@@ -8,4 +8,7 @@ openscad/hybrid/preview.png
 kraken/.venv/
 kraken/__pycache__/
 kraken/preview_*.png
+cam/__pycache__/
+cam/cameras.json
+captures/
 

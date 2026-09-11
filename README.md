@@ -38,3 +38,17 @@ kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
 | `OPTICS.md` / `bom.md` | Path math + shopping list (hybrid buy list in `bom.md`) |
 | `kraken/hybrid_paths.py` | KrakenOS trace of the hybrid pano (paths, frames, stitch) |
 | `docs/kraken/el135_*.png` | 135/5.6 object frames + stitch (commit these; `kraken/preview_*.png` is gitignored) |
+| `cam/dual.py` | USB control for both D7000s (gphoto2 PTP) |
+
+## Dual D7000 USB
+
+Both bodies: Setup → USB → **MTP/PTP**. No lens on the F-mounts (the iris is on the enlarger). `gphoto2` is already the Mac driver.
+
+```
+python3 cam/dual.py detect
+python3 cam/dual.py pair --t SERIAL --r SERIAL
+python3 cam/dual.py set --iso 400 --shutter 1/125 --program M
+python3 cam/dual.py shoot captures/
+```
+
+USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves.
