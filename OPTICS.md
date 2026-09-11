@@ -16,11 +16,11 @@ Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R
 
 ## Field split (panorama)
 
-- Two **first-surface** mirrors form a **roof** that opens toward +Y (away from the lens); the **knife meets at the box center** (origin).
-- Cartridges **drop in from the top** into 45° grooves; the lid’s stepped lip seals the opening (set `SHOW_LID=1`).
-- Coating faces incoming light / optical axis; glass sits behind the coating.
-- Right mirror (+X,+Y) → +X camera; left (−X,+Y) → −X camera.
-- Aim for **5–10% overlap** at the seam for stitching (Hugin / PTGui).
+- One-piece **V cartridge on the back wall** (the face with no lens/camera port).
+- Coatings face **out from the V** toward the lens / chamber; apex against the back wall.
+- Cartridge **drops in from the top**; lid lip seals (`SHOW_LID=1`).
+- Right blade → +X camera; left blade → −X camera.
+- Aim for **5–10% overlap** at the seam for stitching.
 
 ## Equal-path rule
 

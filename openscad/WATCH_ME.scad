@@ -194,7 +194,7 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("Mirror L-cartridge: one piece, left=mirror of right; SHOW_LID=", SHOW_LID);
+    echo("Mirror V on BACK wall; coatings OUT from V toward lens; SHOW_LID=", SHOW_LID);
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 
