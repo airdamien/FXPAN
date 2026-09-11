@@ -2,19 +2,26 @@
 """Local control page for the two D7000s.
 
   python3 cam/web.py
-  open http://127.0.0.1:8765
+  open http://127.0.0.1:8787
 """
 
 from __future__ import annotations
 
+import atexit
 import json
+import re
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
+import live
+
+LIVE = live.Live()
+atexit.register(LIVE.stop)
 
 PAGE = """<!doctype html>
 <meta charset="utf-8">
@@ -22,7 +29,12 @@ PAGE = """<!doctype html>
 <style>
   :root { color-scheme: dark; }
   body { font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; margin: 2rem;
-         background: #111; color: #e8e8e8; max-width: 52rem; }
+         background: #111; color: #e8e8e8; max-width: 64rem; }
+  .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .previews figure { margin: 0; }
+  .previews figcaption { color: #888; font-size: 0.8rem; margin: 0 0 0.35rem; }
+  .previews img { width: 100%; aspect-ratio: 3/2; object-fit: contain;
+                  background: #000; border-radius: 4px; display: block; }
   h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.25rem; }
   p.sub { color: #888; margin: 0 0 1.5rem; }
   section { border: 1px solid #333; border-radius: 8px; padding: 1rem 1.1rem; margin: 0 0 1rem; }
@@ -41,7 +53,7 @@ PAGE = """<!doctype html>
   #log.err { color: #f88; }
 </style>
 <h1>Nikon Duals</h1>
-<p class="sub">gphoto2 PTP · T = back (+Y) · R = side (+X) · USB fire is tens of ms apart</p>
+<p class="sub">gphoto2 PTP · T = back (+Y) · R = side (+X) · USB fire is tens of ms apart · live view is a low-res JPEG preview</p>
 <section>
   <table id="cams"><thead><tr>
     <th>role</th><th>serial</th><th>port</th><th>model</th>
@@ -49,6 +61,22 @@ PAGE = """<!doctype html>
   <div class="row">
     <button id="detect">Detect</button>
     <button id="status">Status</button>
+  </div>
+</section>
+<section>
+  <div class="previews">
+    <figure>
+      <figcaption>T · back · +Y</figcaption>
+      <img id="lvT" alt="T live view">
+    </figure>
+    <figure>
+      <figcaption>R · side · +X</figcaption>
+      <img id="lvR" alt="R live view">
+    </figure>
+  </div>
+  <div class="row">
+    <button id="live">Live view</button>
+    <button id="liveStop">Stop</button>
   </div>
 </section>
 <section>
@@ -102,19 +130,36 @@ const bind = (id, fn) => document.getElementById(id).onclick = async () => {
   try { await fn(); } catch (e) { log(e.message, true); }
   document.getElementById(id).disabled = false;
 };
-bind('detect', async () => { const j = await api('/api/detect'); fill(j.cameras); log(j.message); });
-bind('status', async () => { const j = await api('/api/status'); fill(j.cameras); log(j.message); });
+const liveSrc = (on) => {
+  ['T','R'].forEach(role => {
+    const img = document.getElementById('lv'+role);
+    img.src = on ? '/api/live/'+role+'.mjpg?'+Date.now() : '';
+  });
+};
+bind('detect', async () => { liveSrc(false); const j = await api('/api/detect'); fill(j.cameras); log(j.message); });
+bind('status', async () => { liveSrc(false); const j = await api('/api/status'); fill(j.cameras); log(j.message); });
 bind('pair', async () => {
   const j = await api('/api/pair', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ t: t.value, r: r.value }) });
   log(j.message);
 });
 bind('set', async () => {
+  liveSrc(false);
   const j = await api('/api/set', { method:'POST', headers:{'content-type':'application/json'},
     body: JSON.stringify({ iso: iso.value, shutter: shutter.value, program: program.value }) });
   log(j.message);
 });
-bind('shoot', async () => { const j = await api('/api/shoot', { method:'POST' }); log(j.message); });
+bind('shoot', async () => { liveSrc(false); const j = await api('/api/shoot', { method:'POST' }); log(j.message); });
+bind('live', async () => {
+  const j = await api('/api/live/start', { method:'POST' });
+  liveSrc(true);
+  log(j.message);
+});
+bind('liveStop', async () => {
+  liveSrc(false);
+  const j = await api('/api/live/stop', { method:'POST' });
+  log(j.message);
+});
 api('/api/detect').then(j => { fill(j.cameras); log(j.message); }).catch(e => log(e.message, true));
 </script>
 """
@@ -136,6 +181,66 @@ def _read_json(handler):
     return json.loads(handler.rfile.read(n))
 
 
+def _stop_live():
+    LIVE.stop()
+
+
+def _live_message(snap):
+    if not snap["roles"]:
+        return "live view off"
+    bits = []
+    for role, info in snap["roles"].items():
+        if info["alive"]:
+            bits.append(f"{role} {info['frames']}f")
+        else:
+            bits.append(f"{role} stopped" + (f" ({info['error']})" if info["error"] else ""))
+    return "  ".join(bits)
+
+
+def _send_jpeg(handler, payload):
+    if not payload:
+        handler.send_response(204)
+        handler.end_headers()
+        return
+    handler.send_response(200)
+    handler.send_header("Content-Type", "image/jpeg")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(payload)))
+    handler.end_headers()
+    handler.wfile.write(payload)
+
+
+def _send_mjpeg(handler, role):
+    handler.send_response(200)
+    handler.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+    handler.send_header("Cache-Control", "no-cache, no-store")
+    handler.end_headers()
+    last = None
+    idle = 0
+    while True:
+        jpeg = LIVE.jpeg(role)
+        alive = LIVE.running().get(role, False)
+        if jpeg is not None and jpeg is not last:
+            last = jpeg
+            idle = 0
+            try:
+                handler.wfile.write(
+                    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(jpeg)).encode()
+                    + b"\r\n\r\n"
+                    + jpeg
+                    + b"\r\n"
+                )
+                handler.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+        elif not alive:
+            idle += 1
+            if last is None or idle > 8:
+                return
+        time.sleep(0.05)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("%s\n" % (fmt % args))
@@ -151,7 +256,17 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         try:
+            if path == "/api/live":
+                snap = LIVE.snapshot()
+                return _json(self, 200, {**snap, "message": _live_message(snap)})
+            m = re.fullmatch(r"/api/live/([TR])\.(jpg|mjpg)", path)
+            if m:
+                role, kind = m.group(1), m.group(2)
+                if kind == "jpg":
+                    return _send_jpeg(self, LIVE.jpeg(role))
+                return _send_mjpeg(self, role)
             if path == "/api/detect":
+                _stop_live()
                 rows = dual.detect_bodies()
                 msg = (
                     f"{len(rows)} body(ies)"
@@ -160,6 +275,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return _json(self, 200, {"cameras": rows, "pair": dual.load_pair(), "message": msg})
             if path == "/api/status":
+                _stop_live()
                 rows = dual.detect_bodies()
                 if not rows:
                     raise dual.CamError("no cameras")
@@ -188,7 +304,15 @@ class Handler(BaseHTTPRequestHandler):
                     raise dual.CamError("need T and R serials")
                 dual.save_pair(t, r)
                 return _json(self, 200, {"message": f"paired T={t}  R={r}"})
+            if path == "/api/live/start":
+                have = LIVE.start_from_usb()
+                roles = " ".join(sorted(have))
+                return _json(self, 200, {"message": f"live view {roles}  (low-res PTP preview)"})
+            if path == "/api/live/stop":
+                _stop_live()
+                return _json(self, 200, {"message": "live view stopped"})
             if path == "/api/set":
+                _stop_live()
                 assignments = []
                 if data.get("iso"):
                     assignments.append(("iso", data["iso"]))
@@ -212,6 +336,7 @@ class Handler(BaseHTTPRequestHandler):
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
 
+                _stop_live()
                 have = dual.require_paired(dual.detect_bodies())
                 dest = Path("captures")
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -229,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8787
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"http://127.0.0.1:{port}")
     httpd.serve_forever()

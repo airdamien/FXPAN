@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
+import live
 
 
 DETECT = """\
@@ -40,6 +41,20 @@ class Parse(unittest.TestCase):
 
     def test_current(self):
         self.assertEqual(dual.parse_current(CURRENT), "3000123")
+
+
+class SplitJpeg(unittest.TestCase):
+    def test_two_frames_and_text(self):
+        a = b"\xff\xd8AAAA\xff\xd9"
+        b = b"\xff\xd8BBBB\xff\xd9"
+        frames, rest = live.split_jpegs(b"Capturing...\n" + a + b[:6])
+        self.assertEqual(frames, [a])
+        frames2, rest2 = live.split_jpegs(rest + b[6:])
+        self.assertEqual(frames2, [b])
+        self.assertEqual(rest2, b"")
+
+    def test_empty(self):
+        self.assertEqual(live.split_jpegs(b"hello"), ([], b""))
 
 
 class Pair(unittest.TestCase):
