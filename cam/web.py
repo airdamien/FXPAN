@@ -16,11 +16,12 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
 import live
+import pano
 
 HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
@@ -113,6 +114,16 @@ def _assignments(data):
     return out
 
 
+def _send_path(handler, path, ctype):
+    body = Path(path).read_bytes()
+    handler.send_response(200)
+    handler.send_header("Content-Type", ctype)
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _send_jpeg(handler, payload):
     if not payload:
         handler.send_response(204)
@@ -191,6 +202,23 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "jpg":
                     return _send_jpeg(self, LIVE.jpeg(role))
                 return _send_mjpeg(self, role)
+            if path == "/api/captures":
+                pairs = pano.list_pairs()
+                n = sum(1 for row in pairs if row["ready"])
+                return _json(
+                    self, 200,
+                    {"pairs": pairs, "message": f"{n} JPEG pair(s) in captures/"},
+                )
+            m = re.fullmatch(r"/api/file/([\w.-]+)", path)
+            if m:
+                q = parse_qs(urlparse(self.path).query)
+                width = q.get("w", [None])[0]
+                try:
+                    width = int(width) if width else None
+                except ValueError:
+                    raise dual.CamError("bad width")
+                dest = pano.serve(m.group(1), width)
+                return _send_path(self, dest, pano.content_type(dest))
             if path == "/api/detect":
                 _stop_live()
                 rows = dual.detect_bodies()
@@ -271,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                 have = dual.require_paired(dual.detect_bodies())
                 target = (data.get("target") or "card").strip()
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                dest = Path("captures")
+                dest = pano.CAPTURES
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     if target == "card":
                         futs = [
@@ -287,6 +315,27 @@ class Handler(BaseHTTPRequestHandler):
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
                 where = "cards" if target == "card" else "captures/"
                 return _json(self, 200, {"message": f"shot {stamp}  {msg}  → {where}"})
+            if path == "/api/pano":
+                stamp = (data.get("stamp") or "").strip()
+                if not stamp:
+                    raise dual.CamError("select a T/R pair")
+                try:
+                    overlap = data.get("overlap")
+                    overlap = float(overlap) if overlap is not None else pano.OVERLAP
+                except (TypeError, ValueError):
+                    raise dual.CamError("bad overlap")
+                flip_r = data.get("flip_r", True)
+                if isinstance(flip_r, str):
+                    flip_r = flip_r.lower() not in ("0", "false", "no")
+                info = pano.stitch_stamp(stamp, overlap=overlap, flip_r=bool(flip_r))
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "url": "/api/file/" + info["file"],
+                        "message": f"pano {info['file']}  {info['width']}×{info['height']}",
+                    },
+                )
         except dual.CamError as exc:
             return _json(self, 400, {"error": str(exc)})
         return _json(self, 404, {"error": "not found"})

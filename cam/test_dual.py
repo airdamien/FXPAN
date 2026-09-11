@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
 import live
+import pano
 
 
 DETECT = """\
@@ -67,6 +71,47 @@ class Pair(unittest.TestCase):
         dual.save_pair("111", "222")
         self.assertEqual(json.loads(path.read_text()), {"T": "111", "R": "222"})
         self.assertEqual(dual.load_pair(), {"T": "111", "R": "222"})
+
+
+class Pano(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))
+
+    def _jpeg(self, name, color, w=40, h=20):
+        dest = self.root / name
+        subprocess.run(
+            ["magick", "-size", f"{w}x{h}", f"xc:{color}", str(dest)],
+            check=True,
+            capture_output=True,
+        )
+        return dest
+
+    def test_list_pairs(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        self._jpeg("T_lonely.jpg", "red")
+        rows = pano.list_pairs(self.root)
+        ready = [row for row in rows if row["ready"]]
+        self.assertEqual(len(ready), 1)
+        self.assertEqual(ready[0]["stamp"], "20260101_120000")
+        self.assertEqual(ready[0]["t"], "T_20260101_120000.jpg")
+
+    def test_stitch_width(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        info = pano.stitch_stamp(
+            "20260101_120000", overlap=0.25, flip_r=False, root=self.root
+        )
+        self.assertEqual(info["width"], 70)
+        self.assertEqual(info["height"], 20)
+        self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
+        rows = pano.list_pairs(self.root)
+        self.assertEqual(rows[0]["pano"], "P_20260101_120000.jpg")
+
+    def test_resolve_rejects_traversal(self):
+        with self.assertRaises(dual.CamError):
+            pano.resolve("../secret.jpg", self.root)
 
 
 if __name__ == "__main__":

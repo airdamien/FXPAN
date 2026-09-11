@@ -1,49 +1,81 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nikon Duals — lab</title>
+<title>MAGI · lab</title>
 <style>
   :root { color-scheme: dark; }
-  body { font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; margin: 2rem;
-         background: #111; color: #e8e8e8; max-width: 64rem; }
+  body {
+    font: 15px/1.4 Futura, "Hiragino Kaku Gothic ProN", "Helvetica Neue", sans-serif;
+    margin: 0 auto; padding: 1.4rem 1.6rem 2rem; max-width: 64rem;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,106,0,.04) 3px 4px),
+      #080809;
+    color: #f3ead2;
+  }
+  .nerv {
+    display: inline-block; background: #d4000d; color: #fff;
+    font: 800 11px/1 Futura, sans-serif; letter-spacing: 0.22em;
+    padding: 6px 8px 5px; margin-right: 10px;
+  }
   .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-  .previews figure { margin: 0; }
-  .previews figcaption { color: #888; font-size: 0.8rem; margin: 0 0 0.35rem; }
-  .previews img { width: 100%; aspect-ratio: 3/2; object-fit: contain;
-                  background: #000; border-radius: 4px; display: block; }
-  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.25rem; }
-  p.sub { color: #888; margin: 0 0 1.5rem; }
-  a { color: #e8a317; }
-  section { border: 1px solid #333; border-radius: 8px; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+  .previews figure { margin: 0; position: relative; background: #000;
+    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+    outline: 1px solid #ff6a00; }
+  .previews figcaption { color: #ff6a00; font-size: 0.75rem; letter-spacing: 0.16em; margin: 0 0 0.35rem; }
+  .previews img { width: 100%; aspect-ratio: 3/2; object-fit: contain; display: block; background: #000; }
+  h1 { font-size: 1.15rem; letter-spacing: 0.28em; font-weight: 700; margin: 0 0 0.25rem; }
+  p.sub { color: #8a7a55; margin: 0 0 1.2rem; letter-spacing: 0.06em; }
+  a { color: #ff6a00; }
+  .hazard { height: 7px; margin: 0 0 1rem;
+    background: repeating-linear-gradient(-45deg, #111 0 9px, #f0c000 9px 18px); }
+  section { border: 1px solid #5a3200; padding: 1rem 1.1rem; margin: 0 0 1rem;
+    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #2a2a2a; }
-  th { color: #888; font-weight: 500; }
-  input, select { background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px;
+  th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #3a2208; }
+  th { color: #8a7a55; font-weight: 500; letter-spacing: 0.12em; }
+  input, select { background: #120c08; color: #f3ead2; border: 1px solid #ff6a00;
           padding: 0.35rem 0.5rem; font-size: 16px; }
   input[type=text] { width: 8rem; }
-  input[type=range] { width: 18rem; accent-color: #e8a317; height: 2rem; }
+  input[type=range] { width: 18rem; accent-color: #ff6a00; height: 2rem; }
   .drag { min-width: 16rem; }
-  .drag b { color: #e8a317; font-size: 1.1rem; }
-  button { background: #2a4a7a; color: #fff; border: 0; border-radius: 5px;
-           padding: 0.45rem 0.85rem; cursor: pointer; font: inherit; }
-  button.shoot { background: #8a2a2a; font-size: 1.05rem; padding: 0.7rem 1.4rem; }
+  .drag b { color: #ff6a00; font-size: 1.1rem; }
+  button { background: #120c08; color: #f3ead2; border: 1px solid #ff6a00;
+           padding: 0.5rem 0.9rem; cursor: pointer; font: 700 13px/1 Futura, sans-serif;
+           letter-spacing: 0.14em; }
+  button.shoot { background: #d4000d; border-color: #ff2a2a; color: #fff; font-size: 1.05rem;
+                 padding: 0.7rem 1.4rem; letter-spacing: 0.22em; margin-left: auto; }
+  .dlchk { display: flex; flex-direction: row; align-items: center; gap: 0.4rem;
+           color: #8a7a55; font-size: 0.75rem; letter-spacing: 0.12em;
+           text-transform: uppercase; margin-left: auto; }
+  .dlchk input { accent-color: #ff6a00; width: 1.1rem; height: 1.1rem; }
   button:disabled { opacity: 0.5; cursor: wait; }
   .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: end; margin-top: 0.7rem; }
-  label { display: flex; flex-direction: column; gap: 0.2rem; color: #aaa; font-size: 0.8rem; }
-  #log { white-space: pre-wrap; color: #9c9; font: 13px ui-monospace, monospace; min-height: 3rem; }
-  #log.err { color: #f88; }
+  label { display: flex; flex-direction: column; gap: 0.2rem; color: #8a7a55; font-size: 0.75rem;
+          letter-spacing: 0.12em; text-transform: uppercase; }
+  #log { white-space: pre-wrap; color: #6cff4d; font: 13px ui-monospace, Menlo, monospace; min-height: 3rem; }
+  #log.err { color: #ff3b3b; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 0 0 1rem; }
+  #pairs { display: grid; gap: 0.6rem; margin-top: 0.8rem; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+          width: 100%; text-align: left; padding: 0.5rem; }
+  .pair img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .pair span { grid-column: 1 / -1; color: #8a7a55; font-size: 0.8rem; }
+  .pair.on { background: #3a1600; color: #ff6a00; }
+  .pano-out img { width: 100%; display: block; background: #000; margin-top: 0.8rem; }
+  .tabs button { border-bottom: 3px solid transparent; background: #0c0c0d; }
+  .tabs button.on { border-bottom-color: #ff6a00; color: #ff6a00; }
+  .pane[hidden] { display: none !important; }
 </style>
-<h1>Nikon Duals — lab</h1>
-<p class="sub">Laptop debugger · <a href="/">field / iPhone</a> · T = back (+Y) · R = side (+X) · USB fire is tens of ms</p>
-<section>
-  <table id="cams"><thead><tr>
-    <th>role</th><th>serial</th><th>port</th><th>model</th>
-  </tr></thead><tbody></tbody></table>
-  <div class="row">
-    <button id="detect">Detect</button>
-    <button id="status">Status</button>
-  </div>
-</section>
+<div class="nerv">NERV</div>
+<h1>MAGI · LAB</h1>
+<p class="sub">第3新東京市 debugger · <a href="/">field 作戦</a> · T 初号機 · R 零号機 · USB skew tens of ms</p>
+<div class="hazard"></div>
+<nav class="tabs">
+  <button type="button" class="on" data-tab="view">射撃 VIEW</button>
+  <button type="button" data-tab="usb">USB</button>
+  <button type="button" data-tab="pano">全景 PANO</button>
+</nav>
+<div id="tab-view" class="pane">
 <section>
   <div class="previews">
     <figure>
@@ -58,13 +90,8 @@
   <div class="row">
     <button id="live">Live view</button>
     <button id="liveStop">Stop</button>
-  </div>
-</section>
-<section>
-  <div class="row">
-    <label>T serial<input id="t" placeholder="back / +Y"></label>
-    <label>R serial<input id="r" placeholder="side / +X"></label>
-    <button id="pair">Pair</button>
+    <label class="dlchk"><input type="checkbox" id="dl">Download</label>
+    <button class="shoot" id="shoot">Shoot to cards</button>
   </div>
   <div class="row">
     <label class="drag">ISO <b id="isoVal">400</b>
@@ -93,11 +120,41 @@
     </label>
     <button id="set">Set both</button>
   </div>
+</section>
+</div>
+<div id="tab-usb" class="pane" hidden>
+<section>
+  <table id="cams"><thead><tr>
+    <th>role</th><th>serial</th><th>port</th><th>model</th>
+  </tr></thead><tbody></tbody></table>
   <div class="row">
-    <button class="shoot" id="shoot">Shoot to cards</button>
-    <button id="dl">Shoot + download</button>
+    <button id="detect">Detect</button>
+    <button id="status">Status</button>
   </div>
 </section>
+<section>
+  <div class="row">
+    <label>T serial<input id="t" placeholder="back / +Y"></label>
+    <label>R serial<input id="r" placeholder="side / +X"></label>
+    <button id="pair">Pair</button>
+  </div>
+</section>
+</div>
+<div id="tab-pano" class="pane" hidden>
+<section>
+  <div class="row">
+    <button id="panoRefresh">List pairs</button>
+    <button id="panoGo">Stitch</button>
+    <label class="dlchk"><input type="checkbox" id="flipR" checked>Flip R</label>
+    <label>Overlap
+      <input type="range" id="olDrag" min="5" max="45" value="20" step="1">
+    </label>
+    <b id="olVal">20%</b>
+  </div>
+  <div id="pairs"></div>
+  <div class="pano-out"><img id="panoOut" alt=""></div>
+</section>
+</div>
 <pre id="log">Lab: type serials, inspect status, MJPEG optional. Field UI is / for the phone.</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
@@ -169,14 +226,70 @@ bind("set", async () => {
       program: program.value, wb: wb.value, quality: quality.value }) });
   log(j.message);
 });
-bind("shoot", async () => { liveSrc(false); const j = await api("/api/shoot", { method:"POST",
-  headers:{"content-type":"application/json"}, body: JSON.stringify({ target:"card" }) }); log(j.message); });
-bind("dl", async () => { liveSrc(false); const j = await api("/api/shoot", { method:"POST",
-  headers:{"content-type":"application/json"}, body: JSON.stringify({ target:"download" }) }); log(j.message); });
+const paintShoot = () => {
+  document.getElementById("shoot").textContent =
+    document.getElementById("dl").checked ? "Shoot + download" : "Shoot to cards";
+};
+document.getElementById("dl").onchange = paintShoot;
+bind("shoot", async () => {
+  liveSrc(false);
+  const target = document.getElementById("dl").checked ? "download" : "card";
+  const j = await api("/api/shoot", { method:"POST",
+    headers:{"content-type":"application/json"}, body: JSON.stringify({ target }) });
+  log(j.message);
+});
 bind("live", async () => {
   const j = await api("/api/live/start", { method:"POST" }); liveSrc(true); log(j.message);
 });
 bind("liveStop", async () => { liveSrc(false); const j = await api("/api/live/stop", { method:"POST" }); log(j.message); });
+let stamp = "";
+const loadPairs = async () => {
+  const j = await api("/api/captures");
+  const box = document.getElementById("pairs");
+  box.innerHTML = "";
+  (j.pairs || []).forEach(p => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pair" + (p.stamp === stamp ? " on" : "");
+    b.dataset.stamp = p.stamp;
+    b.disabled = !p.ready;
+    const t = p.t ? `<img alt="T" src="/api/file/${encodeURIComponent(p.t)}?w=320">` : "<span>T —</span>";
+    const r = p.r ? `<img alt="R" src="/api/file/${encodeURIComponent(p.r)}?w=320">` : "<span>R —</span>";
+    b.innerHTML = t + r + `<span>${p.stamp}${p.pano ? " · stitched" : ""}</span>`;
+    b.onclick = () => {
+      stamp = p.stamp;
+      box.querySelectorAll(".pair").forEach(el => el.classList.toggle("on", el.dataset.stamp === p.stamp));
+      if (p.pano) document.getElementById("panoOut").src = "/api/file/"+encodeURIComponent(p.pano)+"?"+Date.now();
+    };
+    box.appendChild(b);
+  });
+  if (!(j.pairs || []).length) {
+    box.innerHTML = "<p class='sub'>No JPEG pairs. Shoot + download first.</p>";
+  }
+  log(j.message);
+};
+document.getElementById("olDrag").oninput = () => {
+  document.getElementById("olVal").textContent = document.getElementById("olDrag").value + "%";
+};
+bind("panoRefresh", loadPairs);
+bind("panoGo", async () => {
+  if (!stamp) throw new Error("select a T/R pair");
+  const j = await api("/api/pano", { method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({ stamp, overlap: parseInt(olDrag.value, 10) / 100,
+      flip_r: document.getElementById("flipR").checked }) });
+  document.getElementById("panoOut").src = j.url + "?" + Date.now();
+  log(j.message);
+  await loadPairs();
+});
+const showTab = (name) => {
+  document.querySelectorAll(".tabs [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  document.getElementById("tab-view").hidden = name !== "view";
+  document.getElementById("tab-usb").hidden = name !== "usb";
+  document.getElementById("tab-pano").hidden = name !== "pano";
+  if (name === "pano") loadPairs().catch(e => log(e.message, true));
+};
+document.querySelectorAll(".tabs [data-tab]").forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
+showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano" : "view");
 bindDrag("isoDrag", ISO, "isoVal", "400");
 bindDrag("shutDrag", SHUT, "shutVal", "1/125");
 api("/api/detect").then(j => { fill(j.cameras); log(j.message); }).catch(e => log(e.message, true));
