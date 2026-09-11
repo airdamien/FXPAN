@@ -4,11 +4,11 @@
 
 | Segment | Symbol | Default (mm) |
 |---------|--------|--------------|
-| Helicoid/lens register → knife edge | `D_LENS_TO_KNIFE` | 45 |
-| Knife edge → camera F-mount face | `D_KNIFE_TO_MOUNT` | 45 |
-| Fold subtotal | `PATH_FOLD` | 90 |
+| Helicoid/lens register → knife edge | `D_LENS_TO_KNIFE` | 55 |
+| Knife edge → camera F-mount face | `D_KNIFE_TO_MOUNT` | 72 |
+| Fold subtotal | `PATH_FOLD` | 127 |
 | Inside each D7000 (mount → sensor) | `FLANGE_F` | **46.5** (fixed) |
-| **Total flange → sensor** | `PATH_TOTAL` | **136.5** |
+| **Total flange → sensor** | `PATH_TOTAL` | **173.5** |
 
 The taking lens must form infinity at **`PATH_TOTAL`**, not at 46.5 mm. That is why the stem is an **M42/M39 focusing helicoid + enlarger/LF lens**, not an F-Nikkor.
 

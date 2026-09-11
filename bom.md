@@ -1,6 +1,6 @@
 # Bill of materials — Nikon Dual T
 
-Path target: **PATH_TOTAL ≈ 136.5 mm** (see [OPTICS.md](OPTICS.md)). Buy **first-surface** mirrors only.
+Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE=55`, `D_KNIFE_TO_MOUNT=72`). See [OPTICS.md](OPTICS.md). Buy **first-surface** mirrors only.
 
 ## Optics (order these)
 
