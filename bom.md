@@ -17,6 +17,7 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 | Qty | Item | Link |
 |-----|------|------|
 | 2 | Nikon D7000 bodies (no lenses) | (you have these) |
+| 2 | **Fotodiox Nikon F reverse ring, 52 mm** | [Fotodiox reverse adapter](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) (pick **52 mm**; screws into the printed 52×0.75 mouths) |
 | 1 | MC-DC2-compatible remote | [Kiwifotos MC-DC2](https://www.amazon.com/Kiwifotos-MC-DC2-Remote-Shutter-Release/dp/B071D9Y331) |
 | 1 | Dual-camera sync path | Prefer [FlashZebra #0236](http://flashzebra.com/products/0236/) (2.5 mm TRS, splitter-ready) + [2× MC-DC2 pigtails](https://www.amazon.com/dp/B0939SV7WP) + a **2.5 mm stereo Y-splitter** ([search](https://www.amazon.com/s?k=2.5mm+stereo+y+splitter+TRS)) |
 
@@ -46,4 +47,4 @@ In [`openscad/params.scad`](openscad/params.scad) set `PART`, then F6 → STL:
 
 - Coatings face the **lens**; glass sits behind (toward +Y). Wrong way = ghosts and blocked camera tunnels.
 - Short 12–19 mm helicoid is for **fine** focus; fixed chassis length sets most of the 136.5 mm register. Stack tubes if you cannot reach infinity.
-- Dry-fit printed F bayonets on a body before hanging both D7000s on the chassis.
+- Screw a 52 mm F reverse ring into each arm; bayonet the D7000s onto those. Tune `F_REV_STACK` if infinity is long/short.

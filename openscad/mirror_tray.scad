@@ -156,9 +156,8 @@ module mirror_ray_guides() {
             translate([0, -D_LENS_TO_KNIFE / 2, 0])
                 cube([1.0, D_LENS_TO_KNIFE, 1.0], center = true);
             for (side = [-1, 1])
-                rotate([0, 0, -side * arm_toe()])
-                    translate([side * D_KNIFE_TO_MOUNT / 2, 0, 0])
-                        cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
+                translate([side * D_KNIFE_TO_MOUNT / 2, 0, 0])
+                    cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
         }
     }
 }

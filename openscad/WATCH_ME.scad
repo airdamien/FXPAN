@@ -2,7 +2,7 @@
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
 // Junction box + 3 bolt-on tubes (each tube is a wall cookie; print cookie on bed).
-// Mirrors drop in from the top. Arms toe in for OVERLAP_FRAC stitch overlap.
+// Mirrors drop in from the top. Cookies sit flat on the cube faces.
 // =============================================================================
 
 include <params.scad>
@@ -20,7 +20,7 @@ LID_LIP   = 3;
 LID_GAP   = 0.3;
 
 function stem_tube_len() = D_LENS_TO_KNIFE - JUNCTION_BOX / 2;
-function arm_tube_len()  = D_KNIFE_TO_MOUNT - MOUNT_PEG - JUNCTION_BOX / 2;
+function arm_tube_len()  = D_KNIFE_TO_MOUNT - F_REV_STACK - JUNCTION_BOX / 2;
 
 module helicoid_nut(h = HELICOID_LEN) {
     ScrewHole(HELICOID_MAJOR, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
@@ -37,7 +37,7 @@ module arm_cradle_solid() {
 
 // Local port frame: z=0 is the outer face, +Z is outward (away from box).
 module port_screws() {
-    for (a = [0, 90, 180, 270])
+    for (a = [45, 135, 225, 315])
         rotate([0, 0, a])
             translate([PORT_SCREW_R, 0, 0])
                 children();
@@ -60,10 +60,9 @@ module at_stem() {
 }
 
 module at_arm(side) {
-    rotate([0, 0, -side * arm_toe()])
-        translate([side * JUNCTION_BOX / 2, 0, 0])
-            rotate([0, side * 90, 0])
-                children();
+    translate([side * JUNCTION_BOX / 2, 0, 0])
+        rotate([0, side * 90, 0])
+            children();
 }
 
 module at_each_port() {
@@ -163,13 +162,24 @@ module part_stem() {
 }
 
 module part_arm(side = 1) {
+    mouth = PORT_PATCH_T + arm_tube_len();
     color("SlateGray")
+    difference() {
         port_tube_solid(arm_tube_len());
-    translate([0, 0, PORT_PATCH_T + arm_tube_len() + MOUNT_PEG]) {
-        f_mount_male_solid(boss = MOUNT_PEG);
-        if (SHOW_CRADLES)
-            arm_cradle_solid();
+        // female 52×0.75 for a Fotodiox (or similar) F reverse ring
+        translate([0, 0, mouth - F_REV_LEN])
+            ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
+                        F_REV_LEN + 0.3,
+                        pitch = F_REV_PITCH, tolerance = F_REV_TOL);
     }
+    if ($preview)
+        color("Goldenrod", 0.55)
+            translate([0, 0, mouth])
+                difference() {
+                    cylinder(h = F_REV_STACK, d = 62);
+                    translate([0, 0, -0.1])
+                        cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
+                }
 }
 
 module part_lid() {
@@ -196,13 +206,12 @@ module part_lid() {
 module ghost_body(side = 1) {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
-            rotate([0, 0, -side * arm_toe()])
-                translate([
-                    side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 15 + BODY_D / 2 + ex),
-                    0,
-                    -8
-                ])
-                    cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
+            translate([
+                side * (D_KNIFE_TO_MOUNT + F_REV_STACK + 15 + BODY_D / 2 + ex),
+                0,
+                -8
+            ])
+                cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
 }
 
 module ghost_lens() {
@@ -222,9 +231,8 @@ module optical_axis_guides() {
             rotate([90, 0, 0])
                 cylinder(h = D_LENS_TO_KNIFE + 2, d = 1.0);
             for (side = [-1, 1])
-                rotate([0, 0, -side * arm_toe()])
-                    rotate([0, side * 90, 0])
-                        cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
+                rotate([0, side * 90, 0])
+                    cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
         }
 }
 
@@ -250,9 +258,8 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("Bolt-on tubes: print cookie on bed; 4× M3 + hex nuts per port");
-    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
-             "  arm_toe=", arm_toe(), " deg"));
+    echo("Bolt-on tubes: 4× M3 at 45°; arms are female 52×0.75 for F reverse rings");
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC));
 }
 
 module export_part() {

@@ -17,7 +17,6 @@ OVERLAP_FRAC  = 0.20;
 function path_after_knife()   = D_KNIFE_TO_MOUNT + FLANGE_F;
 function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
 function overlap_cross()      = overlap_at_sensor() * path_after_knife() / PATH_TOTAL;
-function arm_toe()            = atan(overlap_at_sensor() / path_after_knife());
 
 // First-surface mirrors
 MIRROR_SIZE   = 50;
@@ -34,7 +33,7 @@ JUNCTION_BOX  = 90;
 PORT_PATCH     = 86;      // square of the outer face that travels with the tube
 PORT_PATCH_T   = 4;       // cookie thickness (outer part of WALL)
 PORT_FIT       = 0.35;    // recess clearance
-PORT_SCREW_R   = 38.5;    // 4× M3 on the face (outside the tube, inside the cookie)
+PORT_SCREW_R   = 38.5;    // 4× M3 at 45° so adjacent faces do not share a corner
 PORT_SCREW_D   = 3.2;
 PORT_NUT_AF    = 5.7;     // M3 hex, across flats
 PORT_NUT_T     = 2.6;
@@ -47,10 +46,16 @@ HELICOID_LEN   = 28;
 HELICOID_TOL   = 0.45;    // ScrewHole extra clearance for FDM
 STEM_FLANGE_T  = 6;
 
-// Male F-mount — geometry comes from f-mount_raw.stl (see f_mount_male.scad)
-F_BORE         = 40.3;    // clear aperture through imported mount
-F_REGISTER_T   = 6.75;    // STL height (Zmax-Zmin); used for ghost body spacing
-F_LUG_T        = 0;       // included in STL
+// Fotodiox-style Nikon F reverse ring: male F-bayonet + male 52 mm filter
+// thread. Arms are female 52×0.75; the ring screws on, bodies bayonet on.
+// https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC
+F_REV_MAJOR    = 52;      // filter thread major (mm)
+F_REV_PITCH    = 0.75;
+F_REV_LEN      = 7;       // printed female thread length
+F_REV_STACK    = 8;       // ring, thread seat → F-register (tune on the real part)
+F_REV_TOL      = 0.45;
+F_BORE         = 40.3;
+F_REGISTER_T   = F_REV_STACK;
 
 
 // 1/4-20 UNC in the chassis floor (tripod shoe / camera screw)
