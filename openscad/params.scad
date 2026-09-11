@@ -17,6 +17,7 @@ OVERLAP_FRAC  = 0.20;
 function path_after_knife()   = D_KNIFE_TO_MOUNT + FLANGE_F;
 function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
 function overlap_cross()      = overlap_at_sensor() * path_after_knife() / PATH_TOTAL;
+function arm_toe()            = atan(overlap_at_sensor() / path_after_knife());
 
 // First-surface mirrors
 MIRROR_SIZE   = 50;
@@ -36,8 +37,7 @@ PORT_FIT       = 0.35;    // recess clearance
 PORT_SCREW_R   = 38.5;    // 4× M3 at 45° so adjacent faces do not share a corner
 PORT_SCREW_D   = 3.2;
 PORT_NUT_AF    = 5.7;     // M3 hex, across flats
-PORT_NUT_T     = 2.6;
-PORT_BOSS_H    = 5;       // inner nut boss
+PORT_NUT_T     = 2.6;     // hex trap in the inner wall (no chamber boss)
 
 // Helicoid stem (M42×1)
 HELICOID_MAJOR = 42;

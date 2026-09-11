@@ -2,7 +2,7 @@
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
 // Junction box + 3 bolt-on tubes (each tube is a wall cookie; print cookie on bed).
-// Mirrors drop in from the top. Cookies sit flat on the cube faces.
+// Cookies sit flat on the cube faces. Arm tubes toe toward the lens.
 // =============================================================================
 
 include <params.scad>
@@ -71,13 +71,6 @@ module at_each_port() {
     at_arm(-1) children();
 }
 
-module box_nut_bosses() {
-    at_each_port()
-        port_screws()
-            translate([0, 0, -WALL - PORT_BOSS_H])
-                cylinder(h = PORT_BOSS_H + 0.02, d = PORT_NUT_AF + 4.5);
-}
-
 module box_bore() {
     s = JUNCTION_BOX;
 
@@ -117,9 +110,10 @@ module box_bore() {
 module box_fastener_cuts() {
     at_each_port()
         port_screws() {
-            translate([0, 0, -WALL - PORT_BOSS_H - 0.2])
-                cylinder(h = WALL + PORT_BOSS_H + 0.6, d = PORT_SCREW_D);
-            translate([0, 0, -WALL - PORT_NUT_T])
+            translate([0, 0, -WALL - 0.2])
+                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+            // hex opens to the inner face; stays inside the remaining wall
+            translate([0, 0, -WALL - 0.05])
                 hex_nut_cut();
         }
 }
@@ -127,26 +121,36 @@ module box_fastener_cuts() {
 module part_junction() {
     color("SlateGray")
     difference() {
-        union() {
-            difference() {
-                cube([JUNCTION_BOX, JUNCTION_BOX, JUNCTION_BOX], center = true);
-                box_bore();
-            }
-            box_nut_bosses();
-        }
+        cube([JUNCTION_BOX, JUNCTION_BOX, JUNCTION_BOX], center = true);
+        box_bore();
         box_fastener_cuts();
     }
 }
 
-module port_tube_solid(out_len) {
+// Cookie stays in XY. Tube leans `toe` deg about +X (world −Y / toward the lens).
+module along_tube(toe = 0) {
+    translate([0, 0, PORT_PATCH_T])
+        rotate([toe, 0, 0])
+            children();
+}
+
+module port_tube_solid(out_len, toe = 0) {
     difference() {
         union() {
             port_flange();
-            translate([0, 0, PORT_PATCH_T])
+            along_tube(toe)
                 cylinder(h = out_len, d = TUBE_OD);
+            if (toe != 0)
+                translate([0, 0, PORT_PATCH_T])
+                    hull() {
+                        cylinder(h = 0.2, d = TUBE_OD);
+                        rotate([toe, 0, 0])
+                            cylinder(h = 0.2, d = TUBE_OD);
+                    }
         }
-        translate([0, 0, -1])
-            cylinder(h = PORT_PATCH_T + out_len + 2, d = TUBE_ID);
+        along_tube(toe)
+            translate([0, 0, -PORT_PATCH_T - 2])
+                cylinder(h = PORT_PATCH_T + out_len + 4, d = TUBE_ID);
         port_screws()
             translate([0, 0, -1])
                 cylinder(h = PORT_PATCH_T + 2, d = PORT_SCREW_D);
@@ -162,24 +166,26 @@ module part_stem() {
 }
 
 module part_arm(side = 1) {
-    mouth = PORT_PATCH_T + arm_tube_len();
+    toe = arm_toe();
     color("SlateGray")
     difference() {
-        port_tube_solid(arm_tube_len());
+        port_tube_solid(arm_tube_len(), toe);
         // female 52×0.75 for a Fotodiox (or similar) F reverse ring
-        translate([0, 0, mouth - F_REV_LEN])
-            ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
-                        F_REV_LEN + 0.3,
-                        pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+        along_tube(toe)
+            translate([0, 0, arm_tube_len() - F_REV_LEN])
+                ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
+                            F_REV_LEN + 0.3,
+                            pitch = F_REV_PITCH, tolerance = F_REV_TOL);
     }
     if ($preview)
         color("Goldenrod", 0.55)
-            translate([0, 0, mouth])
-                difference() {
-                    cylinder(h = F_REV_STACK, d = 62);
-                    translate([0, 0, -0.1])
-                        cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
-                }
+            along_tube(toe)
+                translate([0, 0, arm_tube_len()])
+                    difference() {
+                        cylinder(h = F_REV_STACK, d = 62);
+                        translate([0, 0, -0.1])
+                            cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
+                    }
 }
 
 module part_lid() {
@@ -206,12 +212,10 @@ module part_lid() {
 module ghost_body(side = 1) {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
-            translate([
-                side * (D_KNIFE_TO_MOUNT + F_REV_STACK + 15 + BODY_D / 2 + ex),
-                0,
-                -8
-            ])
-                cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
+            at_arm(side)
+                along_tube(arm_toe())
+                    translate([0, 0, arm_tube_len() + F_REV_STACK + 15 + BODY_D / 2 + ex])
+                        cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
 }
 
 module ghost_lens() {
@@ -231,8 +235,10 @@ module optical_axis_guides() {
             rotate([90, 0, 0])
                 cylinder(h = D_LENS_TO_KNIFE + 2, d = 1.0);
             for (side = [-1, 1])
-                rotate([0, side * 90, 0])
-                    cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
+                at_arm(side)
+                    along_tube(arm_toe())
+                        translate([0, 0, -JUNCTION_BOX / 2])
+                            cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
         }
 }
 
@@ -258,8 +264,9 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("Bolt-on tubes: 4× M3 at 45°; arms are female 52×0.75 for F reverse rings");
-    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC));
+    echo("Bolt-on tubes: 4× M3 at 45°; nuts flush in the wall; arms toed 52×0.75");
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
+             "  arm_toe=", arm_toe(), " deg"));
 }
 
 module export_part() {
