@@ -16,9 +16,8 @@ Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R
 
 ## Field split (panorama)
 
-- One-piece **V cartridge on the back wall** (the face with no lens/camera port).
-- Coatings face **out from the V** toward the lens / chamber; apex against the back wall.
-- Cartridge **drops in from the top**; lid lip seals (`SHOW_LID=1`).
+- One-piece **V cartridge** joins at the **middle** (knife at origin); arms run toward the blank **back wall** (+Y).
+- Coatings face **out from the V**. Drop-in from the top; lid lip seals (`SHOW_LID=1`).
 - Right blade → +X camera; left blade → −X camera.
 - Aim for **5–10% overlap** at the seam for stitching.
 

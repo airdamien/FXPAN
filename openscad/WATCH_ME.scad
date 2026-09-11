@@ -194,7 +194,7 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("Mirror V on BACK wall; coatings OUT from V toward lens; SHOW_LID=", SHOW_LID);
+    echo("V cartridge: tip at center, arms to back wall, coatings OUT; SHOW_LID=", SHOW_LID);
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 
