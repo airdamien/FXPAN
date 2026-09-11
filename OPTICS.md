@@ -16,10 +16,10 @@ Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R
 
 ## Field split (panorama)
 
-- Two **first-surface** mirrors form a **roof pointing at the lens** (peak/knife toward −Y).
-- Coating faces incoming light; glass sits behind (toward +Y) so it does not block ±X camera tunnels.
-- Right mirror: plane ≈ y=x, reflects +Y → +X. Left: ≈ y=−x, reflects +Y → −X.
-- Combined virtual frame ≈ **47 × 16 mm** (two DX sensors). Prefer a large image circle (90–150 mm enlarger / LF).
+- Two **first-surface** mirrors form a **roof** that opens toward +Y (away from the lens); the **knife meets at the box center** (origin).
+- Cartridges **drop in from the top** into 45° grooves; the lid’s stepped lip seals the opening (set `SHOW_LID=1`).
+- Coating faces incoming light / optical axis; glass sits behind the coating.
+- Right mirror (+X,+Y) → +X camera; left (−X,+Y) → −X camera.
 - Aim for **5–10% overlap** at the seam for stitching (Hugin / PTGui).
 
 ## Equal-path rule

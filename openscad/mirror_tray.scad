@@ -1,90 +1,118 @@
-// Field-splitter mirrors — roof pointing at the LENS, coating faces incoming light.
+// Drop-in field-splitter cartridges — slide in from +Z, knife at ORIGIN (box center).
 //
-// Optical frame: lens at -Y, rays travel +Y into knife at origin.
-//   Right mirror (+X camera): plane ≈ y=x, normal (−1,1)/√2 → reflects +Y → +X
-//   Left  mirror (−X camera): plane ≈ y=−x, normal (+1,1)/√2 → reflects +Y → −X
-// Glass substrate sits BEHIND the coating (away from lens), so it does not block
-// the path from coating → camera.
+// V opens toward the lens (−Y); coatings face INWARD (into the V / toward the axis).
+// Right (+X cam) in +X,+Y; left (−X cam) in −X,+Y.
 
 include <params.scad>
 
+GROOVE_CLEAR   = 0.4;
+CARTRIDGE_WALL = 2.0;
+RAIL_W         = 2.4;
+RAIL_T         = 2.8;
+
 module mirror_glass() {
-    // Thin dim = local Y. Coating on local −Y face (toward knife / lens).
-    color("silver", 0.9)
-        cube([MIRROR_SIZE, MIRROR_THICK, MIRROR_SIZE], center = true);
+    // Thin = local X. Used with coating on the +X face (toward the V interior).
+    color("silver", 0.92)
+        cube([MIRROR_THICK, MIRROR_SIZE, MIRROR_SIZE], center = true);
 }
 
-// side: +1 = right (+X), −1 = left (−X)
+// Local: coating plane X=0 facing +X (into V); glass/substrate in −X; blade +Y from knife.
+module mirror_cartridge(show_mirror = true) {
+    pocket_y = MIRROR_SIZE + MIRROR_CLEAR * 2;
+    pocket_z = MIRROR_SIZE + MIRROR_CLEAR * 2;
+    // glass center on −X so +X face of glass sits on X=0 (coating into V)
+    gx = -(MIRROR_THICK / 2 + MIRROR_CLEAR);
+
+    difference() {
+        union() {
+            // back plate behind glass (further −X)
+            translate([gx - MIRROR_THICK / 2 - CARTRIDGE_WALL / 2, MIRROR_SIZE / 2, 0])
+                cube([CARTRIDGE_WALL,
+                      pocket_y + CARTRIDGE_WALL * 2,
+                      pocket_z + CARTRIDGE_WALL * 2], center = true);
+            // top/bottom walls
+            for (z = [-1, 1])
+                translate([gx,
+                           MIRROR_SIZE / 2,
+                           z * (pocket_z / 2 + CARTRIDGE_WALL / 2)])
+                    cube([MIRROR_THICK + CARTRIDGE_WALL * 2,
+                          pocket_y + CARTRIDGE_WALL * 2,
+                          CARTRIDGE_WALL], center = true);
+            // far end (away from knife, +Y)
+            translate([gx, MIRROR_SIZE + CARTRIDGE_WALL / 2, 0])
+                cube([MIRROR_THICK + CARTRIDGE_WALL * 2,
+                      CARTRIDGE_WALL,
+                      pocket_z + CARTRIDGE_WALL * 2], center = true);
+            // bottom sill
+            translate([gx, MIRROR_SIZE / 2, -pocket_z / 2 - CARTRIDGE_WALL / 2])
+                cube([MIRROR_THICK + CARTRIDGE_WALL * 2,
+                      pocket_y + CARTRIDGE_WALL * 2,
+                      CARTRIDGE_WALL], center = true);
+            // drop-in rails (outer side)
+            for (z = [-1, 1])
+                translate([gx - MIRROR_THICK / 2 - CARTRIDGE_WALL - RAIL_W / 2,
+                           MIRROR_SIZE / 2,
+                           z * (pocket_z / 2 + CARTRIDGE_WALL + RAIL_W / 2)])
+                    cube([RAIL_W, pocket_y + 4, RAIL_T], center = true);
+        }
+        translate([gx, MIRROR_SIZE / 2, 0])
+            cube([MIRROR_THICK + MIRROR_CLEAR * 2 + 0.2,
+                  pocket_y,
+                  pocket_z], center = true);
+    }
+
+    if (show_mirror)
+        translate([gx, MIRROR_SIZE / 2, 0])
+            mirror_glass();
+}
+
 module mirror_tray(side = 1, show_mirror = true) {
-    pocket = MIRROR_SIZE + MIRROR_CLEAR * 2;
-    depth  = MIRROR_THICK + MIRROR_CLEAR + 2;
-    frame  = 5;
-
-    // Right needs rotate −45° so local +Y = world normal (−√2/2, √2/2)
-    // Left  needs rotate +45° so local +Y = world normal (+√2/2, √2/2)
+    // side=+1: Rz(-45) → local +X=(1,-1)/√2 (into V for right), local +Y=(1,1)/√2
     rot = -side * 45;
-
-    // Put tray center along the normal, OUTWARD into ±X,+Y (behind coating).
-    // Near edge of glass stays close to the knife so the roof points at the lens.
-    along_n = MIRROR_SIZE * 0.5 + MIRROR_THICK;
-
     rotate([0, 0, rot])
-        translate([0, along_n, 0]) {
-            difference() {
-                // Frame mostly on the +local-Y (substrate) side — keeps −Y face open to light
-                translate([0, depth / 2, 0])
-                    cube([pocket + frame * 2, depth + 3, pocket + frame * 2], center = true);
-                // Pocket from the coating side
-                translate([0, MIRROR_CLEAR, 0])
-                    cube([pocket, depth + 2, pocket], center = true);
-                // Open window toward knife (local −Y) AND toward camera (through)
-                translate([0, -5, 0])
-                    cube([pocket - 6, 20, pocket - 6], center = true);
-                // Tip/tilt set-screw holes from behind (substrate side)
-                for (z = [-MIRROR_SIZE * 0.3, MIRROR_SIZE * 0.3])
-                    for (x = [-MIRROR_SIZE * 0.3, MIRROR_SIZE * 0.3])
-                        if (!(x > 0 && z > 0))
-                            translate([x, depth + 1, z])
-                                rotate([90, 0, 0])
-                                    cylinder(h = 14, d = 2.6, $fn = 20);
-            }
-            if (show_mirror)
-                // Coating on local −Y face (toward knife); glass body toward +Y
-                translate([0, MIRROR_THICK / 2 + MIRROR_CLEAR, 0])
-                    mirror_glass();
-        }
+        mirror_cartridge(show_mirror = show_mirror);
 }
 
-module knife_edge_rib(h = MIRROR_SIZE + 6) {
-    // Thin vertical rib at origin; bevelled so coated edges can meet
+module mirror_groove_cutouts() {
+    slot_x = MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2;
+    slot_y = MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2;
+    slot_h = JUNCTION_BOX;
+
+    for (side = [-1, 1]) {
+        rot = -side * 45;
+        // slot centered on cartridge body (glass toward −X local)
+        rotate([0, 0, rot])
+            translate([-(slot_x / 2 - GROOVE_CLEAR),
+                       MIRROR_SIZE / 2,
+                       WALL])
+                cube([slot_x, slot_y, slot_h], center = true);
+    }
+}
+
+module knife_edge_rib(h = MIRROR_SIZE * 0.85) {
     color("DimGray")
-        intersection() {
-            rotate([0, 0, 45])
-                cube([2.0, 2.0, h], center = true);
-            cube([8, 8, h], center = true);
-        }
+        cube([0.8, 0.8, h], center = true);
 }
 
-// Preview rays: lens → knife → each camera (proves path is not blocked)
 module mirror_ray_guides() {
     if ($preview) {
-        color("gold", 0.55) {
-            // incoming from lens
+        color("gold", 0.5) {
             translate([0, -D_LENS_TO_KNIFE / 2, 0])
-                cube([1.2, D_LENS_TO_KNIFE, 1.2], center = true);
-            // to right camera
+                cube([1.0, D_LENS_TO_KNIFE, 1.0], center = true);
             translate([D_KNIFE_TO_MOUNT / 2, 0, 0])
-                cube([D_KNIFE_TO_MOUNT, 1.2, 1.2], center = true);
-            // to left camera
+                cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
             translate([-D_KNIFE_TO_MOUNT / 2, 0, 0])
-                cube([D_KNIFE_TO_MOUNT, 1.2, 1.2], center = true);
+                cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
         }
     }
 }
 
-module mirror_pair(show_mirrors = true) {
-    mirror_tray(side = -1, show_mirror = show_mirrors);
-    mirror_tray(side =  1, show_mirror = show_mirrors);
-    knife_edge_rib();
+module mirror_pair(show_mirrors = true, explode_z = 0) {
+    translate([0, 0, explode_z]) {
+        mirror_tray(side = -1, show_mirror = show_mirrors);
+        mirror_tray(side =  1, show_mirror = show_mirrors);
+        if (explode_z == 0)
+            knife_edge_rib();
+    }
     mirror_ray_guides();
 }

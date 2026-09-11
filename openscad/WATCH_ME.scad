@@ -1,7 +1,8 @@
 // =============================================================================
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
-// T chassis + your f-mount_raw.stl on each arm (nothing else on the mount face).
+// Mirrors drop in from the top into 45° grooves and meet at the box center.
+// Lid optional (SHOW_LID=0 by default) — seats with a light-trap lip.
 // =============================================================================
 
 include <params.scad>
@@ -13,7 +14,10 @@ use <shims.scad>
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
-MOUNT_PEG = 4;   // short fusion peg into arm — keep small so STL stays visible
+MOUNT_PEG = 4;
+LID_T     = 4;
+LID_LIP   = 3;    // light-trap step into the box
+LID_GAP   = 0.3;
 
 module tube_x(x0, x1) {
     translate([x0, 0, 0])
@@ -32,7 +36,6 @@ module helicoid_nut(h = HELICOID_LEN) {
         cylinder(h = h, d = HELICOID_MAJOR + 14);
 }
 
-// Optional body support — off by default (SHOW_CRADLES)
 module arm_cradle_solid() {
     translate([0, -TUBE_OD / 2 - 12, -8])
         difference() {
@@ -66,7 +69,6 @@ module chassis_structure() {
                 helicoid_nut(HELICOID_LEN);
         }
 
-    // Arms stop just shy of the F-mount so the STL is the visible end cap
     tube_x(s / 2 - 2, D_KNIFE_TO_MOUNT - MOUNT_PEG);
     tube_x(-(D_KNIFE_TO_MOUNT - MOUNT_PEG), -s / 2 + 2);
 }
@@ -74,29 +76,31 @@ module chassis_structure() {
 module chassis_bore() {
     s = JUNCTION_BOX;
 
-    cube([s - 2 * WALL, s - 2 * WALL, s - 2 * WALL], center = true);
+    // hollow chamber (keep a floor; open top for drop-in)
+    translate([0, 0, WALL / 2])
+        cube([s - 2 * WALL, s - 2 * WALL, s - WALL], center = true);
+
+    // top opening — full width so cartridges clear
+    translate([0, 0, s / 2 - WALL / 2])
+        cube([s - 2 * WALL, s - 2 * WALL, WALL + 0.2], center = true);
+
+    // lid lip recess (light trap) around top rim
+    translate([0, 0, s / 2 - LID_LIP / 2])
+        cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
 
     rotate([90, 0, 0])
         cylinder(h = D_LENS_TO_KNIFE + STEM_FLANGE_T + 1, d = TUBE_ID);
 
-    // Arms fully hollowed out to the peg
     rotate([0, 90, 0])
         cylinder(h = 2 * (D_KNIFE_TO_MOUNT - MOUNT_PEG) + 2, d = TUBE_ID, center = true);
 
-    translate([0, 0, s / 2 - WALL / 2])
-        cube([s - 2 * WALL, s - 2 * WALL, WALL + 0.2], center = true);
-
+    // screw bosses for lid
     for (x = [-1, 1], y = [-1, 1])
-        translate([x * (s / 2 - 8), y * (s / 2 - 8), s / 2 - 15])
-            cylinder(h = 20, d = 3.2);
+        translate([x * (s / 2 - 8), y * (s / 2 - 8), s / 2 - 12])
+            cylinder(h = 14, d = 3.2);
 
-    for (side = [-1, 1]) {
-        rot = -side * 45;
-        along_n = MIRROR_SIZE * 0.5 + MIRROR_THICK;
-        rotate([0, 0, rot])
-            translate([0, along_n, 0])
-                cube([MIRROR_SIZE + 12, MIRROR_THICK + 14, MIRROR_SIZE + 12], center = true);
-    }
+    // 45° drop-in grooves for mirror cartridges (open at top)
+    mirror_groove_cutouts();
 }
 
 module chassis_f_mounts() {
@@ -115,20 +119,30 @@ module part_chassis() {
         chassis_structure();
         chassis_bore();
     }
-    // F-mounts as separate colored solids on the arm ends
     chassis_f_mounts();
 }
 
+// Lid with stepped light-trap lip that plugs into the top recess
 module part_lid() {
     s = JUNCTION_BOX;
     color("DarkSlateGray")
-    translate([0, 0, s / 2 + 2 + ex * 0.35])
+    translate([0, 0, s / 2 + (SHOW_LID ? 0 : 0) + ex * 0.4]) {
         difference() {
-            cube([s, s, 4], center = true);
+            union() {
+                // outer cap
+                translate([0, 0, LID_T / 2])
+                    cube([s, s, LID_T], center = true);
+                // light-trap lip (fits into rim recess)
+                translate([0, 0, -LID_LIP / 2 + 0.01])
+                    cube([s - WALL - LID_GAP * 2,
+                          s - WALL - LID_GAP * 2,
+                          LID_LIP], center = true);
+            }
             for (x = [-1, 1], y = [-1, 1])
-                translate([x * (s / 2 - 8), y * (s / 2 - 8), -3])
-                    cylinder(h = 8, d = 3.2);
+                translate([x * (s / 2 - 8), y * (s / 2 - 8), -LID_LIP - 1])
+                    cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
         }
+    }
 }
 
 module ghost_body(side = 1) {
@@ -168,14 +182,19 @@ module optical_axis_guides() {
 module assembly() {
     translate([0, ex * 0.1, 0])
         part_chassis();
-    part_lid();
-    translate([0, 0, ex * 0.15])
-        mirror_pair(show_mirrors = $preview);
+
+    if (SHOW_LID)
+        part_lid();
+
+    // Drop-in path: EXPLODED lifts cartridges above the box
+    mirror_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0;
+    mirror_pair(show_mirrors = $preview, explode_z = mirror_z);
+
     ghost_body(-1);
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("F-mounts = f-mount_raw.stl only (no cradle/boss pile)");
+    echo("Mirrors: top-drop grooves, knife at box center; SHOW_LID=", SHOW_LID);
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 
@@ -186,13 +205,13 @@ module export_part() {
     else if (PART == "shims")
         shim_set();
     else if (PART == "f_mount")
-        f_mount_male_solid(boss = 0);  // bare STL
+        f_mount_male_solid(boss = 0);
     else if (PART == "lid")
         part_lid();
     else if (PART == "mirror_tray") {
-        mirror_tray(-1, false);
+        mirror_cartridge(-1, false);
         translate([90, 0, 0])
-            mirror_tray(1, false);
+            mirror_cartridge(1, false);
     }
     else
         assembly();

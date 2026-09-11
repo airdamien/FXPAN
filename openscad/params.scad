@@ -41,7 +41,8 @@ BODY_H = 105;
 BODY_D = 77;
 
 $fn = 96;
-EXPLODED = 0;
-SHOW_GHOSTS = 0;          // 1 = translucent D7000 / lens envelopes
-SHOW_CRADLES = 0;         // 1 = 1/4-20 support tabs under arms
+EXPLODED = 0;             // 1 = pull arms + lift mirror cartridges for drop-in view
+SHOW_LID = 0;             // 0 = hide lid so you can see mirrors / grooves
+SHOW_GHOSTS = 0;
+SHOW_CRADLES = 0;
 PART = "assembly";        // assembly | chassis | lid | mirror_tray | shims | f_mount
