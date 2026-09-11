@@ -35,6 +35,7 @@ KEYS = (
     "whitebalance",
     "expprogram",
     "capturetarget",
+    "batterylevel",
 )
 
 
@@ -207,6 +208,16 @@ def _shoot_one(role, port, dest, stamp):
         ],
         port=port,
         timeout=180,
+    )
+    return role, time.perf_counter() - t0
+
+
+def _shoot_card(role, port):
+    t0 = time.perf_counter()
+    gp(
+        ["--set-config", "capturetarget=1", "--capture-image"],
+        port=port,
+        timeout=90,
     )
     return role, time.perf_counter() - t0
 

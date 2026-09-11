@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Local control page for the two D7000s.
+"""Field + lab control pages for the two bodies.
 
   python3 cam/web.py
-  open http://127.0.0.1:8787
+  iPhone (same Wi-Fi):  http://<lan-ip>:8787/
+  laptop debugger:      http://127.0.0.1:8787/lab
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import atexit
 import json
 import re
+import socket
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,155 +22,54 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
 import live
 
+HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
 atexit.register(LIVE.stop)
+PORT = 8787
 
-PAGE = """<!doctype html>
-<meta charset="utf-8">
-<title>Nikon Duals — camera control</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; margin: 2rem;
-         background: #111; color: #e8e8e8; max-width: 64rem; }
-  .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-  .previews figure { margin: 0; }
-  .previews figcaption { color: #888; font-size: 0.8rem; margin: 0 0 0.35rem; }
-  .previews img { width: 100%; aspect-ratio: 3/2; object-fit: contain;
-                  background: #000; border-radius: 4px; display: block; }
-  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.25rem; }
-  p.sub { color: #888; margin: 0 0 1.5rem; }
-  section { border: 1px solid #333; border-radius: 8px; padding: 1rem 1.1rem; margin: 0 0 1rem; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #2a2a2a; }
-  th { color: #888; font-weight: 500; }
-  input { background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px;
-          padding: 0.35rem 0.5rem; width: 8rem; }
-  button { background: #2a4a7a; color: #fff; border: 0; border-radius: 5px;
-           padding: 0.45rem 0.85rem; cursor: pointer; font: inherit; }
-  button.shoot { background: #8a2a2a; font-size: 1.05rem; padding: 0.7rem 1.4rem; }
-  button:disabled { opacity: 0.5; cursor: wait; }
-  .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: end; margin-top: 0.7rem; }
-  label { display: flex; flex-direction: column; gap: 0.2rem; color: #aaa; font-size: 0.8rem; }
-  #log { white-space: pre-wrap; color: #9c9; font: 13px ui-monospace, monospace; min-height: 3rem; }
-  #log.err { color: #f88; }
-</style>
-<h1>Nikon Duals</h1>
-<p class="sub">gphoto2 PTP · T = back (+Y) · R = side (+X) · USB fire is tens of ms apart · live view is a low-res JPEG preview</p>
-<section>
-  <table id="cams"><thead><tr>
-    <th>role</th><th>serial</th><th>port</th><th>model</th>
-  </tr></thead><tbody></tbody></table>
-  <div class="row">
-    <button id="detect">Detect</button>
-    <button id="status">Status</button>
-  </div>
-</section>
-<section>
-  <div class="previews">
-    <figure>
-      <figcaption>T · back · +Y</figcaption>
-      <img id="lvT" alt="T live view">
-    </figure>
-    <figure>
-      <figcaption>R · side · +X</figcaption>
-      <img id="lvR" alt="R live view">
-    </figure>
-  </div>
-  <div class="row">
-    <button id="live">Live view</button>
-    <button id="liveStop">Stop</button>
-  </div>
-</section>
-<section>
-  <div class="row">
-    <label>T serial<input id="t" placeholder="back / +Y"></label>
-    <label>R serial<input id="r" placeholder="side / +X"></label>
-    <button id="pair">Pair</button>
-  </div>
-  <div class="row">
-    <label>ISO<input id="iso" value="400"></label>
-    <label>Shutter<input id="shutter" value="1/125"></label>
-    <label>Program<input id="program" value="M"></label>
-    <button id="set">Set both</button>
-  </div>
-  <div class="row">
-    <button class="shoot" id="shoot">Shoot T + R</button>
-  </div>
-</section>
-<pre id="log">Detect when both bodies are awake (Setup → USB → MTP/PTP).</pre>
-<script>
-const log = (m, err) => { const el = document.getElementById('log');
-  el.textContent = m; el.className = err ? 'err' : ''; };
-const api = async (path, opt) => {
-  const r = await fetch(path, opt);
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error || r.statusText);
-  return j;
-};
-const fill = (rows) => {
-  const tb = document.querySelector('#cams tbody');
-  tb.innerHTML = '';
-  (rows || []).forEach(row => {
-    const tr = document.createElement('tr');
-    ['role','serial','port','model'].forEach(k => {
-      const td = document.createElement('td');
-      td.textContent = row[k] || '—';
-      tr.appendChild(td);
-    });
-    tb.appendChild(tr);
-    if (row.role === 'T' && row.serial) document.getElementById('t').value = row.serial;
-    if (row.role === 'R' && row.serial) document.getElementById('r').value = row.serial;
-  });
-  if (!(rows || []).length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4">no cameras on USB</td>';
-    tb.appendChild(tr);
-  }
-};
-const bind = (id, fn) => document.getElementById(id).onclick = async () => {
-  document.getElementById(id).disabled = true;
-  try { await fn(); } catch (e) { log(e.message, true); }
-  document.getElementById(id).disabled = false;
-};
-const liveSrc = (on) => {
-  ['T','R'].forEach(role => {
-    const img = document.getElementById('lv'+role);
-    img.src = on ? '/api/live/'+role+'.mjpg?'+Date.now() : '';
-  });
-};
-bind('detect', async () => { liveSrc(false); const j = await api('/api/detect'); fill(j.cameras); log(j.message); });
-bind('status', async () => { liveSrc(false); const j = await api('/api/status'); fill(j.cameras); log(j.message); });
-bind('pair', async () => {
-  const j = await api('/api/pair', { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ t: t.value, r: r.value }) });
-  log(j.message);
-});
-bind('set', async () => {
-  liveSrc(false);
-  const j = await api('/api/set', { method:'POST', headers:{'content-type':'application/json'},
-    body: JSON.stringify({ iso: iso.value, shutter: shutter.value, program: program.value }) });
-  log(j.message);
-});
-bind('shoot', async () => { liveSrc(false); const j = await api('/api/shoot', { method:'POST' }); log(j.message); });
-bind('live', async () => {
-  const j = await api('/api/live/start', { method:'POST' });
-  liveSrc(true);
-  log(j.message);
-});
-bind('liveStop', async () => {
-  liveSrc(false);
-  const j = await api('/api/live/stop', { method:'POST' });
-  log(j.message);
-});
-api('/api/detect').then(j => { fill(j.cameras); log(j.message); }).catch(e => log(e.message, true));
-</script>
-"""
+
+def lan_ips():
+    found = []
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("1.1.1.1", 80))
+        found.append(sock.getsockname()[0])
+        sock.close()
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127."):
+                found.append(ip)
+    except socket.gaierror:
+        pass
+    out = []
+    for ip in found:
+        if ip not in out:
+            out.append(ip)
+    return out
+
+
+def urls_for(port):
+    return [f"http://127.0.0.1:{port}/lab"] + [f"http://{ip}:{port}/" for ip in lan_ips()]
 
 
 def _json(handler, code, payload):
     body = json.dumps(payload).encode()
     handler.send_response(code)
     handler.send_header("Content-Type", "application/json")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _html(handler, name):
+    body = (HERE / name).read_bytes()
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -195,6 +96,21 @@ def _live_message(snap):
         else:
             bits.append(f"{role} stopped" + (f" ({info['error']})" if info["error"] else ""))
     return "  ".join(bits)
+
+
+def _assignments(data):
+    out = []
+    for src, key in (
+        ("iso", "iso"),
+        ("shutter", "shutterspeed"),
+        ("program", "expprogram"),
+        ("wb", "whitebalance"),
+        ("quality", "imagequality"),
+    ):
+        val = (data.get(src) or "").strip()
+        if val:
+            out.append((key, val))
+    return out
 
 
 def _send_jpeg(handler, payload):
@@ -247,15 +163,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if path == "/":
-            body = PAGE.encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
+        if path in ("/", "/field"):
+            return _html(self, "field.html")
+        if path == "/lab":
+            return _html(self, "lab.html")
         try:
+            if path == "/api/meta":
+                port = self.server.server_address[1]
+                phone = urls_for(port)
+                lan = [u for u in phone if "127.0.0.1" not in u]
+                return _json(
+                    self, 200,
+                    {
+                        "lab": f"http://127.0.0.1:{port}/lab",
+                        "phone": lan[0] if lan else f"http://127.0.0.1:{port}/",
+                        "urls": phone,
+                        "pair": dual.load_pair(),
+                        "live": LIVE.snapshot(),
+                    },
+                )
             if path == "/api/live":
                 snap = LIVE.snapshot()
                 return _json(self, 200, {**snap, "message": _live_message(snap)})
@@ -271,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
                 msg = (
                     f"{len(rows)} body(ies)"
                     if rows
-                    else "no cameras. D7000 Setup → USB → MTP/PTP, wake both, plug USB."
+                    else "no cameras. Setup → USB → MTP/PTP, wake both, plug USB."
                 )
                 return _json(self, 200, {"cameras": rows, "pair": dual.load_pair(), "message": msg})
             if path == "/api/status":
@@ -283,13 +209,24 @@ class Handler(BaseHTTPRequestHandler):
 
                 with ThreadPoolExecutor(max_workers=len(rows)) as pool:
                     blocks = list(pool.map(dual._status_one, rows))
+                by_port = {b.get("port"): b for b in blocks}
+                for row in rows:
+                    extra = by_port.get(row["port"]) or {}
+                    for key in ("iso", "shutterspeed", "batterylevel", "imagequality"):
+                        if extra.get(key):
+                            row[key] = extra[key]
                 lines = []
                 for b in blocks:
                     lines.append(
                         f"{b.get('role')}  iso={b.get('iso')}  "
-                        f"shutter={b.get('shutterspeed')}  {b.get('port')}"
+                        f"shutter={b.get('shutterspeed')}  bat={b.get('batterylevel')}  "
+                        f"{b.get('port')}"
                     )
-                return _json(self, 200, {"cameras": rows, "status": blocks, "message": "\n".join(lines)})
+                return _json(
+                    self, 200,
+                    {"cameras": rows, "status": blocks, "pair": dual.load_pair(),
+                     "message": "\n".join(lines)},
+                )
         except dual.CamError as exc:
             return _json(self, 400, {"error": str(exc)})
         return _json(self, 404, {"error": "not found"})
@@ -313,13 +250,7 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, {"message": "live view stopped"})
             if path == "/api/set":
                 _stop_live()
-                assignments = []
-                if data.get("iso"):
-                    assignments.append(("iso", data["iso"]))
-                if data.get("shutter"):
-                    assignments.append(("shutterspeed", data["shutter"]))
-                if data.get("program"):
-                    assignments.append(("expprogram", data["program"]))
+                assignments = _assignments(data)
                 if not assignments:
                     raise dual.CamError("nothing to set")
                 have = dual.require_paired(dual.detect_bodies())
@@ -338,25 +269,38 @@ class Handler(BaseHTTPRequestHandler):
 
                 _stop_live()
                 have = dual.require_paired(dual.detect_bodies())
-                dest = Path("captures")
+                target = (data.get("target") or "card").strip()
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                dest = Path("captures")
                 with ThreadPoolExecutor(max_workers=2) as pool:
-                    futs = [
-                        pool.submit(dual._shoot_one, role, have[role]["port"], dest, stamp)
-                        for role in ("T", "R")
-                    ]
+                    if target == "card":
+                        futs = [
+                            pool.submit(dual._shoot_card, role, have[role]["port"])
+                            for role in ("T", "R")
+                        ]
+                    else:
+                        futs = [
+                            pool.submit(dual._shoot_one, role, have[role]["port"], dest, stamp)
+                            for role in ("T", "R")
+                        ]
                     times = [fut.result() for fut in futs]
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
-                return _json(self, 200, {"message": f"shot {stamp}  {msg}  → captures/"})
+                where = "cards" if target == "card" else "captures/"
+                return _json(self, 200, {"message": f"shot {stamp}  {msg}  → {where}"})
         except dual.CamError as exc:
             return _json(self, 400, {"error": str(exc)})
         return _json(self, 404, {"error": "not found"})
 
 
+class Server(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8787
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"http://127.0.0.1:{port}")
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    httpd = Server(("0.0.0.0", port), Handler)
+    print("field (iPhone)  " + "  ".join(u for u in urls_for(port) if "/lab" not in u))
+    print(f"lab  (laptop)   http://127.0.0.1:{port}/lab")
     httpd.serve_forever()
 
 
