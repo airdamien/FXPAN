@@ -1,6 +1,6 @@
-// One-piece V cartridge on the BACK wall (blank wall — no lens/camera).
-// Coatings face OUT of the V into the chamber (toward the lens).
-// Apex on +Y wall; open toward lens (−Y). Both wings identical handedness.
+// One-piece V on the BACK wall (blank — no lens/camera).
+// Apex on +Y; open toward lens (−Y). Coatings face OUT of the V into the chamber.
+// Left wing = mirror([1,0,0]) of a correct right wing (same coating-out).
 
 include <params.scad>
 
@@ -10,7 +10,6 @@ SPINE_W        = 3.2;
 FLOOR_T        = 2.8;
 RAIL_W         = 2.5;
 
-// Keep the whole V in the back half, flush to +Y wall
 function mirror_apex_y() = JUNCTION_BOX / 2 - WALL - 2;
 
 module mirror_glass() {
@@ -18,8 +17,8 @@ module mirror_glass() {
         cube([MIRROR_THICK, MIRROR_SIZE, MIRROR_SIZE], center = true);
 }
 
-// Local: knife at Y=0, blade +Y.
-// Coatings OUT of V: glass substrate on −X (into crease), coating on +X (faces chamber).
+// Right-wing local: knife Y=0, blade +Y.
+// Coating OUT: substrate −X, coating on +X (faces chamber after world place).
 module mirror_wing_frame() {
     pocket_y = MIRROR_SIZE + MIRROR_CLEAR * 2;
     pocket_z = MIRROR_SIZE + MIRROR_CLEAR * 2;
@@ -58,7 +57,6 @@ module mirror_wing_frame() {
             cube([MIRROR_THICK + MIRROR_CLEAR * 2 + 0.15,
                   pocket_y,
                   pocket_z], center = true);
-        // open on coating side (+X) — out of V into chamber
         translate([5, MIRROR_SIZE / 2, 0])
             cube([12, pocket_y - 4, pocket_z - 4], center = true);
     }
@@ -70,42 +68,53 @@ module mirror_wing_glass() {
         mirror_glass();
 }
 
+// Right only: Rz(-135°) → blade into +X/−Y, coating (+local X) into chamber
+module wing_right(show_mirror = true) {
+    rotate([0, 0, -135]) {
+        mirror_wing_frame();
+        if (show_mirror)
+            mirror_wing_glass();
+    }
+}
+
+module wing_left(show_mirror = true) {
+    // True mirror of right — keeps coating-out on both sides
+    mirror([1, 0, 0])
+        wing_right(show_mirror = show_mirror);
+}
+
 module mirror_L_cartridge(show_mirrors = true) {
-    // Build in place at the back wall:
-    // World: apex at (0, apex_y), blades sweep toward −Y into the box.
-    // Right @ world angle that puts blade along back→right; left mirrored by −angle.
     ay = mirror_apex_y();
 
-    color("SteelBlue")
-    union() {
-        // floor against back
-        translate([0, ay - MIRROR_SIZE / 2,
-                   -MIRROR_SIZE / 2 - FLOOR_T / 2 - MIRROR_CLEAR])
-            cube([MIRROR_SIZE * 1.1, MIRROR_SIZE + 6, FLOOR_T], center = true);
+    translate([0, ay, 0]) {
+        color("SteelBlue")
+        union() {
+            // floor toward chamber from apex
+            translate([0, -MIRROR_SIZE / 2,
+                       -MIRROR_SIZE / 2 - FLOOR_T / 2 - MIRROR_CLEAR])
+                cube([MIRROR_SIZE * 1.1, MIRROR_SIZE + 8, FLOOR_T], center = true);
 
-        // spine on back wall
-        translate([0, ay - SPINE_W / 2, 0])
-            cube([SPINE_W, SPINE_W,
-                  MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
+            // spine on the back wall
+            translate([0, SPINE_W / 2, 0])
+                cube([SPINE_W, SPINE_W,
+                      MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
 
-        translate([0, ay - MIRROR_SIZE * 0.45, -MIRROR_SIZE / 2 + 2])
-            cube([MIRROR_SIZE * 0.8, 5, 3.5], center = true);
+            translate([0, -MIRROR_SIZE * 0.4, -MIRROR_SIZE / 2 + 2])
+                cube([MIRROR_SIZE * 0.8, 5, 3.5], center = true);
 
-        // Wings: start at apex, extend into chamber (−Y) at ±45° from back wall
-        // Rz(180-45)=Rz(135) and Rz(180+45)=Rz(225): local +Y → into −Y hemisphere
-        translate([0, ay, 0]) {
-            rotate([0, 0, 135])
+            // frames only inside color union (glasses after)
+            rotate([0, 0, -135])
                 mirror_wing_frame();
-            rotate([0, 0, 225])
-                mirror_wing_frame();
+            mirror([1, 0, 0])
+                rotate([0, 0, -135])
+                    mirror_wing_frame();
         }
-    }
-    if (show_mirrors) {
-        translate([0, ay, 0]) {
-            rotate([0, 0, 135])
+        if (show_mirrors) {
+            rotate([0, 0, -135])
                 mirror_wing_glass();
-            rotate([0, 0, 225])
-                mirror_wing_glass();
+            mirror([1, 0, 0])
+                rotate([0, 0, -135])
+                    mirror_wing_glass();
         }
     }
 }
@@ -115,20 +124,21 @@ module mirror_groove_cutouts() {
     ay = mirror_apex_y();
 
     translate([0, ay, 0]) {
-        for (ang = [135, 225]) {
-            rotate([0, 0, ang])
-                translate([-(MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2),
-                           MIRROR_SIZE / 2,
-                           WALL])
-                    cube([MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2,
-                          MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2,
-                          well_h], center = true);
+        for (side = [0, 1]) {
+            mirror([side, 0, 0])
+                rotate([0, 0, -135])
+                    translate([-(MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2),
+                               MIRROR_SIZE / 2,
+                               WALL])
+                        cube([MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2,
+                              MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2,
+                              well_h], center = true);
         }
+        translate([0, -MIRROR_SIZE * 0.35, WALL])
+            cube([SPINE_W + GROOVE_CLEAR * 4,
+                  MIRROR_SIZE * 0.9,
+                  well_h], center = true);
     }
-    translate([0, ay - MIRROR_SIZE * 0.35, WALL])
-        cube([SPINE_W + GROOVE_CLEAR * 4,
-              MIRROR_SIZE * 0.9,
-              well_h], center = true);
 }
 
 module mirror_ray_guides() {
