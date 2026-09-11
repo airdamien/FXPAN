@@ -74,8 +74,8 @@ module mirror_L_cartridge(show_mirrors = true) {
     ay = mirror_apex_y();
 
     // Apex on back wall. Blades run into the chamber (−Y) at ±45° to ±X.
-    // Right @ −135°, out=+1 → coating on outer (+local X) face.
-    // Left  @ +135°, out=−1 → coating on outer (−local X) face.
+    // After Rz(±135), local +X maps INTO the V — so out=−1 on right / +1 on left
+    // puts coatings on the OUTER faces (out from the V).
     translate([0, ay, 0]) {
         color("SteelBlue")
         union() {
@@ -93,15 +93,15 @@ module mirror_L_cartridge(show_mirrors = true) {
                       MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
 
             rotate([0, 0, -135])
-                mirror_wing_frame(out = 1);
-            rotate([0, 0, 135])
                 mirror_wing_frame(out = -1);
+            rotate([0, 0, 135])
+                mirror_wing_frame(out = 1);
         }
         if (show_mirrors) {
             rotate([0, 0, -135])
-                mirror_wing_glass(out = 1);
-            rotate([0, 0, 135])
                 mirror_wing_glass(out = -1);
+            rotate([0, 0, 135])
+                mirror_wing_glass(out = 1);
         }
     }
 }
@@ -112,13 +112,13 @@ module mirror_groove_cutouts() {
 
     translate([0, ay, 0]) {
         rotate([0, 0, -135])
-            translate([MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2,
+            translate([-(MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2),
                        MIRROR_SIZE / 2, WALL])
                 cube([MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2,
                       MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2,
                       well_h], center = true);
         rotate([0, 0, 135])
-            translate([-(MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2),
+            translate([MIRROR_THICK / 2 + CARTRIDGE_WALL + RAIL_W / 2,
                        MIRROR_SIZE / 2, WALL])
                 cube([MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2,
                       MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2,
