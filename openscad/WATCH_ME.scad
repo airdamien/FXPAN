@@ -194,7 +194,7 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("Mirrors: top-drop grooves, knife at box center; SHOW_LID=", SHOW_LID);
+    echo("Mirror L-cartridge: one piece, left=mirror of right; SHOW_LID=", SHOW_LID);
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 
@@ -208,11 +208,8 @@ module export_part() {
         f_mount_male_solid(boss = 0);
     else if (PART == "lid")
         part_lid();
-    else if (PART == "mirror_tray") {
-        mirror_cartridge(-1, false);
-        translate([90, 0, 0])
-            mirror_cartridge(1, false);
-    }
+    else if (PART == "mirror_tray")
+        mirror_L_cartridge(show_mirrors = false);
     else
         assembly();
 }
