@@ -1,8 +1,8 @@
 // =============================================================================
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
-// Junction box + 3 bolt-on tubes (each tube is a wall cookie; print cookie on bed).
-// Cookies sit flat on the cube faces. Arm tubes toe toward the lens.
+// Junction box + 3 bolt-on tubes (print flange on the bed, bolt onto the flat wall).
+// Flanges sit on the cube faces. Arm tubes toe toward the lens.
 // =============================================================================
 
 include <params.scad>
@@ -18,6 +18,7 @@ MOUNT_PEG = 4;
 LID_T     = 4;
 LID_LIP   = 3;
 LID_GAP   = 0.3;
+LID_SCREW = 4;            // inset from the outer edge (was 8: holes sat on the inner wall)
 
 function stem_tube_len() = D_LENS_TO_KNIFE - JUNCTION_BOX / 2;
 function arm_tube_len()  = D_KNIFE_TO_MOUNT - F_REV_STACK - JUNCTION_BOX / 2;
@@ -84,7 +85,7 @@ module box_bore() {
         cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
 
     for (x = [-1, 1], y = [-1, 1])
-        translate([x * (s / 2 - 8), y * (s / 2 - 8), s / 2 - 12])
+        translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), s / 2 - 12])
             cylinder(h = 14, d = 3.2);
 
     mirror_groove_cutouts();
@@ -96,15 +97,9 @@ module box_bore() {
         cylinder(h = 1.2, d1 = TRIPOD_MAJOR + 1.6, d2 = TRIPOD_MAJOR);
     }
 
-    at_each_port() {
-        // cookie recess in the outer wall
-        translate([0, 0, -PORT_PATCH_T / 2])
-            cube([PORT_PATCH + PORT_FIT, PORT_PATCH + PORT_FIT,
-                  PORT_PATCH_T + 0.15], center = true);
-        // light hole through the remaining wall
+    at_each_port()
         translate([0, 0, -WALL / 2])
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
-    }
 }
 
 module box_fastener_cuts() {
@@ -203,7 +198,7 @@ module part_lid() {
                 lid_retain_tabs(lip = LID_LIP);
             }
             for (x = [-1, 1], y = [-1, 1])
-                translate([x * (s / 2 - 8), y * (s / 2 - 8), -LID_LIP - 1])
+                translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
         }
     }

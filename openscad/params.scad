@@ -30,10 +30,9 @@ TUBE_OD       = 68;
 WALL          = (TUBE_OD - TUBE_ID) / 2;
 JUNCTION_BOX  = 90;
 
-// Detachable ports: wall cookie + tube, print cookie on the bed
-PORT_PATCH     = 86;      // square of the outer face that travels with the tube
-PORT_PATCH_T   = 4;       // cookie thickness (outer part of WALL)
-PORT_FIT       = 0.35;    // recess clearance
+// Detachable ports: flange + tube, print flange on the bed, bolt onto the flat wall
+PORT_PATCH     = 86;      // flange square (sits on the face, no wall pocket)
+PORT_PATCH_T   = 4;       // flange thickness
 PORT_SCREW_R   = 38.5;    // 4× M3 at 45° so adjacent faces do not share a corner
 PORT_SCREW_D   = 3.2;
 PORT_NUT_AF    = 5.7;     // M3 hex, across flats
@@ -76,4 +75,4 @@ EXPLODED = 0;             // 1 = pull arms + lift mirror cartridges for drop-in 
 SHOW_LID = 0;             // 0 = hide lid so you can see mirrors / grooves
 SHOW_GHOSTS = 0;
 SHOW_CRADLES = 0;
-PART = "assembly";        // assembly | chassis | stem | arm_l | arm_r | lid | mirror_tray | shims | f_mount
+PART = is_undef(PART) ? "assembly" : PART;  // assembly | chassis | stem | arm_l | arm_r | lid | mirror_tray | shims | f_mount

@@ -35,10 +35,10 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 
 ## Print export cheatsheet
 
-In [`openscad/params.scad`](openscad/params.scad) set `PART`, then F6 → STL:
+`./export_stls.sh` writes binary STLs to [`stls/`](stls/). Or set `PART` in [`openscad/params.scad`](openscad/params.scad) and F6:
 
 - `chassis` — junction box only (print floor on the bed)
-- `stem` / `arm_l` / `arm_r` — tube + wall cookie (print the square cookie on the bed)
+- `stem` / `arm_l` / `arm_r` — tube + flange (print the square flange on the bed)
 - `lid` — chamber lid
 - `mirror_tray` — V cartridge
 - `shims` — 0.2 / 0.5 / 1.0 mm focus rings
