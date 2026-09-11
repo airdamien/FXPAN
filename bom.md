@@ -70,6 +70,7 @@ Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.pn
 | 1 spool | PETG or ABS | Chassis + tray | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | 12 | M3 hex nuts + 12× M3×10–16 | Three port cookies, 4 each | [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) · [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 4 | M3×10 lid screws | Corners of the lid | same assortment |
+| 4 | M2.5×6 thread-forming | Blind Pi holes in the lid (58×49 HAT). Do not punch through. | [M2.5 screws](https://www.amazon.com/s?k=M2.5+6mm+screw) |
 | 1 | 1/4-20 camera screw | Printed thread in the floor | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
