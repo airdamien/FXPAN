@@ -267,7 +267,7 @@ module assembly() {
     at_reflect() ghost_body_at();
     at_transmit() ghost_body_at();
     optical_axis_guides();
-    echo("hybrid L: one 50/50 at origin; toe=adjacent DX halves");
+    echo("hybrid L: drop 50x50x1 from +Z into the slot; S1 toward the lens");
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
              " mm  field_toe=", field_toe(), " deg"));
 }

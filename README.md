@@ -21,6 +21,7 @@ KrakenOS path/frame preview for the hybrid L (Python 3.12):
 python3.12 -m venv kraken/.venv
 kraken/.venv/bin/pip install -r kraken/requirements.txt
 kraken/.venv/bin/python kraken/hybrid_paths.py
+kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
 ```
 
 ## Files
