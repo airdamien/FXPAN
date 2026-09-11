@@ -137,6 +137,7 @@ module part_lid() {
                     cube([s - WALL - LID_GAP * 2,
                           s - WALL - LID_GAP * 2,
                           LID_LIP], center = true);
+                lid_retain_tabs(lip = LID_LIP);
             }
             for (x = [-1, 1], y = [-1, 1])
                 translate([x * (s / 2 - 8), y * (s / 2 - 8), -LID_LIP - 1])
@@ -194,7 +195,7 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("V cartridge: tip at center, arms to back wall, coatings OUT; SHOW_LID=", SHOW_LID);
+    echo("V cartridge: tip at origin, coatings OUT, lid forks retain; SHOW_LID=", SHOW_LID);
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 

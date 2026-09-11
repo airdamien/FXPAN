@@ -1,22 +1,38 @@
-// One-piece V cartridge — thin knife join at the MIDDLE (origin).
-// Tip at box center, pointing at the lens; arms toward blank back wall (+Y).
-// Coatings on the OUTSIDE of the V. No fat spine / no back plate.
+// One-piece V cartridge. Knife at origin (box middle).
+// Tip points at the lens (−Y). Arms run toward the blank back wall (+Y).
+// Coatings on the OUTSIDE of the V (toward the cameras).
+// Lid forks drop over two posts to retain the cartridge.
 
 include <params.scad>
 
-GROOVE_CLEAR   = 0.4;
 CARTRIDGE_WALL = 2.2;
-RAIL_W         = 2.2;
-FLOOR_T        = 2.2;
+FLOOR_T        = 2.4;
 KNIFE_W        = 0.9;
+POST_W         = 8.0;
+POST_D         = 3.2;
+POST_H         = 12.0;
+FORK_CLEAR     = 0.4;
+FORK_LEN       = 10.0;
+POCKET_T       = 2.2;
+CHAMBER_MARGIN = 1.2;
+
+function chamber_xy() = JUNCTION_BOX - 2 * WALL;
+function floor_z()    = -JUNCTION_BOX / 2 + WALL;
+function blade_mid()  = MIRROR_SIZE * 0.55;
+
+// World XY of a wing post. side +1 = +X (right), −1 = −X (left).
+function retain_xy(side) =
+    [side * blade_mid() * sin(45), blade_mid() * cos(45)];
 
 module mirror_glass() {
     color("silver", 0.92)
         cube([MIRROR_THICK, MIRROR_SIZE, MIRROR_SIZE], center = true);
 }
 
-// Backing on INSIDE of V; glass pocket on OUTSIDE (`out` = ±1).
-// Local: knife Y=0, blade +Y.
+// Local: knife at Y=0, blade +Y.
+// `out` = which local-X side is OUTSIDE the V (coating / open face).
+// Right wing  Rz(−45): local +X is outside → out = +1
+// Left  wing  Rz(+45): local −X is outside → out = −1
 module mirror_wing(out = 1, glass = false) {
     py = MIRROR_SIZE + MIRROR_CLEAR * 2;
     pz = MIRROR_SIZE + MIRROR_CLEAR * 2;
@@ -28,97 +44,128 @@ module mirror_wing(out = 1, glass = false) {
     } else {
         difference() {
             union() {
-                // solid backing on the INSIDE (−out)
+                // backing on the INSIDE of the V
                 translate([-out * (CARTRIDGE_WALL / 2 + MIRROR_THICK / 2),
                            MIRROR_SIZE / 2, 0])
-                    cube([CARTRIDGE_WALL,
-                          py + CARTRIDGE_WALL,
-                          pz + CARTRIDGE_WALL * 2], center = true);
+                    cube([CARTRIDGE_WALL, py, pz + CARTRIDGE_WALL * 2],
+                         center = true);
 
                 for (z = [-1, 1])
                     translate([0, MIRROR_SIZE / 2,
                                z * (pz / 2 + CARTRIDGE_WALL / 2)])
-                        cube([MIRROR_THICK + CARTRIDGE_WALL * 2,
-                              py + CARTRIDGE_WALL,
+                        cube([MIRROR_THICK + CARTRIDGE_WALL * 2, py,
                               CARTRIDGE_WALL], center = true);
 
-                translate([0, MIRROR_SIZE + CARTRIDGE_WALL / 2, 0])
-                    cube([MIRROR_THICK + CARTRIDGE_WALL * 2,
-                          CARTRIDGE_WALL,
+                // end cap stays on the glass, does not overshoot toward the wall
+                translate([0, MIRROR_SIZE - CARTRIDGE_WALL / 2, 0])
+                    cube([MIRROR_THICK + CARTRIDGE_WALL * 2, CARTRIDGE_WALL,
                           pz + CARTRIDGE_WALL * 2], center = true);
 
                 hull() {
-                    translate([0, 0.5, 0])
-                        cube([KNIFE_W, 1, pz * 0.65], center = true);
-                    translate([-out * CARTRIDGE_WALL * 0.3, MIRROR_SIZE * 0.1, 0])
-                        cube([0.8, 0.8, pz * 0.65], center = true);
+                    translate([0, 0.4, 0])
+                        cube([KNIFE_W, 0.8, pz * 0.6], center = true);
+                    translate([-out * CARTRIDGE_WALL * 0.3, MIRROR_SIZE * 0.08, 0])
+                        cube([0.8, 0.8, pz * 0.6], center = true);
                 }
-
-                translate([out * (MIRROR_THICK + CARTRIDGE_WALL + RAIL_W / 2),
-                           MIRROR_SIZE / 2, 0])
-                    cube([RAIL_W, py, pz + 5], center = true);
-
-                translate([-out * CARTRIDGE_WALL * 0.2, MIRROR_SIZE / 2,
-                           -pz / 2 - FLOOR_T / 2])
-                    cube([CARTRIDGE_WALL + MIRROR_THICK,
-                          py + 2, FLOOR_T], center = true);
             }
             translate([gx, MIRROR_SIZE / 2, 0])
                 cube([MIRROR_THICK + MIRROR_CLEAR * 2 + 0.15, py, pz],
                      center = true);
-            // open on OUTSIDE so coating faces out of the V
             translate([out * 8, MIRROR_SIZE / 2, 0])
-                cube([16, py - 5, pz - 5], center = true);
+                cube([16, py - 6, pz - 6], center = true);
         }
     }
 }
 
-module mirror_L_cartridge(show_mirrors = true) {
-    color("SteelBlue")
-    union() {
-        // tiny knife at tip — wings meet here; no fat rectangle
-        translate([0, KNIFE_W / 2, 0])
-            cube([KNIFE_W, KNIFE_W,
-                  MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
-
-        // Coatings OUT: after ±45°, local +X points into the crease,
-        // so out must be NEGATIVE on the right and POSITIVE on the left.
-        rotate([0, 0, -45])
-            mirror_wing(out = -1, glass = false);
-        rotate([0, 0, 45])
-            mirror_wing(out = 1, glass = false);
-    }
-    if (show_mirrors) {
-        rotate([0, 0, -45])
-            mirror_wing(out = -1, glass = true);
-        rotate([0, 0, 45])
-            mirror_wing(out = 1, glass = true);
+module cartridge_posts() {
+    top = (MIRROR_SIZE + MIRROR_CLEAR * 2) / 2 + CARTRIDGE_WALL;
+    for (side = [-1, 1]) {
+        p = retain_xy(side);
+        translate([p[0], p[1], top + POST_H / 2])
+            cube([POST_W, POST_D, POST_H], center = true);
     }
 }
 
+module cartridge_feet() {
+    // pads down to the chamber floor so the V sits, not floats
+    z0 = floor_z() + FLOOR_T / 2;
+    for (side = [-1, 1]) {
+        p = retain_xy(side);
+        translate([p[0], p[1], z0])
+            cube([12, 8, FLOOR_T], center = true);
+    }
+    translate([0, 6, z0])
+        cube([10, 10, FLOOR_T], center = true);
+}
+
+module mirror_L_cartridge(show_mirrors = true) {
+    color("SteelBlue")
+    intersection() {
+        union() {
+            translate([0, KNIFE_W / 2, 0])
+                cube([KNIFE_W, KNIFE_W,
+                      MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
+
+            rotate([0, 0, -45])
+                mirror_wing(out = 1, glass = false);
+            rotate([0, 0, 45])
+                mirror_wing(out = -1, glass = false);
+
+            cartridge_posts();
+            cartridge_feet();
+        }
+        cube([chamber_xy() - CHAMBER_MARGIN * 2,
+              chamber_xy() - CHAMBER_MARGIN * 2,
+              JUNCTION_BOX - 1], center = true);
+    }
+    if (show_mirrors) {
+        intersection() {
+            union() {
+                rotate([0, 0, -45])
+                    mirror_wing(out = 1, glass = true);
+                rotate([0, 0, 45])
+                    mirror_wing(out = -1, glass = true);
+            }
+            cube([chamber_xy() - CHAMBER_MARGIN * 2,
+                  chamber_xy() - CHAMBER_MARGIN * 2,
+                  JUNCTION_BOX - 1], center = true);
+        }
+    }
+}
+
+// Floor pockets only — never a through-wall slab.
 module mirror_groove_cutouts() {
-    well_h = JUNCTION_BOX;
-
-    // rail grooves
-    for (pair = [[-45, -1], [45, 1]]) {
-        rotate([0, 0, pair[0]])
-            translate([pair[1] * (MIRROR_THICK + CARTRIDGE_WALL + RAIL_W / 2),
-                       MIRROR_SIZE / 2, WALL])
-                cube([MIRROR_THICK + CARTRIDGE_WALL * 2 + RAIL_W * 2 + GROOVE_CLEAR * 2,
-                      MIRROR_SIZE + CARTRIDGE_WALL * 2 + GROOVE_CLEAR * 2,
-                      well_h], center = true);
+    z0 = floor_z() + POCKET_T / 2 - 0.05;
+    intersection() {
+        union() {
+            for (side = [-1, 1]) {
+                p = retain_xy(side);
+                translate([p[0], p[1], z0])
+                    cube([13, 9, POCKET_T], center = true);
+            }
+            translate([0, 6, z0])
+                cube([11, 11, POCKET_T], center = true);
+        }
+        translate([0, 0, floor_z()])
+            cube([chamber_xy() - 1, chamber_xy() - 1, POCKET_T * 3],
+                 center = true);
     }
+}
 
-    // clear the OPEN of the V (toward back wall) so no leftover chassis slab
-    hull() {
-        translate([0, 2, WALL])
-            cube([4, 4, well_h], center = true);
-        translate([0, JUNCTION_BOX / 2 - WALL, WALL])
-            cube([MIRROR_SIZE * 1.2, 4, well_h], center = true);
+// Call from the lid (lid origin = box rim, +Z out). Forks slot over the posts.
+module lid_retain_tabs(lip = 3) {
+    for (side = [-1, 1]) {
+        p = retain_xy(side);
+        translate([p[0], p[1], 0])
+            difference() {
+                translate([0, 0, -lip - FORK_LEN / 2])
+                    cube([POST_W + 4, POST_D + 3.2, FORK_LEN], center = true);
+                translate([0, 0, -lip - FORK_LEN / 2 - 0.6])
+                    cube([POST_W + FORK_CLEAR * 2,
+                          POST_D + FORK_CLEAR * 2,
+                          FORK_LEN], center = true);
+            }
     }
-
-    translate([0, KNIFE_W, WALL])
-        cube([KNIFE_W + GROOVE_CLEAR * 4, KNIFE_W * 4, well_h], center = true);
 }
 
 module mirror_ray_guides() {

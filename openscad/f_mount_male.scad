@@ -3,15 +3,15 @@
 include <params.scad>
 
 F_STL_FILE   = "../f-mount_raw.stl";
-F_STL_CX     = 2.091;
-F_STL_CY     = 0.934;
+// Flange OD circle is already at XY origin; old CX/CY offsets shoved the
+// bayonet off the arm bore.
 F_STL_ZMIN   = -1.750;
 F_STL_ZMAX   = 5.000;
 F_STL_HEIGHT = F_STL_ZMAX - F_STL_ZMIN;
 F_STL_OD     = 52;
 
 module f_mount_stl_raw() {
-    translate([-F_STL_CX, -F_STL_CY, -F_STL_ZMIN])
+    translate([0, 0, -F_STL_ZMIN])
         import(F_STL_FILE, convexity = 12);
 }
 
