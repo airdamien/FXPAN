@@ -22,6 +22,7 @@ python3.12 -m venv kraken/.venv
 kraken/.venv/bin/pip install -r kraken/requirements.txt
 kraken/.venv/bin/python kraken/hybrid_paths.py
 kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
+kraken/.venv/bin/python kraken/hybrid_scene.py       # el135_scene.png + D7200 compare
 # also writes docs/kraken/el135_*.png for the recommended 135 mm taking lens
 ```
 
@@ -37,7 +38,7 @@ kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
 | `f-mount_raw.stl` | Reference scan for bayonet calibration |
 | `OPTICS.md` / `bom.md` | Path math + shopping list (hybrid buy list in `bom.md`) |
 | `kraken/hybrid_paths.py` | KrakenOS trace of the hybrid pano (paths, frames, stitch) |
-| `docs/kraken/el135_*.png` | 135/5.6 object frames + stitch (commit these; `kraken/preview_*.png` is gitignored) |
+| `docs/kraken/el135_*.png` | 135/5.6 object frames + stitch + D7200 pixel compare (commit these; `kraken/preview_*.png` is gitignored) |
 | `cam/dual.py` | USB control for both D7000s (gphoto2 PTP) |
 
 ## Dual D7000 USB
