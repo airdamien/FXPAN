@@ -1,7 +1,7 @@
 // =============================================================================
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
-// Mirrors drop in from the top into 45° grooves and meet at the box center.
+// Mirrors drop in from the top. Arms toe in for OVERLAP_FRAC stitch overlap.
 // Lid optional (SHOW_LID=0 by default) — seats with a light-trap lip.
 // =============================================================================
 
@@ -69,8 +69,10 @@ module chassis_structure() {
                 helicoid_nut(HELICOID_LEN);
         }
 
-    tube_x(s / 2 - 2, D_KNIFE_TO_MOUNT - MOUNT_PEG);
-    tube_x(-(D_KNIFE_TO_MOUNT - MOUNT_PEG), -s / 2 + 2);
+    for (side = [-1, 1])
+        rotate([0, 0, -side * arm_toe()])
+            tube_x(side > 0 ? (s / 2 - 2) : -(D_KNIFE_TO_MOUNT - MOUNT_PEG),
+                   side > 0 ? (D_KNIFE_TO_MOUNT - MOUNT_PEG) : -(s / 2 - 2));
 }
 
 module chassis_bore() {
@@ -91,8 +93,11 @@ module chassis_bore() {
     rotate([90, 0, 0])
         cylinder(h = D_LENS_TO_KNIFE + STEM_FLANGE_T + 1, d = TUBE_ID);
 
-    rotate([0, 90, 0])
-        cylinder(h = 2 * (D_KNIFE_TO_MOUNT - MOUNT_PEG) + 2, d = TUBE_ID, center = true);
+    for (side = [-1, 1])
+        rotate([0, 0, -side * arm_toe()])
+            rotate([0, 90, 0])
+                cylinder(h = 2 * (D_KNIFE_TO_MOUNT - MOUNT_PEG) + 2,
+                         d = TUBE_ID, center = true);
 
     // screw bosses for lid
     for (x = [-1, 1], y = [-1, 1])
@@ -105,12 +110,13 @@ module chassis_bore() {
 
 module chassis_f_mounts() {
     for (side = [-1, 1])
-        translate([side * D_KNIFE_TO_MOUNT, 0, 0])
-            rotate([0, side * 90, 0]) {
-                f_mount_male_solid(boss = MOUNT_PEG);
-                if (SHOW_CRADLES)
-                    arm_cradle_solid();
-            }
+        rotate([0, 0, -side * arm_toe()])
+            translate([side * D_KNIFE_TO_MOUNT, 0, 0])
+                rotate([0, side * 90, 0]) {
+                    f_mount_male_solid(boss = MOUNT_PEG);
+                    if (SHOW_CRADLES)
+                        arm_cradle_solid();
+                }
 }
 
 module part_chassis() {
@@ -149,12 +155,13 @@ module part_lid() {
 module ghost_body(side = 1) {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
-            translate([
-                side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 15 + BODY_D / 2 + ex),
-                0,
-                -8
-            ])
-                cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
+            rotate([0, 0, -side * arm_toe()])
+                translate([
+                    side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 15 + BODY_D / 2 + ex),
+                    0,
+                    -8
+                ])
+                    cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
 }
 
 module ghost_lens() {
@@ -173,10 +180,10 @@ module optical_axis_guides() {
         color("gold", 0.45) {
             rotate([90, 0, 0])
                 cylinder(h = D_LENS_TO_KNIFE + 2, d = 1.0);
-            rotate([0, -90, 0])
-                cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
-            rotate([0, 90, 0])
-                cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
+            for (side = [-1, 1])
+                rotate([0, 0, -side * arm_toe()])
+                    rotate([0, side * 90, 0])
+                        cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
         }
 }
 
@@ -196,7 +203,8 @@ module assembly() {
     ghost_lens();
     optical_axis_guides();
     echo("V cartridge: tip at origin, coatings OUT, lid forks retain; SHOW_LID=", SHOW_LID);
-    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
+             "  arm_toe=", arm_toe(), " deg  cross=", overlap_cross(), " mm"));
 }
 
 module export_part() {

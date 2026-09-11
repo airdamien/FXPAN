@@ -19,7 +19,7 @@ Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R
 - One-piece **V cartridge** joins at the **middle** (knife at origin); arms run toward the blank **back wall** (+Y).
 - Coatings face **out from the V**. Cartridge stays inside the chamber; floor pockets locate it; lid forks slot over two posts (`SHOW_LID=1`).
 - Right blade → +X camera; left blade → −X camera.
-- Aim for **5–10% overlap** at the seam for stitching.
+- **Stitch overlap** (`OVERLAP_FRAC`, default **0.20**): each arm is toed toward the lens by `arm_toe()` so the camera axis looks across the knife, and each glass is shifted inward by `overlap_cross()/2` so there is coating on that line of sight. That is ~4.7 mm / ~1000 px on a D7000. A hard V still cannot put the *same* full-brightness rays on both sensors — the extra strip is the crossed-glass + pupil-split seam, not a 50/50 cube. Tune `OVERLAP_FRAC` in [`openscad/params.scad`](openscad/params.scad).
 
 ## Equal-path rule
 

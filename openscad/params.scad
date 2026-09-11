@@ -9,6 +9,16 @@ D_KNIFE_TO_MOUNT = 72;    // knife → camera F-mount register face
 PATH_FOLD        = D_LENS_TO_KNIFE + D_KNIFE_TO_MOUNT;
 PATH_TOTAL       = PATH_FOLD + FLANGE_F;  // ~173.5 mm
 
+// Stitch overlap: each camera looks across the knife by this fraction of
+// a D7000 frame. Glasses cross past the axis by the same field mapped to
+// the knife. Tune OVERLAP_FRAC; 0.20 ≈ 4.7 mm / ~1000 px on each body.
+SENSOR_W      = 23.6;
+OVERLAP_FRAC  = 0.20;
+function path_after_knife()   = D_KNIFE_TO_MOUNT + FLANGE_F;
+function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
+function overlap_cross()      = overlap_at_sensor() * path_after_knife() / PATH_TOTAL;
+function arm_toe()            = atan(overlap_at_sensor() / path_after_knife());
+
 // First-surface mirrors
 MIRROR_SIZE   = 50;
 MIRROR_THICK  = 3;

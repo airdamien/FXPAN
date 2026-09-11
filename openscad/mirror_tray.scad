@@ -19,10 +19,20 @@ CHAMBER_MARGIN = 1.2;
 function chamber_xy() = JUNCTION_BOX - 2 * WALL;
 function floor_z()    = -JUNCTION_BOX / 2 + WALL;
 function blade_mid()  = MIRROR_SIZE * 0.55;
+function blade_ang(side) = -side * 45;   // +1 right → −45°
+function wing_in(side)   = -side * overlap_cross() / 2;
 
 // World XY of a wing post. side +1 = +X (right), −1 = −X (left).
 function retain_xy(side) =
-    [side * blade_mid() * sin(45), blade_mid() * cos(45)];
+    let (a = blade_ang(side), lx = wing_in(side), ly = blade_mid())
+        [lx * cos(a) - ly * sin(a),
+         lx * sin(a) + ly * cos(a)];
+
+module place_wing(side, glass = false) {
+    rotate([0, 0, blade_ang(side)])
+        translate([wing_in(side), 0, 0])
+            mirror_wing(out = side, glass = glass);
+}
 
 module mirror_glass() {
     color("silver", 0.92)
@@ -106,10 +116,8 @@ module mirror_L_cartridge(show_mirrors = true) {
                 cube([KNIFE_W, KNIFE_W,
                       MIRROR_SIZE + CARTRIDGE_WALL * 2], center = true);
 
-            rotate([0, 0, -45])
-                mirror_wing(out = 1, glass = false);
-            rotate([0, 0, 45])
-                mirror_wing(out = -1, glass = false);
+            place_wing(1, glass = false);
+            place_wing(-1, glass = false);
 
             cartridge_posts();
             cartridge_feet();
@@ -121,10 +129,8 @@ module mirror_L_cartridge(show_mirrors = true) {
     if (show_mirrors) {
         intersection() {
             union() {
-                rotate([0, 0, -45])
-                    mirror_wing(out = 1, glass = true);
-                rotate([0, 0, 45])
-                    mirror_wing(out = -1, glass = true);
+                place_wing(1, glass = true);
+                place_wing(-1, glass = true);
             }
             cube([chamber_xy() - CHAMBER_MARGIN * 2,
                   chamber_xy() - CHAMBER_MARGIN * 2,
@@ -173,10 +179,10 @@ module mirror_ray_guides() {
         color("gold", 0.5) {
             translate([0, -D_LENS_TO_KNIFE / 2, 0])
                 cube([1.0, D_LENS_TO_KNIFE, 1.0], center = true);
-            translate([D_KNIFE_TO_MOUNT / 2, 0, 0])
-                cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
-            translate([-D_KNIFE_TO_MOUNT / 2, 0, 0])
-                cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
+            for (side = [-1, 1])
+                rotate([0, 0, -side * arm_toe()])
+                    translate([side * D_KNIFE_TO_MOUNT / 2, 0, 0])
+                        cube([D_KNIFE_TO_MOUNT, 1.0, 1.0], center = true);
         }
     }
 }
