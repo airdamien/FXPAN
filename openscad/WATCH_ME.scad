@@ -118,12 +118,12 @@ module chassis_bore() {
     }
 }
 
-// F-mounts pointed OUTWARD (+X / −X). Unioned after bore so they survive.
+// F-mounts pointed OUTWARD (±X). Unioned after bore so they survive.
 module chassis_f_mounts() {
     for (side = [-1, 1])
         translate([side * D_KNIFE_TO_MOUNT, 0, 0])
-            // side=+1 → rotate −90° about Y → local +Z maps to world +X (outward)
-            rotate([0, -side * 90, 0]) {
+            // side=+1 → rotate +90° about Y → local +Z → world +X (bayonet out)
+            rotate([0, side * 90, 0]) {
                 f_mount_male_solid(boss = MOUNT_BOSS);
                 arm_cradle_solid();
             }
@@ -168,13 +168,13 @@ module part_lid() {
 
 module ghost_body(side = 1) {
     if ($preview)
-        color("black", 0.18)
+        color("black", 0.12)
             translate([
-                side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + F_LUG_T + BODY_D / 2 + 4 + ex),
+                side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 10 + BODY_D / 2 + ex),
                 0,
-                -5
+                -8
             ])
-                cube([BODY_D, BODY_W * 0.85, BODY_H * 0.75], center = true);
+                cube([BODY_D, BODY_W * 0.8, BODY_H * 0.7], center = true);
 }
 
 module ghost_lens() {
@@ -212,7 +212,7 @@ module assembly() {
     optical_axis_guides();
     echo(str("PATH_FOLD=", PATH_FOLD,
              " PATH_TOTAL=", PATH_TOTAL,
-             " mm | F-mounts OUTWARD + M42 ScrewHole"));
+             " mm | F-mounts from f-mount_raw.stl + M42 ScrewHole"));
 }
 
 module export_part() {

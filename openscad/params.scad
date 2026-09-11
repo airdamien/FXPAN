@@ -27,15 +27,11 @@ HELICOID_LEN   = 28;
 HELICOID_TOL   = 0.45;    // ScrewHole extra clearance for FDM
 STEM_FLANGE_T  = 6;
 
-// Male F-mount (camera bayonets onto this)
-F_THROAT       = 43.8;
-F_LUG_OD       = 47.6;
-F_LUG_T        = 1.8;
-F_LUG_SWEEP    = 60;
-F_REGISTER_T   = 5.0;
-F_LOCK_NOTCH_W = 4.2;
-F_LOCK_NOTCH_D = 1.8;
-F_BORE         = F_THROAT - 3.5;
+// Male F-mount — geometry comes from f-mount_raw.stl (see f_mount_male.scad)
+F_BORE         = 40.3;    // clear aperture through imported mount
+F_REGISTER_T   = 6.75;    // STL height (Zmax-Zmin); used for ghost body spacing
+F_LUG_T        = 0;       // included in STL
+
 
 SHIM_RANGE     = 2.0;
 SHIM_STEPS     = [0.2, 0.5, 1.0];
