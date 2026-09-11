@@ -10,6 +10,9 @@ include <../lib/threads.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
 
+/* [View] */
+SHOW_LID = 1; // [0:hide, 1:show]
+
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
@@ -48,6 +51,31 @@ module port_screws() {
 module port_flange() {
     translate([0, 0, PORT_PATCH_T / 2])
         cube([PORT_PATCH, PORT_PATCH, PORT_PATCH_T], center = true);
+}
+
+// Engraved on the camera-side face (print flange on the bed).
+// kind "R": local −X is world +Z. kind "T": local −Y is world +Z.
+module flange_marks(kind) {
+    t = 0.8;
+    e = PORT_PATCH / 2 - 3.4;
+    module stamp(letter) {
+        translate([-4.6, 0])
+            polygon([[0, 2.6], [-1.7, -1.4], [1.7, -1.4]]);
+        translate([3.2, 0])
+            text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
+                 halign = "center", valign = "center");
+    }
+    translate([0, 0, PORT_PATCH_T - t])
+        linear_extrude(t + 0.15) {
+            if (kind == "R")
+                translate([-e, 0])
+                    rotate(90)
+                        stamp("R");
+            else
+                translate([0, -e])
+                    rotate(180)
+                        stamp("T");
+        }
 }
 
 module hex_nut_cut() {
@@ -189,7 +217,7 @@ module part_elnikkor_adapter() {
                 cylinder(h = 28, d = 47.5);
 }
 
-module part_camera_tube(out_len, rx = 0, ry = 0) {
+module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
     color("SlateGray")
     difference() {
         port_tube_solid(out_len, rx, ry);
@@ -198,6 +226,8 @@ module part_camera_tube(out_len, rx = 0, ry = 0) {
                 ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
                             F_REV_LEN + 0.3,
                             pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+        if (mark != "")
+            flange_marks(mark);
     }
     if ($preview)
         color("Goldenrod", 0.55)
@@ -276,11 +306,11 @@ module assembly() {
 
     at_reflect()
         translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(reflect_tube_len(), rx = -field_toe());
+            part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
 
     at_transmit()
         translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(transmit_tube_len(), ry = -field_toe());
+            part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
 
     hybrid_pair(show_glass = $preview,
                 explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
@@ -302,9 +332,9 @@ module export_part() {
     else if (PART == "stem")
         part_stem();
     else if (PART == "arm_r")
-        part_camera_tube(reflect_tube_len(), rx = -field_toe());
+        part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t")
-        part_camera_tube(transmit_tube_len(), ry = -field_toe());
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "shims")
         shim_set();
     else if (PART == "elnikkor_adapter")

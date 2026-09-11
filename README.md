@@ -52,3 +52,7 @@ python3 cam/dual.py shoot captures/
 ```
 
 USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves.
+
+```
+python3 cam/web.py          # http://127.0.0.1:8765
+```

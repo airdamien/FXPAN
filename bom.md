@@ -56,6 +56,14 @@ Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www
 
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export with `./export_stls.sh --hybrid`. Print `chassis` (floor on the bed), `stem`, `arm_r`, `arm_t`, `lid`, `hybrid_tray`, `shims`, `elnikkor_adapter` (M42 male on the bed). Drop the 50×50×1 plate into the tray slot from above, **S1 toward the lens**.
 
+### Hybrid assembly
+
+1. Box floor on the bed; tubes flange-on-bed. Black PETG/ABS.
+2. Drop the uncut 50×50×1 into the tray from +Z, **S1 toward the lens**. Seat the tray in the box corners. Lid forks over the two posts.
+3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
+4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter.
+5. Nuts in the wall traps; 4× M3 per cookie. Screw a 52 mm F reverse ring into each mouth; bayonet the D7000s. Helicoid + `elnikkor_adapter` on the stem.
+
 Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) · [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png) (~14 cm object stitch at 0.61 m, 1.7× one DX). You already have the D7000s and the 50/2.8 (close-up only).
 
 | Qty | Item | Why | Link |

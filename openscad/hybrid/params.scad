@@ -77,7 +77,6 @@ BODY_D = 77;
 
 $fn = 96;
 EXPLODED = 0;
-SHOW_LID = 1;             // 0 = hide lid so you can see the plate / tray
 SHOW_GHOSTS = 0;
 PART = is_undef(PART) ? "assembly" : PART;
 // assembly | chassis | stem | arm_r | arm_t | lid | hybrid_tray | shims | elnikkor_adapter
