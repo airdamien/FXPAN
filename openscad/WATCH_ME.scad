@@ -4,7 +4,7 @@
 // Junction box + 3 bolt-on tubes (print flange on the bed, bolt onto the flat wall).
 // Flanges sit on the cube faces. Arm tubes toe toward the lens.
 // 50/50 plate fork (same full frame): openscad/bsplit/WATCH_ME.scad
-// Hybrid pano L (one 50/50, field split + overlap): openscad/hybrid/WATCH_ME.scad
+// Hybrid pano L (toed DX + one 50/50 plate): openscad/hybrid/WATCH_ME.scad
 // =============================================================================
 
 include <params.scad>

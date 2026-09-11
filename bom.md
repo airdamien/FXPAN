@@ -55,7 +55,7 @@ Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www
 
 ## Hybrid pano (optional)
 
-That same Edmund 50×50×1 plate, used whole — no extra mirrors. Park it at 45° with the leading edge at the split: left field misses to the back camera, right field hits (R to the side camera, T baffled except a `BS_EXPOSE` stitch strip). Unique-right is ~1 stop down.
+That same Edmund 50×50×1 plate. Arms are toed so each D7000 looks at a different half of a ~42.5 mm image (1.8× one frame). Taking lens must cover ~45 mm diagonal.
 
 ## Notes
 

@@ -47,16 +47,15 @@ Other reasons the V stayed:
 
 The amplitude-split fork is [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad): lens −Y, reflect +X, transmit +Y. The T tube is shortened by `bs_t_comp()`. Open that file, not `WATCH_ME.scad`. Export with `./export_stls.sh --bsplit`.
 
-## Hybrid (pano L: one 50/50, no extra mirror)
+## Hybrid (pano L: toed DX + one 50/50 plate)
 
-Tilting a 50/50 does **not** send left pixels one way and right pixels the other — it only steers the reflected beam. Field split comes from **where the plate sits in the aperture**.
+A knife in the converging beam splits the **pupil**, not the picture — both bodies still see one DX frame. The panorama is each camera looking at a **different half** of a wider taking-lens image.
 
-The [Edmund 50×50×1 50R/50T](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) stands at 45° with its leading edge at the split:
+`sensor_shift() = SENSOR_W/2 × (1 − OVERLAP_FRAC)` ≈ **9.4 mm**. Each arm is toed by `field_toe()` so its DX window is that offset. Stitch width is `SENSOR_W × (2 − OVERLAP_FRAC)` ≈ **42.5 mm / 1.8×** one frame. The taking lens must cover that (~45 mm diagonal).
 
-- Rays that **miss** (left field) go straight to the back camera (+Y) at full brightness.
-- Rays that **hit** reflect to +X and transmit toward +Y. The first `BS_EXPOSE` mm is the stitch overlap (both cameras). A baffle on the transmit face blocks unique-right T so the back camera does not see the whole right half.
+One uncut 50×50 plate at the origin (same seat as bsplit): reflect → +X, transmit → +Y. Both unique halves are ~1 stop down.
 
-The right unique is ~1 stop down (it only exists as a 50/50 reflection). Chassis is an **L** (lens −Y, right +X, left +Y). Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export with `./export_stls.sh --hybrid`.
+Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
 ## What will not work
 

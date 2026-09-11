@@ -1,0 +1,4 @@
+KrakenOS==1.0.0.24
+matplotlib
+numpy
+setuptools<81

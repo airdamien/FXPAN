@@ -2,7 +2,7 @@
 
 Two Nikon D7000 bodies + one taking lens, field-split with first-surface mirrors.
 
-A **50/50 plate** fork (both cameras get the same full frame) lives in [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad). A **hybrid** pano L (one 50/50: miss = left half, hit = right half + overlap) lives in [`openscad/hybrid/`](openscad/hybrid/WATCH_ME.scad). See [OPTICS.md](OPTICS.md).
+A **50/50 plate** fork (both cameras get the same full frame) lives in [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad). A **hybrid** pano L (toed DX bodies + one 50/50 plate — ~1.8× one frame) lives in [`openscad/hybrid/`](openscad/hybrid/WATCH_ME.scad). See [OPTICS.md](OPTICS.md).
 
 **Infinity-capable:** M42/M39 helicoid + enlarger/LF lens on the stem (not an F-Nikkor).  
 Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.md).
@@ -15,6 +15,14 @@ Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.
 
 `./export_stls.sh` writes print STLs to `stls/`. `--bsplit` and `--hybrid` write those forks to `stls/bsplit/` and `stls/hybrid/`. Print the box floor-down. Print tubes with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts.
 
+KrakenOS path/frame preview for the hybrid L (Python 3.12):
+
+```
+python3.12 -m venv kraken/.venv
+kraken/.venv/bin/pip install -r kraken/requirements.txt
+kraken/.venv/bin/python kraken/hybrid_paths.py
+```
+
 ## Files
 
 | Path | Role |
@@ -26,3 +34,4 @@ Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.
 | `openscad/shims.scad` | Focus-match rings |
 | `f-mount_raw.stl` | Reference scan for bayonet calibration |
 | `OPTICS.md` / `bom.md` | Path math + shopping list |
+| `kraken/hybrid_paths.py` | KrakenOS trace of the hybrid pano (paths, frames, stitch) |

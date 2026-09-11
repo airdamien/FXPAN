@@ -1,8 +1,5 @@
-// One 50×50×1 50/50 at 45°. Leading edge at the origin (split).
-// Rays that miss (left field) go +Y at full brightness.
-// Rays that hit: R → +X, T → +Y. First BS_EXPOSE mm is the stitch strip.
-// A baffle on the transmit face blocks unique-right T so the back camera
-// does not see the whole right half. S1 toward the lens. No FSM.
+// Same 45° 50/50 plate as bsplit: center = origin, S1 toward the lens.
+// The panorama is the toed DX windows, not a second optic.
 
 include <params.scad>
 
@@ -20,19 +17,17 @@ function slot_t()     = BS_THICK + BS_CLEAR * 2;
 function plate_w()    = BS_SIZE + BS_CLEAR * 2;
 
 function retain_xy(side) =
-    let (ly = (side > 0) ? BS_SIZE * 0.85 : BS_SIZE * 0.15, a = -45)
+    let (ly = side * plate_w() / 2, a = -45)
         [-ly * sin(a), ly * cos(a)];
 
-module in_plate() {
+module place_plate(glass = false) {
     rotate([0, 0, -45])
-        children();
-}
-
-module place_bs_glass() {
-    in_plate()
-        translate([0, BS_SIZE / 2, 0])
-            color("gold", 0.4)
+        if (glass) {
+            color("gold", 0.45)
                 cube([BS_THICK, BS_SIZE, BS_SIZE], center = true);
+        } else {
+            bs_frame();
+        }
 }
 
 module bs_frame() {
@@ -43,29 +38,19 @@ module bs_frame() {
     z0 = floor_z();
     z1 = -pz / 2;
 
-    in_plate()
-        translate([0, BS_SIZE / 2, 0])
-            difference() {
-                union() {
-                    translate([0, 0, (z0 + z1) / 2])
-                        cube([st + w * 2, py + w * 2, z1 - z0], center = true);
-                    translate([0, 0, pz / 2 + w / 2])
-                        cube([st + w * 2, py + w * 2, w], center = true);
-                    // trailing rail only — leading edge stays open at the split
-                    translate([0, py / 2 + w / 2, 0])
-                        cube([st + w * 2, w, pz + w * 2], center = true);
-                    // T-side baffle: unique right stays off the back camera
-                    translate([-(st / 2 + w / 2), BS_EXPOSE / 2, 0])
-                        cube([w, py - BS_EXPOSE, pz - 6], center = true);
-                }
-                cube([st, py + 0.2, pz + 20], center = true);
-                // incoming face open (whole plate in the beam)
-                translate([20, 0, 0])
-                    cube([40, py - 6, pz - 6], center = true);
-                // overlap window on the T face
-                translate([-20, -(py / 2) + BS_EXPOSE / 2, 0])
-                    cube([40, BS_EXPOSE, pz - 6], center = true);
-            }
+    difference() {
+        union() {
+            translate([0, 0, (z0 + z1) / 2])
+                cube([st + w * 2, py + w * 2, z1 - z0], center = true);
+            translate([0, 0, pz / 2 + w / 2])
+                cube([st + w * 2, py + w * 2, w], center = true);
+            for (s = [-1, 1])
+                translate([0, s * (py / 2 + w / 2), 0])
+                    cube([st + w * 2, w, pz + w * 2], center = true);
+        }
+        cube([st, py + 0.2, pz + 20], center = true);
+        cube([40, py - 6, pz - 6], center = true);
+    }
 }
 
 module cartridge_posts() {
@@ -81,7 +66,7 @@ module hybrid_cartridge(show_glass = true) {
     color("SteelBlue")
     intersection() {
         union() {
-            bs_frame();
+            place_plate(glass = false);
             cartridge_posts();
         }
         cube([chamber_xy() - CHAMBER_MARGIN * 2,
@@ -90,7 +75,7 @@ module hybrid_cartridge(show_glass = true) {
     }
     if (show_glass)
         intersection() {
-            place_bs_glass();
+            place_plate(glass = true);
             cube([chamber_xy() - CHAMBER_MARGIN * 2,
                   chamber_xy() - CHAMBER_MARGIN * 2,
                   JUNCTION_BOX - 1], center = true);

@@ -1,7 +1,7 @@
-// Nikon Dual — hybrid pano L (one 50/50, no extra mirror)
-// Plate at 45°, leading edge at the split. Miss → +Y (left half).
-// Hit → R to +X, T to +Y. First BS_EXPOSE mm is the overlap; a T-side
-// baffle keeps unique-right off the back camera.
+// Nikon Dual — hybrid pano L (toed DX + one 50/50 plate)
+// Each DX body is aimed at a different half of a ~42.5 mm image
+// (sensor_shift / field_toe). That is the panorama.
+// One uncut 50×50 plate at the origin: R → +X, T → +Y.
 // https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/
 
 FLANGE_F = 46.5;
@@ -12,15 +12,18 @@ PATH_FOLD        = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT;
 PATH_TOTAL       = PATH_FOLD + FLANGE_F;
 
 SENSOR_W      = 23.6;
+SENSOR_H      = 15.6;
 OVERLAP_FRAC  = 0.20;
 function path_after_knife()   = D_PLATE_TO_MOUNT + FLANGE_F;
 function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
 function overlap_cross()      = overlap_at_sensor() * path_after_knife() / PATH_TOTAL;
+function sensor_shift()       = SENSOR_W / 2 * (1 - OVERLAP_FRAC);
+function field_toe()          = atan(sensor_shift() / path_after_knife());
+function stitch_w()           = SENSOR_W * (2 - OVERLAP_FRAC);
 
 BS_SIZE    = 50;
 BS_THICK   = 1.0;
 BS_CLEAR   = 0.35;
-BS_EXPOSE  = 10;          // strip width at the split
 BS_N       = 1.52;
 function bs_t_comp() =
     let (ti = 45, tt = asin(sin(ti) / BS_N))

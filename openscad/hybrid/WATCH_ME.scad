@@ -1,8 +1,8 @@
 // =============================================================================
-// hybrid/WATCH_ME.scad  — pano L: one 50/50 in the beam
+// hybrid/WATCH_ME.scad  — pano L: one 50/50 plate, toed DX bodies
 // =============================================================================
-// Lens −Y. Miss (left) → back camera +Y. Hit: R → side +X, T → back.
-// Leading edge at the split; BS_EXPOSE is the overlap. Open this file.
+// Each camera looks at a different half of a stitch_w() image (field_toe).
+// Lens −Y. Plate at origin: R → +X, T → +Y. Open this file.
 // =============================================================================
 
 include <params.scad>
@@ -116,19 +116,27 @@ module part_junction() {
     }
 }
 
-module along_tube() {
+module along_tube(rx = 0, ry = 0) {
     translate([0, 0, PORT_PATCH_T])
-        children();
+        rotate([rx, ry, 0])
+            children();
 }
 
-module port_tube_solid(out_len) {
+module port_tube_solid(out_len, rx = 0, ry = 0) {
     difference() {
         union() {
             port_flange();
-            along_tube()
+            along_tube(rx, ry)
                 cylinder(h = out_len, d = TUBE_OD);
+            if (rx != 0 || ry != 0)
+                translate([0, 0, PORT_PATCH_T])
+                    hull() {
+                        cylinder(h = 0.2, d = TUBE_OD);
+                        rotate([rx, ry, 0])
+                            cylinder(h = 0.2, d = TUBE_OD);
+                    }
         }
-        along_tube()
+        along_tube(rx, ry)
             translate([0, 0, -PORT_PATCH_T - 2])
                 cylinder(h = PORT_PATCH_T + out_len + 4, d = TUBE_ID);
         port_screws()
@@ -170,11 +178,11 @@ module part_elnikkor_adapter() {
                 cylinder(h = 28, d = 47.5);
 }
 
-module part_camera_tube(out_len) {
+module part_camera_tube(out_len, rx = 0, ry = 0) {
     color("SlateGray")
     difference() {
-        port_tube_solid(out_len);
-        along_tube()
+        port_tube_solid(out_len, rx, ry);
+        along_tube(rx, ry)
             translate([0, 0, out_len - F_REV_LEN])
                 ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
                             F_REV_LEN + 0.3,
@@ -182,7 +190,7 @@ module part_camera_tube(out_len) {
     }
     if ($preview)
         color("Goldenrod", 0.55)
-            along_tube()
+            along_tube(rx, ry)
                 translate([0, 0, out_len])
                     difference() {
                         cylinder(h = F_REV_STACK, d = 62);
@@ -247,11 +255,11 @@ module assembly() {
 
     at_reflect()
         translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(reflect_tube_len());
+            part_camera_tube(reflect_tube_len(), rx = -field_toe());
 
     at_transmit()
         translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(transmit_tube_len());
+            part_camera_tube(transmit_tube_len(), ry = -field_toe());
 
     hybrid_pair(show_glass = $preview,
                 explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
@@ -259,9 +267,9 @@ module assembly() {
     at_reflect() ghost_body_at();
     at_transmit() ghost_body_at();
     optical_axis_guides();
-    echo("hybrid L: one 50/50; miss=+Y left; hit R=+X right; strip=overlap");
-    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  BS_EXPOSE=", BS_EXPOSE,
-             " mm  bs_t_comp=", bs_t_comp(), " mm"));
+    echo("hybrid L: one 50/50 at origin; toe=adjacent DX halves");
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
+             " mm  field_toe=", field_toe(), " deg"));
 }
 
 module export_part() {
@@ -270,9 +278,9 @@ module export_part() {
     else if (PART == "stem")
         part_stem();
     else if (PART == "arm_r")
-        part_camera_tube(reflect_tube_len());
+        part_camera_tube(reflect_tube_len(), rx = -field_toe());
     else if (PART == "arm_t")
-        part_camera_tube(transmit_tube_len());
+        part_camera_tube(transmit_tube_len(), ry = -field_toe());
     else if (PART == "shims")
         shim_set();
     else if (PART == "elnikkor_adapter")

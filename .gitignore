@@ -5,3 +5,7 @@ openscad/preview.png
 openscad/bsplit/preview.png
 openscad/hybrid/preview.png
 /tmp/
+kraken/.venv/
+kraken/__pycache__/
+kraken/preview_*.png
+
