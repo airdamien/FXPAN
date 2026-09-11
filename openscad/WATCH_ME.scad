@@ -28,18 +28,13 @@ module tube_y(y0, y1) {
 }
 
 module helicoid_nut(h = HELICOID_LEN) {
+    // Smooth bore sized for M42×1; chase with an M42×1 tap after printing.
+    // (Helical groove subtracts were spawning detached junk geometry.)
     major = HELICOID_MAJOR;
-    pitch = HELICOID_PITCH;
     difference() {
         cylinder(h = h, d = major + 12);
         translate([0, 0, -0.1])
-            cylinder(h = h + 0.2, d = major - 1.6);
-        for (i = [0 : max(0, floor(h / pitch) - 1)])
-            translate([0, 0, i * pitch])
-                rotate([0, 0, (i * 25) % 360])
-                    rotate_extrude(angle = 300)
-                        translate([major / 2 - 0.85, 0])
-                            circle(d = 0.8, $fn = 12);
+            cylinder(h = h + 0.2, d = major - 0.2);
     }
 }
 
