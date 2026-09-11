@@ -42,4 +42,6 @@ BODY_D = 77;
 
 $fn = 96;
 EXPLODED = 0;
+SHOW_GHOSTS = 0;          // 1 = translucent D7000 / lens envelopes
+SHOW_CRADLES = 0;         // 1 = 1/4-20 support tabs under arms
 PART = "assembly";        // assembly | chassis | lid | mirror_tray | shims | f_mount

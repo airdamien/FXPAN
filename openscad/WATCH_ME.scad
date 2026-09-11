@@ -1,8 +1,7 @@
 // =============================================================================
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
-// Solid T chassis: junction + stem (M42 thread) + arms.
-// F-mounts are unioned ON AFTER boring so they cannot be hollowed away.
+// T chassis + your f-mount_raw.stl on each arm (nothing else on the mount face).
 // =============================================================================
 
 include <params.scad>
@@ -11,11 +10,10 @@ use <f_mount_male.scad>
 use <mirror_tray.scad>
 use <shims.scad>
 
-// Coarser thread mesh for snappy previews; drop to 0.2 for final STL
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
-MOUNT_BOSS = 16;
+MOUNT_PEG = 4;   // short fusion peg into arm — keep small so STL stays visible
 
 module tube_x(x0, x1) {
     translate([x0, 0, 0])
@@ -29,33 +27,24 @@ module tube_y(y0, y1) {
             cylinder(h = y1 - y0, d = TUBE_OD);
 }
 
-// Internal M42×1 using rcolyer threads.scad
 module helicoid_nut(h = HELICOID_LEN) {
-    major = HELICOID_MAJOR;
-    ScrewHole(major, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
-        cylinder(h = h, d = major + 14);
+    ScrewHole(HELICOID_MAJOR, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
+        cylinder(h = h, d = HELICOID_MAJOR + 14);
 }
 
+// Optional body support — off by default (SHOW_CRADLES)
 module arm_cradle_solid() {
-    hull() {
-        translate([0, 0, -MOUNT_BOSS / 2])
-            cylinder(h = MOUNT_BOSS, d = TUBE_OD);
-        translate([0, -TUBE_OD / 2 - 10, -MOUNT_BOSS / 2])
-            cube([40, 18, MOUNT_BOSS], center = true);
-    }
-    translate([0, -TUBE_OD / 2 - 16, -MOUNT_BOSS / 2])
+    translate([0, -TUBE_OD / 2 - 12, -8])
         difference() {
-            cube([30, 14, 12], center = true);
+            cube([24, 12, 10], center = true);
             cylinder(h = 20, d = 5.6, center = true);
         }
 }
 
-// Box + tubes + stem only (no F-mounts — those are added after bore)
 module chassis_structure() {
     s = JUNCTION_BOX;
     cube([s, s, s], center = true);
 
-    // stem tube into helicoid register
     tube_y(-D_LENS_TO_KNIFE, -s / 2 + 2);
 
     translate([0, -D_LENS_TO_KNIFE, 0])
@@ -77,30 +66,23 @@ module chassis_structure() {
                 helicoid_nut(HELICOID_LEN);
         }
 
-    // arm tubes out to mount plane (overlap box wall)
-    tube_x(s / 2 - 2, D_KNIFE_TO_MOUNT);
-    tube_x(-D_KNIFE_TO_MOUNT, -s / 2 + 2);
+    // Arms stop just shy of the F-mount so the STL is the visible end cap
+    tube_x(s / 2 - 2, D_KNIFE_TO_MOUNT - MOUNT_PEG);
+    tube_x(-(D_KNIFE_TO_MOUNT - MOUNT_PEG), -s / 2 + 2);
 }
 
 module chassis_bore() {
     s = JUNCTION_BOX;
 
-    // hollow chamber
     cube([s - 2 * WALL, s - 2 * WALL, s - 2 * WALL], center = true);
 
-    // stem optical bore — stop before threaded helicoid nut
     rotate([90, 0, 0])
         cylinder(h = D_LENS_TO_KNIFE + STEM_FLANGE_T + 1, d = TUBE_ID);
 
-    // arm optical bores — stop before mount boss so F-mounts stay solid
-    for (side = [-1, 1]) {
-        len = D_KNIFE_TO_MOUNT - MOUNT_BOSS - 1;
-        translate([side * (s / 2 - 1), 0, 0])
-            rotate([0, -side * 90, 0])
-                cylinder(h = len, d = TUBE_ID);
-    }
+    // Arms fully hollowed out to the peg
+    rotate([0, 90, 0])
+        cylinder(h = 2 * (D_KNIFE_TO_MOUNT - MOUNT_PEG) + 2, d = TUBE_ID, center = true);
 
-    // open top
     translate([0, 0, s / 2 - WALL / 2])
         cube([s - 2 * WALL, s - 2 * WALL, WALL + 0.2], center = true);
 
@@ -108,7 +90,6 @@ module chassis_bore() {
         translate([x * (s / 2 - 8), y * (s / 2 - 8), s / 2 - 15])
             cylinder(h = 20, d = 3.2);
 
-    // mirror tray pockets (stay in +Y roof, clear of ±X mounts)
     for (side = [-1, 1]) {
         rot = -side * 45;
         along_n = MIRROR_SIZE * 0.5 + MIRROR_THICK;
@@ -118,40 +99,24 @@ module chassis_bore() {
     }
 }
 
-// F-mounts pointed OUTWARD (±X). Unioned after bore so they survive.
 module chassis_f_mounts() {
     for (side = [-1, 1])
         translate([side * D_KNIFE_TO_MOUNT, 0, 0])
-            // side=+1 → rotate +90° about Y → local +Z → world +X (bayonet out)
             rotate([0, side * 90, 0]) {
-                f_mount_male_solid(boss = MOUNT_BOSS);
-                arm_cradle_solid();
+                f_mount_male_solid(boss = MOUNT_PEG);
+                if (SHOW_CRADLES)
+                    arm_cradle_solid();
             }
 }
 
 module part_chassis() {
     color("SlateGray")
-    union() {
-        difference() {
-            chassis_structure();
-            chassis_bore();
-        }
-        chassis_f_mounts();
+    difference() {
+        chassis_structure();
+        chassis_bore();
     }
-    // tray floors
-    color("Gray")
-    for (side = [-1, 1]) {
-        rot = -side * 45;
-        along_n = MIRROR_SIZE * 0.5 + MIRROR_THICK;
-        rotate([0, 0, rot])
-            translate([0, along_n + 6, -JUNCTION_BOX / 2 + WALL + 2])
-                difference() {
-                    cube([MIRROR_SIZE + 8, 8, 4], center = true);
-                    for (x = [-14, 14])
-                        translate([x, 0, 0])
-                            cylinder(h = 6, d = 2.9, center = true);
-                }
-    }
+    // F-mounts as separate colored solids on the arm ends
+    chassis_f_mounts();
 }
 
 module part_lid() {
@@ -167,10 +132,10 @@ module part_lid() {
 }
 
 module ghost_body(side = 1) {
-    if ($preview)
+    if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
             translate([
-                side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 10 + BODY_D / 2 + ex),
+                side * (D_KNIFE_TO_MOUNT + F_REGISTER_T + 15 + BODY_D / 2 + ex),
                 0,
                 -8
             ])
@@ -178,7 +143,7 @@ module ghost_body(side = 1) {
 }
 
 module ghost_lens() {
-    if ($preview)
+    if ($preview && SHOW_GHOSTS)
         color("black", 0.2)
             translate([0, -D_LENS_TO_KNIFE - STEM_FLANGE_T - HELICOID_LEN - 20 - ex, 0])
                 rotate([90, 0, 0]) {
@@ -190,7 +155,7 @@ module ghost_lens() {
 
 module optical_axis_guides() {
     if ($preview)
-        color("gold", 0.5) {
+        color("gold", 0.45) {
             rotate([90, 0, 0])
                 cylinder(h = D_LENS_TO_KNIFE + 2, d = 1.0);
             rotate([0, -90, 0])
@@ -210,9 +175,8 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo(str("PATH_FOLD=", PATH_FOLD,
-             " PATH_TOTAL=", PATH_TOTAL,
-             " mm | F-mounts from f-mount_raw.stl + M42 ScrewHole"));
+    echo("F-mounts = f-mount_raw.stl only (no cradle/boss pile)");
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm"));
 }
 
 module export_part() {
@@ -222,7 +186,7 @@ module export_part() {
     else if (PART == "shims")
         shim_set();
     else if (PART == "f_mount")
-        f_mount_male_solid(boss = MOUNT_BOSS);
+        f_mount_male_solid(boss = 0);  // bare STL
     else if (PART == "lid")
         part_lid();
     else if (PART == "mirror_tray") {
