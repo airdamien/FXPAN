@@ -26,7 +26,8 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 |-----|------|------|
 | 1 spool | PETG or ABS (not brittle PLA for bayonets) | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | ~20 | M3 heat-set inserts | [Amazon M3 heat set inserts](https://www.amazon.com/s?k=M3+heat+set+inserts) |
-| ~20 | M3×8–16 socket screws | [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
+| ~20 | M3×8–16 socket screws | 12 for the three port cookies (4 each). [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
+| 12 | M3 hex nuts | Drop into the inner traps, then screw the tubes on. [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
 | 6 | M3 set screws (mirror tip/tilt) | [Amazon M3 set screws](https://www.amazon.com/s?k=M3+set+screw+kit) |
 | 2 | 1/4-20 screws (arm cradles / tripod) | Printed **1/4-20** in the chassis floor (print that face on the bed). [Amazon 1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking sheet or flat black paint | [Amazon camera flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
@@ -35,9 +36,10 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 
 In [`openscad/params.scad`](openscad/params.scad) set `PART`, then F6 → STL:
 
-- `chassis` — one solid T (junction + stem + both F-mounts)
+- `chassis` — junction box only (print floor on the bed)
+- `stem` / `arm_l` / `arm_r` — tube + wall cookie (print the square cookie on the bed)
 - `lid` — chamber lid
-- `mirror_tray` — L+R trays
+- `mirror_tray` — V cartridge
 - `shims` — 0.2 / 0.5 / 1.0 mm focus rings
 
 ## Notes

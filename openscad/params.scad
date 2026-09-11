@@ -30,6 +30,16 @@ TUBE_OD       = 68;
 WALL          = (TUBE_OD - TUBE_ID) / 2;
 JUNCTION_BOX  = 90;
 
+// Detachable ports: wall cookie + tube, print cookie on the bed
+PORT_PATCH     = 86;      // square of the outer face that travels with the tube
+PORT_PATCH_T   = 4;       // cookie thickness (outer part of WALL)
+PORT_FIT       = 0.35;    // recess clearance
+PORT_SCREW_R   = 38.5;    // 4× M3 on the face (outside the tube, inside the cookie)
+PORT_SCREW_D   = 3.2;
+PORT_NUT_AF    = 5.7;     // M3 hex, across flats
+PORT_NUT_T     = 2.6;
+PORT_BOSS_H    = 5;       // inner nut boss
+
 // Helicoid stem (M42×1)
 HELICOID_MAJOR = 42;
 HELICOID_PITCH = 1.0;
@@ -61,4 +71,4 @@ EXPLODED = 0;             // 1 = pull arms + lift mirror cartridges for drop-in 
 SHOW_LID = 0;             // 0 = hide lid so you can see mirrors / grooves
 SHOW_GHOSTS = 0;
 SHOW_CRADLES = 0;
-PART = "assembly";        // assembly | chassis | lid | mirror_tray | shims | f_mount
+PART = "assembly";        // assembly | chassis | stem | arm_l | arm_r | lid | mirror_tray | shims | f_mount

@@ -11,6 +11,8 @@ Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.
 2. Enable **Design → Automatic Reload and Preview**
 3. Tweak [`openscad/params.scad`](openscad/params.scad) (`EXPLODED`, distances, `PART`)
 
+Print the box floor-down. Print `stem` / `arm_l` / `arm_r` with the square wall cookie on the bed, then drop each cookie into its recess and bolt with 4× M3 + hex nuts.
+
 ## Files
 
 | Path | Role |

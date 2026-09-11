@@ -1,8 +1,8 @@
 // =============================================================================
 // WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
+// Junction box + 3 bolt-on tubes (each tube is a wall cookie; print cookie on bed).
 // Mirrors drop in from the top. Arms toe in for OVERLAP_FRAC stitch overlap.
-// Lid optional (SHOW_LID=0 by default) — seats with a light-trap lip.
 // =============================================================================
 
 include <params.scad>
@@ -16,20 +16,11 @@ screw_resolution = $preview ? 0.6 : 0.25;
 ex = EXPLODED ? 55 : 0;
 MOUNT_PEG = 4;
 LID_T     = 4;
-LID_LIP   = 3;    // light-trap step into the box
+LID_LIP   = 3;
 LID_GAP   = 0.3;
 
-module tube_x(x0, x1) {
-    translate([x0, 0, 0])
-        rotate([0, 90, 0])
-            cylinder(h = x1 - x0, d = TUBE_OD);
-}
-
-module tube_y(y0, y1) {
-    translate([0, y0, 0])
-        rotate([-90, 0, 0])
-            cylinder(h = y1 - y0, d = TUBE_OD);
-}
+function stem_tube_len() = D_LENS_TO_KNIFE - JUNCTION_BOX / 2;
+function arm_tube_len()  = D_KNIFE_TO_MOUNT - MOUNT_PEG - JUNCTION_BOX / 2;
 
 module helicoid_nut(h = HELICOID_LEN) {
     ScrewHole(HELICOID_MAJOR, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
@@ -44,109 +35,151 @@ module arm_cradle_solid() {
         }
 }
 
-module chassis_structure() {
-    s = JUNCTION_BOX;
-    cube([s, s, s], center = true);
-
-    tube_y(-D_LENS_TO_KNIFE, -s / 2 + 2);
-
-    translate([0, -D_LENS_TO_KNIFE, 0])
-        rotate([90, 0, 0]) {
-            difference() {
-                union() {
-                    cylinder(h = STEM_FLANGE_T, d = TUBE_OD + 10);
-                    for (a = [0, 90, 180, 270])
-                        rotate([0, 0, a])
-                            translate([TUBE_OD / 2 + 4, 0, STEM_FLANGE_T / 2])
-                                cube([12, 14, STEM_FLANGE_T], center = true);
-                }
-                for (a = [0, 90, 180, 270])
-                    rotate([0, 0, a])
-                        translate([TUBE_OD / 2 + 4, 0, -1])
-                            cylinder(h = STEM_FLANGE_T + 2, d = 3.2);
-            }
-            translate([0, 0, STEM_FLANGE_T])
-                helicoid_nut(HELICOID_LEN);
-        }
-
-    for (side = [-1, 1])
-        rotate([0, 0, -side * arm_toe()])
-            tube_x(side > 0 ? (s / 2 - 2) : -(D_KNIFE_TO_MOUNT - MOUNT_PEG),
-                   side > 0 ? (D_KNIFE_TO_MOUNT - MOUNT_PEG) : -(s / 2 - 2));
+// Local port frame: z=0 is the outer face, +Z is outward (away from box).
+module port_screws() {
+    for (a = [0, 90, 180, 270])
+        rotate([0, 0, a])
+            translate([PORT_SCREW_R, 0, 0])
+                children();
 }
 
-module chassis_bore() {
+module port_flange() {
+    translate([0, 0, PORT_PATCH_T / 2])
+        cube([PORT_PATCH, PORT_PATCH, PORT_PATCH_T], center = true);
+}
+
+module hex_nut_cut() {
+    cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
+}
+
+// Place children in each port's local frame (outer face at the cube surface).
+module at_stem() {
+    translate([0, -JUNCTION_BOX / 2, 0])
+        rotate([90, 0, 0])
+            children();
+}
+
+module at_arm(side) {
+    rotate([0, 0, -side * arm_toe()])
+        translate([side * JUNCTION_BOX / 2, 0, 0])
+            rotate([0, side * 90, 0])
+                children();
+}
+
+module at_each_port() {
+    at_stem() children();
+    at_arm(1) children();
+    at_arm(-1) children();
+}
+
+module box_nut_bosses() {
+    at_each_port()
+        port_screws()
+            translate([0, 0, -WALL - PORT_BOSS_H])
+                cylinder(h = PORT_BOSS_H + 0.02, d = PORT_NUT_AF + 4.5);
+}
+
+module box_bore() {
     s = JUNCTION_BOX;
 
-    // hollow chamber (keep a floor; open top for drop-in)
     translate([0, 0, WALL / 2])
         cube([s - 2 * WALL, s - 2 * WALL, s - WALL], center = true);
 
-    // top opening — full width so cartridges clear
     translate([0, 0, s / 2 - WALL / 2])
         cube([s - 2 * WALL, s - 2 * WALL, WALL + 0.2], center = true);
 
-    // lid lip recess (light trap) around top rim
     translate([0, 0, s / 2 - LID_LIP / 2])
         cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
 
-    rotate([90, 0, 0])
-        cylinder(h = D_LENS_TO_KNIFE + STEM_FLANGE_T + 1, d = TUBE_ID);
-
-    for (side = [-1, 1])
-        rotate([0, 0, -side * arm_toe()])
-            rotate([0, 90, 0])
-                cylinder(h = 2 * (D_KNIFE_TO_MOUNT - MOUNT_PEG) + 2,
-                         d = TUBE_ID, center = true);
-
-    // screw bosses for lid
     for (x = [-1, 1], y = [-1, 1])
         translate([x * (s / 2 - 8), y * (s / 2 - 8), s / 2 - 12])
             cylinder(h = 14, d = 3.2);
 
-    // 45° drop-in grooves for mirror cartridges (open at top)
     mirror_groove_cutouts();
 
-    // 1/4-20 in the floor (print with this face on the bed)
     translate([0, 0, -s / 2 - 0.05]) {
         ScrewThread(1.01 * TRIPOD_MAJOR + 1.25 * TRIPOD_TOL,
                     WALL - TRIPOD_KEEP,
                     pitch = TRIPOD_PITCH, tolerance = TRIPOD_TOL);
         cylinder(h = 1.2, d1 = TRIPOD_MAJOR + 1.6, d2 = TRIPOD_MAJOR);
     }
+
+    at_each_port() {
+        // cookie recess in the outer wall
+        translate([0, 0, -PORT_PATCH_T / 2])
+            cube([PORT_PATCH + PORT_FIT, PORT_PATCH + PORT_FIT,
+                  PORT_PATCH_T + 0.15], center = true);
+        // light hole through the remaining wall
+        translate([0, 0, -WALL / 2])
+            cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
+    }
 }
 
-module chassis_f_mounts() {
-    for (side = [-1, 1])
-        rotate([0, 0, -side * arm_toe()])
-            translate([side * D_KNIFE_TO_MOUNT, 0, 0])
-                rotate([0, side * 90, 0]) {
-                    f_mount_male_solid(boss = MOUNT_PEG);
-                    if (SHOW_CRADLES)
-                        arm_cradle_solid();
-                }
+module box_fastener_cuts() {
+    at_each_port()
+        port_screws() {
+            translate([0, 0, -WALL - PORT_BOSS_H - 0.2])
+                cylinder(h = WALL + PORT_BOSS_H + 0.6, d = PORT_SCREW_D);
+            translate([0, 0, -WALL - PORT_NUT_T])
+                hex_nut_cut();
+        }
 }
 
-module part_chassis() {
+module part_junction() {
     color("SlateGray")
     difference() {
-        chassis_structure();
-        chassis_bore();
+        union() {
+            difference() {
+                cube([JUNCTION_BOX, JUNCTION_BOX, JUNCTION_BOX], center = true);
+                box_bore();
+            }
+            box_nut_bosses();
+        }
+        box_fastener_cuts();
     }
-    chassis_f_mounts();
 }
 
-// Lid with stepped light-trap lip that plugs into the top recess
+module port_tube_solid(out_len) {
+    difference() {
+        union() {
+            port_flange();
+            translate([0, 0, PORT_PATCH_T])
+                cylinder(h = out_len, d = TUBE_OD);
+        }
+        translate([0, 0, -1])
+            cylinder(h = PORT_PATCH_T + out_len + 2, d = TUBE_ID);
+        port_screws()
+            translate([0, 0, -1])
+                cylinder(h = PORT_PATCH_T + 2, d = PORT_SCREW_D);
+    }
+}
+
+module part_stem() {
+    color("SlateGray") {
+        port_tube_solid(stem_tube_len());
+        translate([0, 0, PORT_PATCH_T + stem_tube_len()])
+            helicoid_nut();
+    }
+}
+
+module part_arm(side = 1) {
+    color("SlateGray")
+        port_tube_solid(arm_tube_len());
+    translate([0, 0, PORT_PATCH_T + arm_tube_len() + MOUNT_PEG]) {
+        f_mount_male_solid(boss = MOUNT_PEG);
+        if (SHOW_CRADLES)
+            arm_cradle_solid();
+    }
+}
+
 module part_lid() {
     s = JUNCTION_BOX;
     color("DarkSlateGray")
     translate([0, 0, s / 2 + (SHOW_LID ? 0 : 0) + ex * 0.4]) {
         difference() {
             union() {
-                // outer cap
                 translate([0, 0, LID_T / 2])
                     cube([s, s, LID_T], center = true);
-                // light-trap lip (fits into rim recess)
                 translate([0, 0, -LID_LIP / 2 + 0.01])
                     cube([s - WALL - LID_GAP * 2,
                           s - WALL - LID_GAP * 2,
@@ -196,13 +229,20 @@ module optical_axis_guides() {
 }
 
 module assembly() {
-    translate([0, ex * 0.1, 0])
-        part_chassis();
+    part_junction();
+
+    at_stem()
+        translate([0, 0, EXPLODED ? ex : 0])
+            part_stem();
+
+    for (side = [-1, 1])
+        at_arm(side)
+            translate([0, 0, EXPLODED ? ex : 0])
+                part_arm(side);
 
     if (SHOW_LID)
         part_lid();
 
-    // Drop-in path: EXPLODED lifts cartridges above the box
     mirror_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0;
     mirror_pair(show_mirrors = $preview, explode_z = mirror_z);
 
@@ -210,15 +250,20 @@ module assembly() {
     ghost_body(1);
     ghost_lens();
     optical_axis_guides();
-    echo("V cartridge: tip at origin, coatings OUT, lid forks retain; SHOW_LID=", SHOW_LID);
+    echo("Bolt-on tubes: print cookie on bed; 4× M3 + hex nuts per port");
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
-             "  arm_toe=", arm_toe(), " deg  cross=", overlap_cross(), " mm"));
+             "  arm_toe=", arm_toe(), " deg"));
 }
 
 module export_part() {
-    if (PART == "chassis" || PART == "junction" || PART == "stem" ||
-        PART == "arm_l" || PART == "arm_r")
-        part_chassis();
+    if (PART == "chassis" || PART == "junction")
+        part_junction();
+    else if (PART == "stem")
+        part_stem();
+    else if (PART == "arm_l")
+        part_arm(-1);
+    else if (PART == "arm_r")
+        part_arm(1);
     else if (PART == "shims")
         shim_set();
     else if (PART == "f_mount")
