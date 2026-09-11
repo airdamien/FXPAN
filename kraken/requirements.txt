@@ -1,4 +1,6 @@
 KrakenOS==1.0.0.24
 matplotlib
 numpy
+scipy
+pyvista
 setuptools<81

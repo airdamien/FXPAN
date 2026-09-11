@@ -55,11 +55,13 @@ A knife in the converging beam splits the **pupil**, not the picture — both bo
 
 One uncut 50×50 plate at the origin (same seat as bsplit): reflect → +X, transmit → +Y. Both unique halves are ~1 stop down.
 
+Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). On `PATH_TOTAL=173.5` it focuses at **~608 mm** (m≈0.29). Stitch is ~149 mm of object / 42.5 mm on the sensors (~1.7× one DX). The 50/2.8 you have is close-up only (~73 mm). See [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) and [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png).
+
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
 ## What will not work
 
 - Native F-mount Nikkor on the stem for infinity (path already spent 46.5 mm inside each body).
-- El-Nikkor **50 mm** f/2.8 on this path (close-up only). Print `elnikkor_adapter` (L39×26 TPI) until a ~90–150 mm enlarger/LF lens arrives.
+- El-Nikkor **50 mm** f/2.8 on this path (close-up only). Print `elnikkor_adapter` (L39×26 TPI) and use the **135 mm f/5.6** for a ~0.6 m subject. Infinity needs path ≈ f, not a longer lens.
 - Second-surface (household) mirrors — ghost images.
 - Fixed mirrors with no shims — one side will miss focus (see Hackaday A7 T-rig).

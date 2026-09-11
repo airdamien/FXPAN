@@ -5,7 +5,7 @@ Two Nikon D7000 bodies + one taking lens, field-split with first-surface mirrors
 A **50/50 plate** fork (both cameras get the same full frame) lives in [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad). A **hybrid** pano L (toed DX bodies + one 50/50 plate — ~1.8× one frame) lives in [`openscad/hybrid/`](openscad/hybrid/WATCH_ME.scad). See [OPTICS.md](OPTICS.md).
 
 **Infinity-capable:** M42/M39 helicoid + enlarger/LF lens on the stem (not an F-Nikkor).  
-Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.md).
+Path budget: `PATH_TOTAL = fold + 46.5 ≈ 173.5 mm` — see [OPTICS.md](OPTICS.md). Hybrid taking lens: EL-Nikkor 135/5.6 (focus ~0.61 m on this path) — [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png).
 
 ## Watch while editing
 
@@ -22,6 +22,7 @@ python3.12 -m venv kraken/.venv
 kraken/.venv/bin/pip install -r kraken/requirements.txt
 kraken/.venv/bin/python kraken/hybrid_paths.py
 kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
+# also writes docs/kraken/el135_*.png for the recommended 135 mm taking lens
 ```
 
 ## Files
@@ -34,5 +35,6 @@ kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
 | `openscad/mirror_tray.scad` | 45° FSM trays + knife |
 | `openscad/shims.scad` | Focus-match rings |
 | `f-mount_raw.stl` | Reference scan for bayonet calibration |
-| `OPTICS.md` / `bom.md` | Path math + shopping list |
+| `OPTICS.md` / `bom.md` | Path math + shopping list (hybrid buy list in `bom.md`) |
 | `kraken/hybrid_paths.py` | KrakenOS trace of the hybrid pano (paths, frames, stitch) |
+| `docs/kraken/el135_*.png` | 135/5.6 object frames + stitch (commit these; `kraken/preview_*.png` is gitignored) |

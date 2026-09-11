@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Trace the hybrid L pano in KrakenOS.
 
-Taking lens is the El-Nikkor 50/2.8 Japan (f=51.6 mm) on PATH_TOTAL, so
-the object sits at ~73 mm — close-up only. Each DX sensor is aimed at a
-different half of a stitch_w image (sensor_shift).
+Each DX sensor is aimed at a different half of a stitch_w image
+(sensor_shift). Writes kraken/preview_*.png for the El-Nikkor 50/2.8
+(close-up, object ~73 mm) and docs/kraken/el135_*.png for the 135/5.6
+(~0.61 m, recommended taking lens).
 """
 
 from __future__ import annotations
@@ -33,14 +34,23 @@ TUBE_ID = 52.0
 JUNCTION_BOX = 90.0
 WAVE = 0.55
 
-# El-Nikkor 50/2.8 Japan (published 51.6 mm). Cannot reach infinity here.
+S_PRIME = PATH_TOTAL
 EL_NAME = "EL-Nikkor 50/2.8"
 EL_F = 51.6
 EL_FNUM = 5.6
 EL_EPD = EL_F / EL_FNUM
-S_PRIME = PATH_TOTAL
 S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
 MAG = S_PRIME / S_OBJ
+
+
+def apply_lens(name, f, fnum):
+    global EL_NAME, EL_F, EL_FNUM, EL_EPD, S_OBJ, MAG
+    EL_NAME = name
+    EL_F = float(f)
+    EL_FNUM = float(fnum)
+    EL_EPD = EL_F / EL_FNUM
+    S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
+    MAG = S_PRIME / S_OBJ
 
 SHIFT = SENSOR_W / 2.0 * (1.0 - OVERLAP_FRAC)
 HALF_W = SENSOR_W / 2.0
@@ -310,8 +320,8 @@ def plot_frames(thx, thy, t_frac, r_frac, dest):
         ax.set_ylabel("object Y (mm)")
         ax.set_title(title)
     fig.suptitle(
-        f"{EL_NAME}  f={EL_F} mm at f/{EL_FNUM:g}  ·  object {S_OBJ:.0f} mm  "
-        f"(m={MAG:.2f}, close-up only)"
+        f"{EL_NAME}  f={EL_F:g} mm at f/{EL_FNUM:g}  ·  object {S_OBJ:.0f} mm  "
+        f"(m={MAG:.2f})"
     )
     fig.tight_layout()
     fig.savefig(dest, dpi=140)
@@ -336,19 +346,19 @@ def plot_pano(thx, thy, t_frac, r_frac, dest):
     plt.close(fig)
 
 
-def main():
-    sys_r = reflect_system()
-    sys_t_fan = transmit_system(focal=False)
+def run_lens(dest_dir, prefix, do_paths=False, require=True):
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
     sys_t = transmit_system(focal=True)
-
-    rows = trace_fan(sys_r, sys_t_fan)
-    paths = OUT / "preview_paths.png"
-    frames = OUT / "preview_frames.png"
-    plot_paths(rows, paths)
+    if do_paths:
+        rows = trace_fan(reflect_system(), transmit_system(focal=False))
+        plot_paths(rows, dest_dir / f"{prefix}paths.png")
+        print(dest_dir / f"{prefix}paths.png")
 
     thx, thy, t_frac, r_frac, counts = trace_frames(sys_t)
+    frames = dest_dir / f"{prefix}frames.png"
+    pano = dest_dir / f"{prefix}pano.png"
     plot_frames(thx, thy, t_frac, r_frac, frames)
-    pano = OUT / "preview_pano.png"
     plot_pano(thx, thy, t_frac, r_frac, pano)
 
     t_on = thx[t_frac.max(axis=0) > 0.15]
@@ -359,7 +369,7 @@ def main():
     ratio = span / obj_single if obj_single else 0.0
     pano_fov = 2.0 * np.degrees(np.arctan((span / 2.0) / S_OBJ)) if span else 0.0
     print(
-        f"{EL_NAME}  f={EL_F} mm  f/{EL_FNUM:g}  S_OBJ={S_OBJ:.1f} mm  "
+        f"{EL_NAME}  f={EL_F:g} mm  f/{EL_FNUM:g}  S_OBJ={S_OBJ:.1f} mm  "
         f"S_PRIME={S_PRIME:.1f} mm  m={MAG:.2f}"
     )
     print(f"PATH_TOTAL={PATH_TOTAL} mm  stitch_w={STITCH_W:.1f} mm")
@@ -372,16 +382,24 @@ def main():
         f"object single={obj_single:.2f} mm  pano span={span:.2f} mm  "
         f"ratio={ratio:.2f}x"
     )
-    print(
-        f"object FOV single={SINGLE_FOV:.2f} deg  pano={pano_fov:.2f} deg"
-    )
-    print(paths)
+    print(f"object FOV single={SINGLE_FOV:.2f} deg  pano={pano_fov:.2f} deg")
     print(frames)
     print(pano)
+    if not require:
+        return
     if counts["left"] == 0 or counts["right"] == 0 or counts["overlap"] == 0:
         raise SystemExit("split failed: need unique-left, overlap, and unique-right")
     if ratio < 1.6:
         raise SystemExit(f"not a pano: span/single={ratio:.2f} (need >= 1.6)")
+
+
+def main():
+    apply_lens("EL-Nikkor 50/2.8", 51.6, 5.6)
+    run_lens(OUT, "preview_", do_paths=True)
+    # Recommended taking lens: same L39 as the 50, 4×5 coverage, ~$80–150 used.
+    apply_lens("EL-Nikkor 135/5.6", 135.0, 5.6)
+    docs = OUT.parent / "docs" / "kraken"
+    run_lens(docs, "el135_")
 
 
 if __name__ == "__main__":
