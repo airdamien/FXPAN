@@ -2,4 +2,6 @@
 *.stl
 !f-mount_raw.stl
 openscad/preview.png
+openscad/bsplit/preview.png
+openscad/hybrid/preview.png
 /tmp/

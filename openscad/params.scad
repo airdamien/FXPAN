@@ -45,6 +45,18 @@ HELICOID_LEN   = 28;
 HELICOID_TOL   = 0.45;    // ScrewHole extra clearance for FDM
 STEM_FLANGE_T  = 6;
 
+// Temporary El-Nikkor 50/2.8 (Japan): rear is Leica L39 × 26 TPI, not M39×1.
+// Printed ring: male M42 into the stem / helicoid, female L39 for the lens.
+// 50 mm will not reach infinity on PATH_TOTAL — close-up only until a longer lens.
+EL_M39_MAJOR   = 39;
+EL_M39_PITCH   = 25.4 / 26;
+EL_M39_LEN     = 6;
+EL_M39_TOL     = 0.45;
+EL_M42_LEN     = 7;
+EL_ADAPTER_HEX = 4;
+EL_ADAPTER_OD  = 50;
+EL_BORE        = 34;
+
 // Fotodiox-style Nikon F reverse ring: male F-bayonet + male 52 mm filter
 // thread. Arms are female 52×0.75; the ring screws on, bodies bayonet on.
 // https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC
@@ -75,4 +87,4 @@ EXPLODED = 0;             // 1 = pull arms + lift mirror cartridges for drop-in 
 SHOW_LID = 0;             // 0 = hide lid so you can see mirrors / grooves
 SHOW_GHOSTS = 0;
 SHOW_CRADLES = 0;
-PART = is_undef(PART) ? "assembly" : PART;  // assembly | chassis | stem | arm_l | arm_r | lid | mirror_tray | shims | f_mount
+PART = is_undef(PART) ? "assembly" : PART;  // assembly | chassis | stem | arm_l | arm_r | lid | mirror_tray | shims | elnikkor_adapter | f_mount

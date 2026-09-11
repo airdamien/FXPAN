@@ -2,6 +2,8 @@
 
 Two Nikon D7000 bodies + one taking lens, field-split with first-surface mirrors.
 
+A **50/50 plate** fork (both cameras get the same full frame) lives in [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad). A **hybrid** pano L (one 50/50: miss = left half, hit = right half + overlap) lives in [`openscad/hybrid/`](openscad/hybrid/WATCH_ME.scad). See [OPTICS.md](OPTICS.md).
+
 **Infinity-capable:** M42/M39 helicoid + enlarger/LF lens on the stem (not an F-Nikkor).  
 Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.md).
 
@@ -11,7 +13,7 @@ Path budget: `PATH_TOTAL = fold + 46.5 ≈ 136.5 mm` — see [OPTICS.md](OPTICS.
 2. Enable **Design → Automatic Reload and Preview**
 3. Tweak [`openscad/params.scad`](openscad/params.scad) (`EXPLODED`, distances, `PART`)
 
-`./export_stls.sh` writes print STLs to `stls/`. Print the box floor-down. Print `stem` / `arm_l` / `arm_r` with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts.
+`./export_stls.sh` writes print STLs to `stls/`. `--bsplit` and `--hybrid` write those forks to `stls/bsplit/` and `stls/hybrid/`. Print the box floor-down. Print tubes with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts.
 
 ## Files
 
