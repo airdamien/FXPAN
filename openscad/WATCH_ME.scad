@@ -106,6 +106,14 @@ module chassis_bore() {
 
     // 45° drop-in grooves for mirror cartridges (open at top)
     mirror_groove_cutouts();
+
+    // 1/4-20 in the floor (print with this face on the bed)
+    translate([0, 0, -s / 2 - 0.05]) {
+        ScrewThread(1.01 * TRIPOD_MAJOR + 1.25 * TRIPOD_TOL,
+                    WALL - TRIPOD_KEEP,
+                    pitch = TRIPOD_PITCH, tolerance = TRIPOD_TOL);
+        cylinder(h = 1.2, d1 = TRIPOD_MAJOR + 1.6, d2 = TRIPOD_MAJOR);
+    }
 }
 
 module chassis_f_mounts() {

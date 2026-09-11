@@ -43,6 +43,12 @@ F_REGISTER_T   = 6.75;    // STL height (Zmax-Zmin); used for ghost body spacing
 F_LUG_T        = 0;       // included in STL
 
 
+// 1/4-20 UNC in the chassis floor (tripod shoe / camera screw)
+TRIPOD_MAJOR   = 6.35;
+TRIPOD_PITCH   = 1.27;
+TRIPOD_TOL     = 0.45;
+TRIPOD_KEEP    = 1.8;     // leave this much floor so the tap stays blind
+
 SHIM_RANGE     = 2.0;
 SHIM_STEPS     = [0.2, 0.5, 1.0];
 
