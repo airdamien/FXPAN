@@ -1,0 +1,5 @@
+.DS_Store
+*.stl
+!f-mount_raw.stl
+openscad/preview.png
+/tmp/

@@ -1,0 +1,42 @@
+# Optical path budget — Nikon Dual T
+
+## Register math
+
+| Segment | Symbol | Default (mm) |
+|---------|--------|--------------|
+| Helicoid/lens register → knife edge | `D_LENS_TO_KNIFE` | 45 |
+| Knife edge → camera F-mount face | `D_KNIFE_TO_MOUNT` | 45 |
+| Fold subtotal | `PATH_FOLD` | 90 |
+| Inside each D7000 (mount → sensor) | `FLANGE_F` | **46.5** (fixed) |
+| **Total flange → sensor** | `PATH_TOTAL` | **136.5** |
+
+The taking lens must form infinity at **`PATH_TOTAL`**, not at 46.5 mm. That is why the stem is an **M42/M39 focusing helicoid + enlarger/LF lens**, not an F-Nikkor.
+
+Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R arms identical** except for shim stacks.
+
+## Field split (panorama)
+
+- Two **first-surface** mirrors form a **roof pointing at the lens** (peak/knife toward −Y).
+- Coating faces incoming light; glass sits behind (toward +Y) so it does not block ±X camera tunnels.
+- Right mirror: plane ≈ y=x, reflects +Y → +X. Left: ≈ y=−x, reflects +Y → −X.
+- Combined virtual frame ≈ **47 × 16 mm** (two DX sensors). Prefer a large image circle (90–150 mm enlarger / LF).
+- Aim for **5–10% overlap** at the seam for stitching (Hugin / PTGui).
+
+## Equal-path rule
+
+L and R geometric paths must match within **~0.1 mm**. Use printed shim rings (`SHIM_STEPS`) between arm tube and F-mount until both live-views are sharp on a **distant** chart without refocusing the helicoid between bodies.
+
+## Alignment procedure
+
+1. Flock or matte-black the chamber interior; install FSM glass coating-side toward the light.
+2. Mount both D7000s; MC-DC2 Y-remote for sync.
+3. Helicoid → infinity on a distant target using **one** body.
+4. If the other body is soft, add/remove shims on that arm only; recheck.
+5. Tip/tilt set-screws on mirror trays until the seam is centered and vertical.
+6. Shoot overlap chart; stitch; note vignetting — stop down or swap to larger-circle lens if needed.
+
+## What will not work
+
+- Native F-mount Nikkor on the stem for infinity (path already spent 46.5 mm inside each body).
+- Second-surface (household) mirrors — ghost images.
+- Fixed mirrors with no shims — one side will miss focus (see Hackaday A7 T-rig).
