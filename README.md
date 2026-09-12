@@ -1,82 +1,121 @@
-# Nikon Duals
+# Duals
 
-Two bodies + one taking lens. The original chassis is a panoramic **T**: two Nikon D7000s, field-split with first-surface mirrors.
+One taking lens. Two bodies. A **1.8×** stitch.
 
-The taking lens is never an F-Nikkor. Stem is **M42/M39 helicoid + enlarger/LF lens**. Path budget is `PATH_TOTAL = fold + register` — see [OPTICS.md](OPTICS.md). Shopping and assembly: [bom.md](bom.md).
+Each camera is aimed at a different half of a wider image (20% overlap). The taking lens is an enlarger/LF optic on an M42 helicoid — never a native-mount still lens. Path is `fold + register`. Math: [OPTICS.md](OPTICS.md). Buy list and assembly: [bom.md](bom.md).
 
-## Forks
+![Hybrid L with two D7000s](docs/chassis/hybrid_bodies.png)
 
-Same 90 mm junction box, same 52/68 tubes, same enlarger stem. What changes is the splitter and the camera mount.
+Hybrid L — D7000s on **▲ R** (+X) and **▲ T** (+Y). Stem is the EL-Nikkor. Bodies are preview ghosts; the print is the box and tubes.
 
-| Fork | Split | Bodies | Register | `PATH_TOTAL` | 135/5.6 focus | Stitch | Watch | Export |
-|------|-------|--------|----------|--------------|---------------|--------|-------|--------|
-| V (default) | two 50×50 FSM, hard knife | D7000 DX | 46.5 mm F | 173.5 mm | — | field halves | [`openscad/WATCH_ME.scad`](openscad/WATCH_ME.scad) | `./export_stls.sh` |
-| bsplit | one 50/50 plate | D7000 DX | 46.5 mm F | 173.5 mm | — | same frame, −1 stop | [`openscad/bsplit/WATCH_ME.scad`](openscad/bsplit/WATCH_ME.scad) | `--bsplit` |
-| hybrid | one 50/50, toed arms | D7000 DX | 46.5 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k | [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad) | `--hybrid` |
-| EFhybrid | same L | 5D Mark III FF | 44.0 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad) | `--efhybrid` |
-| Ehybrid | same L | Sony α7 FF | 18.0 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | [`openscad/Ehybrid/WATCH_ME.scad`](openscad/Ehybrid/WATCH_ME.scad) | `--ehybrid` |
+![Hybrid L, lid off](docs/chassis/hybrid.png)
 
-Hybrid panorama is **not** a pupil-split of one DX/FF frame. Each body is aimed at a different half of a wider taking-lens image (`sensor_shift` / `field_toe`, 20% overlap). Stitch is **1.8×** one frame. The 50×50 plate is large enough; do not cut it.
+Lid off: one uncut 50×50×1 plate, S1 toward the lens. Gold mouths are 52×0.75 reverse rings (or print `arm_*_f` for a male bayonet).
 
-Print STLs live in `stls/v/`, `stls/bsplit/`, `stls/hybrid/`, `stls/EFhybrid/`, `stls/Ehybrid/` (`./export_stls.sh`, plus `--bsplit` / `--hybrid` / `--efhybrid` / `--ehybrid`). Print the box floor-down. Print tubes with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts. Wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`.
+![Panorama V](docs/chassis/v.png)
 
-## Countryside — EL-Nikkor 135/5.6
+The original **V**: two first-surface mirrors, opposite arms, field-split. Same box, same stem.
 
-Kraken maps the same Tuscany still through the toed T/R windows. Scene: [Radek Hloch / CC BY-SA 4.0](https://commons.wikimedia.org/wiki/File:Landscape_of_Tuscany_3.jpg). Regenerate with `kraken/.venv/bin/python kraken/hybrid_scene.py`.
+## Print STLs
 
-On the D7000 / 5D III path the 135 focuses around **0.61–0.64 m**. The α7 fork is shorter (E is 18 mm), so the same lens focuses at **~2 m** and the object field is much larger. That is the chassis, not a different lens.
+Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl` is the reverse-ring mouth; `arm_*_f.stl` is the printed male bayonet.
 
-### D7000 DX — 173.5 mm path, ~0.61 m
+| Kit | Bodies | Mouth | Path | 135/5.6 | Stitch | Files |
+|-----|--------|-------|------|---------|--------|-------|
+| [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k | `--hybrid` |
+| [`stls/EFhybrid/`](stls/EFhybrid/) | 5D Mark III FF | 58 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | `--efhybrid` |
+| [`stls/Ehybrid/`](stls/Ehybrid/) | Sony α7 FF | 52 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | `--ehybrid` |
+| [`stls/v/`](stls/v/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 37.8 mm · 12.4° · ~7.9k | `./export_stls.sh` |
+| [`stls/bsplit/`](stls/bsplit/) | D7000 DX | 52 mm F | 173.5 mm | — | same frame, −1 stop | `--bsplit` |
 
-One DX window (~83×55 mm of object, 7.8°) versus the hybrid stitch (~149 mm, 14°, ~8870×3264).
+**Print:** PETG or ABS (not PLA for bayonets). Box **floor on the bed**. Tubes **flange on the bed**. Bolt each flange with 4× M3 + hex nuts in the wall traps.
+
+### Hybrid kit (`stls/hybrid/`)
+
+| File | What | Bed |
+|------|------|-----|
+| `chassis.stl` | 90 mm junction box | floor down |
+| `hybrid_tray.stl` | 50×50 plate seat + roof pegs | as exported |
+| `lid.stl` | chamber lid, blind Pi holes | outer face up |
+| `stem.stl` | lens tube, M42 helicoid nut | flange down |
+| `arm_r.stl` / `arm_t.stl` | toed camera tubes, 52×0.75 | flange down |
+| `arm_r_f.stl` / `arm_t_f.stl` | same tubes, printed F | flange down |
+| `shims.stl` | 0.2 / 0.5 / 1.0 mm focus rings | as exported |
+| `elnikkor_adapter.stl` | M42 male → L39×26 TPI | M42 male on the bed |
+
+Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-359 plate in from above; do not cut it. Re-export with `./export_stls.sh --hybrid` (wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`).
+
+## Light path
+
+The hybrid L is **one** 50/50 plate, not a knife in the pupil. Lens on −Y. Reflect → R (+X). Transmit → T (+Y). Each arm is toed by `field_toe` so its sensor window sits on a different half of a `stitch_w` image.
+
+![Fold schematic](docs/kraken/el135_paths.png)
+
+KrakenOS sequential fold. Plate at z = 55 mm. Gold = 50/50. Red = R sensor. Blue = T sensor. Same fold on every hybrid kit; only the register (46.5 / 44 / 18 mm) changes `PATH_TOTAL`.
+
+![Rays on the print STLs](docs/kraken/hybrid_stl_paths.png)
+
+Non-sequential trace **on the print meshes** (`stls/hybrid/chassis.stl` + `hybrid_tray.stl`). Plastic is absorb. Blue = T through the slot. Red = R off the coating. Left is top (lens −Y, T +Y, R +X). The plate is large enough — the field at the glass is small.
+
+On a D7000 + EL-Nikkor 135/5.6: focus **~608 mm**, stitch **~149 mm** of object / **42.5 mm** on the sensors, **~14°**, **~8870×3264**. T-only / overlap / R-only = 108 / 27 / 108. `ratio` must stay ≥ 1.6. Full budget: [OPTICS.md](OPTICS.md).
+
+Regenerate:
+
+```
+kraken/.venv/bin/python kraken/hybrid_paths.py       # fold + frames + stitch
+kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the STLs
+kraken/.venv/bin/python kraken/hybrid_scene.py       # countryside below
+```
+
+## Field — same countryside, three bodies
+
+Same Tuscany still through the toed windows. Scene: [Radek Hloch / CC BY-SA 4.0](https://commons.wikimedia.org/wiki/File:Landscape_of_Tuscany_3.jpg).
+
+D7000 / 5D III: 135 focuses **~0.61–0.64 m**. α7: E is 18 mm, so the same lens focuses at **~2 m** and the object field is much larger. That is the chassis, not a different lens.
+
+### D7000 DX — 173.5 mm, ~0.61 m
+
+One DX window (~83×55 mm, 7.8°) vs the stitch (~149 mm, 14°, ~8870×3264).
 
 ![D7000 countryside](docs/kraken/el135_scene.png)
 
-T and R each own a half of a wider image. Color map of that split, and the stitched object strip:
+T and R each own a half. Color map of that split, and the stitched strip:
 
 ![D7000 T/R frames](docs/kraken/el135_frames.png)
 
 ![D7000 stitch vs one DX](docs/kraken/el135_pano.png)
 
-Same DX window on a D7200 (24.2 MP, 3.9 µm) versus the D7000 (16.2 MP, 4.8 µm). Stars are native photosites on 8×8 mm of object.
+Same DX window, D7000 (16.2 MP, 4.8 µm) vs D7200 (24.2 MP, 3.9 µm). Stars are native photosites on 8×8 mm of object.
 
 ![D7000 vs D7200 sampling](docs/kraken/el135_d7200.png)
 
-### 5D Mark III FF — 171 mm path, ~0.64 m
+### V knife — same 173.5 mm, ~0.61 m
+
+Hard field split. Each D7000 still records a full DX frame, but the frame is one half of the taking-lens image plus **20% across the knife** (~4.7 mm / ~1000 px). Unique halves keep a stop. Stitch is **1.6×** (~133 mm of object, 12.4°, ~7885×3264).
+
+![V countryside](docs/kraken/el135_v_scene.png)
+
+Same still, V vs hybrid L. Hybrid is two toed full-frame windows on a 50/50 (1.8×, −1 stop). The V boxes sit inside the hybrid stitch.
+
+![V vs hybrid L](docs/kraken/el135_v_hybrid.png)
+
+### 5D Mark III FF — 171 mm, ~0.64 m
 
 36×24 mm, 6.25 µm. Single ~135×90 mm / 12°. Stitch ~243 mm / 21.5° / ~10368×3840.
 
 ![5D Mark III countryside](docs/kraken/el135_5d3_scene.png)
 
-Same still, D7000 boxes inside the 5D III field:
-
 ![D7000 vs 5D Mark III](docs/kraken/el135_d7000_5d3.png)
 
-### Sony α7 FF — 145 mm path, ~2 m
+### Sony α7 FF — 145 mm, ~2 m
 
 35.8×23.9 mm, 6.0 µm. Single ~483×323 mm / 14.1°. Stitch ~870 mm / 25.1° / ~10800×4000.
 
 ![α7 countryside](docs/kraken/el135_a7_scene.png)
 
-D7000 at 0.61 m is a postage stamp on the α7 field. Footer on the figure calls that out.
+D7000 at 0.61 m is a postage stamp on the α7 field.
 
 ![D7000 vs α7](docs/kraken/el135_d7000_a7.png)
-
-## Watch while editing
-
-1. Open the watch file for the fork you are printing (table above).
-2. Enable **Design → Automatic Reload and Preview**.
-3. Tweak that folder’s `params.scad` (`EXPLODED`, distances, `PART`). `ARM_MOUNT=0` is the reverse-ring mouth; `1` is the printed male bayonet (`arm_*_f`).
-
-```
-python3.12 -m venv kraken/.venv
-kraken/.venv/bin/pip install -r kraken/requirements.txt
-kraken/.venv/bin/python kraken/hybrid_paths.py
-kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the print STLs
-kraken/.venv/bin/python kraken/hybrid_scene.py       # countryside figures above
-```
-
-`docs/kraken/el135_*.png` is committed. `kraken/preview_*.png` is gitignored.
 
 ## Dual D7000 USB
 
@@ -95,21 +134,28 @@ USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves.
 python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127.0.0.1:8787/lab
 ```
 
-## Files
+## Source
+
+1. Open the watch file for the fork you are printing.
+2. Enable **Design → Automatic Reload and Preview**.
+3. Tweak that folder’s `params.scad`. `ARM_MOUNT=0` is the reverse-ring mouth; `1` is the printed male bayonet.
+
+```
+python3.12 -m venv kraken/.venv
+kraken/.venv/bin/pip install -r kraken/requirements.txt
+```
+
+`docs/kraken/` and `docs/chassis/` are committed. `kraken/preview_*.png` is gitignored.
 
 | Path | Role |
 |------|------|
-| `openscad/WATCH_ME.scad` | Live assembly / STL export (V) |
-| `openscad/params.scad` | V dimensions |
+| `stls/{v,bsplit,hybrid,EFhybrid,Ehybrid}/` | Print STLs |
+| `openscad/WATCH_ME.scad` | V |
 | `openscad/hybrid/WATCH_ME.scad` | D7000 hybrid L |
-| `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III hybrid L |
-| `openscad/Ehybrid/WATCH_ME.scad` | α7 hybrid L |
-| `openscad/f_mount_male.scad` | Printed male F |
-| `openscad/mirror_tray.scad` | 45° FSM trays + knife |
-| `f-mount_raw.stl` | Reference scan for bayonet calibration |
-| `OPTICS.md` / `bom.md` | Path math + buy lists + assembly |
-| `kraken/hybrid_paths.py` | KrakenOS trace (paths, frames, stitch) |
-| `kraken/hybrid_scene.py` | Countryside figures |
-| `docs/kraken/el135_*.png` | 135/5.6 sims (commit these) |
-| `stls/{v,bsplit,hybrid,EFhybrid,Ehybrid}/` | Print STLs (`./export_stls.sh`) |
-| `cam/dual.py` | USB control for both D7000s (gphoto2 PTP) |
+| `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III |
+| `openscad/Ehybrid/WATCH_ME.scad` | α7 |
+| `kraken/hybrid_paths.py` | Fold + frames + stitch |
+| `kraken/hybrid_stl_paths.py` | Rays on the print STLs |
+| `kraken/hybrid_scene.py` | Countryside |
+| `OPTICS.md` / `bom.md` | Path math + buy + assembly |
+| `cam/dual.py` | D7000 USB (gphoto2 PTP) |

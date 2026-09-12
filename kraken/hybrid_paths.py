@@ -420,7 +420,7 @@ def main():
     # Recommended taking lens: same L39 as the 50, 4×5 coverage, ~$80–150 used.
     apply_lens("EL-Nikkor 135/5.6", 135.0, 5.6)
     docs = OUT.parent / "docs" / "kraken"
-    run_lens(docs, "el135_")
+    run_lens(docs, "el135_", do_paths=True)
 
 
 if __name__ == "__main__":

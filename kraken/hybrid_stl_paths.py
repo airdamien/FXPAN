@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCAD = ROOT / "openscad" / "hybrid" / "WATCH_ME.scad"
 STL_DIR = ROOT / "stls" / "hybrid"
 OUT = Path(__file__).resolve().parent / "preview_stl_paths.png"
+DOCS = ROOT / "docs" / "kraken" / "hybrid_stl_paths.png"
 OSC = Path("/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
 WAVE = 0.55
 
@@ -212,8 +213,12 @@ def main():
     if rays_r:
         print("R end", np.round(rays_r[len(rays_r) // 2][-1], 2))
 
-    render(pv.read(str(chassis_p)), pv.read(str(tray_p)), rays_t, rays_r, OUT)
+    mesh_c = pv.read(str(chassis_p))
+    mesh_t = pv.read(str(tray_p))
+    render(mesh_c, mesh_t, rays_t, rays_r, OUT)
+    render(mesh_c, mesh_t, rays_t, rays_r, DOCS)
     print(OUT)
+    print(DOCS)
 
 
 if __name__ == "__main__":
