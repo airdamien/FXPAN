@@ -3,6 +3,7 @@
 !f-mount_raw.stl
 !openscad/d7000_body.stl
 !openscad/taking_lens.stl
+!stls/**/*.stl
 openscad/preview.png
 openscad/bsplit/preview.png
 openscad/hybrid/preview.png

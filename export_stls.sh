@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Export printable STLs.
-#   ./export_stls.sh [part ...]              panorama V → stls/
+#   ./export_stls.sh [part ...]              panorama V → stls/v/
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
 #   ./export_stls.sh --hybrid [part ...]     pano L (one 50/50) → stls/hybrid/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
@@ -13,7 +13,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")" && pwd)
 scad=$root/openscad/WATCH_ME.scad
-out=$root/stls
+out=$root/stls/v
 default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter)
 
 if [[ "${1:-}" == "--bsplit" ]]; then

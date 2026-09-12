@@ -18,7 +18,7 @@ Same 90 mm junction box, same 52/68 tubes, same enlarger stem. What changes is t
 
 Hybrid panorama is **not** a pupil-split of one DX/FF frame. Each body is aimed at a different half of a wider taking-lens image (`sensor_shift` / `field_toe`, 20% overlap). Stitch is **1.8×** one frame. The 50×50 plate is large enough; do not cut it.
 
-Print the box floor-down. Print tubes with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts. Wrappers: `./export_efhybrid.sh`, `./export_ehybrid.sh`.
+Print STLs live in `stls/v/`, `stls/bsplit/`, `stls/hybrid/`, `stls/EFhybrid/`, `stls/Ehybrid/` (`./export_stls.sh`, plus `--bsplit` / `--hybrid` / `--efhybrid` / `--ehybrid`). Print the box floor-down. Print tubes with the square flange on the bed, then bolt each flange onto the flat wall with 4× M3 + hex nuts. Wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`.
 
 ## Countryside — EL-Nikkor 135/5.6
 
@@ -111,4 +111,5 @@ python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127
 | `kraken/hybrid_paths.py` | KrakenOS trace (paths, frames, stitch) |
 | `kraken/hybrid_scene.py` | Countryside figures |
 | `docs/kraken/el135_*.png` | 135/5.6 sims (commit these) |
+| `stls/{v,bsplit,hybrid,EFhybrid,Ehybrid}/` | Print STLs (`./export_stls.sh`) |
 | `cam/dual.py` | USB control for both D7000s (gphoto2 PTP) |

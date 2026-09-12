@@ -35,11 +35,11 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 
 ## Print export cheatsheet
 
-`./export_stls.sh` writes the panorama V to [`stls/`](stls/). Flags write the other forks:
+`./export_stls.sh` writes print STLs under [`stls/`](stls/) by fork. Those files are committed.
 
 | Flag / wrapper | Out | Mouth (`ARM_MOUNT=0` / `arm_*_f`) |
 |----------------|-----|-----------------------------------|
-| (none) | `stls/` | 52×0.75 F reverse / printed F |
+| (none) | `stls/v/` | 52×0.75 F reverse / printed F |
 | `--bsplit` | `stls/bsplit/` | 52×0.75 F reverse / printed F |
 | `--hybrid` | `stls/hybrid/` | 52×0.75 F reverse / printed F |
 | `--efhybrid` / `./export_efhybrid.sh` | `stls/EFhybrid/` | **58×0.75** EF reverse / printed EF |
