@@ -3,6 +3,8 @@
 // =============================================================================
 // Junction box + 3 bolt-on tubes (print flange on the bed, bolt onto the flat wall).
 // Flanges sit on the cube faces. Arm tubes toe toward the lens.
+// ARM_MOUNT 0 = female 52×0.75 + nut pocket; 1 = printed F-bayonet (clocked).
+// F_MOUNT_CLOCK: add if the first F-print locks 90° off.
 // 50/50 plate fork (same full frame): openscad/bsplit/WATCH_ME.scad
 // Hybrid pano L (toed DX + one 50/50 plate): openscad/hybrid/WATCH_ME.scad
 // =============================================================================
@@ -19,6 +21,10 @@ use <taking_lens.scad>
 SHOW_BODIES = 0; // [0:hide, 1:show]
 SHOW_LENS = 0; // [0:hide, 1:show]
 
+/* [Mount] */
+ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
+F_MOUNT_CLOCK = 0;
+
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
@@ -28,8 +34,9 @@ LID_LIP   = 3;
 LID_GAP   = 0.3;
 LID_SCREW = 4;            // inset from the outer edge (was 8: holes sat on the inner wall)
 
+function mount_stack()   = ARM_MOUNT ? F_FMOUNT_STACK : F_REV_STACK;
 function stem_tube_len() = D_LENS_TO_KNIFE - JUNCTION_BOX / 2;
-function arm_tube_len()  = D_KNIFE_TO_MOUNT - F_REV_STACK - JUNCTION_BOX / 2;
+function arm_tube_len()  = D_KNIFE_TO_MOUNT - mount_stack() - JUNCTION_BOX / 2;
 
 module helicoid_nut(h = HELICOID_LEN) {
     ScrewHole(HELICOID_MAJOR, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
@@ -59,6 +66,23 @@ module port_flange() {
 
 module hex_nut_cut() {
     cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
+}
+
+// Camera-end rectangle for an M3 nut; radial 3.2 hole so a set screw
+// pinches the reverse ring. az=180 is local −X (world +Z on the +X arm).
+module rev_lock_cuts(out_len, az = 180) {
+    z0 = out_len - F_REV_LEN / 2;
+    r_mid = (TUBE_ID + TUBE_OD) / 4;
+    nw = 5.5 + 0.2;
+    nt = 2.4 + 0.2;
+    floor_z = z0 - 5.5 / 2 - 0.2;
+    rotate([0, 0, az]) {
+        translate([0, 0, z0])
+            rotate([0, 90, 0])
+                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
+        translate([r_mid, 0, (out_len + floor_z) / 2])
+            cube([nt, nw, out_len - floor_z + 0.2], center = true);
+    }
 }
 
 // Place children in each port's local frame (outer face at the cube surface).
@@ -199,14 +223,21 @@ module part_arm(side = 1) {
     color("SlateGray")
     difference() {
         port_tube_solid(arm_tube_len(), toe);
-        // female 52×0.75 for a Fotodiox (or similar) F reverse ring
-        along_tube(toe)
-            translate([0, 0, arm_tube_len() - F_REV_LEN])
-                ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
-                            F_REV_LEN + 0.3,
-                            pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+        if (ARM_MOUNT == 0)
+            along_tube(toe) {
+                translate([0, 0, arm_tube_len() - F_REV_LEN])
+                    ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
+                                F_REV_LEN + 0.3,
+                                pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+                rev_lock_cuts(arm_tube_len(), side > 0 ? 180 : 0);
+            }
     }
-    if ($preview && !SHOW_BODIES)
+    if (ARM_MOUNT)
+        color("Goldenrod")
+            along_tube(toe)
+                translate([0, 0, arm_tube_len()])
+                    f_mount_on_tube((side > 0 ? 0 : 180) + F_MOUNT_CLOCK);
+    else if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube(toe)
                 translate([0, 0, arm_tube_len()])
@@ -243,7 +274,7 @@ module ghost_body(side = 1) {
         color("black", 0.12)
             at_arm(side)
                 along_tube(arm_toe())
-                    translate([0, 0, arm_tube_len() + F_REV_STACK + 15 + BODY_D / 2 + ex])
+                    translate([0, 0, arm_tube_len() + mount_stack() + 15 + BODY_D / 2 + ex])
                         cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
 }
 
@@ -252,7 +283,7 @@ module camera_body(side = 1) {
         color("DimGray", 0.92)
             at_arm(side)
                 along_tube(arm_toe())
-                    translate([0, 0, arm_tube_len() + ex])
+                    translate([0, 0, arm_tube_len() + (ARM_MOUNT ? F_FMOUNT_STACK : 0) + ex])
                         d7000_body(side > 0 ? -90 : 90);
 }
 
@@ -317,7 +348,8 @@ module assembly() {
     ghost_lens();
     taking_lens_at();
     optical_axis_guides();
-    echo("Bolt-on tubes: 4× M3 at 45°; nuts flush in the wall; arms toed 52×0.75");
+    echo(str("Bolt-on tubes: 4× M3 at 45°; ARM_MOUNT=", ARM_MOUNT,
+             " (", ARM_MOUNT ? "integrated F" : "reverse ring", ")"));
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
              "  arm_toe=", arm_toe(), " deg"));
 }

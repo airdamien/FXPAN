@@ -31,3 +31,17 @@ module f_mount_male_solid(register_t = 0, boss = 4) {
 module f_mount_male(register_t = 0) {
     f_mount_male_solid(boss = 0);
 }
+
+// Back at z=0 (tube end). Register face at z=1.75. Lock notch at +Y
+// in the raw mesh; rotate `clock` so the body locks flange-mark up.
+// Short bored peg sinks into TUBE_ID so the union fuses for export.
+module f_mount_on_tube(clock = 0) {
+    translate([0, 0, -4])
+        difference() {
+            cylinder(h = 4.4, d = F_STL_OD);
+            translate([0, 0, -0.1])
+                cylinder(h = 4.6, d = F_BORE);
+        }
+    rotate([0, 0, clock])
+        f_mount_stl_raw();
+}

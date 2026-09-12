@@ -55,6 +55,7 @@ F_REV_LEN      = 7;
 F_REV_STACK    = 8;
 F_REV_TOL      = 0.45;
 F_BORE         = 40.3;
+F_FMOUNT_STACK = 1.75;
 F_REGISTER_T   = F_REV_STACK;
 
 TRIPOD_MAJOR   = 6.35;
