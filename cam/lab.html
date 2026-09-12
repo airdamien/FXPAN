@@ -35,7 +35,7 @@
   th { color: #8a7a55; font-weight: 500; letter-spacing: 0.12em; }
   input, select { background: #120c08; color: #f3ead2; border: 1px solid #ff6a00;
           padding: 0.35rem 0.5rem; font-size: 16px; }
-  input[type=text] { width: 8rem; }
+  #tab-usb select { min-width: 16rem; }
   input[type=range] { width: 18rem; accent-color: #ff6a00; height: 2rem; }
   .drag { min-width: 16rem; }
   .drag b { color: #ff6a00; font-size: 1.1rem; }
@@ -118,14 +118,14 @@
         <option>NEF+Fine</option><option value="NEF (Raw)">NEF (Raw)</option>
       </select>
     </label>
-    <button id="set">Set both</button>
+    <button id="set">Set</button>
   </div>
 </section>
 </div>
 <div id="tab-usb" class="pane" hidden>
 <section>
   <table id="cams"><thead><tr>
-    <th>role</th><th>serial</th><th>port</th><th>model</th>
+    <th>role</th><th>port</th><th>model</th>
   </tr></thead><tbody></tbody></table>
   <div class="row">
     <button id="detect">Detect</button>
@@ -134,9 +134,12 @@
 </section>
 <section>
   <div class="row">
-    <label>T serial<input id="t" placeholder="back / +Y"></label>
-    <label>R serial<input id="r" placeholder="side / +X"></label>
-    <button id="pair">Pair</button>
+    <label>T · back +Y
+      <select id="t"><option value="">—</option></select>
+    </label>
+    <label>R · side +X
+      <select id="r"><option value="">—</option></select>
+    </label>
   </div>
 </section>
 </div>
@@ -155,7 +158,7 @@
   <div class="pano-out"><img id="panoOut" alt=""></div>
 </section>
 </div>
-<pre id="log">Lab: type serials, inspect status, MJPEG optional. Field UI is / for the phone.</pre>
+<pre id="log">Lab: Detect, then pick T and/or R from the list. Field UI is / for the phone.</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
   "1600","2000","2500","3200","4000","5000","6400","12800","25600"];
@@ -182,23 +185,60 @@ const api = async (path, opt) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
-const fill = (rows) => {
+const camLabel = (row) => {
+  const model = (row.model || "camera").replace(/^Nikon DSC /, "");
+  return model + " · " + (row.port || "USB");
+};
+let lastRows = [];
+let lastPair = {};
+const fillPicks = (rows, pair) => {
+  pair = pair || {};
+  ["t","r"].forEach(role => {
+    const el = document.getElementById(role);
+    const cur = pair[role.toUpperCase()] || el.value;
+    el.innerHTML = '<option value="">—</option>';
+    (rows || []).forEach(row => {
+      if (!row.serial) return;
+      const opt = document.createElement("option");
+      opt.value = row.serial;
+      opt.textContent = camLabel(row);
+      if (row.serial === cur) opt.selected = true;
+      el.appendChild(opt);
+    });
+    if (cur && ![...el.options].some(o => o.value === cur)) {
+      const opt = document.createElement("option");
+      opt.value = cur;
+      opt.textContent = "saved · offline";
+      opt.selected = true;
+      el.appendChild(opt);
+    }
+  });
+};
+const fill = (rows, pair) => {
+  lastRows = rows || [];
+  lastPair = pair || {};
+  (rows || []).forEach(row => {
+    if (row.role === "T" && row.serial) lastPair.T = row.serial;
+    if (row.role === "R" && row.serial) lastPair.R = row.serial;
+  });
+  fillPicks(lastRows, lastPair);
   const tb = document.querySelector("#cams tbody");
   tb.innerHTML = "";
   (rows || []).forEach(row => {
+    const who = (row.serial && row.serial === lastPair.T) ? "T"
+      : (row.serial && row.serial === lastPair.R) ? "R"
+      : (row.role || "—");
     const tr = document.createElement("tr");
-    ["role","serial","port","model"].forEach(k => {
+    [who, row.port, row.model].forEach(val => {
       const td = document.createElement("td");
-      td.textContent = row[k] || "—";
+      td.textContent = val || "—";
       tr.appendChild(td);
     });
     tb.appendChild(tr);
-    if (row.role === "T" && row.serial) t.value = row.serial;
-    if (row.role === "R" && row.serial) r.value = row.serial;
   });
   if (!(rows || []).length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="4">no cameras on USB</td>';
+    tr.innerHTML = '<td colspan="3">no cameras on USB</td>';
     tb.appendChild(tr);
   }
 };
@@ -212,13 +252,23 @@ const liveSrc = (on) => {
     document.getElementById("lv"+role).src = on ? "/api/live/"+role+".mjpg?"+Date.now() : "";
   });
 };
-bind("detect", async () => { liveSrc(false); const j = await api("/api/detect"); fill(j.cameras); log(j.message); });
-bind("status", async () => { liveSrc(false); const j = await api("/api/status"); fill(j.cameras); log(j.message); });
-bind("pair", async () => {
+bind("detect", async () => { liveSrc(false); const j = await api("/api/detect"); fill(j.cameras, j.pair); log(j.message); });
+bind("status", async () => { liveSrc(false); const j = await api("/api/status"); fill(j.cameras, j.pair); log(j.message); });
+const pairNow = async (changed) => {
+  let tv = t.value, rv = r.value;
+  if (tv && tv === rv) {
+    if (changed === "t") { r.value = ""; rv = ""; }
+    else { t.value = ""; tv = ""; }
+  }
+  if (!tv && !rv) { log("pick T or R"); return; }
   const j = await api("/api/pair", { method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ t: t.value, r: r.value }) });
+    body: JSON.stringify({ t: tv, r: rv }) });
+  lastPair = j.pair || { T: tv, R: rv };
   log(j.message);
-});
+  fill(lastRows, lastPair);
+};
+t.onchange = () => pairNow("t").catch(e => log(e.message, true));
+r.onchange = () => pairNow("r").catch(e => log(e.message, true));
 bind("set", async () => {
   liveSrc(false);
   const j = await api("/api/set", { method:"POST", headers:{"content-type":"application/json"},
@@ -292,5 +342,5 @@ document.querySelectorAll(".tabs [data-tab]").forEach(b => { b.onclick = () => s
 showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano" : "view");
 bindDrag("isoDrag", ISO, "isoVal", "400");
 bindDrag("shutDrag", SHUT, "shutVal", "1/125");
-api("/api/detect").then(j => { fill(j.cameras); log(j.message); }).catch(e => log(e.message, true));
+api("/api/detect").then(j => { fill(j.cameras, j.pair); log(j.message); }).catch(e => log(e.message, true));
 </script>

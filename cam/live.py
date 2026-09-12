@@ -34,15 +34,7 @@ def split_jpegs(buf):
 
 
 def paired_on_usb():
-    rows = dual.detect_bodies()
-    have = {row["role"]: row for row in rows if row["role"] in ("T", "R")}
-    if have:
-        return have
-    if not rows:
-        raise dual.CamError(
-            "no cameras. D7000 Setup → USB → MTP/PTP, wake both, plug USB."
-        )
-    raise dual.CamError("pair T and R first (serials on the Detect table)")
+    return dual.require_online(dual.detect_bodies())
 
 
 class Live:
@@ -80,6 +72,7 @@ class Live:
     def start_from_usb(self):
         self.stop()
         have = paired_on_usb()
+        dual.free_usb()
         for role, row in have.items():
             self._spawn(role, row["port"])
         deadline = time.time() + 1.2

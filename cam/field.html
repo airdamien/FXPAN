@@ -126,6 +126,7 @@
     clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   }
   .picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .picks.two { grid-template-columns: 1fr 1fr; }
   .picks label { display: flex; flex-direction: column; gap: 5px; color: var(--dim);
                  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; }
   select {
@@ -239,7 +240,15 @@
   <button id="detect">探知 DETECT</button>
   <button id="status">計測 STATUS</button>
 </div>
-<div class="lbl">UNITS · tap T / R</div>
+<div class="lbl">UNITS</div>
+<div class="picks two">
+  <label>T · back +Y
+    <select id="pickT"></select>
+  </label>
+  <label>R · side +X
+    <select id="pickR"></select>
+  </label>
+</div>
 <div id="cams"></div>
 </div>
 <div id="tab-pano" class="pane" hidden>
@@ -255,7 +264,7 @@
 <div id="pairs"></div>
 <div class="pano-out"><img id="panoOut" alt=""></div>
 </div>
-<pre id="log">MAGI-01  wake both bodies · USB MTP/PTP · same Wi‑Fi</pre>
+<pre id="log">MAGI-01  wake a body · USB MTP/PTP · same Wi‑Fi</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
   "1600","2000","2500","3200","4000","5000","6400","12800","25600"];
@@ -269,7 +278,7 @@ const QUAL = [["JPEG Fine","JPEG Fine"],["JPEG Normal","JPEG Norm"],
   ["NEF+Fine","NEF+Fine"],["NEF (Raw)","NEF"]];
 const PROG = [["M","M"],["A","A"],["S","S"],["P","P"]];
 const state = { iso:"400", shutter:"1/125", wb:"Auto", quality:"JPEG Fine", program:"M",
-  t:"", r:"", live:false, timer:0, stamp:"" };
+  t:"", r:"", live:false, timer:0, stamp:"", rows:[] };
 const log = (m, err) => { const el = document.getElementById("log");
   el.textContent = m; el.className = err ? "err" : ""; };
 const api = async (path, opt) => {
@@ -315,38 +324,53 @@ const snapFromStatus = (b) => {
   if (b.imagequality) { state.quality = b.imagequality; fillSelect("quality", QUAL, "quality"); }
   if (b.expprogram) { state.program = b.expprogram; fillSelect("program", PROG, "program"); }
 };
+const camLabel = (row) => {
+  const model = (row.model || "camera").replace(/^Nikon DSC /, "");
+  return model + " · " + (row.port || "USB");
+};
+const fillPicks = (rows) => {
+  ["T","R"].forEach(role => {
+    const el = document.getElementById("pick"+role);
+    const cur = state[role.toLowerCase()];
+    el.innerHTML = '<option value="">—</option>';
+    (rows || []).forEach(row => {
+      if (!row.serial) return;
+      const opt = document.createElement("option");
+      opt.value = row.serial;
+      opt.textContent = camLabel(row);
+      if (row.serial === cur) opt.selected = true;
+      el.appendChild(opt);
+    });
+    if (cur && ![...el.options].some(o => o.value === cur)) {
+      const opt = document.createElement("option");
+      opt.value = cur;
+      opt.textContent = "saved · offline";
+      opt.selected = true;
+      el.appendChild(opt);
+    }
+    el.onchange = () => pickRole(role).catch(e => log(e.message, true));
+  });
+};
 const fill = (rows, pair) => {
+  state.rows = rows || [];
   pair = pair || {};
   if (pair.T) state.t = pair.T;
   if (pair.R) state.r = pair.R;
-  const box = document.getElementById("cams");
-  box.innerHTML = "";
   (rows || []).forEach(row => {
     if (row.role === "T" && row.serial) state.t = row.serial;
     if (row.role === "R" && row.serial) state.r = row.serial;
-    const el = document.createElement("div");
-    el.className = "cam";
+  });
+  fillPicks(rows);
+  const box = document.getElementById("cams");
+  box.innerHTML = "";
+  (rows || []).forEach(row => {
     const who = (row.serial && row.serial === state.t) ? "T"
       : (row.serial && row.serial === state.r) ? "R"
       : (row.role || "—");
+    const el = document.createElement("div");
+    el.className = "cam";
     el.innerHTML = `<div><b>${who}  ${row.model || "camera"}</b>
-      <span>${row.serial || "no serial"}  ${row.port || ""}</span></div>`;
-    ["T","R"].forEach(role => {
-      const b = document.createElement("button");
-      b.className = "chip" + (row.serial && state[role.toLowerCase()] === row.serial ? " on" : "");
-      b.textContent = role;
-      b.onclick = async () => {
-        state[role.toLowerCase()] = row.serial || "";
-        if (state.t && state.r) {
-          const j = await api("/api/pair", { method:"POST",
-            headers:{"content-type":"application/json"},
-            body: JSON.stringify({ t: state.t, r: state.r }) });
-          log(j.message);
-        }
-        fill(rows, { T: state.t, R: state.r });
-      };
-      el.appendChild(b);
-    });
+      <span>${row.port || ""}  ${row.batterylevel || row.iso || ""}</span></div>`;
     box.appendChild(el);
     const st = document.getElementById("st"+who);
     if (st) st.textContent = (row.batterylevel || row.iso || "USB");
@@ -354,6 +378,24 @@ const fill = (rows, pair) => {
   if (!(rows || []).length) {
     box.innerHTML = "<div class='cam'><div><b>NO BODIES</b><span>MTP/PTP · wake · plug USB</span></div></div>";
   }
+};
+const pickRole = async (role) => {
+  state.t = document.getElementById("pickT").value;
+  state.r = document.getElementById("pickR").value;
+  if (state.t && state.t === state.r) {
+    if (role === "T") state.r = "";
+    else state.t = "";
+  }
+  if (!state.t && !state.r) {
+    fillPicks(state.rows);
+    log("pick T or R");
+    return;
+  }
+  const j = await api("/api/pair", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ t: state.t, r: state.r }) });
+  log(j.message);
+  fill(state.rows, { T: state.t, R: state.r });
 };
 const bind = (id, fn) => {
   document.getElementById(id).onclick = async () => {

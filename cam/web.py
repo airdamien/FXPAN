@@ -25,8 +25,15 @@ import pano
 
 HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
-atexit.register(LIVE.stop)
 PORT = 8787
+
+
+def _shutdown():
+    LIVE.stop()
+    dual.ptp_hold(False)
+
+
+atexit.register(_shutdown)
 
 
 def lan_ips():
@@ -225,7 +232,7 @@ class Handler(BaseHTTPRequestHandler):
                 msg = (
                     f"{len(rows)} body(ies)"
                     if rows
-                    else "no cameras. Setup → USB → MTP/PTP, wake both, plug USB."
+                    else "no cameras. Setup → USB → MTP/PTP, wake, plug USB."
                 )
                 return _json(self, 200, {"cameras": rows, "pair": dual.load_pair(), "message": msg})
             if path == "/api/status":
@@ -265,10 +272,11 @@ class Handler(BaseHTTPRequestHandler):
             data = _read_json(self)
             if path == "/api/pair":
                 t, r = (data.get("t") or "").strip(), (data.get("r") or "").strip()
-                if not t or not r:
-                    raise dual.CamError("need T and R serials")
-                dual.save_pair(t, r)
-                return _json(self, 200, {"message": f"paired T={t}  R={r}"})
+                if not t and not r:
+                    raise dual.CamError("need a T or R serial")
+                data = dual.save_pair(t, r, replace=True)
+                bits = "  ".join(f"{k}={v}" for k, v in data.items())
+                return _json(self, 200, {"message": f"paired {bits}", "pair": data})
             if path == "/api/live/start":
                 have = LIVE.start_from_usb()
                 roles = " ".join(sorted(have))
@@ -281,35 +289,41 @@ class Handler(BaseHTTPRequestHandler):
                 assignments = _assignments(data)
                 if not assignments:
                     raise dual.CamError("nothing to set")
-                have = dual.require_paired(dual.detect_bodies())
+                have = dual.require_online(dual.detect_bodies())
                 from concurrent.futures import ThreadPoolExecutor
 
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    for role in ("T", "R"):
-                        pool.submit(dual._set_one, have[role]["port"], assignments).result()
+                with ThreadPoolExecutor(max_workers=len(have)) as pool:
+                    futs = [
+                        pool.submit(dual._set_one, row["port"], assignments)
+                        for row in have.values()
+                    ]
+                    for fut in futs:
+                        fut.result()
+                roles = " and ".join(sorted(have))
                 return _json(
                     self, 200,
-                    {"message": "set " + " ".join(f"{k}={v}" for k, v in assignments)},
+                    {"message": "set " + " ".join(f"{k}={v}" for k, v in assignments)
+                     + f" on {roles}"},
                 )
             if path == "/api/shoot":
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
 
                 _stop_live()
-                have = dual.require_paired(dual.detect_bodies())
+                have = dual.require_online(dual.detect_bodies())
                 target = (data.get("target") or "card").strip()
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dest = pano.CAPTURES
-                with ThreadPoolExecutor(max_workers=2) as pool:
+                with ThreadPoolExecutor(max_workers=len(have)) as pool:
                     if target == "card":
                         futs = [
                             pool.submit(dual._shoot_card, role, have[role]["port"])
-                            for role in ("T", "R")
+                            for role in have
                         ]
                     else:
                         futs = [
                             pool.submit(dual._shoot_one, role, have[role]["port"], dest, stamp)
-                            for role in ("T", "R")
+                            for role in have
                         ]
                     times = [fut.result() for fut in futs]
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
@@ -346,10 +360,12 @@ class Server(ThreadingHTTPServer):
 
 
 def main():
+    dual.ptp_hold(True)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
     httpd = Server(("0.0.0.0", port), Handler)
     print("field (iPhone)  " + "  ".join(u for u in urls_for(port) if "/lab" not in u))
     print(f"lab  (laptop)   http://127.0.0.1:{port}/lab")
+    print("ptpcamerad held down (python3 cam/dual.py ptp-on to restore Photos)")
     httpd.serve_forever()
 
 

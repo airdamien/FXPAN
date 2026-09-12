@@ -2,10 +2,11 @@
 """USB control for the two D7000s via gphoto2 (PTP).
 
 The taking-lens iris lives on the enlarger, not the bodies. This matches
-ISO / shutter / WB and fires both cameras. USB skew is tens of ms — use
-the MC-DC2 Y-lead for anything that moves.
+ISO / shutter / WB and fires every paired body on USB (one is enough).
+USB skew is tens of ms — use the MC-DC2 Y-lead for anything that moves.
 
   python3 cam/dual.py detect
+  python3 cam/dual.py pair --t SERIAL
   python3 cam/dual.py pair --t SERIAL --r SERIAL
   python3 cam/dual.py status
   python3 cam/dual.py set --iso 400 --shutter 1/125
@@ -19,6 +20,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -43,16 +45,90 @@ class CamError(Exception):
     pass
 
 
+def _kill_ptp():
+    if sys.platform != "darwin":
+        return
+    subprocess.run(
+        ["killall", "-9", "ptpcamerad", "PTPCamera"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def ptp_disable():
+    """Stop macOS from grabbing PTP cameras so gphoto2 can claim them."""
+    if sys.platform != "darwin":
+        return
+    subprocess.run(
+        ["launchctl", "disable", f"gui/{os.getuid()}/com.apple.ptpcamerad"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _kill_ptp()
+
+
+def ptp_enable():
+    if sys.platform != "darwin":
+        return
+    subprocess.run(
+        ["launchctl", "enable", f"gui/{os.getuid()}/com.apple.ptpcamerad"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+_hold_stop = None
+_hold_th = None
+
+
+def ptp_hold(on=True):
+    """Keep ptpcamerad dead for the life of the web UI / a long run."""
+    global _hold_stop, _hold_th
+    if sys.platform != "darwin":
+        return
+    if not on:
+        if _hold_stop:
+            _hold_stop.set()
+        _hold_stop = None
+        _hold_th = None
+        return
+    ptp_disable()
+    if _hold_th and _hold_th.is_alive():
+        return
+    _hold_stop = threading.Event()
+
+    def loop():
+        while not _hold_stop.wait(0.08):
+            _kill_ptp()
+
+    _hold_th = threading.Thread(target=loop, name="ptp-hold", daemon=True)
+    _hold_th.start()
+
+
 def free_usb():
-    if sys.platform == "darwin":
-        subprocess.run(
-            ["killall", "PTPCamera"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    _kill_ptp()
 
 
-def gp(args, port=None, timeout=120):
+def _claim_fail(err):
+    err = err or ""
+    return "Could not claim the USB device" in err or "Error (-53" in err
+
+
+def _gp_err(err):
+    if _claim_fail(err):
+        return "USB busy (macOS ptpcamerad). Hit Status again."
+    lines = [ln.strip() for ln in (err or "").splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        if ln.startswith("***") or ln.startswith("gphoto2"):
+            continue
+        return ln[:200]
+    return (err or "gphoto2 failed")[-200:]
+
+
+def gp(args, port=None, timeout=120, _retried=False):
+    free_usb()
+    if _retried:
+        time.sleep(0.35)
     cmd = [GPHOTO2]
     if port:
         cmd += ["--port", port]
@@ -60,8 +136,18 @@ def gp(args, port=None, timeout=120):
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip()
-        raise CamError(f"{' '.join(cmd)}\n{err}")
+        if not _retried and _claim_fail(err):
+            return gp(args, port=port, timeout=timeout, _retried=True)
+        raise CamError(_gp_err(err))
     return proc.stdout
+
+
+def parse_currents(text):
+    return [
+        line.split(":", 1)[1].strip()
+        for line in text.splitlines()
+        if line.startswith("Current:")
+    ]
 
 
 def parse_detect(text):
@@ -91,11 +177,26 @@ def load_pair():
     return {k: str(v) for k, v in data.items() if k in ("T", "R") and v}
 
 
-def save_pair(t_serial, r_serial):
-    PAIR_PATH.write_text(json.dumps({"T": t_serial, "R": r_serial}, indent=2) + "\n")
+def save_pair(t_serial=None, r_serial=None, replace=False):
+    data = {} if replace else dict(load_pair())
+    if t_serial is not None:
+        if t_serial:
+            data["T"] = str(t_serial)
+        else:
+            data.pop("T", None)
+    if r_serial is not None:
+        if r_serial:
+            data["R"] = str(r_serial)
+        else:
+            data.pop("R", None)
+    if data.get("T") and data.get("T") == data.get("R"):
+        raise CamError("T and R cannot be the same serial")
+    PAIR_PATH.write_text(json.dumps(data, indent=2) + "\n")
+    return data
 
 
 def detect_bodies():
+    ptp_disable()
     free_usb()
     rows = parse_detect(gp(["--auto-detect"]))
     for row in rows:
@@ -110,15 +211,30 @@ def detect_bodies():
     return rows
 
 
-def require_paired(rows):
+def require_online(rows):
+    """Paired bodies on USB. One is enough. A lone unpaired body is T (or R
+    if T is already stored for a different serial)."""
     have = {row["role"]: row for row in rows if row["role"] in ("T", "R")}
-    if "T" in have and "R" in have:
+    if have:
         return have
+    if len(rows) == 1:
+        row = dict(rows[0])
+        stored = load_pair()
+        if stored.keys() == {"T"}:
+            role = "R"
+        elif stored.keys() == {"R"}:
+            role = "T"
+        else:
+            role = "T"
+        row["role"] = role
+        return {role: row}
+    if not rows:
+        raise CamError("no cameras. D7000 Setup → USB → MTP/PTP, wake, plug USB.")
     extras = [row for row in rows if not row["role"]]
     raise CamError(
-        "need paired T and R on USB. "
+        "no paired body on USB. "
         f"detect saw {len(rows)} body(ies); pair file is {PAIR_PATH}. "
-        "Run: python3 cam/dual.py detect && python3 cam/dual.py pair --t SERIAL --r SERIAL"
+        "Tap T or R on Detect, or: python3 cam/dual.py pair --t SERIAL"
         + (f"  unpaired={extras}" if extras else "")
     )
 
@@ -126,7 +242,7 @@ def require_paired(rows):
 def cmd_detect(_args):
     rows = detect_bodies()
     if not rows:
-        print("no cameras. D7000 Setup → USB → MTP/PTP, wake both, plug USB.")
+        print("no cameras. D7000 Setup → USB → MTP/PTP, wake, plug USB.")
         return
     print(f"{'role':<4} {'serial':<14} {'port':<14} model")
     for row in rows:
@@ -137,17 +253,28 @@ def cmd_detect(_args):
 
 
 def cmd_pair(args):
-    save_pair(args.t, args.r)
-    print(f"wrote {PAIR_PATH}  T={args.t}  R={args.r}")
+    if not args.t and not args.r:
+        raise CamError("need --t and/or --r")
+    data = save_pair(args.t, args.r)
+    bits = "  ".join(f"{k}={v}" for k, v in data.items()) or "(empty)"
+    print(f"wrote {PAIR_PATH}  {bits}")
 
 
 def _status_one(row):
     vals = {"role": row["role"] or "-", "port": row["port"], "model": row["model"]}
+    args = []
     for key in KEYS:
-        try:
-            vals[key] = parse_current(gp(["--get-config", key], port=row["port"]))
-        except CamError as exc:
-            vals[key] = f"! {exc}"
+        args += ["--get-config", key]
+    try:
+        currents = parse_currents(gp(args, port=row["port"]))
+        for key, val in zip(KEYS, currents):
+            vals[key] = val
+        for key in KEYS[len(currents) :]:
+            vals[key] = "?"
+    except CamError as exc:
+        msg = str(exc)
+        for key in KEYS:
+            vals[key] = msg
     return vals
 
 
@@ -186,12 +313,13 @@ def cmd_set(args):
         assignments.append(("expprogram", args.program))
     if not assignments:
         raise CamError("nothing to set (use --iso / --shutter / --quality / --wb / --program)")
-    have = require_paired(detect_bodies())
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futs = [pool.submit(_set_one, have[role]["port"], assignments) for role in ("T", "R")]
+    have = require_online(detect_bodies())
+    with ThreadPoolExecutor(max_workers=len(have)) as pool:
+        futs = [pool.submit(_set_one, row["port"], assignments) for row in have.values()]
         for fut in futs:
             fut.result()
-    print("set " + " ".join(f"{k}={v}" for k, v in assignments) + " on T and R")
+    roles = " and ".join(sorted(have))
+    print("set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}")
 
 
 def _shoot_one(role, port, dest, stamp):
@@ -223,15 +351,16 @@ def _shoot_card(role, port):
 
 
 def cmd_shoot(args):
-    have = require_paired(detect_bodies())
+    have = require_online(detect_bodies())
     dest = Path(args.dest)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    print(f"shoot {stamp}  T={have['T']['port']}  R={have['R']['port']}  → {dest}/")
+    ports = "  ".join(f"{role}={have[role]['port']}" for role in sorted(have))
+    print(f"shoot {stamp}  {ports}  → {dest}/")
     t0 = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=len(have)) as pool:
         futs = [
             pool.submit(_shoot_one, role, have[role]["port"], dest, stamp)
-            for role in ("T", "R")
+            for role in have
         ]
         for fut in futs:
             role, elapsed = fut.result()
@@ -243,9 +372,9 @@ def build_parser():
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("detect", help="list USB bodies and pair roles")
-    pair = sub.add_parser("pair", help="remember which serial is T vs R")
-    pair.add_argument("--t", required=True, help="transmit / back (+Y) serial")
-    pair.add_argument("--r", required=True, help="reflect / side (+X) serial")
+    pair = sub.add_parser("pair", help="remember which serial is T and/or R")
+    pair.add_argument("--t", help="transmit / back (+Y) serial")
+    pair.add_argument("--r", help="reflect / side (+X) serial")
     sub.add_parser("status", help="ISO, shutter, quality on each body")
     s = sub.add_parser("set", help="write the same exposure to both")
     s.add_argument("--iso")
@@ -255,15 +384,34 @@ def build_parser():
     s.add_argument("--program", default=None, help="usually M")
     sh = sub.add_parser("shoot", help="fire both and download")
     sh.add_argument("dest", nargs="?", default="captures")
+    sub.add_parser("ptp-off", help="disable macOS ptpcamerad so gphoto2 can claim USB")
+    sub.add_parser("ptp-on", help="re-enable macOS ptpcamerad")
     return p
+
+
+def cmd_ptp_off(_args):
+    ptp_disable()
+    print("ptpcamerad disabled. Photos / Image Capture will not grab the D7000s.")
+
+
+def cmd_ptp_on(_args):
+    ptp_hold(False)
+    ptp_enable()
+    print("ptpcamerad re-enabled.")
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
-        {"detect": cmd_detect, "pair": cmd_pair, "status": cmd_status, "set": cmd_set, "shoot": cmd_shoot}[
-            args.cmd
-        ](args)
+        {
+            "detect": cmd_detect,
+            "pair": cmd_pair,
+            "status": cmd_status,
+            "set": cmd_set,
+            "shoot": cmd_shoot,
+            "ptp-off": cmd_ptp_off,
+            "ptp-on": cmd_ptp_on,
+        }[args.cmd](args)
     except CamError as exc:
         print(exc, file=sys.stderr)
         return 1

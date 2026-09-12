@@ -46,6 +46,19 @@ class Parse(unittest.TestCase):
     def test_current(self):
         self.assertEqual(dual.parse_current(CURRENT), "3000123")
 
+    def test_currents(self):
+        self.assertEqual(
+            dual.parse_currents("Current: 400\nOther: x\nCurrent: 1/125\n"),
+            ["400", "1/125"],
+        )
+
+    def test_claim_err(self):
+        self.assertTrue(dual._claim_fail("Could not claim the USB device"))
+        self.assertEqual(
+            dual._gp_err("*** Error (-53: 'Could not claim the USB device') ***"),
+            "USB busy (macOS ptpcamerad). Hit Status again.",
+        )
+
 
 class SplitJpeg(unittest.TestCase):
     def test_two_frames_and_text(self):
@@ -71,6 +84,44 @@ class Pair(unittest.TestCase):
         dual.save_pair("111", "222")
         self.assertEqual(json.loads(path.read_text()), {"T": "111", "R": "222"})
         self.assertEqual(dual.load_pair(), {"T": "111", "R": "222"})
+        dual.save_pair("111", None, replace=True)
+        self.assertEqual(dual.load_pair(), {"T": "111"})
+        dual.save_pair(None, "222")
+        self.assertEqual(dual.load_pair(), {"T": "111", "R": "222"})
+        with self.assertRaises(dual.CamError):
+            dual.save_pair("111", "111", replace=True)
+
+
+class Online(unittest.TestCase):
+    def setUp(self):
+        path = Path(self.id().replace(".", "_") + ".json")
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        old = dual.PAIR_PATH
+        dual.PAIR_PATH = path
+        self.addCleanup(lambda: setattr(dual, "PAIR_PATH", old))
+
+    def test_one_paired(self):
+        have = dual.require_online(
+            [{"role": "T", "port": "usb:1", "serial": "111", "model": "D7000"}]
+        )
+        self.assertEqual(list(have), ["T"])
+
+    def test_lone_unpaired_is_t(self):
+        have = dual.require_online(
+            [{"role": "", "port": "usb:1", "serial": "999", "model": "D7000"}]
+        )
+        self.assertEqual(have["T"]["serial"], "999")
+
+    def test_lone_unpaired_is_r_if_t_stored(self):
+        dual.save_pair("111", None, replace=True)
+        have = dual.require_online(
+            [{"role": "", "port": "usb:1", "serial": "222", "model": "D7000"}]
+        )
+        self.assertEqual(list(have), ["R"])
+
+    def test_none(self):
+        with self.assertRaises(dual.CamError):
+            dual.require_online([])
 
 
 class Pano(unittest.TestCase):
