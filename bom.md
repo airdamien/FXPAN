@@ -43,6 +43,7 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 | (none) | `stls/v/` | 52×0.75 F reverse / printed F |
 | `--bsplit` | `stls/bsplit/` | 52×0.75 F reverse / printed F |
 | `--hybrid` | `stls/hybrid/` | 52×0.75 F reverse / printed F |
+| `--shadowgraph` / `./export_shadowgraph.sh` | `stls/hybrid_shadowgraph/` | 52×0.75 F reverse / printed F; shadowgraph R tube |
 | `--efhybrid` / `./export_efhybrid.sh` | `stls/EFhybrid/` | **58×0.75** EF reverse / printed EF |
 | `--ehybrid` / `./export_ehybrid.sh` | `stls/Ehybrid/` | **52×0.75** E reverse / printed E |
 
@@ -58,6 +59,8 @@ Or set `PART` and F6:
 `--bsplit` parts: `chassis` / `stem` / `arm_r` (reflect, +X) / `arm_t` (transmit, +Y, shorter by `bs_t_comp`) / `lid` / `bs_tray` / `shims` / `elnikkor_adapter`
 
 `--hybrid` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` (right half, +X) / `arm_t` (left half, +Y) / `lid` / `hybrid_tray` / `shims` / `elnikkor_adapter`. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
+
+`--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them.
 
 ## 50/50 plate fork (optional)
 

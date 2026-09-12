@@ -23,6 +23,7 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 | Kit | Bodies | Mouth | Path | 135/5.6 | Stitch | Files |
 |-----|--------|-------|------|---------|--------|-------|
 | [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k | `--hybrid` |
+| [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | same frame · T sharp / R shadowgraph | `--shadowgraph` |
 | [`stls/EFhybrid/`](stls/EFhybrid/) | 5D Mark III FF | 58 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | `--efhybrid` |
 | [`stls/Ehybrid/`](stls/Ehybrid/) | Sony α7 FF | 52 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | `--ehybrid` |
 | [`stls/v/`](stls/v/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 37.8 mm · 12.4° · ~7.9k | `./export_stls.sh` |
@@ -44,6 +45,10 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 | `elnikkor_adapter.stl` | M42 male → L39×26 TPI | M42 male on the bed |
 
 Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-359 plate in from above; do not cut it. Re-export with `./export_stls.sh --hybrid` (wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`).
+
+### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
+
+Same box, stem, tray, and lid as hybrid. Tubes are not toed — both bodies see one frame. `arm_t` is the conjugate tube (`▲ T shadowgraph`). `arm_r` is the longer razor-slot tube (`▲ R shadowgraph`). Do not stack a 0.6 mm ring to fake it. Export: `./export_stls.sh --shadowgraph` or `./export_shadowgraph.sh`.
 
 ## Light path
 
@@ -154,9 +159,10 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 
 | Path | Role |
 |------|------|
-| `stls/{v,bsplit,hybrid,EFhybrid,Ehybrid}/` | Print STLs |
+| `stls/{v,bsplit,hybrid,hybrid_shadowgraph,EFhybrid,Ehybrid}/` | Print STLs |
 | `openscad/WATCH_ME.scad` | V |
 | `openscad/hybrid/WATCH_ME.scad` | D7000 hybrid L |
+| `openscad/hybrid_shadowgraph/WATCH_ME.scad` | same-image T sharp / R shadowgraph |
 | `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III |
 | `openscad/Ehybrid/WATCH_ME.scad` | α7 |
 | `kraken/hybrid_paths.py` | Fold + frames + stitch |

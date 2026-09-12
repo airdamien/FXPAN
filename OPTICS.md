@@ -59,6 +59,10 @@ Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). O
 
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
+## Hybrid shadowgraph (same-image DX + one 50/50 plate)
+
+Same L and plate, but `field_toe() = 0`: both bodies see the same DX frame. T is the conjugate tube (`▲ T shadowgraph`). R is the longer razor-slot tube — 0.6 mm extra (~7.4 mm object-side defocus), `▲ R shadowgraph`. Not a stitch. Bright card at ~0.61 m. Export with `./export_stls.sh --shadowgraph`. Kraken plates: [`docs/kraken/shadowgraph_bullet.png`](docs/kraken/shadowgraph_bullet.png), [`docs/kraken/shadowgraph_wave.png`](docs/kraken/shadowgraph_wave.png).
+
 ## EF hybrid (pano L: toed 5D Mark III + one 50/50 plate)
 
 Same L and the same uncut 50×50 plate. Bodies are Canon **5D Mark III** (36×24 mm, EF, **44.0 mm** register). `sensor_shift()` ≈ **14.4 mm**, stitch ≈ **64.8 mm / 1.8×** one FF frame. `PATH_TOTAL` ≈ **171 mm**. Tube mouth is **58×0.75** for an EF reversing ring, or `ARM_MOUNT=1` for a printed male EF. Open [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad). Export with `./export_stls.sh --efhybrid`. Countryside compare: [`docs/kraken/el135_d7000_5d3.png`](docs/kraken/el135_d7000_5d3.png) (D7000 stitch ~14° / 8.9k px vs 5D Mk III ~21.5° / 10.4k px).

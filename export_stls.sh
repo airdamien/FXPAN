@@ -3,6 +3,7 @@
 #   ./export_stls.sh [part ...]              panorama V → stls/v/
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
 #   ./export_stls.sh --hybrid [part ...]     pano L (one 50/50) → stls/hybrid/
+#   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
@@ -27,6 +28,11 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
+elif [[ "${1:-}" == "--shadowgraph" ]]; then
+    shift
+    scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
+    out=$root/stls/hybrid_shadowgraph
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
 elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
