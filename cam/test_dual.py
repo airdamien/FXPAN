@@ -183,13 +183,44 @@ class Pano(unittest.TestCase):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")
         info = pano.stitch_stamp(
-            "20260101_120000", overlap=0.25, flip_r=False, root=self.root
+            "20260101_120000", overlap=0.25, flip_r=False, mode="blend", root=self.root
         )
         self.assertEqual(info["width"], 70)
         self.assertEqual(info["height"], 20)
         self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
         rows = pano.list_pairs(self.root)
         self.assertEqual(rows[0]["pano"], "P_20260101_120000.jpg")
+        self.assertEqual(rows[0]["stitch"].get("mode"), "blend")
+
+    def test_open_import(self):
+        pano._venv_site()
+        try:
+            from stitching import AffineStitcher, Stitcher
+        except ImportError:
+            self.skipTest("stitching-headless not installed")
+        self.assertTrue(callable(Stitcher) and callable(AffineStitcher))
+
+    def test_find_overlap_marker(self):
+        full = self.root / "full.jpg"
+        t = self.root / "t.jpg"
+        r = self.root / "r.jpg"
+        subprocess.run(
+            ["magick", "-size", "136x40", "plasma:fractal", str(full)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["magick", str(full), "-crop", "80x40+0+0", "+repage", str(t)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["magick", str(full), "-crop", "80x40+56+0", "+repage", str(r)],
+            check=True, capture_output=True,
+        )
+        found = pano.find_overlap(t, r, try_flip=False)
+        self.assertFalse(found["flip_r"])
+        self.assertGreater(found["overlap"], 0.20)
+        self.assertLess(found["overlap"], 0.40)
+        self.assertLess(abs(found["dy"]), 4)
 
     def test_resolve_rejects_traversal(self):
         with self.assertRaises(dual.CamError):

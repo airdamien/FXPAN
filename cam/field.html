@@ -168,15 +168,26 @@
     font-size: 22px; letter-spacing: 0.28em; font-weight: 800;
     min-height: 68px; min-width: 42%;
   }
-  #pairs { display: grid; gap: 8px; margin: 10px 0; }
+  #pairs { display: grid; gap: 10px; margin: 10px 0; }
   .pair {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-    width: 100%; padding: 8px; text-align: left;
+    display: grid; gap: 6px; width: 100%; padding: 8px; text-align: left;
+    border: 1px solid #5a3200;
   }
+  .pair-frames {
+    display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; align-items: start;
+  }
+  .pair-frames figure { margin: 0; }
+  .pair-frames figcaption { color: var(--dim); font-size: 10px; letter-spacing: 0.12em; }
   .pair img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
-  .pair span { grid-column: 1 / -1; color: var(--dim); font-size: 11px; letter-spacing: 0.12em; }
-  .pair.on { background: #3a1600; color: var(--r); }
-  .pano-out img { width: 100%; display: block; background: #000; margin-top: 10px; }
+  .pair-pano img { aspect-ratio: 16/6; object-fit: contain; }
+  .pair-stat {
+    color: var(--ok); font: 12px/1.35 ui-monospace, Menlo, monospace;
+    white-space: pre-wrap; min-height: 2.6em;
+  }
+  .pair-stat.err { color: #ff3b3b; }
+  .pair-stat.run { color: var(--r); }
+  .pair-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pair-acts .who { color: var(--dim); font-size: 11px; letter-spacing: 0.1em; }
   .file {
     display: grid; gap: 8px; padding: 10px;
     border: 1px solid #5a3200;
@@ -334,15 +345,21 @@
 <div id="tab-pano" class="pane" hidden>
 <div class="row">
   <button id="panoRefresh">更新 LIST</button>
-  <button id="panoGo">結合 STITCH</button>
+  <label>Mode
+    <select id="panoMode">
+      <option value="open">Open</option>
+      <option value="match">Match</option>
+      <option value="blend">Blend</option>
+      <option value="cut">Cut</option>
+    </select>
+  </label>
+  <label class="dlchk"><input type="checkbox" id="flipR">鏡面 R</label>
 </div>
-<label class="dlchk"><input type="checkbox" id="flipR" checked>鏡面 R</label>
 <div class="drag">
-  <div class="k">Overlap <b id="olVal">20%</b></div>
+  <div class="k">Overlap <b id="olVal">20%</b> <small style="color:var(--dim)">cut/blend</small></div>
   <input type="range" id="olDrag" min="5" max="45" value="20" step="1">
 </div>
 <div id="pairs"></div>
-<div class="pano-out"><img id="panoOut" alt=""></div>
 </div>
 <div id="tab-files" class="pane" hidden>
 <div class="row">
@@ -666,47 +683,90 @@ bind("liveStop", async () => {
   setLiveSrc(false);
   const j = await api("/api/live/stop", { method:"POST" }); log(j.message);
 });
-const loadPairs = async () => {
+const stitchLine = (p) => {
+  const s = p.stitch || {};
+  if (s.running) return (s.message || "stitching…") + (s.log && s.log.length > 1 ? "\n" + s.log.slice(-3).join("\n") : "");
+  if (s.error) return s.error;
+  if (s.message) return s.message;
+  if (p.pano) return "stitched  " + p.pano;
+  return p.ready ? "ready  pick Match / Blend / Cut" : "need T and R";
+};
+const paintPairStat = (el, p) => {
+  const s = p.stitch || {};
+  el.textContent = stitchLine(p);
+  el.className = "pair-stat" + (s.running ? " run" : s.error ? " err" : "");
+};
+let panoTimer = 0;
+const loadPairs = async (silent) => {
   const j = await api("/api/captures");
   const box = document.getElementById("pairs");
-  box.innerHTML = "";
+  const seen = new Set();
   (j.pairs || []).forEach(p => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "pair" + (p.stamp === state.stamp ? " on" : "");
-    b.dataset.stamp = p.stamp;
-    b.disabled = !p.ready;
-    const t = p.t ? `<img alt="T" src="/api/file/${encodeURIComponent(p.t)}?w=240">` : "<span>T —</span>";
-    const r = p.r ? `<img alt="R" src="/api/file/${encodeURIComponent(p.r)}?w=240">` : "<span>R —</span>";
-    b.innerHTML = t + r + `<span>${p.stamp}${p.pano ? " · 結合済" : ""}</span>`;
-    b.onclick = () => {
-      state.stamp = p.stamp;
-      box.querySelectorAll(".pair").forEach(el => el.classList.toggle("on", el.dataset.stamp === p.stamp));
-      if (p.pano) document.getElementById("panoOut").src = "/api/file/"+encodeURIComponent(p.pano)+"?"+Date.now();
+    seen.add(p.stamp);
+    let el = box.querySelector(`[data-stamp="${p.stamp}"]`);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "pair";
+      el.dataset.stamp = p.stamp;
+      el.innerHTML = `<div class="pair-frames">
+          <figure><figcaption>T</figcaption><img class="pt" alt="T"></figure>
+          <figure><figcaption>R</figcaption><img class="pr" alt="R"></figure>
+          <figure class="pair-pano"><figcaption>PANO</figcaption><img class="pp" alt="P"></figure>
+        </div>
+        <div class="pair-stat"></div>
+        <div class="pair-acts"><button type="button" class="go">結合 STITCH</button>
+          <span class="who">${p.stamp}</span></div>`;
+      el.querySelector(".go").onclick = () => startPano(p.stamp).catch(e => {
+        el.querySelector(".pair-stat").className = "pair-stat err";
+        el.querySelector(".pair-stat").textContent = e.message;
+        log(e.message, true);
+      });
+      box.appendChild(el);
+    }
+    const setImg = (sel, name, w) => {
+      const img = el.querySelector(sel);
+      if (!name) { img.removeAttribute("src"); return; }
+      const next = "/api/file/"+encodeURIComponent(name)+"?w="+w;
+      if (!img.src.includes(encodeURIComponent(name))) img.src = next + "&t="+Date.now();
+      else if ((p.stitch || {}).phase === "done") img.src = next + "&t="+Date.now();
     };
-    box.appendChild(b);
+    setImg(".pt", p.t, 240);
+    setImg(".pr", p.r, 240);
+    setImg(".pp", p.pano, 720);
+    el.querySelector(".go").disabled = !p.ready || !!(p.stitch && p.stitch.running);
+    paintPairStat(el.querySelector(".pair-stat"), p);
+  });
+  [...box.querySelectorAll(".pair")].forEach(el => {
+    if (!seen.has(el.dataset.stamp)) el.remove();
   });
   if (!(j.pairs || []).length) {
-    box.innerHTML = "<div class='cam'><div><b>NO PAIRS</b><span>回収 FIRE writes T_/R_ JPEGs</span></div></div>";
+    if (!box.querySelector(".cam"))
+      box.innerHTML = "<div class='cam'><div><b>NO PAIRS</b><span>回収 FIRE writes T_/R_ JPEGs</span></div></div>";
+  } else {
+    const empty = box.querySelector(":scope > .cam");
+    if (empty) empty.remove();
   }
+  const busy = (j.pairs || []).some(p => p.stitch && p.stitch.running);
+  if (busy && !panoTimer) panoTimer = setInterval(() => loadPairs(true).catch(() => {}), 700);
+  if (!busy && panoTimer) { clearInterval(panoTimer); panoTimer = 0; }
+  if (!silent) log(j.message);
+};
+const startPano = async (stamp) => {
+  state.stamp = stamp;
+  const j = await api("/api/pano", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ stamp,
+      mode: document.getElementById("panoMode").value,
+      overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
+      flip_r: document.getElementById("flipR").checked }) });
   log(j.message);
+  await loadPairs(true);
 };
 const paintOl = () => {
   document.getElementById("olVal").textContent = document.getElementById("olDrag").value + "%";
 };
 document.getElementById("olDrag").oninput = paintOl;
-bind("panoRefresh", loadPairs);
-bind("panoGo", async () => {
-  if (!state.stamp) throw new Error("select a T/R pair");
-  const j = await api("/api/pano", { method:"POST",
-    headers:{"content-type":"application/json"},
-    body: JSON.stringify({ stamp: state.stamp,
-      overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
-      flip_r: document.getElementById("flipR").checked }) });
-  document.getElementById("panoOut").src = j.url + "?" + Date.now();
-  log(j.message);
-  await loadPairs();
-});
+bind("panoRefresh", () => loadPairs());
 const fileThumb = (name, label) => name
   ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
   : `<span class="who">${label} —</span>`;

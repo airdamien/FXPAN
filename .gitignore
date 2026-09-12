@@ -11,6 +11,7 @@ kraken/.venv/
 kraken/__pycache__/
 kraken/preview_*.png
 cam/__pycache__/
+cam/.venv/
 cam/cameras.json
 captures/
 

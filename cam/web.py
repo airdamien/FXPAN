@@ -217,7 +217,22 @@ class Handler(BaseHTTPRequestHandler):
                 n = sum(1 for row in pairs if row["ready"])
                 return _json(
                     self, 200,
-                    {"pairs": pairs, "message": f"{n} JPEG pair(s) in captures/"},
+                    {
+                        "pairs": pairs,
+                        "jobs": pano.jobs_snapshot(),
+                        "message": f"{n} JPEG pair(s) in captures/",
+                    },
+                )
+            if path == "/api/pano/job":
+                q = parse_qs(urlparse(self.path).query)
+                stamp = (q.get("stamp", [""])[0] or "").strip()
+                return _json(
+                    self, 200,
+                    {
+                        "job": pano.job_get(stamp) if stamp else {},
+                        "jobs": pano.jobs_snapshot(),
+                        "pairs": pano.list_pairs(),
+                    },
                 )
             m = re.fullmatch(r"/api/file/([\w.-]+)", path)
             if m:
@@ -382,16 +397,19 @@ class Handler(BaseHTTPRequestHandler):
                     overlap = float(overlap) if overlap is not None else pano.OVERLAP
                 except (TypeError, ValueError):
                     raise dual.CamError("bad overlap")
-                flip_r = data.get("flip_r", True)
+                flip_r = data.get("flip_r", False)
                 if isinstance(flip_r, str):
                     flip_r = flip_r.lower() not in ("0", "false", "no")
-                info = pano.stitch_stamp(stamp, overlap=overlap, flip_r=bool(flip_r))
+                mode = (data.get("mode") or "open").strip().lower()
+                job = pano.start_stitch(
+                    stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
+                )
                 return _json(
                     self, 200,
                     {
-                        **info,
-                        "url": "/api/file/" + info["file"],
-                        "message": f"pano {info['file']}  {info['width']}×{info['height']}",
+                        **job,
+                        "pairs": pano.list_pairs(),
+                        "message": job.get("message") or f"stitch {mode} {stamp}",
                     },
                 )
         except dual.CamError as exc:
