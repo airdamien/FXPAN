@@ -3,6 +3,8 @@
 #   ./export_stls.sh [part ...]              panorama V → stls/
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
 #   ./export_stls.sh --hybrid [part ...]     pano L (one 50/50) → stls/hybrid/
+#   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
+#   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
 #
 # Camera tubes export twice:
 #   arm_r.stl / arm_t.stl / arm_l.stl     female 52×0.75 (reverse ring)
@@ -23,6 +25,16 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter)
+elif [[ "${1:-}" == "--efhybrid" ]]; then
+    shift
+    scad=$root/openscad/EFhybrid/WATCH_ME.scad
+    out=$root/stls/EFhybrid
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter)
+elif [[ "${1:-}" == "--ehybrid" ]]; then
+    shift
+    scad=$root/openscad/Ehybrid/WATCH_ME.scad
+    out=$root/stls/Ehybrid
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter)
 fi
 

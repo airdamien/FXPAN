@@ -52,6 +52,27 @@ def apply_lens(name, f, fnum):
     S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
     MAG = S_PRIME / S_OBJ
 
+
+def apply_chassis(flange=46.5, sensor_w=23.6, sensor_h=15.6):
+    """D7000 DX is the default. 5D Mk III: flange=44, 36×24. A7: flange=18, 35.8×23.9."""
+    global FLANGE_F, PATH_TOTAL, PATH_AFTER, S_PRIME
+    global SENSOR_W, SENSOR_H, SHIFT, HALF_W, HALF_H, OL_W, STITCH_W
+    global SINGLE_FOV, PANO_FOV
+    FLANGE_F = float(flange)
+    SENSOR_W = float(sensor_w)
+    SENSOR_H = float(sensor_h)
+    PATH_AFTER = D_PLATE_TO_MOUNT + FLANGE_F
+    PATH_TOTAL = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT + FLANGE_F
+    S_PRIME = PATH_TOTAL
+    SHIFT = SENSOR_W / 2.0 * (1.0 - OVERLAP_FRAC)
+    HALF_W = SENSOR_W / 2.0
+    HALF_H = SENSOR_H / 2.0
+    OL_W = SENSOR_W * OVERLAP_FRAC / 2.0
+    STITCH_W = SENSOR_W * (2.0 - OVERLAP_FRAC)
+    SINGLE_FOV = 2.0 * np.degrees(np.arctan(HALF_W / PATH_TOTAL))
+    PANO_FOV = 2.0 * np.degrees(np.arctan(STITCH_W / 2.0 / PATH_TOTAL))
+    apply_lens(EL_NAME, EL_F, EL_FNUM)
+
 SHIFT = SENSOR_W / 2.0 * (1.0 - OVERLAP_FRAC)
 HALF_W = SENSOR_W / 2.0
 HALF_H = SENSOR_H / 2.0
