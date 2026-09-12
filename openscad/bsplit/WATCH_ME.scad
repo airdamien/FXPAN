@@ -208,6 +208,7 @@ module part_camera_tube(out_len, lock_az = 180) {
                                 F_REV_LEN + 0.3,
                                 pitch = F_REV_PITCH, tolerance = F_REV_TOL);
                 rev_lock_cuts(out_len, lock_az);
+                f_pin_line_cut(out_len, lock_az);
             }
     }
     if (ARM_MOUNT)

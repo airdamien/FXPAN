@@ -255,6 +255,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                                 F_REV_LEN + 0.3,
                                 pitch = F_REV_PITCH, tolerance = F_REV_TOL);
                 rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
+                f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
             }
         if (mark != "")
             flange_marks(mark);

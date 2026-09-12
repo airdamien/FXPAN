@@ -228,6 +228,7 @@ module part_arm(side = 1) {
                                 F_REV_LEN + 0.3,
                                 pitch = F_REV_PITCH, tolerance = F_REV_TOL);
                 rev_lock_cuts(arm_tube_len(), side > 0 ? 180 : 0);
+                f_pin_line_cut(arm_tube_len(), side > 0 ? 180 : 0);
             }
     }
     if (ARM_MOUNT)
