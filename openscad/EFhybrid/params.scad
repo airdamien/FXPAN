@@ -74,10 +74,12 @@ EF_LUG_SWEEP    = 48;
 EF_REGISTER_T   = 2.0;
 EF_FMOUNT_STACK = EF_REGISTER_T;
 
-TRIPOD_MAJOR   = 6.35;
-TRIPOD_PITCH   = 1.27;
-TRIPOD_TOL     = 0.45;
-TRIPOD_KEEP    = 1.8;
+// 1/4-20 heat-set in the chassis floor (print floor on the bed).
+// CNC Kitchen short camera insert: 1/4-20 × 6.4 mm, hole Ø8.1.
+TRIPOD_INSERT_D = 8.1;
+TRIPOD_INSERT_L = 6.4;
+TRIPOD_KEEP     = 1.2;
+function tripod_hole_h() = min(WALL - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0);
 
 SHIM_STEPS = [0.2, 0.5, 1.0];
 

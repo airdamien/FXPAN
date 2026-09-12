@@ -154,10 +154,8 @@ module box_bore() {
     mirror_groove_cutouts();
 
     translate([0, 0, -s / 2 - 0.05]) {
-        ScrewThread(1.01 * TRIPOD_MAJOR + 1.25 * TRIPOD_TOL,
-                    WALL - TRIPOD_KEEP,
-                    pitch = TRIPOD_PITCH, tolerance = TRIPOD_TOL);
-        cylinder(h = 1.2, d1 = TRIPOD_MAJOR + 1.6, d2 = TRIPOD_MAJOR);
+        cylinder(h = tripod_hole_h() + 0.1, d = TRIPOD_INSERT_D);
+        cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
     }
 
     at_each_port()

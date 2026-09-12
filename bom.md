@@ -30,7 +30,8 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 | ~20 | M3×8–16 socket screws | 12 for the three port cookies (4 each). [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 12 | M3 hex nuts | Drop into the inner traps, then screw the tubes on. [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
 | 6 | M3 set screws (mirror tip/tilt) | [Amazon M3 set screws](https://www.amazon.com/s?k=M3+set+screw+kit) |
-| 2 | 1/4-20 screws (arm cradles / tripod) | Printed **1/4-20** in the chassis floor (print that face on the bed). [Amazon 1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
+| 1 | **1/4-20 heat-set insert**, short **6.4 mm** | Floor well Ø8.1 mm. Iron in from the bed face after printing. Do not punch through. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
+| 1 | 1/4-20 camera screw | Into that insert (tripod / clamp) | [Amazon 1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking sheet or flat black paint | [Amazon camera flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
 ## Print export cheatsheet
@@ -68,7 +69,7 @@ Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export wi
 
 ### Assembly
 
-1. Box floor on the bed; tubes flange-on-bed. Black PETG/ABS.
+1. Box floor on the bed; tubes flange-on-bed. Black PETG/ABS. Iron a **1/4-20×6.4** heat-set into the floor well from the bed face. Do not punch through.
 2. Drop the uncut 50×50×1 into the tray from +Z, **S1 toward the lens**. Roof pegs sit past the plate edge so it drops in. Seat the tray in the box corners. Lid forks over the two posts.
 3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
 4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter (`bs_t_comp`).
@@ -91,7 +92,8 @@ Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.pn
 | 12 | M3 hex nuts + 12× M3×10–16 | Three port cookies, 4 each | [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) · [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 4 | M3×10 lid screws | Corners of the lid | same assortment |
 | 4 | M2.5×6 thread-forming | Blind Pi holes in the lid (58×49 HAT). Do not punch through. | [M2.5 screws](https://www.amazon.com/s?k=M2.5+6mm+screw) |
-| 1 | 1/4-20 camera screw | Printed thread in the floor | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
+| 1 | **1/4-20 heat-set**, short 6.4 mm | Floor well Ø8.1. Iron in from the bed face. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
+| 1 | 1/4-20 camera screw | Into that insert | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
 A 150 mm EL-Nikkor / Rodagon / Componon-S is the next step closer to “far” (focus ~1.1 m on this path). Infinity needs the chassis path ≈ the focal length (~174 mm), not a longer lens.
@@ -102,7 +104,7 @@ Same L, same uncut plate, same stem (helicoid + 135 + adapter). Bodies are two *
 
 Open [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad). Export with `./export_stls.sh --efhybrid` or `./export_efhybrid.sh`. Countryside: [`docs/kraken/el135_d7000_5d3.png`](docs/kraken/el135_d7000_5d3.png).
 
-Print the same part list as the D7000 hybrid. Shared buy list too: plate, 135, helicoid, adapter, PETG, M3, lid screws, Pi screws, 1/4-20, flocking. Swap the cameras and the mouths.
+Print the same part list as the D7000 hybrid. Shared buy list too: plate, 135, helicoid, adapter, PETG, M3, lid screws, Pi screws, 1/4-20 heat-set, flocking. Swap the cameras and the mouths.
 
 ### Buy (delta)
 
@@ -118,7 +120,7 @@ Print the same part list as the D7000 hybrid. Shared buy list too: plate, 135, h
 
 Same tray / lid / Pi holes / flange arrows as the D7000 hybrid.
 
-1. Print floor-down / flange-on-bed. Black PETG/ABS.
+1. Print floor-down / flange-on-bed. Black PETG/ABS. Iron the **1/4-20×6.4** heat-set into the floor from the bed face.
 2. Plate in from +Z, **S1 toward the lens**. Lid forks over the posts.
 3. **▲ R** on +X, **▲ T** on +Y, arrow up. T is shorter. Do not swap the arms.
 4. Screw the **58 mm EF** reverse rings into the mouths; bayonet the 5Ds. No lens on the EF mounts — iris is on the 135.
@@ -148,7 +150,7 @@ Print the same part list. Shared buy list is the D7000 hybrid minus the F rings 
 
 Same tray / lid / Pi holes / flange arrows as the other L forks.
 
-1. Print floor-down / flange-on-bed. Black PETG/ABS. Do not print the bayonet in PLA.
+1. Print floor-down / flange-on-bed. Black PETG/ABS. Do not print the bayonet in PLA. Iron the **1/4-20×6.4** heat-set into the floor from the bed face.
 2. Plate in from +Z, **S1 toward the lens**. Lid forks over the posts.
 3. **▲ R** on +X, **▲ T** on +Y, arrow up. T is shorter. Do not swap the arms.
 4. Screw the **52 mm E** reverse rings into the mouths; bayonet the A7s. No lens on the E mounts.
@@ -162,3 +164,4 @@ Same tray / lid / Pi holes / flange arrows as the other L forks.
 - Short 12–19 mm helicoid is for **fine** focus; fixed chassis length sets most of the register. Stack tubes if you cannot reach the working distance.
 - Hybrid mouths: D7000 = 52 mm **F** reverse ring; 5D III = 58 mm **EF**; α7 = 52 mm **E**. Same 52×0.75 thread on Nikon and Sony is not the same ring.
 - Tune `F_REV_STACK` / `EF_REV_STACK` / `E_REV_STACK` if the working distance is long or short.
+- Floor is a Ø8.1 mm well for a **1/4-20×6.4** heat-set, not a printed thread. Iron from the bed face; leave the 1.2 mm keep so it stays blind.
