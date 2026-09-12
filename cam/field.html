@@ -139,8 +139,15 @@
     display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   }
+  .cam.is-t { border-color: var(--t); }
+  .cam.is-r { border-color: var(--r); }
+  .cam.ghost { opacity: 0.55; }
   .cam b { font-size: 13px; letter-spacing: 0.08em; }
   .cam span { display: block; color: var(--dim); font-size: 12px; }
+  .cam button.role { min-width: 48px; letter-spacing: 0.12em; }
+  .cam button.role.on { color: #fff; }
+  .cam.is-t button.role.on { background: var(--t); border-color: var(--t); }
+  .cam.is-r button.role.on { background: var(--r); border-color: var(--r); }
   #log {
     margin: 10px 0 0; color: var(--ok); font: 12px/1.4 "Share Tech Mono", ui-monospace, Menlo, monospace;
     white-space: pre-wrap; min-height: 2.6em;
@@ -330,16 +337,9 @@
 <div class="row">
   <button id="detect">探知 DETECT</button>
   <button id="status">計測 STATUS</button>
+  <button id="swap" disabled>入替 SWAP</button>
 </div>
-<div class="lbl">UNITS</div>
-<div class="picks two">
-  <label>T · back +Y
-    <select id="pickT"></select>
-  </label>
-  <label>R · side +X
-    <select id="pickR"></select>
-  </label>
-</div>
+<div class="lbl">UNITS · tap T / R · again to clear</div>
 <div id="cams"></div>
 </div>
 <div id="tab-pano" class="pane" hidden>
@@ -514,79 +514,100 @@ const snapFromStatus = (b) => {
   if (b.imagequality) { state.quality = b.imagequality; fillSelect("quality", QUAL, "quality"); }
   if (b.expprogram) { state.program = b.expprogram; fillSelect("program", PROG, "program"); }
 };
-const camLabel = (row) => {
-  const model = (row.model || "camera").replace(/^Nikon DSC /, "");
-  return model + " · " + (row.port || "USB");
+const shortSerial = (s) => {
+  s = String(s || "");
+  return s.length > 4 ? s.slice(-4) : s;
 };
-const fillPicks = (rows) => {
-  ["T","R"].forEach(role => {
-    const el = document.getElementById("pick"+role);
-    const cur = state[role.toLowerCase()];
-    el.innerHTML = '<option value="">—</option>';
-    (rows || []).forEach(row => {
-      if (!row.serial) return;
-      const opt = document.createElement("option");
-      opt.value = row.serial;
-      opt.textContent = camLabel(row);
-      if (row.serial === cur) opt.selected = true;
-      el.appendChild(opt);
-    });
-    if (cur && ![...el.options].some(o => o.value === cur)) {
-      const opt = document.createElement("option");
-      opt.value = cur;
-      opt.textContent = "saved · offline";
-      opt.selected = true;
-      el.appendChild(opt);
-    }
-    el.onchange = () => pickRole(role).catch(e => log(e.message, true));
+const camBits = (row) => {
+  const model = (row.model || "camera").replace(/^Nikon DSC /, "");
+  const bits = [];
+  if (row.serial) bits.push("#" + shortSerial(row.serial));
+  if (row.port) bits.push(row.port);
+  if (row.batterylevel) bits.push(row.batterylevel);
+  else if (row.iso) bits.push("ISO " + row.iso);
+  return { title: model, sub: bits.join(" · ") || "USB" };
+};
+const applyPair = (pair, swapped) => {
+  if (swapped) {
+    const t = state.stats.T, r = state.stats.R;
+    state.stats.T = Object.assign({}, r, { role: "T" });
+    state.stats.R = Object.assign({}, t, { role: "R" });
+  }
+  state.t = (pair && pair.T) || "";
+  state.r = (pair && pair.R) || "";
+  if (!state.t) state.stats.T = { on: false };
+  if (!state.r) state.stats.R = { on: false };
+  (state.rows || []).forEach(row => {
+    row.role = row.serial && row.serial === state.t ? "T"
+      : row.serial && row.serial === state.r ? "R" : "";
   });
+  const sw = document.getElementById("swap");
+  if (sw) sw.disabled = !state.t && !state.r;
+  paintHud();
+};
+let pairing = false;
+const paintCams = () => {
+  const box = document.getElementById("cams");
+  box.innerHTML = "";
+  const seen = new Set();
+  const addCard = (row, ghost) => {
+    const serial = row.serial || "";
+    if (serial) seen.add(serial);
+    const who = serial && serial === state.t ? "T"
+      : serial && serial === state.r ? "R"
+      : (row.role || "");
+    const info = camBits(row);
+    const el = document.createElement("div");
+    el.className = "cam" + (who === "T" ? " is-t" : who === "R" ? " is-r" : "") + (ghost ? " ghost" : "");
+    const note = ghost ? " · offline" : serial ? "" : " · wake for serial";
+    el.innerHTML = `<div><b>${who ? who + "  " : ""}${info.title}</b><span>${info.sub}${note}</span></div>`;
+    ["T","R"].forEach(role => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = role;
+      b.className = "role" + (who === role ? " on" : "");
+      b.disabled = !serial || pairing;
+      b.onclick = () => assignRole(role, who === role ? "" : serial).catch(e => log(e.message, true));
+      el.appendChild(b);
+    });
+    box.appendChild(el);
+    if (who === "T" || who === "R") {
+      const st = document.getElementById("st"+who);
+      if (st) st.textContent = (row.batterylevel || row.iso || "USB");
+    }
+  };
+  (state.rows || []).forEach(row => addCard(row, false));
+  [["T", state.t], ["R", state.r]].forEach(([role, serial]) => {
+    if (serial && !seen.has(serial))
+      addCard({ serial, role, model: "saved" }, true);
+  });
+  if (!(state.rows || []).length && !state.t && !state.r) {
+    box.innerHTML = "<div class='cam'><div><b>NO BODIES</b><span>MTP/PTP · wake · plug USB</span></div></div>";
+  }
 };
 const fill = (rows, pair) => {
   state.rows = rows || [];
-  pair = pair || {};
-  if (pair.T) state.t = pair.T;
-  if (pair.R) state.r = pair.R;
-  (rows || []).forEach(row => {
+  if (pair) applyPair(pair);
+  else (rows || []).forEach(row => {
     if (row.role === "T" && row.serial) state.t = row.serial;
     if (row.role === "R" && row.serial) state.r = row.serial;
   });
-  fillPicks(rows);
-  const box = document.getElementById("cams");
-  box.innerHTML = "";
-  (rows || []).forEach(row => {
-    const who = (row.serial && row.serial === state.t) ? "T"
-      : (row.serial && row.serial === state.r) ? "R"
-      : (row.role || "—");
-    const el = document.createElement("div");
-    el.className = "cam";
-    el.innerHTML = `<div><b>${who}  ${row.model || "camera"}</b>
-      <span>${row.port || ""}  ${row.batterylevel || row.iso || ""}</span></div>`;
-    box.appendChild(el);
-    const st = document.getElementById("st"+who);
-    if (st) st.textContent = (row.batterylevel || row.iso || "USB");
-  });
-  if (!(rows || []).length) {
-    box.innerHTML = "<div class='cam'><div><b>NO BODIES</b><span>MTP/PTP · wake · plug USB</span></div></div>";
-  }
+  paintCams();
   ingestHud(rows);
 };
-const pickRole = async (role) => {
-  state.t = document.getElementById("pickT").value;
-  state.r = document.getElementById("pickR").value;
-  if (state.t && state.t === state.r) {
-    if (role === "T") state.r = "";
-    else state.t = "";
-  }
-  if (!state.t && !state.r) {
-    fillPicks(state.rows);
-    log("pick T or R");
-    return;
-  }
-  const j = await api("/api/pair", { method:"POST",
-    headers:{"content-type":"application/json"},
-    body: JSON.stringify({ t: state.t, r: state.r }) });
-  log(j.message);
-  fill(state.rows, { T: state.t, R: state.r });
+const assignRole = async (role, serial) => {
+  if (pairing) return;
+  pairing = true;
+  paintCams();
+  try {
+    const body = role === "T" ? { t: serial } : { r: serial };
+    const j = await api("/api/pair", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify(body) });
+    applyPair(j.pair);
+    paintCams();
+    log(j.message);
+  } finally { pairing = false; paintCams(); }
 };
 const bind = (id, fn) => {
   document.getElementById(id).onclick = async () => {
@@ -638,6 +659,19 @@ bind("detect", async () => {
   const j = await api("/api/detect"); fill(j.cameras, j.pair); log(j.message);
   if (was) { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
 });
+document.getElementById("swap").onclick = async () => {
+  const b = document.getElementById("swap");
+  b.disabled = true;
+  try {
+    const j = await api("/api/pair", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ swap: true }) });
+    applyPair(j.pair, true);
+    paintCams();
+    log(j.message);
+  } catch (e) { log(e.message, true); }
+  b.disabled = !state.t && !state.r;
+};
 bind("status", async () => { await usb(async () => {
   const j = await api("/api/status"); fill(j.cameras, j.pair); log(j.message);
   ingestHud(j.cameras, j.status);

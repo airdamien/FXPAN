@@ -294,12 +294,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = _read_json(self)
             if path == "/api/pair":
-                t, r = (data.get("t") or "").strip(), (data.get("r") or "").strip()
-                if not t and not r:
-                    raise dual.CamError("need a T or R serial")
-                data = dual.save_pair(t, r, replace=True)
-                bits = "  ".join(f"{k}={v}" for k, v in data.items())
-                return _json(self, 200, {"message": f"paired {bits}", "pair": data})
+                if data.get("swap"):
+                    saved = dual.swap_pair()
+                else:
+                    has_t, has_r = "t" in data, "r" in data
+                    if not has_t and not has_r:
+                        raise dual.CamError("need a T or R serial")
+                    t = str(data.get("t") or "").strip() if has_t else None
+                    r = str(data.get("r") or "").strip() if has_r else None
+                    saved = dual.save_pair(t, r, replace=False)
+                bits = "  ".join(f"{k}={v}" for k, v in saved.items()) or "(cleared)"
+                return _json(self, 200, {"message": f"paired {bits}", "pair": saved})
             if path == "/api/live/start":
                 have = LIVE.start_from_usb()
                 roles = " ".join(sorted(have))

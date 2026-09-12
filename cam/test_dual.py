@@ -121,6 +121,15 @@ class Pair(unittest.TestCase):
         self.assertEqual(dual.load_pair(), {"T": "111", "R": "222"})
         with self.assertRaises(dual.CamError):
             dual.save_pair("111", "111", replace=True)
+        dual.save_pair("111", "222", replace=True)
+        self.assertEqual(dual.save_pair("222", None), {"T": "222"})
+        dual.save_pair("111", "222", replace=True)
+        self.assertEqual(dual.swap_pair(), {"T": "222", "R": "111"})
+        self.assertEqual(dual.save_pair("", None), {"R": "111"})
+        self.assertEqual(dual.swap_pair(), {"T": "111"})
+        dual.save_pair("", "", replace=True)
+        with self.assertRaises(dual.CamError):
+            dual.swap_pair()
 
 
 class Online(unittest.TestCase):

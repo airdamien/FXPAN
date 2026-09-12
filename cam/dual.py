@@ -257,19 +257,34 @@ def load_pair():
 def save_pair(t_serial=None, r_serial=None, replace=False):
     data = {} if replace else dict(load_pair())
     if t_serial is not None:
+        t_serial = str(t_serial).strip()
+    if r_serial is not None:
+        r_serial = str(r_serial).strip()
+    if t_serial and r_serial and t_serial == r_serial:
+        raise CamError("T and R cannot be the same serial")
+    if t_serial is not None:
         if t_serial:
-            data["T"] = str(t_serial)
+            data["T"] = t_serial
+            if data.get("R") == t_serial:
+                data.pop("R", None)
         else:
             data.pop("T", None)
     if r_serial is not None:
         if r_serial:
-            data["R"] = str(r_serial)
+            data["R"] = r_serial
+            if data.get("T") == r_serial:
+                data.pop("T", None)
         else:
             data.pop("R", None)
-    if data.get("T") and data.get("T") == data.get("R"):
-        raise CamError("T and R cannot be the same serial")
     PAIR_PATH.write_text(json.dumps(data, indent=2) + "\n")
     return data
+
+
+def swap_pair():
+    old = load_pair()
+    if not old:
+        raise CamError("nothing to swap")
+    return save_pair(old.get("R") or "", old.get("T") or "", replace=True)
 
 
 def detect_bodies():
@@ -311,7 +326,7 @@ def require_online(rows):
     raise CamError(
         "no paired body on USB. "
         f"detect saw {len(rows)} body(ies); pair file is {PAIR_PATH}. "
-        "Tap T or R on Detect, or: python3 cam/dual.py pair --t SERIAL"
+        "Tap T or R on a body on the USB tab, or: python3 cam/dual.py pair --t SERIAL"
         + (f"  unpaired={extras}" if extras else "")
     )
 

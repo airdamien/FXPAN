@@ -36,6 +36,11 @@
   input, select { background: #120c08; color: #f3ead2; border: 1px solid #ff6a00;
           padding: 0.35rem 0.5rem; font-size: 16px; }
   #tab-usb select { min-width: 16rem; }
+  #cams button.on-t { color: #9a5cff; border-color: #9a5cff; }
+  #cams button.on-r { color: #ff6a00; border-color: #ff6a00; }
+  #cams td.assign { white-space: nowrap; }
+  #cams td.assign button { margin-right: 0.35rem; }
+  #cams tr.ghost { opacity: 0.5; }
   input[type=range] { width: 18rem; accent-color: #ff6a00; height: 2rem; }
   .drag { min-width: 16rem; }
   .drag b { color: #ff6a00; font-size: 1.1rem; }
@@ -194,22 +199,14 @@
 </div>
 <div id="tab-usb" class="pane" hidden>
 <section>
+  <p class="sub">Tap T or R on a body. Tap again to clear. Swap if they landed backwards.</p>
   <table id="cams"><thead><tr>
-    <th>role</th><th>port</th><th>model</th>
+    <th>role</th><th>serial</th><th>port</th><th>model</th><th>assign</th>
   </tr></thead><tbody></tbody></table>
   <div class="row">
     <button id="detect">Detect</button>
     <button id="status">Status</button>
-  </div>
-</section>
-<section>
-  <div class="row">
-    <label>T · back +Y
-      <select id="t"><option value="">—</option></select>
-    </label>
-    <label>R · side +X
-      <select id="r"><option value="">—</option></select>
-    </label>
+    <button id="swap" disabled>Swap T/R</button>
   </div>
 </section>
 </div>
@@ -244,7 +241,7 @@
   <div id="files"></div>
 </section>
 </div>
-<pre id="log">Lab: Detect, then pick T and/or R from the list. Field UI is / for the phone.</pre>
+<pre id="log">Lab: Detect, then tap T or R on a body. Field UI is / for the phone.</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
   "1600","2000","2500","3200","4000","5000","6400","12800","25600"];
@@ -271,12 +268,9 @@ const api = async (path, opt) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
-const camLabel = (row) => {
-  const model = (row.model || "camera").replace(/^Nikon DSC /, "");
-  return model + " · " + (row.port || "USB");
-};
 let lastRows = [];
 let lastPair = {};
+let pairing = false;
 const stats = { T: { on: false }, R: { on: false } };
 const roleOf = (row) => {
   if (row.serial && row.serial === lastPair.T) return "T";
@@ -346,57 +340,89 @@ const ingestHud = (rows, blocks) => {
   });
   paintHud();
 };
-const fillPicks = (rows, pair) => {
-  pair = pair || {};
-  ["t","r"].forEach(role => {
-    const el = document.getElementById(role);
-    const cur = pair[role.toUpperCase()] || el.value;
-    el.innerHTML = '<option value="">—</option>';
-    (rows || []).forEach(row => {
-      if (!row.serial) return;
-      const opt = document.createElement("option");
-      opt.value = row.serial;
-      opt.textContent = camLabel(row);
-      if (row.serial === cur) opt.selected = true;
-      el.appendChild(opt);
-    });
-    if (cur && ![...el.options].some(o => o.value === cur)) {
-      const opt = document.createElement("option");
-      opt.value = cur;
-      opt.textContent = "saved · offline";
-      opt.selected = true;
-      el.appendChild(opt);
-    }
+const applyPair = (pair, swapped) => {
+  if (swapped) {
+    const t = stats.T, r = stats.R;
+    stats.T = Object.assign({}, r, { role: "T" });
+    stats.R = Object.assign({}, t, { role: "R" });
+  }
+  lastPair = { T: (pair && pair.T) || "", R: (pair && pair.R) || "" };
+  if (!lastPair.T) { delete lastPair.T; stats.T = { on: false }; }
+  if (!lastPair.R) { delete lastPair.R; stats.R = { on: false }; }
+  (lastRows || []).forEach(row => {
+    row.role = row.serial && row.serial === lastPair.T ? "T"
+      : row.serial && row.serial === lastPair.R ? "R" : "";
   });
+  const sw = document.getElementById("swap");
+  if (sw) sw.disabled = !lastPair.T && !lastPair.R;
+  paintHud();
+};
+const paintCams = () => {
+  const tb = document.querySelector("#cams tbody");
+  tb.innerHTML = "";
+  const seen = new Set();
+  const addRow = (row, ghost) => {
+    const serial = row.serial || "";
+    if (serial) seen.add(serial);
+    const who = serial && serial === lastPair.T ? "T"
+      : serial && serial === lastPair.R ? "R"
+      : (row.role || "—");
+    const tr = document.createElement("tr");
+    if (ghost) tr.className = "ghost";
+    [who === "" ? "—" : who, serial || "?", row.port || (ghost ? "offline" : "—"),
+      (row.model || "—").replace(/^Nikon DSC /, "")].forEach(val => {
+      const td = document.createElement("td");
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+    const td = document.createElement("td");
+    td.className = "assign";
+    ["T","R"].forEach(role => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = role;
+      if (who === role) b.classList.add(role === "T" ? "on-t" : "on-r");
+      b.disabled = !serial || pairing;
+      b.onclick = () => assignRole(role, who === role ? "" : serial).catch(e => log(e.message, true));
+      td.appendChild(b);
+    });
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  };
+  (lastRows || []).forEach(row => addRow(row, false));
+  [["T", lastPair.T], ["R", lastPair.R]].forEach(([role, serial]) => {
+    if (serial && !seen.has(serial))
+      addRow({ serial, role, model: "saved" }, true);
+  });
+  if (!(lastRows || []).length && !lastPair.T && !lastPair.R) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="5">no cameras on USB</td>';
+    tb.appendChild(tr);
+  }
 };
 const fill = (rows, pair) => {
   lastRows = rows || [];
-  lastPair = pair || {};
-  (rows || []).forEach(row => {
+  if (pair) applyPair(pair);
+  else (rows || []).forEach(row => {
     if (row.role === "T" && row.serial) lastPair.T = row.serial;
     if (row.role === "R" && row.serial) lastPair.R = row.serial;
   });
-  fillPicks(lastRows, lastPair);
-  const tb = document.querySelector("#cams tbody");
-  tb.innerHTML = "";
-  (rows || []).forEach(row => {
-    const who = (row.serial && row.serial === lastPair.T) ? "T"
-      : (row.serial && row.serial === lastPair.R) ? "R"
-      : (row.role || "—");
-    const tr = document.createElement("tr");
-    [who, row.port, row.model].forEach(val => {
-      const td = document.createElement("td");
-      td.textContent = val || "—";
-      tr.appendChild(td);
-    });
-    tb.appendChild(tr);
-  });
-  if (!(rows || []).length) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="3">no cameras on USB</td>';
-    tb.appendChild(tr);
-  }
+  paintCams();
   ingestHud(rows);
+};
+const assignRole = async (role, serial) => {
+  if (pairing) return;
+  pairing = true;
+  paintCams();
+  try {
+    const body = role === "T" ? { t: serial } : { r: serial };
+    const j = await api("/api/pair", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify(body) });
+    applyPair(j.pair);
+    paintCams();
+    log(j.message);
+  } finally { pairing = false; paintCams(); }
 };
 const bind = (id, fn) => document.getElementById(id).onclick = async () => {
   document.getElementById(id).disabled = true;
@@ -416,21 +442,19 @@ bind("status", async () => {
   ingestHud(j.cameras, j.status);
   log(j.message);
 });
-const pairNow = async (changed) => {
-  let tv = t.value, rv = r.value;
-  if (tv && tv === rv) {
-    if (changed === "t") { r.value = ""; rv = ""; }
-    else { t.value = ""; tv = ""; }
-  }
-  if (!tv && !rv) { log("pick T or R"); return; }
-  const j = await api("/api/pair", { method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({ t: tv, r: rv }) });
-  lastPair = j.pair || { T: tv, R: rv };
-  log(j.message);
-  fill(lastRows, lastPair);
+document.getElementById("swap").onclick = async () => {
+  const b = document.getElementById("swap");
+  b.disabled = true;
+  try {
+    const j = await api("/api/pair", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ swap: true }) });
+    applyPair(j.pair, true);
+    paintCams();
+    log(j.message);
+  } catch (e) { log(e.message, true); }
+  b.disabled = !lastPair.T && !lastPair.R;
 };
-t.onchange = () => pairNow("t").catch(e => log(e.message, true));
-r.onchange = () => pairNow("r").catch(e => log(e.message, true));
 bind("set", async () => {
   liveSrc(false);
   const j = await api("/api/set", { method:"POST", headers:{"content-type":"application/json"},
