@@ -12,6 +12,12 @@ include <lib/threads.scad>
 use <f_mount_male.scad>
 use <mirror_tray.scad>
 use <shims.scad>
+use <d7000_body.scad>
+use <taking_lens.scad>
+
+/* [View] */
+SHOW_BODIES = 0; // [0:hide, 1:show]
+SHOW_LENS = 0; // [0:hide, 1:show]
 
 screw_resolution = $preview ? 0.6 : 0.25;
 
@@ -182,7 +188,7 @@ module part_elnikkor_adapter() {
         translate([0, 0, -0.2])
             cylinder(h = h1 + h2 + h3 + 0.4, d = EL_BORE);
     }
-    if ($preview)
+    if ($preview && !SHOW_LENS)
         color("DimGray", 0.45)
             translate([0, 0, h1 + h2 + h3])
                 cylinder(h = 28, d = 47.5);
@@ -200,7 +206,7 @@ module part_arm(side = 1) {
                             F_REV_LEN + 0.3,
                             pitch = F_REV_PITCH, tolerance = F_REV_TOL);
     }
-    if ($preview)
+    if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube(toe)
                 translate([0, 0, arm_tube_len()])
@@ -241,8 +247,27 @@ module ghost_body(side = 1) {
                         cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
 }
 
+module camera_body(side = 1) {
+    if (SHOW_BODIES)
+        color("DimGray", 0.92)
+            at_arm(side)
+                along_tube(arm_toe())
+                    translate([0, 0, arm_tube_len() + ex])
+                        d7000_body(side > 0 ? -90 : 90);
+}
+
+module taking_lens_at() {
+    if (SHOW_LENS)
+        color("DimGray", 0.92)
+            at_stem()
+                translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                                 + EL_M42_LEN + EL_ADAPTER_HEX + EL_M39_LEN
+                                 + (EXPLODED ? ex * 1.4 : 0)])
+                    taking_lens();
+}
+
 module ghost_lens() {
-    if ($preview && SHOW_GHOSTS)
+    if ($preview && SHOW_GHOSTS && !SHOW_LENS)
         color("black", 0.2)
             translate([0, -D_LENS_TO_KNIFE - STEM_FLANGE_T - HELICOID_LEN - 20 - ex, 0])
                 rotate([90, 0, 0]) {
@@ -287,7 +312,10 @@ module assembly() {
 
     ghost_body(-1);
     ghost_body(1);
+    camera_body(-1);
+    camera_body(1);
     ghost_lens();
+    taking_lens_at();
     optical_axis_guides();
     echo("Bolt-on tubes: 4× M3 at 45°; nuts flush in the wall; arms toed 52×0.75");
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,

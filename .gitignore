@@ -1,6 +1,8 @@
 .DS_Store
 *.stl
 !f-mount_raw.stl
+!openscad/d7000_body.stl
+!openscad/taking_lens.stl
 openscad/preview.png
 openscad/bsplit/preview.png
 openscad/hybrid/preview.png

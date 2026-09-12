@@ -9,6 +9,12 @@ include <params.scad>
 include <../lib/threads.scad>
 use <bs_tray.scad>
 use <shims.scad>
+use <../d7000_body.scad>
+use <../taking_lens.scad>
+
+/* [View] */
+SHOW_BODIES = 0; // [0:hide, 1:show]
+SHOW_LENS = 0; // [0:hide, 1:show]
 
 screw_resolution = $preview ? 0.6 : 0.25;
 
@@ -162,7 +168,7 @@ module part_elnikkor_adapter() {
         translate([0, 0, -0.2])
             cylinder(h = h1 + h2 + h3 + 0.4, d = EL_BORE);
     }
-    if ($preview)
+    if ($preview && !SHOW_LENS)
         color("DimGray", 0.45)
             translate([0, 0, h1 + h2 + h3])
                 cylinder(h = 28, d = 47.5);
@@ -178,7 +184,7 @@ module part_camera_tube(out_len) {
                             F_REV_LEN + 0.3,
                             pitch = F_REV_PITCH, tolerance = F_REV_TOL);
     }
-    if ($preview)
+    if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube()
                 translate([0, 0, out_len])
@@ -219,6 +225,24 @@ module ghost_body_at() {
                     cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
 }
 
+module taking_lens_at() {
+    if (SHOW_LENS)
+        color("DimGray", 0.92)
+            at_stem()
+                translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                                 + EL_M42_LEN + EL_ADAPTER_HEX + EL_M39_LEN
+                                 + (EXPLODED ? ex * 1.4 : 0)])
+                    taking_lens();
+}
+
+module camera_body_at(out_len, roll = 0) {
+    if (SHOW_BODIES)
+        color("DimGray", 0.92)
+            along_tube()
+                translate([0, 0, out_len + ex])
+                    d7000_body(roll);
+}
+
 module optical_axis_guides() {
     if ($preview)
         color("gold", 0.45) {
@@ -254,8 +278,15 @@ module assembly() {
     bs_pair(show_plate = $preview,
             explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
 
-    at_reflect() ghost_body_at();
-    at_transmit() ghost_body_at();
+    at_reflect() {
+        ghost_body_at();
+        camera_body_at(reflect_tube_len(), roll = -90);
+    }
+    at_transmit() {
+        ghost_body_at();
+        camera_body_at(transmit_tube_len(), roll = 180);
+    }
+    taking_lens_at();
     optical_axis_guides();
     echo("bsplit: 50/50 plate; R=+X  T=+Y; T tube shortened by bs_t_comp()");
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  bs_t_comp=", bs_t_comp(), " mm"));

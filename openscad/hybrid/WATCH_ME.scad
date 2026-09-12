@@ -9,9 +9,13 @@ include <params.scad>
 include <../lib/threads.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
+use <../d7000_body.scad>
+use <../taking_lens.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
+SHOW_BODIES = 0; // [0:hide, 1:show]
+SHOW_LENS = 0; // [0:hide, 1:show]
 
 screw_resolution = $preview ? 0.6 : 0.25;
 
@@ -211,7 +215,7 @@ module part_elnikkor_adapter() {
         translate([0, 0, -0.2])
             cylinder(h = h1 + h2 + h3 + 0.4, d = EL_BORE);
     }
-    if ($preview)
+    if ($preview && !SHOW_LENS)
         color("DimGray", 0.45)
             translate([0, 0, h1 + h2 + h3])
                 cylinder(h = 28, d = 47.5);
@@ -229,7 +233,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (mark != "")
             flange_marks(mark);
     }
-    if ($preview)
+    if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube(rx, ry)
                 translate([0, 0, out_len])
@@ -280,6 +284,24 @@ module ghost_body_at() {
                     cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
 }
 
+module taking_lens_at() {
+    if (SHOW_LENS)
+        color("DimGray", 0.92)
+            at_stem()
+                translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                                 + EL_M42_LEN + EL_ADAPTER_HEX + EL_M39_LEN
+                                 + (EXPLODED ? ex * 1.4 : 0)])
+                    taking_lens();
+}
+
+module camera_body_at(out_len, rx = 0, ry = 0, roll = 0) {
+    if (SHOW_BODIES)
+        color("DimGray", 0.92)
+            along_tube(rx, ry)
+                translate([0, 0, out_len + ex])
+                    d7000_body(roll);
+}
+
 module optical_axis_guides() {
     if ($preview)
         color("gold", 0.45) {
@@ -318,8 +340,15 @@ module assembly() {
     if (SHOW_LID)
         part_lid();
 
-    at_reflect() ghost_body_at();
-    at_transmit() ghost_body_at();
+    at_reflect() {
+        ghost_body_at();
+        camera_body_at(reflect_tube_len(), rx = -field_toe(), roll = -90);
+    }
+    at_transmit() {
+        ghost_body_at();
+        camera_body_at(transmit_tube_len(), ry = -field_toe(), roll = 180);
+    }
+    taking_lens_at();
     optical_axis_guides();
     echo("hybrid L: drop 50x50x1 from +Z into the slot; S1 toward the lens");
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
