@@ -109,15 +109,18 @@ def _live_message(snap):
 def _assignments(data):
     out = []
     for src, key in (
+        ("program", "expprogram"),
         ("iso", "iso"),
         ("shutter", "shutterspeed"),
-        ("program", "expprogram"),
         ("wb", "whitebalance"),
         ("quality", "imagequality"),
     ):
         val = (data.get(src) or "").strip()
-        if val:
-            out.append((key, val))
+        if not val:
+            continue
+        if key == "expprogram" and val not in ("M", "A", "S", "P"):
+            continue
+        out.append((key, val))
     return out
 
 
@@ -247,14 +250,19 @@ class Handler(BaseHTTPRequestHandler):
                 by_port = {b.get("port"): b for b in blocks}
                 for row in rows:
                     extra = by_port.get(row["port"]) or {}
-                    for key in ("iso", "shutterspeed", "batterylevel", "imagequality"):
+                    for key in (
+                        "iso", "shutterspeed", "batterylevel", "imagequality",
+                        "whitebalance", "expprogram", "exposurecompensation",
+                        "focusmode", "focusmode2", "meteringmode", "availableshots",
+                    ):
                         if extra.get(key):
                             row[key] = extra[key]
                 lines = []
                 for b in blocks:
                     lines.append(
-                        f"{b.get('role')}  iso={b.get('iso')}  "
-                        f"shutter={b.get('shutterspeed')}  bat={b.get('batterylevel')}  "
+                        f"{b.get('role')}  {b.get('expprogram') or '-'}  "
+                        f"iso={b.get('iso')}  shutter={b.get('shutterspeed')}  "
+                        f"wb={b.get('whitebalance') or '-'}  bat={b.get('batterylevel')}  "
                         f"{b.get('port')}"
                     )
                 return _json(
@@ -292,19 +300,22 @@ class Handler(BaseHTTPRequestHandler):
                 have = dual.require_online(dual.detect_bodies())
                 from concurrent.futures import ThreadPoolExecutor
 
+                notes = []
                 with ThreadPoolExecutor(max_workers=len(have)) as pool:
                     futs = [
                         pool.submit(dual._set_one, row["port"], assignments)
                         for row in have.values()
                     ]
                     for fut in futs:
-                        fut.result()
+                        notes.extend(fut.result() or [])
                 roles = " and ".join(sorted(have))
-                return _json(
-                    self, 200,
-                    {"message": "set " + " ".join(f"{k}={v}" for k, v in assignments)
-                     + f" on {roles}"},
-                )
+                msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
+                if notes:
+                    msg += "  (" + "; ".join(notes)
+                    if any(n.startswith("expprogram=") for n in notes):
+                        msg += " — turn the mode dial to M"
+                    msg += ")"
+                return _json(self, 200, {"message": msg})
             if path == "/api/shoot":
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
@@ -329,6 +340,39 @@ class Handler(BaseHTTPRequestHandler):
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
                 where = "cards" if target == "card" else "captures/"
                 return _json(self, 200, {"message": f"shot {stamp}  {msg}  → {where}"})
+            if path == "/api/captures/delete":
+                stamp = (data.get("stamp") or "").strip()
+                side = (data.get("side") or "").strip().upper()
+                info = pano.delete_stamp(stamp, sides=[side] if side else None)
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "pairs": pano.list_pairs(),
+                        "message": f"deleted {stamp}" + (f" {side}" if side else "")
+                        + f"  ({info['count']} file(s))",
+                    },
+                )
+            if path == "/api/captures/before-today":
+                info = pano.delete_before_today()
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "pairs": pano.list_pairs(),
+                        "message": f"removed {info['count']} before {info['today']}",
+                    },
+                )
+            if path == "/api/captures/keep-last":
+                info = pano.keep_last(data.get("n", 5))
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "pairs": pano.list_pairs(),
+                        "message": f"kept {len(info['kept'])}, removed {info['count']}",
+                    },
+                )
             if path == "/api/pano":
                 stamp = (data.get("stamp") or "").strip()
                 if not stamp:

@@ -53,7 +53,7 @@
     background: repeating-linear-gradient(-45deg, #111 0 9px, #f0c000 9px 18px);
   }
   .tabs {
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;
     margin: 0 calc(-1 * var(--pad));
   }
   .tabs button {
@@ -177,7 +177,86 @@
   .pair span { grid-column: 1 / -1; color: var(--dim); font-size: 11px; letter-spacing: 0.12em; }
   .pair.on { background: #3a1600; color: var(--r); }
   .pano-out img { width: 100%; display: block; background: #000; margin-top: 10px; }
+  .file {
+    display: grid; gap: 8px; padding: 10px;
+    border: 1px solid #5a3200;
+  }
+  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .file .who { color: var(--dim); font-size: 10px; letter-spacing: 0.14em; }
+  .file .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hud {
+    position: sticky; top: 0; z-index: 5;
+    display: grid; grid-template-columns: 1fr 1fr;
+    margin: 0 calc(-1 * var(--pad));
+    background: #0c0c0d; border-bottom: 1px solid #5a3200;
+  }
+  .hud-cam {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; min-height: 48px;
+  }
+  .hud-cam.t { border-right: 1px solid #3a2208; }
+  .hud-cam b {
+    font: 800 20px/1 Futura, sans-serif; letter-spacing: 0.08em; min-width: 1.1em;
+  }
+  .hud-cam.t b { color: var(--t); }
+  .hud-cam.r b { color: var(--r); }
+  .hud-mid { flex: 1; min-width: 0; }
+  .hud-line {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 12px; letter-spacing: 0.06em;
+  }
+  .hud-sub { color: var(--dim); font-size: 10px; letter-spacing: 0.08em; margin-top: 2px; }
+  .hud-pwr {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  }
+  .hud-ico {
+    flex: 0 0 auto; width: 14px; height: 8px; box-sizing: border-box;
+    border: 1px solid currentColor; color: var(--dim); position: relative;
+  }
+  .hud-ico::after {
+    content: ""; position: absolute; right: -3px; top: 1px;
+    width: 2px; height: 4px; background: currentColor;
+  }
+  .hud-bat {
+    flex: 1; min-width: 0; height: 5px; background: #2a1a08; overflow: hidden;
+  }
+  .hud-bat i { display: block; height: 100%; width: 0; background: var(--ok); }
+  .hud-pct { color: var(--dim); font-size: 11px; letter-spacing: 0.08em; white-space: nowrap; }
+  .hud-shots { color: var(--dim); font-size: 10px; letter-spacing: 0.06em; white-space: nowrap; }
+  .hud-shots:empty { display: none; }
+  .hud-cam.low .hud-bat i { background: var(--fire); }
+  .hud-cam.low .hud-ico, .hud-cam.low .hud-pct { color: var(--fire); }
+  .hud-cam.off { opacity: 0.35; }
 </style>
+<div class="hud" id="hud">
+  <div class="hud-cam t off" id="hudT">
+    <b>T</b>
+    <div class="hud-mid">
+      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+      <div class="hud-pwr">
+        <span class="hud-ico" aria-hidden="true"></span>
+        <div class="hud-bat"><i></i></div>
+        <span class="hud-pct">—</span>
+        <span class="hud-shots"></span>
+      </div>
+    </div>
+  </div>
+  <div class="hud-cam r off" id="hudR">
+    <b>R</b>
+    <div class="hud-mid">
+      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+      <div class="hud-pwr">
+        <span class="hud-ico" aria-hidden="true"></span>
+        <div class="hud-bat"><i></i></div>
+        <span class="hud-pct">—</span>
+        <span class="hud-shots"></span>
+      </div>
+    </div>
+  </div>
+</div>
 <header>
   <div class="nerv">NERV</div>
   <h1>DUALS <small>特務機関 · UNIT T/R</small></h1>
@@ -190,6 +269,7 @@
   <button type="button" class="on" data-tab="view">射撃 VIEW</button>
   <button type="button" data-tab="usb">USB</button>
   <button type="button" data-tab="pano">全景 PANO</button>
+  <button type="button" data-tab="files">記録 FILES</button>
 </nav>
 <div id="tab-view" class="pane">
 <div class="previews">
@@ -264,6 +344,14 @@
 <div id="pairs"></div>
 <div class="pano-out"><img id="panoOut" alt=""></div>
 </div>
+<div id="tab-files" class="pane" hidden>
+<div class="row">
+  <button id="filesRefresh">更新 LIST</button>
+  <button id="filesToday">今日以前</button>
+  <button id="filesKeep5">最新5</button>
+</div>
+<div id="files"></div>
+</div>
 <pre id="log">MAGI-01  wake a body · USB MTP/PTP · same Wi‑Fi</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
@@ -276,9 +364,10 @@ const WB = [["Auto","Auto"],["Sunny","Sunny"],["Cloudy","Cloudy"],["Flash","Flas
   ["Tungsten","Tungsten"],["Fluorescent","Fluor"],["Shade","Shade"]];
 const QUAL = [["JPEG Fine","JPEG Fine"],["JPEG Normal","JPEG Norm"],
   ["NEF+Fine","NEF+Fine"],["NEF (Raw)","NEF"]];
-const PROG = [["M","M"],["A","A"],["S","S"],["P","P"]];
+const PROG = [["M","M"],["A","A"],["S","S"],["P","P"],["Auto","Auto"]];
 const state = { iso:"400", shutter:"1/125", wb:"Auto", quality:"JPEG Fine", program:"M",
-  t:"", r:"", live:false, timer:0, stamp:"", rows:[] };
+  t:"", r:"", live:false, timer:0, stamp:"", rows:[],
+  stats: { T: { on: false }, R: { on: false } } };
 const log = (m, err) => { const el = document.getElementById("log");
   el.textContent = m; el.className = err ? "err" : ""; };
 const api = async (path, opt) => {
@@ -289,8 +378,7 @@ const api = async (path, opt) => {
 };
 const idxOf = (list, val) => {
   const s = String(val || "").replace(/^ISO\s+/i, "").trim();
-  const i = list.findIndex(v => v === s || v === val);
-  return i < 0 ? 0 : i;
+  return list.findIndex(v => v === s || v === val);
 };
 const bindDrag = (id, list, key, label) => {
   const el = document.getElementById(id);
@@ -303,13 +391,18 @@ const bindDrag = (id, list, key, label) => {
     document.getElementById(label).textContent = list[i];
   };
   el.oninput = paint;
-  el.value = String(idxOf(list, state[key]));
+  const i = idxOf(list, state[key]);
+  if (i >= 0) el.value = String(i);
   paint();
 };
 const fillSelect = (id, items, key) => {
   const el = document.getElementById(id);
   el.innerHTML = "";
-  items.forEach(item => {
+  const rows = items.slice();
+  if (state[key] && !rows.some(item => item[0] === state[key])) {
+    rows.push([state[key], state[key]]);
+  }
+  rows.forEach(item => {
     const opt = document.createElement("option");
     opt.value = item[0]; opt.textContent = item[1];
     if (item[0] === state[key]) opt.selected = true;
@@ -317,9 +410,89 @@ const fillSelect = (id, items, key) => {
   });
   el.onchange = () => { state[key] = el.value; };
 };
+const roleOf = (row) => {
+  if (row.serial && row.serial === state.t) return "T";
+  if (row.serial && row.serial === state.r) return "R";
+  if (row.role === "T" || row.role === "R") return row.role;
+  return "";
+};
+const batPct = (s) => {
+  const m = String(s || "").match(/(\d+)\s*%/);
+  if (m) return Math.min(100, parseInt(m[1], 10));
+  const named = { full: 100, high: 80, normal: 50, medium: 50, low: 20, empty: 5, critical: 8 };
+  const k = String(s || "").toLowerCase();
+  for (const name of Object.keys(named)) if (k.includes(name)) return named[name];
+  return null;
+};
+const shortQual = (s) => {
+  s = String(s || "");
+  if (!s || /USB busy|ptpcamerad|\?/.test(s)) return "";
+  return s.replace(/^JPEG\s+/i, "").replace(/\s*\(Raw\)/i, "").replace(/^NEF\+.*/i, "NEF+");
+};
+const shortEv = (s) => {
+  s = String(s || "").trim();
+  if (!s || /USB busy|ptpcamerad|\?/.test(s)) return "";
+  if (s === "0" || s === "0.0" || s === "+0" || s === "0 EV") return "";
+  return /[+-]/.test(s) ? s : ((parseFloat(s) > 0 ? "+" : "") + s);
+};
+const paintHud = () => {
+  ["T","R"].forEach(role => {
+    const s = state.stats[role] || {};
+    const el = document.getElementById("hud"+role);
+    const iso = s.iso ? String(s.iso).replace(/^ISO\s+/i, "") : "—";
+    const shut = s.shutterspeed || "—";
+    const mode = s.expprogram || "—";
+    const wb = s.whitebalance || "—";
+    const qual = shortQual(s.imagequality) || "—";
+    const af = s.focusmode || s.focusmode2 || "";
+    const ev = shortEv(s.exposurecompensation);
+    const meter = s.meteringmode || "";
+    const shots = String(s.availableshots || "").replace(/[^\d]/g, "");
+    const bat = s.batterylevel || "";
+    const pct = batPct(bat);
+    const busy = bat && /USB busy|ptpcamerad|gphoto2/i.test(bat);
+    el.classList.toggle("off", !s.on);
+    el.classList.toggle("low", pct != null && pct <= 25);
+    el.querySelector(".hud-mode").textContent = mode;
+    el.querySelector(".hud-iso").textContent = iso === "—" ? "ISO —" : "ISO "+iso;
+    el.querySelector(".hud-shut").textContent = shut;
+    el.querySelector(".hud-wb").textContent = ev ? wb + "  " + ev : wb;
+    el.querySelector(".hud-qual").textContent = qual;
+    el.querySelector(".hud-af").textContent = [af, meter].filter(Boolean).join(" · ") || "—";
+    el.querySelector(".hud-bat i").style.width = (pct == null ? 0 : pct) + "%";
+    el.querySelector(".hud-pct").textContent = busy ? "USB" : (bat || (s.on ? "USB" : "—"));
+    el.querySelector(".hud-shots").textContent = shots && !busy ? shots : "";
+    const st = document.getElementById("st"+role);
+    if (st) st.textContent = s.on
+      ? [mode !== "—" ? mode : "", iso !== "—" ? iso : "", shut !== "—" ? shut : "", bat].filter(Boolean).join(" · ") || "USB"
+      : "—";
+  });
+};
+const ingestHud = (rows, blocks) => {
+  if (rows) {
+    state.stats = { T: { on: false }, R: { on: false } };
+    rows.forEach(row => {
+      const role = roleOf(row);
+      if (role) state.stats[role] = Object.assign({}, row, { role, on: true });
+    });
+  }
+  (blocks || []).forEach(b => {
+    if (b.role !== "T" && b.role !== "R") return;
+    state.stats[b.role] = Object.assign({}, state.stats[b.role], b, { role: b.role, on: true });
+  });
+  paintHud();
+};
+const normShut = (s) => String(s || "").trim().replace(/\s+/g, "").replace(/s$/i, "").replace(/"$/, "");
+const modeOwnsShutter = (m) => /^(M|S)$/i.test(String(m || "").trim());
 const snapFromStatus = (b) => {
   if (b.iso) { state.iso = String(b.iso).replace(/^ISO\s+/i, ""); bindDrag("isoDrag", ISO, "iso", "isoVal"); }
-  if (b.shutterspeed) { state.shutter = String(b.shutterspeed); bindDrag("shutDrag", SHUT, "shutter", "shutVal"); }
+  if (b.shutterspeed && modeOwnsShutter(b.expprogram)) {
+    const shut = normShut(b.shutterspeed);
+    if (idxOf(SHUT, shut) >= 0) {
+      state.shutter = shut;
+      bindDrag("shutDrag", SHUT, "shutter", "shutVal");
+    }
+  }
   if (b.whitebalance) { state.wb = b.whitebalance; fillSelect("wb", WB, "wb"); }
   if (b.imagequality) { state.quality = b.imagequality; fillSelect("quality", QUAL, "quality"); }
   if (b.expprogram) { state.program = b.expprogram; fillSelect("program", PROG, "program"); }
@@ -378,6 +551,7 @@ const fill = (rows, pair) => {
   if (!(rows || []).length) {
     box.innerHTML = "<div class='cam'><div><b>NO BODIES</b><span>MTP/PTP · wake · plug USB</span></div></div>";
   }
+  ingestHud(rows);
 };
 const pickRole = async (role) => {
   state.t = document.getElementById("pickT").value;
@@ -449,9 +623,8 @@ bind("detect", async () => {
 });
 bind("status", async () => { await usb(async () => {
   const j = await api("/api/status"); fill(j.cameras, j.pair); log(j.message);
+  ingestHud(j.cameras, j.status);
   (j.status || []).forEach(b => {
-    const el = document.getElementById("st"+(b.role || ""));
-    if (el) el.textContent = [b.iso, b.shutterspeed, b.batterylevel].filter(Boolean).join(" · ");
     if (b.role === "T" || b.role === "R") snapFromStatus(b);
   });
 }); });
@@ -460,6 +633,16 @@ bind("set", async () => { await usb(async () => {
     headers:{"content-type":"application/json"},
     body: JSON.stringify({ iso: state.iso, shutter: state.shutter,
       program: state.program, wb: state.wb, quality: state.quality }) });
+  ["T","R"].forEach(role => {
+    if (state.stats[role] && state.stats[role].on) {
+      state.stats[role].iso = state.iso;
+      state.stats[role].shutterspeed = state.shutter;
+      state.stats[role].expprogram = state.program;
+      state.stats[role].whitebalance = state.wb;
+      state.stats[role].imagequality = state.quality;
+    }
+  });
+  paintHud();
   log(j.message);
 }); });
 const fire = (target) => usb(async () => {
@@ -524,17 +707,77 @@ bind("panoGo", async () => {
   log(j.message);
   await loadPairs();
 });
+const fileThumb = (name, label) => name
+  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
+  : `<span class="who">${label} —</span>`;
+const loadFiles = async (pairs, message) => {
+  let rows = pairs;
+  if (!rows) {
+    const j = await api("/api/captures");
+    rows = j.pairs || [];
+    if (message == null) message = j.message;
+  }
+  const box = document.getElementById("files");
+  box.innerHTML = "";
+  (rows || []).forEach(p => {
+    const el = document.createElement("div");
+    el.className = "file";
+    el.innerHTML = `<div class="thumbs">${fileThumb(p.t,"T")}${fileThumb(p.r,"R")}${fileThumb(p.pano,"P")}</div>
+      <span class="who">${p.stamp}${p.ready ? "" : " · 欠"}</span>
+      <div class="acts"></div>`;
+    const acts = el.querySelector(".acts");
+    [["T","T"],["R","R"],["P","P"],["","全削除"]].forEach(([side, label]) => {
+      if (side === "T" && !p.t) return;
+      if (side === "R" && !p.r) return;
+      if (side === "P" && !p.pano) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "削除 " + label;
+      b.onclick = async () => {
+        try {
+          const j = await api("/api/captures/delete", { method:"POST",
+            headers:{"content-type":"application/json"},
+            body: JSON.stringify({ stamp: p.stamp, side }) });
+          log(j.message);
+          await loadFiles(j.pairs, j.message);
+          if (document.getElementById("tab-pano") && !document.getElementById("tab-pano").hidden)
+            await loadPairs();
+        } catch (e) { log(e.message, true); }
+      };
+      acts.appendChild(b);
+    });
+    box.appendChild(el);
+  });
+  if (!(rows || []).length) {
+    box.innerHTML = "<div class='cam'><div><b>NO FILES</b><span>captures/ is empty</span></div></div>";
+  }
+  if (message) log(message);
+};
+const filesPost = (path, body, warn) => async () => {
+  if (warn && !confirm(warn)) return;
+  const j = await api(path, { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify(body || {}) });
+  log(j.message);
+  await loadFiles(j.pairs, j.message);
+};
+bind("filesRefresh", () => loadFiles());
+bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every capture from before today?"));
+bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
 const showTab = (name) => {
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   document.getElementById("tab-view").hidden = name !== "view";
   document.getElementById("tab-usb").hidden = name !== "usb";
   document.getElementById("tab-pano").hidden = name !== "pano";
+  document.getElementById("tab-files").hidden = name !== "files";
   if (name === "pano") loadPairs().catch(e => log(e.message, true));
+  if (name === "files") loadFiles().catch(e => log(e.message, true));
 };
 document.querySelectorAll(".tabs [data-tab]").forEach(b => {
   b.onclick = () => showTab(b.dataset.tab);
 });
-showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano" : "view");
+showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano"
+  : location.hash === "#files" ? "files" : "view");
 bindDrag("isoDrag", ISO, "iso", "isoVal");
 bindDrag("shutDrag", SHUT, "shutter", "shutVal");
 fillSelect("program", PROG, "program");
@@ -549,6 +792,15 @@ if (navigator.wakeLock) {
 api("/api/meta").then(j => {
   document.getElementById("host").textContent = (j.phone || "").replace("http://","");
 }).catch(() => {});
-api("/api/detect").then(j => { fill(j.cameras, j.pair); log(j.message); })
-  .catch(e => log(e.message, true));
+api("/api/detect").then(async j => {
+  fill(j.cameras, j.pair); log(j.message);
+  if ((j.cameras || []).length) {
+    const s = await api("/api/status");
+    fill(s.cameras, s.pair);
+    ingestHud(s.cameras, s.status);
+    (s.status || []).forEach(b => {
+      if (b.role === "T" || b.role === "R") snapFromStatus(b);
+    });
+  }
+}).catch(e => log(e.message, true));
 </script>

@@ -54,7 +54,12 @@
           letter-spacing: 0.12em; text-transform: uppercase; }
   #log { white-space: pre-wrap; color: #6cff4d; font: 13px ui-monospace, Menlo, monospace; min-height: 3rem; }
   #log.err { color: #ff3b3b; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 0 0 1rem; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; margin: 0 0 1rem; }
+  .file { border: 1px solid #5a3200; padding: 0.7rem; margin-top: 0.6rem; }
+  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
+  .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .file .who { color: #8a7a55; font-size: 0.8rem; display: block; margin: 0.4rem 0; }
+  .file .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   #pairs { display: grid; gap: 0.6rem; margin-top: 0.8rem; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
           width: 100%; text-align: left; padding: 0.5rem; }
@@ -65,15 +70,73 @@
   .tabs button { border-bottom: 3px solid transparent; background: #0c0c0d; }
   .tabs button.on { border-bottom-color: #ff6a00; color: #ff6a00; }
   .pane[hidden] { display: none !important; }
+  .hud {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    margin: 0 0 1rem; border: 1px solid #5a3200; background: #0c0c0d;
+  }
+  .hud-cam { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0.8rem; }
+  .hud-cam.t { border-right: 1px solid #3a2208; }
+  .hud-cam b { font: 800 1.15rem/1 Futura, sans-serif; letter-spacing: 0.08em; }
+  .hud-cam.t b { color: #9a5cff; }
+  .hud-cam.r b { color: #ff6a00; }
+  .hud-mid { flex: 1; min-width: 0; }
+  .hud-line { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.85rem; }
+  .hud-sub { color: #8a7a55; font-size: 0.72rem; margin-top: 0.15rem; }
+  .hud-pwr { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; }
+  .hud-ico {
+    flex: 0 0 auto; width: 14px; height: 8px; box-sizing: border-box;
+    border: 1px solid currentColor; color: #8a7a55; position: relative;
+  }
+  .hud-ico::after {
+    content: ""; position: absolute; right: -3px; top: 1px;
+    width: 2px; height: 4px; background: currentColor;
+  }
+  .hud-bat { flex: 1; min-width: 0; height: 5px; background: #2a1a08; overflow: hidden; }
+  .hud-bat i { display: block; height: 100%; width: 0; background: #6cff4d; }
+  .hud-pct { color: #8a7a55; font-size: 0.8rem; white-space: nowrap; }
+  .hud-shots { color: #8a7a55; font-size: 0.72rem; white-space: nowrap; }
+  .hud-shots:empty { display: none; }
+  .hud-cam.low .hud-bat i { background: #d4000d; }
+  .hud-cam.low .hud-ico, .hud-cam.low .hud-pct { color: #d4000d; }
+  .hud-cam.off { opacity: 0.35; }
 </style>
 <div class="nerv">NERV</div>
 <h1>MAGI · LAB</h1>
 <p class="sub">第3新東京市 debugger · <a href="/">field 作戦</a> · T 初号機 · R 零号機 · USB skew tens of ms</p>
+<div class="hud" id="hud">
+  <div class="hud-cam t off" id="hudT">
+    <b>T</b>
+    <div class="hud-mid">
+      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+      <div class="hud-pwr">
+        <span class="hud-ico" aria-hidden="true"></span>
+        <div class="hud-bat"><i></i></div>
+        <span class="hud-pct">—</span>
+        <span class="hud-shots"></span>
+      </div>
+    </div>
+  </div>
+  <div class="hud-cam r off" id="hudR">
+    <b>R</b>
+    <div class="hud-mid">
+      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+      <div class="hud-pwr">
+        <span class="hud-ico" aria-hidden="true"></span>
+        <div class="hud-bat"><i></i></div>
+        <span class="hud-pct">—</span>
+        <span class="hud-shots"></span>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="hazard"></div>
 <nav class="tabs">
   <button type="button" class="on" data-tab="view">射撃 VIEW</button>
   <button type="button" data-tab="usb">USB</button>
   <button type="button" data-tab="pano">全景 PANO</button>
+  <button type="button" data-tab="files">記録 FILES</button>
 </nav>
 <div id="tab-view" class="pane">
 <section>
@@ -103,6 +166,7 @@
     <label>Program
       <select id="program">
         <option>M</option><option>A</option><option>S</option><option>P</option>
+        <option>Auto</option>
       </select>
     </label>
     <label>WB
@@ -158,6 +222,16 @@
   <div class="pano-out"><img id="panoOut" alt=""></div>
 </section>
 </div>
+<div id="tab-files" class="pane" hidden>
+<section>
+  <div class="row">
+    <button id="filesRefresh">List</button>
+    <button id="filesToday">Delete before today</button>
+    <button id="filesKeep5">Keep last 5</button>
+  </div>
+  <div id="files"></div>
+</section>
+</div>
 <pre id="log">Lab: Detect, then pick T and/or R from the list. Field UI is / for the phone.</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
@@ -191,6 +265,75 @@ const camLabel = (row) => {
 };
 let lastRows = [];
 let lastPair = {};
+const stats = { T: { on: false }, R: { on: false } };
+const roleOf = (row) => {
+  if (row.serial && row.serial === lastPair.T) return "T";
+  if (row.serial && row.serial === lastPair.R) return "R";
+  if (row.role === "T" || row.role === "R") return row.role;
+  return "";
+};
+const batPct = (s) => {
+  const m = String(s || "").match(/(\d+)\s*%/);
+  if (m) return Math.min(100, parseInt(m[1], 10));
+  const named = { full: 100, high: 80, normal: 50, medium: 50, low: 20, empty: 5, critical: 8 };
+  const k = String(s || "").toLowerCase();
+  for (const name of Object.keys(named)) if (k.includes(name)) return named[name];
+  return null;
+};
+const shortQual = (s) => {
+  s = String(s || "");
+  if (!s || /USB busy|ptpcamerad|\?/.test(s)) return "";
+  return s.replace(/^JPEG\s+/i, "").replace(/\s*\(Raw\)/i, "").replace(/^NEF\+.*/i, "NEF+");
+};
+const shortEv = (s) => {
+  s = String(s || "").trim();
+  if (!s || /USB busy|ptpcamerad|\?/.test(s)) return "";
+  if (s === "0" || s === "0.0" || s === "+0" || s === "0 EV") return "";
+  return /[+-]/.test(s) ? s : ((parseFloat(s) > 0 ? "+" : "") + s);
+};
+const paintHud = () => {
+  ["T","R"].forEach(role => {
+    const s = stats[role] || {};
+    const el = document.getElementById("hud"+role);
+    const iso = s.iso ? String(s.iso).replace(/^ISO\s+/i, "") : "—";
+    const shut = s.shutterspeed || "—";
+    const mode = s.expprogram || "—";
+    const wb = s.whitebalance || "—";
+    const qual = shortQual(s.imagequality) || "—";
+    const af = s.focusmode || s.focusmode2 || "";
+    const ev = shortEv(s.exposurecompensation);
+    const meter = s.meteringmode || "";
+    const shots = String(s.availableshots || "").replace(/[^\d]/g, "");
+    const bat = s.batterylevel || "";
+    const pct = batPct(bat);
+    el.classList.toggle("off", !s.on);
+    el.classList.toggle("low", pct != null && pct <= 25);
+    el.querySelector(".hud-mode").textContent = mode;
+    el.querySelector(".hud-iso").textContent = iso === "—" ? "ISO —" : "ISO "+iso;
+    el.querySelector(".hud-shut").textContent = shut;
+    el.querySelector(".hud-wb").textContent = ev ? wb + "  " + ev : wb;
+    el.querySelector(".hud-qual").textContent = qual;
+    el.querySelector(".hud-af").textContent = [af, meter].filter(Boolean).join(" · ") || "—";
+    el.querySelector(".hud-bat i").style.width = (pct == null ? 0 : pct) + "%";
+    el.querySelector(".hud-pct").textContent = bat || (s.on ? "USB" : "—");
+    el.querySelector(".hud-shots").textContent = shots || "";
+  });
+};
+const ingestHud = (rows, blocks) => {
+  if (rows) {
+    stats.T = { on: false };
+    stats.R = { on: false };
+    rows.forEach(row => {
+      const role = roleOf(row);
+      if (role) stats[role] = Object.assign({}, row, { role, on: true });
+    });
+  }
+  (blocks || []).forEach(b => {
+    if (b.role !== "T" && b.role !== "R") return;
+    stats[b.role] = Object.assign({}, stats[b.role], b, { role: b.role, on: true });
+  });
+  paintHud();
+};
 const fillPicks = (rows, pair) => {
   pair = pair || {};
   ["t","r"].forEach(role => {
@@ -241,6 +384,7 @@ const fill = (rows, pair) => {
     tr.innerHTML = '<td colspan="3">no cameras on USB</td>';
     tb.appendChild(tr);
   }
+  ingestHud(rows);
 };
 const bind = (id, fn) => document.getElementById(id).onclick = async () => {
   document.getElementById(id).disabled = true;
@@ -253,7 +397,13 @@ const liveSrc = (on) => {
   });
 };
 bind("detect", async () => { liveSrc(false); const j = await api("/api/detect"); fill(j.cameras, j.pair); log(j.message); });
-bind("status", async () => { liveSrc(false); const j = await api("/api/status"); fill(j.cameras, j.pair); log(j.message); });
+bind("status", async () => {
+  liveSrc(false);
+  const j = await api("/api/status");
+  fill(j.cameras, j.pair);
+  ingestHud(j.cameras, j.status);
+  log(j.message);
+});
 const pairNow = async (changed) => {
   let tv = t.value, rv = r.value;
   if (tv && tv === rv) {
@@ -274,6 +424,16 @@ bind("set", async () => {
   const j = await api("/api/set", { method:"POST", headers:{"content-type":"application/json"},
     body: JSON.stringify({ iso: isoVal.textContent, shutter: shutVal.textContent,
       program: program.value, wb: wb.value, quality: quality.value }) });
+  ["T","R"].forEach(role => {
+    if (stats[role] && stats[role].on) {
+      stats[role].iso = isoVal.textContent;
+      stats[role].shutterspeed = shutVal.textContent;
+      stats[role].expprogram = program.value;
+      stats[role].whitebalance = wb.value;
+      stats[role].imagequality = quality.value;
+    }
+  });
+  paintHud();
   log(j.message);
 });
 const paintShoot = () => {
@@ -331,16 +491,81 @@ bind("panoGo", async () => {
   log(j.message);
   await loadPairs();
 });
+const fileThumb = (name, label) => name
+  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
+  : `<span class="who">${label} —</span>`;
+const loadFiles = async (pairs, message) => {
+  let rows = pairs;
+  if (!rows) {
+    const j = await api("/api/captures");
+    rows = j.pairs || [];
+    if (message == null) message = j.message;
+  }
+  const box = document.getElementById("files");
+  box.innerHTML = "";
+  (rows || []).forEach(p => {
+    const el = document.createElement("div");
+    el.className = "file";
+    el.innerHTML = `<div class="thumbs">${fileThumb(p.t,"T")}${fileThumb(p.r,"R")}${fileThumb(p.pano,"P")}</div>
+      <span class="who">${p.stamp}${p.ready ? "" : " · incomplete"}</span>
+      <div class="acts"></div>`;
+    const acts = el.querySelector(".acts");
+    [["T","T"],["R","R"],["P","Pano"],["","all"]].forEach(([side, label]) => {
+      if (side === "T" && !p.t) return;
+      if (side === "R" && !p.r) return;
+      if (side === "P" && !p.pano) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Delete " + label;
+      b.onclick = async () => {
+        try {
+          const j = await api("/api/captures/delete", { method:"POST",
+            headers:{"content-type":"application/json"},
+            body: JSON.stringify({ stamp: p.stamp, side }) });
+          log(j.message);
+          await loadFiles(j.pairs, j.message);
+        } catch (e) { log(e.message, true); }
+      };
+      acts.appendChild(b);
+    });
+    box.appendChild(el);
+  });
+  if (!(rows || []).length) {
+    box.innerHTML = "<p class='sub'>captures/ is empty.</p>";
+  }
+  if (message) log(message);
+};
+const filesPost = (path, body, warn) => async () => {
+  if (warn && !confirm(warn)) return;
+  const j = await api(path, { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify(body || {}) });
+  log(j.message);
+  await loadFiles(j.pairs, j.message);
+};
+bind("filesRefresh", () => loadFiles());
+bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every capture from before today?"));
+bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
 const showTab = (name) => {
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   document.getElementById("tab-view").hidden = name !== "view";
   document.getElementById("tab-usb").hidden = name !== "usb";
   document.getElementById("tab-pano").hidden = name !== "pano";
+  document.getElementById("tab-files").hidden = name !== "files";
   if (name === "pano") loadPairs().catch(e => log(e.message, true));
+  if (name === "files") loadFiles().catch(e => log(e.message, true));
 };
 document.querySelectorAll(".tabs [data-tab]").forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
-showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano" : "view");
+showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano"
+  : location.hash === "#files" ? "files" : "view");
 bindDrag("isoDrag", ISO, "isoVal", "400");
 bindDrag("shutDrag", SHUT, "shutVal", "1/125");
-api("/api/detect").then(j => { fill(j.cameras, j.pair); log(j.message); }).catch(e => log(e.message, true));
+api("/api/detect").then(async j => {
+  fill(j.cameras, j.pair); log(j.message);
+  if ((j.cameras || []).length) {
+    const s = await api("/api/status");
+    fill(s.cameras, s.pair);
+    ingestHud(s.cameras, s.status);
+  }
+}).catch(e => log(e.message, true));
 </script>

@@ -36,9 +36,28 @@ KEYS = (
     "imagequality",
     "whitebalance",
     "expprogram",
+    "exposurecompensation",
     "capturetarget",
     "batterylevel",
 )
+EXTRA_KEYS = (
+    "focusmode2", "focusmode", "meteringmode", "availableshots",
+    "500e", "scenemode",
+)
+
+# D7000 mode dial. gphoto2 names 32790 "Night Landscape" — that is the
+# leftover SCENE submenu (scenemode), not the dial.
+D7000_DIAL = {
+    "1": "M",
+    "2": "P",
+    "3": "A",
+    "4": "S",
+    "32784": "Auto",
+    "32790": "SCENE",
+    "32792": "Auto (no flash)",
+    "32848": "U1",
+    "32849": "U2",
+}
 
 
 class CamError(Exception):
@@ -150,6 +169,24 @@ def parse_currents(text):
     ]
 
 
+def parse_widget_currents(text):
+    """One Current per Label block. Extra Current: lines cannot shift keys."""
+    vals = []
+    current = ""
+    saw = False
+    for line in text.splitlines():
+        if line.startswith("Label:"):
+            if saw:
+                vals.append(current)
+            current = ""
+            saw = True
+        elif line.startswith("Current:"):
+            current = line.split(":", 1)[1].strip()
+    if saw:
+        vals.append(current)
+    return vals
+
+
 def parse_detect(text):
     rows = []
     for line in text.splitlines():
@@ -168,6 +205,46 @@ def parse_current(text):
         if line.startswith("Current:"):
             return line.split(":", 1)[1].strip()
     return ""
+
+
+def format_shutter(s):
+    raw = (s or "").strip()
+    if not raw:
+        return raw
+    t = raw.lower().replace(" ", "")
+    if t.endswith("s") and "/" not in t:
+        t = t[:-1]
+    try:
+        sec = float(t)
+    except ValueError:
+        return raw
+    if sec <= 0:
+        return raw
+    if sec >= 1:
+        if abs(sec - round(sec)) < 0.05:
+            return str(int(round(sec)))
+        return f"{sec:.1f}".rstrip("0").rstrip(".")
+    inv = 1.0 / sec
+    n = int(round(inv))
+    if n >= 2 and abs(inv - n) < 0.08 * n:
+        return f"1/{n}"
+    return raw
+
+
+def decode_program(vals):
+    code = str(vals.get("500e") or "").strip()
+    name = D7000_DIAL.get(code)
+    if not name:
+        raw = (vals.get("expprogram") or "").strip()
+        if raw.lower() == "night landscape":
+            name = "SCENE"
+        else:
+            name = raw
+    if name == "SCENE":
+        scene = (vals.get("scenemode") or "").strip()
+        if scene:
+            return f"SCENE · {scene}"
+    return name
 
 
 def load_pair():
@@ -260,21 +337,45 @@ def cmd_pair(args):
     print(f"wrote {PAIR_PATH}  {bits}")
 
 
+def _get_config(port, key):
+    try:
+        return parse_current(gp(["--get-config", key], port=port))
+    except CamError:
+        return ""
+
+
 def _status_one(row):
     vals = {"role": row["role"] or "-", "port": row["port"], "model": row["model"]}
     args = []
     for key in KEYS:
         args += ["--get-config", key]
     try:
-        currents = parse_currents(gp(args, port=row["port"]))
-        for key, val in zip(KEYS, currents):
-            vals[key] = val
-        for key in KEYS[len(currents) :]:
-            vals[key] = "?"
-    except CamError as exc:
-        msg = str(exc)
+        raw = gp(args, port=row["port"])
+        currents = parse_widget_currents(raw)
+        if len(currents) != len(KEYS):
+            currents = parse_currents(raw)
+        if len(currents) == len(KEYS):
+            for key, val in zip(KEYS, currents):
+                vals[key] = val
+        else:
+            for key in KEYS:
+                vals[key] = _get_config(row["port"], key)
+    except CamError:
         for key in KEYS:
-            vals[key] = msg
+            vals[key] = _get_config(row["port"], key)
+    for key in EXTRA_KEYS:
+        val = _get_config(row["port"], key)
+        if val:
+            vals[key] = val
+    if not vals.get("focusmode"):
+        vals["focusmode"] = vals.get("focusmode2") or ""
+    if vals.get("shutterspeed"):
+        vals["shutterspeed"] = format_shutter(vals["shutterspeed"])
+    if (vals.get("whitebalance") or "").lower() == "automatic":
+        vals["whitebalance"] = "Auto"
+    prog = decode_program(vals)
+    if prog:
+        vals["expprogram"] = prog
     return vals
 
 
@@ -293,14 +394,22 @@ def cmd_status(_args):
 
 
 def _set_one(port, assignments):
-    args = []
+    """Set each widget on its own. expprogram is the mode dial and often readonly."""
+    errors = []
     for key, value in assignments:
-        args += ["--set-config", f"{key}={value}"]
-    gp(args, port=port)
+        try:
+            gp(["--set-config", f"{key}={value}"], port=port)
+        except CamError as exc:
+            errors.append(f"{key}={value}: {exc}")
+    if errors and len(errors) == len(assignments):
+        raise CamError("; ".join(errors))
+    return errors
 
 
 def cmd_set(args):
     assignments = []
+    if args.program is not None:
+        assignments.append(("expprogram", args.program))
     if args.iso is not None:
         assignments.append(("iso", args.iso))
     if args.shutter is not None:
@@ -309,17 +418,18 @@ def cmd_set(args):
         assignments.append(("imagequality", args.quality))
     if args.wb is not None:
         assignments.append(("whitebalance", args.wb))
-    if args.program is not None:
-        assignments.append(("expprogram", args.program))
     if not assignments:
         raise CamError("nothing to set (use --iso / --shutter / --quality / --wb / --program)")
     have = require_online(detect_bodies())
+    notes = []
     with ThreadPoolExecutor(max_workers=len(have)) as pool:
         futs = [pool.submit(_set_one, row["port"], assignments) for row in have.values()]
         for fut in futs:
-            fut.result()
+            notes.extend(fut.result() or [])
     roles = " and ".join(sorted(have))
     print("set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}")
+    for note in notes:
+        print(note)
 
 
 def _shoot_one(role, port, dest, stamp):

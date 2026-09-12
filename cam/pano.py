@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import dual
@@ -21,6 +22,7 @@ OVERLAP = 0.20
 PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
 SAFE = re.compile(r"^[\w.-]+$")
+DAY_RE = re.compile(r"^(\d{8})_")
 
 
 def _magick(args, timeout=180):
@@ -203,6 +205,84 @@ def stitch_files(t_path, r_path, dest, overlap=OVERLAP, flip_r=True):
             ]
         )
     return {"file": dest.name, "width": out_w, "height": h, "overlap": ol}
+
+
+def stamp_day(stamp):
+    m = DAY_RE.match(stamp or "")
+    return m.group(1) if m else ""
+
+
+def _unlink_named(root, name):
+    n = 0
+    path = Path(root) / name
+    if path.is_file():
+        path.unlink()
+        n += 1
+    thumbs = Path(root) / ".thumbs"
+    if thumbs.is_dir():
+        for thumb in thumbs.iterdir():
+            if thumb.is_file() and thumb.name.endswith("_" + name):
+                thumb.unlink()
+                n += 1
+    return n
+
+
+def delete_stamp(stamp, root=None, sides=None):
+    if not stamp or "/" in stamp or ".." in stamp:
+        raise dual.CamError("bad stamp")
+    root = Path(root or CAPTURES)
+    want = {s.upper() for s in sides} if sides else {"T", "R", "P"}
+    if not want.issubset({"T", "R", "P"}):
+        raise dual.CamError("side is T, R, or P")
+    names = []
+    for row in list_pairs(root):
+        if row["stamp"] != stamp:
+            continue
+        if "T" in want and row["t"]:
+            names.append(row["t"])
+        if "R" in want and row["r"]:
+            names.append(row["r"])
+        if "P" in want and row["pano"]:
+            names.append(row["pano"])
+        break
+    else:
+        raise dual.CamError("missing pair")
+    count = 0
+    for name in names:
+        count += _unlink_named(root, name)
+    return {"stamp": stamp, "removed": names, "count": count}
+
+
+def delete_before_today(root=None, today=None):
+    today = today or date.today().strftime("%Y%m%d")
+    removed = []
+    for row in list_pairs(root):
+        day = stamp_day(row["stamp"])
+        if day and day < today:
+            delete_stamp(row["stamp"], root)
+            removed.append(row["stamp"])
+    return {"today": today, "removed": removed, "count": len(removed)}
+
+
+def keep_last(n=5, root=None):
+    try:
+        n = int(n)
+    except (TypeError, ValueError) as exc:
+        raise dual.CamError("keep 1–99") from exc
+    if n < 1 or n > 99:
+        raise dual.CamError("keep 1–99")
+    rows = sorted(
+        list_pairs(root),
+        key=lambda row: (1 if stamp_day(row["stamp"]) else 0, row["stamp"]),
+        reverse=True,
+    )
+    keep = rows[:n]
+    drop = rows[n:]
+    removed = []
+    for row in drop:
+        delete_stamp(row["stamp"], root)
+        removed.append(row["stamp"])
+    return {"kept": [row["stamp"] for row in keep], "removed": removed, "count": len(removed)}
 
 
 def stitch_stamp(stamp, overlap=OVERLAP, flip_r=True, root=None):

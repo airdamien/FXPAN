@@ -52,6 +52,37 @@ class Parse(unittest.TestCase):
             ["400", "1/125"],
         )
 
+    def test_format_shutter(self):
+        self.assertEqual(dual.format_shutter("0.0250s"), "1/40")
+        self.assertEqual(dual.format_shutter("1/125"), "1/125")
+        self.assertEqual(dual.format_shutter("4s"), "4")
+        self.assertEqual(dual.format_shutter("4"), "4")
+
+    def test_decode_program_d7000_dial(self):
+        self.assertEqual(
+            dual.decode_program({
+                "500e": "32790",
+                "scenemode": "Night landscape",
+                "expprogram": "Night Landscape",
+            }),
+            "SCENE · Night landscape",
+        )
+        self.assertEqual(dual.decode_program({"500e": "1", "expprogram": "M"}), "M")
+        self.assertEqual(dual.decode_program({"500e": "32792"}), "Auto (no flash)")
+
+    def test_widget_currents_do_not_shift(self):
+        raw = (
+            "Label: ISO Speed\nCurrent: 400\nCurrent: extra\n"
+            "Label: White Balance\nCurrent: Auto\n"
+            "Label: Exposure Program\nCurrent: M\n"
+            "Label: Shutter Speed\nCurrent: 1/125\n"
+        )
+        self.assertEqual(
+            dual.parse_widget_currents(raw),
+            ["extra", "Auto", "M", "1/125"],
+        )
+        self.assertNotEqual(dual.parse_currents(raw), dual.parse_widget_currents(raw))
+
     def test_claim_err(self):
         self.assertTrue(dual._claim_fail("Could not claim the USB device"))
         self.assertEqual(
@@ -163,6 +194,32 @@ class Pano(unittest.TestCase):
     def test_resolve_rejects_traversal(self):
         with self.assertRaises(dual.CamError):
             pano.resolve("../secret.jpg", self.root)
+
+    def test_delete_stamp_and_side(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        self._jpeg("P_20260101_120000.jpg", "green")
+        pano.delete_stamp("20260101_120000", self.root, sides=["P"])
+        self.assertFalse((self.root / "P_20260101_120000.jpg").is_file())
+        self.assertTrue((self.root / "T_20260101_120000.jpg").is_file())
+        pano.delete_stamp("20260101_120000", self.root)
+        self.assertEqual(pano.list_pairs(self.root), [])
+
+    def test_before_today_and_keep_last(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        self._jpeg("T_20260911_100000.jpg", "red")
+        self._jpeg("R_20260911_100000.jpg", "blue")
+        self._jpeg("T_20260911_110000.jpg", "red")
+        info = pano.delete_before_today(self.root, today="20260911")
+        self.assertEqual(info["removed"], ["20260101_120000"])
+        stamps = {row["stamp"] for row in pano.list_pairs(self.root)}
+        self.assertEqual(stamps, {"20260911_100000", "20260911_110000"})
+        for i in range(6):
+            self._jpeg(f"T_20260911_12000{i}.jpg", "red")
+        kept = pano.keep_last(5, self.root)
+        self.assertEqual(kept["count"], 3)
+        self.assertEqual(len(pano.list_pairs(self.root)), 5)
 
 
 if __name__ == "__main__":
