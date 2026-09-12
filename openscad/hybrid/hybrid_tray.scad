@@ -8,6 +8,8 @@ CARTRIDGE_WALL = 4.5;
 POST_W         = 8.0;
 POST_D         = 3.2;
 POST_H         = 12.0;
+// Past the plate edge so a 50×50 can drop in between the pegs.
+POST_OUT       = 8.0;
 FORK_CLEAR     = 0.4;
 FORK_LEN       = 10.0;
 SLIP           = 0.4;
@@ -28,7 +30,7 @@ function corner_y()   = half() * sqrt(2);
 function shelf_z()    = -BS_SIZE / 2 - 0.15;
 
 function retain_xy(side) =
-    let (ly = side * plate_w() / 2, a = -45)
+    let (ly = side * (plate_w() / 2 + POST_OUT), a = -45)
         [-ly * sin(a), ly * cos(a)];
 
 module place_plate(glass = false) {
