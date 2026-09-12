@@ -234,7 +234,8 @@ module part_arm(side = 1) {
         color("Goldenrod")
             along_tube(toe)
                 translate([0, 0, arm_tube_len()])
-                    f_mount_on_tube((side > 0 ? 0 : 180) + F_MOUNT_CLOCK);
+                    // Raw forks at +X. Pin is 90° left of up (+X arm −X, −X arm +X).
+                    f_mount_on_tube((side > 0 ? -90 : 90) + F_MOUNT_CLOCK);
     else if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube(toe)

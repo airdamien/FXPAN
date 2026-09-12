@@ -32,8 +32,9 @@ module f_mount_male(register_t = 0) {
     f_mount_male_solid(boss = 0);
 }
 
-// Back at z=0 (tube end). Register face at z=1.75. Lock notch at +Y
-// in the raw mesh; rotate `clock` so the body locks flange-mark up.
+// Back at z=0 (tube end). Register face at z=1.75. Lock-pin forks at +X
+// in the raw mesh (not +Y). Clock so those forks sit 90° left of
+// flange-mark-up — that is where the D7000 body pin actually is.
 // Short bored peg sinks into TUBE_ID so the union fuses for export.
 module f_mount_on_tube(clock = 0) {
     translate([0, 0, -4])

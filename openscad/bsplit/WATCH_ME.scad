@@ -214,7 +214,8 @@ module part_camera_tube(out_len, lock_az = 180) {
         color("Goldenrod")
             along_tube()
                 translate([0, 0, out_len])
-                    f_mount_on_tube((lock_az == -90 ? -90 : 0) + F_MOUNT_CLOCK);
+                    // Raw forks at +X. Pin is 90° left of up (R −X, T −Y).
+                    f_mount_on_tube((lock_az == -90 ? 0 : -90) + F_MOUNT_CLOCK);
     else if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
             along_tube()
