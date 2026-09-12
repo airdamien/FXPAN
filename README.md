@@ -57,13 +57,18 @@ KrakenOS sequential fold. Plate at z = 55 mm. Gold = 50/50. Red = R sensor. Blue
 
 Non-sequential trace **on the print meshes** (`stls/hybrid/chassis.stl` + `hybrid_tray.stl`). Plastic is absorb. Blue = T through the slot. Red = R off the coating. Left is top (lens −Y, T +Y, R +X). The plate is large enough — the field at the glass is small.
 
+![V rays on the print STLs](docs/kraken/v_stl_paths.png)
+
+Same idea on the V (`stls/v/chassis.stl` + `mirror_tray.stl`). Two 45° first-surface mirrors, knife at the origin. Blue = L (−X). Red = R (+X). Incoming from the lens (−Y). Unique halves stay full brightness.
+
 On a D7000 + EL-Nikkor 135/5.6: focus **~608 mm**, stitch **~149 mm** of object / **42.5 mm** on the sensors, **~14°**, **~8870×3264**. T-only / overlap / R-only = 108 / 27 / 108. `ratio` must stay ≥ 1.6. Full budget: [OPTICS.md](OPTICS.md).
 
 Regenerate:
 
 ```
 kraken/.venv/bin/python kraken/hybrid_paths.py       # fold + frames + stitch
-kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the STLs
+kraken/.venv/bin/python kraken/hybrid_stl_paths.py   # rays on the hybrid STLs
+kraken/.venv/bin/python kraken/v_stl_paths.py        # rays on the V STLs
 kraken/.venv/bin/python kraken/hybrid_scene.py       # countryside below
 ```
 
@@ -155,7 +160,8 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III |
 | `openscad/Ehybrid/WATCH_ME.scad` | α7 |
 | `kraken/hybrid_paths.py` | Fold + frames + stitch |
-| `kraken/hybrid_stl_paths.py` | Rays on the print STLs |
+| `kraken/hybrid_stl_paths.py` | Rays on the hybrid STLs |
+| `kraken/v_stl_paths.py` | Rays on the V STLs |
 | `kraken/hybrid_scene.py` | Countryside |
 | `OPTICS.md` / `bom.md` | Path math + buy + assembly |
 | `cam/dual.py` | D7000 USB (gphoto2 PTP) |
