@@ -60,7 +60,7 @@ Or set `PART` and F6:
 
 `--hybrid` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` (right half, +X) / `arm_t` (left half, +Y) / `lid` / `hybrid_tray` / `shims` / `elnikkor_adapter`. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
 
-`--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them.
+`--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them. Bench setup and Kraken plates: [README — Shadowgraph](README.md#shadowgraph).
 
 ## 50/50 plate fork (optional)
 

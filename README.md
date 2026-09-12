@@ -48,7 +48,7 @@ Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-35
 
 ### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
 
-Same box, stem, tray, and lid as hybrid. Tubes are not toed — both bodies see one frame. `arm_t` is the conjugate tube (`▲ T shadowgraph`). `arm_r` is the longer razor-slot tube (`▲ R shadowgraph`). Do not stack a 0.6 mm ring to fake it. Export: `./export_stls.sh --shadowgraph` or `./export_shadowgraph.sh`.
+Same box, stem, tray, and lid as hybrid. Tubes are not toed — both bodies see one frame. `arm_t` is the conjugate tube (`▲ T shadowgraph`). `arm_r` is the longer razor-slot tube (`▲ R shadowgraph`). Do not stack a 0.6 mm ring to fake it. Export: `./export_stls.sh --shadowgraph` or `./export_shadowgraph.sh`. Sims, what it can do, and the bench setup: [Shadowgraph](#shadowgraph).
 
 ## Light path
 
@@ -127,6 +127,54 @@ D7000 at 0.61 m is a postage stamp on the α7 field.
 
 ![D7000 vs α7](docs/kraken/el135_d7000_a7.png)
 
+## Shadowgraph
+
+The pano hybrid toes each body at a **different** half of a wider image. For air, vapor, or a shock you want the **same** DX pixels (`field_toe = 0`). That is [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/): same box, same uncut #43-359 plate, same 135/5.6. Different tubes.
+
+T is conjugate — a phase-blind image of the card (the slug only). R is **0.6 mm** longer, about **7.4 mm** of object-side defocus (`extra / m²`). Ray bunching at a density jump is the shadowgraph. Both flanges say **shadowgraph**. Do not swap them. Do not stitch.
+
+![Hybrid toe vs same-image](docs/kraken/schlieren_windows.png)
+
+Top: current hybrid (~4.6° toe). Subtract T−R and you have two scenes — a tree that only exists on one body looks like flow. Bottom: shadowgraph arms (`toe = 0`). Same pixels. The knife panel is Kraken’s ray walk through a jet, linearized.
+
+![T conjugate / R shadowgraph / Settles](docs/kraken/shadowgraph_bullet.png)
+
+Same 50/50 pair, M≈2. T is the silhouette. R is the printed extra length at DX sampling. Right is a collimated-lab Settles plate — the thing this chassis is not.
+
+![Wave plate vs Fresnel vs the 0.6 mm extra](docs/kraken/shadowgraph_wave.png)
+
+Same Kraken OPD. Geometric extra ≈ Fresnel at the chassis z (7.4 mm) — a printed phase plate does not buy a Mach cone. A Fourier knife is schlieren. A 250 mm lab throw is closer to Settles and is a **different illuminator**, not a printed part. Do not add a Zernike / phase plate.
+
+![BOS on the same-image pair](docs/kraken/schlieren_bos.png)
+
+Background-oriented schlieren on `toe = 0`: speckle card, both bodies see this. Correlate each body against its own still. Quiver is Kraken’s chief-ray walk. Stitch first and the hybrid toe looks like fake flow.
+
+### Setup
+
+1. Print the shadowgraph kit. Box floor on the bed; tubes flange on the bed. Same plate drop as hybrid: **S1 toward the lens**.
+2. Bright card (or a speckle card for BOS) at **~0.61 m** — the 135 conjugate on `PATH_TOTAL = 173.5`.
+3. Helicoid until **T** is sharp on the card. Leave R alone. The extra length is the tube, not a stacked ring.
+4. Put the subject in front of the card (jet, wake, slug). MC-DC2 Y-lead — USB fire is tens of ms apart.
+5. Optional: a razor in the R mouth slot (0.42 mm, +Y through to the axis). Soft Fourier cutoff, ~8 mm early of the 135 rear focus; the real plane sits ~8 mm *inside* the F-mount.
+6. Compare T vs R on the same pixels. Do not stitch. Do not subtract a toed pano pair.
+
+### What this chassis will and will not do
+
+| Works | Will not |
+|-------|----------|
+| Geometric shadowgraph on R (printed +0.6 mm) | Settles spark *lines* from chassis z — that needs ~250 mm of throw and a collimated flash |
+| Same-image BOS on a speckle card | Using the pano hybrid and subtracting — two windows, looks like flow |
+| Razor in the R slot (soft knife / weak schlieren) | A printed Zernike or phase plate — helps weak phase, not a Mach cone |
+| Heat-gun / shock / vapor in front of the card | Stereo, or a field-split V, of the same event — one taking lens |
+
+Regenerate:
+
+```
+kraken/.venv/bin/python kraken/schlieren_scene.py      # toe vs same-image, BOS, ray walk
+kraken/.venv/bin/python kraken/shadowgraph_scene.py    # T slug / R cone / Settles
+kraken/.venv/bin/python kraken/shadowgraph_wave.py     # Fresnel / knife / phase plate
+```
+
 ## Dual D7000 USB
 
 Nikon-only. Both bodies: Setup → USB → **MTP/PTP**. No lens on the F-mounts (the iris is on the enlarger). `gphoto2` is already the Mac driver.
@@ -169,5 +217,8 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `kraken/hybrid_stl_paths.py` | Rays on the hybrid STLs |
 | `kraken/v_stl_paths.py` | Rays on the V STLs |
 | `kraken/hybrid_scene.py` | Countryside |
+| `kraken/schlieren_scene.py` | Toe vs same-image, BOS, ray walk |
+| `kraken/shadowgraph_scene.py` | T slug / R cone |
+| `kraken/shadowgraph_wave.py` | Fresnel / knife / phase plate |
 | `OPTICS.md` / `bom.md` | Path math + buy + assembly |
 | `cam/dual.py` | D7000 USB (gphoto2 PTP) |

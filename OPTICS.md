@@ -61,7 +61,7 @@ Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify wi
 
 ## Hybrid shadowgraph (same-image DX + one 50/50 plate)
 
-Same L and plate, but `field_toe() = 0`: both bodies see the same DX frame. T is the conjugate tube (`▲ T shadowgraph`). R is the longer razor-slot tube — 0.6 mm extra (~7.4 mm object-side defocus), `▲ R shadowgraph`. Not a stitch. Bright card at ~0.61 m. Export with `./export_stls.sh --shadowgraph`. Kraken plates: [`docs/kraken/shadowgraph_bullet.png`](docs/kraken/shadowgraph_bullet.png), [`docs/kraken/shadowgraph_wave.png`](docs/kraken/shadowgraph_wave.png).
+Same L and plate, but `field_toe() = 0`: both bodies see the same DX frame. T is the conjugate tube (`▲ T shadowgraph`). R is the longer razor-slot tube — 0.6 mm extra (~7.4 mm object-side defocus), `▲ R shadowgraph`. Not a stitch. Bright card at ~0.61 m. Export with `./export_stls.sh --shadowgraph`. Setup, what works, and the Kraken plates: [README — Shadowgraph](README.md#shadowgraph).
 
 ## EF hybrid (pano L: toed 5D Mark III + one 50/50 plate)
 
