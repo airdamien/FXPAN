@@ -5,139 +5,185 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NERV">
+<meta name="apple-mobile-web-app-title" content="D12600">
 <meta name="theme-color" content="#0b0b0c">
-<title>NERV · DUALS</title>
+<title>D12600</title>
 <style>
   :root {
     color-scheme: dark;
-    --bg: #080809;
-    --ink: #f3ead2;
-    --dim: #8a7a55;
-    --line: #ff6a00;
+    --bg: #101214;
+    --ink: #e8eaed;
+    --dim: #8b939e;
+    --line: #2f3640;
     --t: #9a5cff;
-    --r: #ff6a00;
-    --fire: #d4000d;
+    --r: #c45c26;
+    --fire: #b42318;
     --ok: #6cff4d;
-    --pad: max(14px, env(safe-area-inset-left));
+    --btn: #1c2128;
+    --side: 168px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
   body {
-    font: 16px/1.3 Futura, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Helvetica Neue", sans-serif;
-    padding: env(safe-area-inset-top) var(--pad) 0;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    font: 16px/1.25 "DejaVu Sans", Futura, "Hiragino Sans", system-ui, sans-serif;
     touch-action: manipulation;
-    background:
-      linear-gradient(rgba(255,106,0,.04), transparent 28%),
-      repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,106,0,.035) 3px 4px),
-      var(--bg);
+    overflow: hidden;
   }
   body.live .pulse { color: var(--ok); }
+  .app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   header {
-    display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 8px;
-    align-items: end; padding: 12px 0 10px;
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px 6px 12px;
+    border-bottom: 1px solid var(--line);
+    min-height: 48px;
   }
-  .nerv {
-    background: var(--fire); color: #fff; font: 800 11px/1 Futura, sans-serif;
-    letter-spacing: 0.22em; padding: 7px 8px 6px; clip-path: polygon(0 0, 100% 0, 100% 70%, 82% 100%, 0 100%);
+  .brand {
+    flex: 0 0 auto; font: 700 18px/1 "DejaVu Sans", sans-serif;
+    letter-spacing: 0.08em; color: #f2f4f8;
   }
-  header h1 {
-    margin: 0; font-size: 15px; letter-spacing: 0.34em; font-weight: 700;
+  header a { color: var(--r); font-size: 12px; letter-spacing: 0.12em; text-decoration: none; }
+  #host, .pulse { color: var(--dim); font-size: 12px; letter-spacing: 0.06em; white-space: nowrap; }
+  .pulse { min-width: 4.5em; text-align: right; }
+  .main { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 8px 10px 8px 10px; }
+  .stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+  .side {
+    flex: 0 0 var(--side); min-width: var(--side);
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative;
   }
-  header h1 small { display: block; color: var(--dim); letter-spacing: 0.42em; font-size: 9px; }
-  header a { color: var(--r); font-size: 11px; letter-spacing: 0.2em; text-decoration: none; }
-  #host, .pulse { color: var(--r); font-size: 11px; letter-spacing: 0.08em; }
-  .hazard {
-    height: 7px; margin: 0 calc(-1 * var(--pad));
-    background: repeating-linear-gradient(-45deg, #111 0 9px, #f0c000 9px 18px);
+  #exp.on { background: var(--r); border-color: var(--r); color: #fff; }
+  #expModal {
+    position: absolute; inset: 0; z-index: 5;
+    background: #101214; border-radius: 8px;
+    display: flex; flex-direction: column; gap: 8px; padding: 8px 4px;
   }
-  .tabs {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;
-    margin: 0 calc(-1 * var(--pad));
+  #expModal[hidden] { display: none !important; }
+  .vsliders {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
   }
-  .tabs button {
-    clip-path: none; border: 0; border-bottom: 3px solid transparent;
-    letter-spacing: 0.12em; background: #0c0c0d; font-size: 12px;
+  .vdrag {
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 0; gap: 4px;
   }
-  .tabs button.on { border-bottom-color: var(--r); color: var(--r); background: #1a0e04; }
+  .vdrag b {
+    color: var(--r); font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
+    text-align: center; line-height: 1.15; min-height: 2.2em;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .vdrag span { color: var(--dim); font-size: 10px; letter-spacing: 0.12em; }
+  .vdrag .slot {
+    flex: 1; min-height: 0; width: 100%; position: relative;
+  }
+  input[type=range].vert {
+    -webkit-appearance: none; appearance: none;
+    position: absolute; top: 50%; left: 50%;
+    width: var(--vh, 240px); height: 44px; margin: 0;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    background: transparent;
+  }
+  input[type=range].vert::-webkit-slider-runnable-track {
+    height: 3px; background: #2f3640;
+  }
+  input[type=range].vert::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px;
+    background: var(--r); margin-top: -10px; border: 0; border-radius: 50%;
+  }
+  #expDone { width: 100%; min-height: 48px; }
+  .tabs { display: flex; flex-direction: column; gap: 8px; }
+  .side button { width: 100%; }
+  .tabs button.on { background: var(--r); border-color: var(--r); color: #fff; }
+  .side-fill { flex: 1; min-height: 0; }
+  .pane {
+    flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+  }
   .pane[hidden] { display: none !important; }
   .previews {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 10px;
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr);
+    gap: 8px;
   }
-  figure {
-    margin: 0; position: relative; background: #000;
-    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-    outline: 1px solid var(--line); outline-offset: -1px;
+  .previews.pano-on { grid-template-rows: minmax(0, 1fr) minmax(72px, 32%); }
+  .previews figure {
+    margin: 0; position: relative; background: #0b0d10; min-height: 0; overflow: hidden;
+    outline: 1px solid var(--line);
   }
-  figure img { width: 100%; aspect-ratio: 3/2; object-fit: cover; display: block; background: #000; }
-  figure::after {
+  .previews figure.t { outline-color: var(--t); }
+  .previews figure.r { outline-color: var(--r); }
+  .previews figure.p {
+    grid-column: 1 / -1; outline-color: #c9a227;
+  }
+  .previews figure.p[hidden] { display: none !important; }
+  .previews figure img, .previews figure canvas {
+    width: 100%; height: 100%; object-fit: contain; display: block; background: #0b0d10;
+  }
+  .previews figure.t::after, .previews figure.r::after {
     content: ""; pointer-events: none; position: absolute; inset: 0;
     background:
-      linear-gradient(transparent 49.4%, rgba(255,106,0,.45) 49.4% 50.6%, transparent 50.6%),
-      linear-gradient(90deg, transparent 49.4%, rgba(255,106,0,.45) 49.4% 50.6%, transparent 50.6%),
-      repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,.2) 2px 3px);
+      linear-gradient(transparent 49.4%, rgba(196,92,38,.45) 49.4% 50.6%, transparent 50.6%),
+      linear-gradient(90deg, transparent 49.4%, rgba(196,92,38,.45) 49.4% 50.6%, transparent 50.6%);
   }
-  figure .tag {
+  .previews .tag {
     position: absolute; top: 6px; left: 8px; z-index: 1;
-    font: 800 20px/1 Futura, sans-serif; letter-spacing: 0.08em;
+    font: 800 20px/1 sans-serif; letter-spacing: 0.08em;
     text-shadow: 0 0 8px currentColor;
   }
-  figure .jp {
+  .previews .jp {
     position: absolute; top: 8px; right: 8px; z-index: 1;
     font-size: 10px; letter-spacing: 0.18em; opacity: 0.85;
   }
-  figure .meta {
+  .previews .meta {
     position: absolute; left: 7px; bottom: 7px; right: 7px; z-index: 1;
     font-size: 10px; letter-spacing: 0.12em; text-shadow: 0 1px 3px #000;
     display: flex; justify-content: space-between;
   }
-  .t { outline-color: var(--t); }
   .t .tag, .t .meta, .t .jp { color: var(--t); }
   .r .tag, .r .meta, .r .jp { color: var(--r); }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .p .tag, .p .meta, .p .jp { color: #c9a227; }
+  #panoPrev.on { background: var(--r); border-color: var(--r); color: #fff; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex: 0 0 auto; }
+  .livebar { display: flex; flex-direction: column; gap: 8px; }
+  .livebar[hidden] { display: none !important; }
   button, .chip {
-    appearance: none; border: 1px solid var(--r); background: #120c08; color: var(--ink);
-    font: 700 13px/1.1 Futura, "Hiragino Sans", sans-serif; letter-spacing: 0.14em;
-    min-height: 44px; padding: 0 12px;
-    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+    appearance: none; border: 1px solid var(--line); background: var(--btn); color: var(--ink);
+    font: 700 15px/1.1 "DejaVu Sans", sans-serif; letter-spacing: 0.08em;
+    min-height: 44px; padding: 0 12px; border-radius: 8px;
   }
-  button:active, .chip.on { background: #3a1600; color: var(--r); }
+  button:active, .chip.on { background: #3a414c; }
   button:disabled { opacity: 0.4; }
   .chip { min-width: 52px; text-align: center; }
-  .lbl { width: 100%; color: var(--dim); font-size: 10px; letter-spacing: 0.22em;
-         text-transform: uppercase; margin: 12px 0 4px; }
-  .drag { margin: 10px 0 4px; }
+  .lbl { width: 100%; color: var(--dim); font-size: 11px; letter-spacing: 0.14em;
+         text-transform: uppercase; margin: 0; flex: 0 0 auto; }
+  .drag { margin: 0; flex: 0 0 auto; }
   .drag .k {
     display: flex; justify-content: space-between; align-items: baseline;
-    color: var(--dim); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--dim); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
   }
-  .drag .k b { color: var(--r); font-size: 24px; letter-spacing: 0.04em; font-weight: 700; }
+  .drag .k b { color: var(--r); font-size: 22px; letter-spacing: 0.04em; font-weight: 700; }
   input[type=range] {
-    -webkit-appearance: none; appearance: none; width: 100%; height: 44px;
+    -webkit-appearance: none; appearance: none; width: 100%; height: 40px;
     background: transparent; margin: 0;
   }
-  input[type=range]::-webkit-slider-runnable-track {
-    height: 3px; background: #3a2208;
-  }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: #2f3640; }
   input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none; width: 22px; height: 22px;
-    background: var(--r); margin-top: -10px; border: 0;
-    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    background: var(--r); margin-top: -10px; border: 0; border-radius: 50%;
   }
-  .picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0; }
-  .picks.two { grid-template-columns: 1fr 1fr; }
+  .picks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; flex: 0 0 auto; }
   .picks label { display: flex; flex-direction: column; gap: 5px; color: var(--dim);
-                 font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; }
+                 font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
   select {
-    font: 16px/1.2 inherit; min-height: 44px; padding: 0 10px;
-    background: #120c08; color: var(--ink); border: 1px solid var(--r);
+    font: 16px/1.2 inherit; min-height: 44px; padding: 0 10px; border-radius: 8px;
+    background: var(--btn); color: var(--ink); border: 1px solid var(--line);
   }
-  #cams { display: grid; gap: 8px; }
+  #cams, #pairs, #files {
+    flex: 1; min-height: 0; overflow: auto; display: grid; gap: 8px; align-content: start;
+  }
   .cam {
-    border: 1px solid #5a3200; padding: 10px 12px;
+    border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px;
     display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
-    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+    background: #0b0d10;
   }
   .cam.is-t { border-color: var(--t); }
   .cam.is-r { border-color: var(--r); }
@@ -149,41 +195,34 @@
   .cam.is-t button.role.on { background: var(--t); border-color: var(--t); }
   .cam.is-r button.role.on { background: var(--r); border-color: var(--r); }
   #log {
-    margin: 10px 0 0; color: var(--ok); font: 12px/1.4 "Share Tech Mono", ui-monospace, Menlo, monospace;
-    white-space: pre-wrap; min-height: 2.6em;
+    flex: 0 0 auto; margin: 0; color: var(--dim); max-height: 2.6em;
+    font: 13px/1.3 ui-monospace, "DejaVu Sans Mono", Menlo, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   #log.err { color: #ff3b3b; }
-  .fire {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px;
-  }
-  .fire .acts { display: flex; gap: 8px; flex: 1; }
   .dlchk {
-    display: flex; align-items: center; gap: 7px; margin-left: auto;
-    color: var(--dim); font-size: 10px; letter-spacing: 0.18em;
-    text-transform: uppercase; min-height: 44px; white-space: nowrap;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    color: var(--dim); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; min-height: 40px; white-space: nowrap;
   }
   .dlchk input {
     appearance: none; -webkit-appearance: none;
-    width: 22px; height: 22px; margin: 0;
-    border: 1px solid var(--r); background: #120c08;
-    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    width: 18px; height: 18px; margin: 0; border-radius: 4px;
+    border: 1px solid var(--line); background: var(--btn);
   }
-  .dlchk input:checked { background: var(--r); }
-  .dlchk:has(input:checked) { color: var(--r); }
-  .simpi { margin-left: 0; }
+  .dlchk input:checked { background: var(--r); border-color: var(--r); }
+  .dlchk:has(input:checked) { color: #fff; }
+  .simpi { margin-left: 0; justify-content: flex-start; }
   #shoot {
-    background: var(--fire); border-color: #ff2a2a; color: #fff;
-    font-size: 22px; letter-spacing: 0.28em; font-weight: 800;
-    min-height: 68px; min-width: 42%;
+    background: var(--fire); border-color: var(--fire); color: #fff;
+    font-size: 18px; letter-spacing: 0.16em; font-weight: 700; min-height: 72px;
   }
-  #gpio {
-    min-height: 68px; letter-spacing: 0.12em;
-  }
-  #gpio[hidden] { display: none !important; }
-  #pairs { display: grid; gap: 10px; margin: 10px 0; }
+  body.kiosk { cursor: none; }
+  body.kiosk header a[href="/lab"] { display: none; }
+  #kioskExit[hidden] { display: none !important; }
   .pair {
     display: grid; gap: 6px; width: 100%; padding: 8px; text-align: left;
-    border: 1px solid #5a3200;
+    border: 1px solid var(--line); border-radius: 8px; background: #0b0d10;
   }
   .pair-frames {
     display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; align-items: start;
@@ -194,7 +233,7 @@
   .pair-pano img { aspect-ratio: 16/6; object-fit: contain; }
   .pair-stat {
     color: var(--ok); font: 12px/1.35 ui-monospace, Menlo, monospace;
-    white-space: pre-wrap; min-height: 2.6em;
+    white-space: pre-wrap; min-height: 1.4em;
   }
   .pair-stat.err { color: #ff3b3b; }
   .pair-stat.run { color: var(--r); }
@@ -202,37 +241,31 @@
   .pair-acts .who { color: var(--dim); font-size: 11px; letter-spacing: 0.1em; }
   .file {
     display: grid; gap: 8px; padding: 10px;
-    border: 1px solid #5a3200;
+    border: 1px solid var(--line); border-radius: 8px; background: #0b0d10;
   }
   .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
   .file .who { color: var(--dim); font-size: 10px; letter-spacing: 0.14em; }
   .file .acts { display: flex; flex-wrap: wrap; gap: 6px; }
   .hud {
-    position: sticky; top: 0; z-index: 5;
-    display: grid; grid-template-columns: 1fr 1fr;
-    margin: 0 calc(-1 * var(--pad));
-    background: #0c0c0d; border-bottom: 1px solid #5a3200;
+    flex: 1; min-width: 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   }
   .hud-cam {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 12px; min-height: 48px;
+    display: flex; align-items: center; gap: 8px; min-width: 0;
   }
-  .hud-cam.t { border-right: 1px solid #3a2208; }
   .hud-cam b {
-    font: 800 20px/1 Futura, sans-serif; letter-spacing: 0.08em; min-width: 1.1em;
+    font: 800 18px/1 sans-serif; letter-spacing: 0.06em; min-width: 1.05em;
   }
   .hud-cam.t b { color: var(--t); }
   .hud-cam.r b { color: var(--r); }
   .hud-mid { flex: 1; min-width: 0; }
   .hud-line {
     display: flex; justify-content: space-between; gap: 8px;
-    font-size: 12px; letter-spacing: 0.06em;
+    font-size: 13px; letter-spacing: 0.04em;
   }
-  .hud-sub { color: var(--dim); font-size: 10px; letter-spacing: 0.08em; margin-top: 2px; }
-  .hud-pwr {
-    display: flex; align-items: center; gap: 6px; margin-top: 5px;
-  }
+  .hud-sub { display: none; }
+  .hud-pwr { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
   .hud-ico {
     flex: 0 0 auto; width: 14px; height: 8px; box-sizing: border-box;
     border: 1px solid currentColor; color: var(--dim); position: relative;
@@ -241,83 +274,130 @@
     content: ""; position: absolute; right: -3px; top: 1px;
     width: 2px; height: 4px; background: currentColor;
   }
-  .hud-bat {
-    flex: 1; min-width: 0; height: 5px; background: #2a1a08; overflow: hidden;
-  }
+  .hud-bat { flex: 1; min-width: 0; height: 5px; background: #2a2f36; overflow: hidden; }
   .hud-bat i { display: block; height: 100%; width: 0; background: var(--ok); }
-  .hud-pct { color: var(--dim); font-size: 11px; letter-spacing: 0.08em; white-space: nowrap; }
+  .hud-pct { color: var(--dim); font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
   .hud-shots { color: var(--dim); font-size: 10px; letter-spacing: 0.06em; white-space: nowrap; }
   .hud-shots:empty { display: none; }
   .hud-cam.low .hud-bat i { background: var(--fire); }
   .hud-cam.low .hud-ico, .hud-cam.low .hud-pct { color: var(--fire); }
   .hud-cam.off { opacity: 0.35; }
+  @media (max-width: 720px) {
+    html, body { height: auto; min-height: 100%; overflow: auto; }
+    .app { min-height: 100dvh; height: auto; }
+    .main { flex-direction: column; }
+    .stage { min-height: 52vh; }
+    .previews { min-height: 220px; }
+    .side { flex: 0 0 auto; flex-direction: row; min-width: 0; width: 100%; }
+    .tabs { flex-direction: row; flex: 1; }
+    .tabs button { flex: 1; width: auto; padding: 0 6px; font-size: 12px; }
+    .side button { width: auto; }
+    .livebar { flex-direction: row; }
+    .side-fill { display: none; }
+    #shoot { min-width: 28%; }
+    #expModal {
+      position: fixed; top: 56px; right: 8px; bottom: auto; left: auto;
+      width: 168px; height: min(420px, calc(100dvh - 140px));
+    }
+    #log { white-space: pre-wrap; max-height: none; }
+  }
 </style>
-<div class="hud" id="hud">
-  <div class="hud-cam t off" id="hudT">
-    <b>T</b>
-    <div class="hud-mid">
-      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
-      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
-      <div class="hud-pwr">
-        <span class="hud-ico" aria-hidden="true"></span>
-        <div class="hud-bat"><i></i></div>
-        <span class="hud-pct">—</span>
-        <span class="hud-shots"></span>
-      </div>
-    </div>
-  </div>
-  <div class="hud-cam r off" id="hudR">
-    <b>R</b>
-    <div class="hud-mid">
-      <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
-      <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
-      <div class="hud-pwr">
-        <span class="hud-ico" aria-hidden="true"></span>
-        <div class="hud-bat"><i></i></div>
-        <span class="hud-pct">—</span>
-        <span class="hud-shots"></span>
-      </div>
-    </div>
-  </div>
-</div>
+<div class="app">
 <header>
-  <div class="nerv">NERV</div>
-  <h1>DUALS <small>特務機関 · UNIT T/R</small></h1>
+  <div class="brand">D12600</div>
+  <div class="hud" id="hud">
+    <div class="hud-cam t off" id="hudT">
+      <b>T</b>
+      <div class="hud-mid">
+        <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+        <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+        <div class="hud-pwr">
+          <span class="hud-ico" aria-hidden="true"></span>
+          <div class="hud-bat"><i></i></div>
+          <span class="hud-pct">—</span>
+          <span class="hud-shots"></span>
+        </div>
+      </div>
+    </div>
+    <div class="hud-cam r off" id="hudR">
+      <b>R</b>
+      <div class="hud-mid">
+        <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
+        <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
+        <div class="hud-pwr">
+          <span class="hud-ico" aria-hidden="true"></span>
+          <div class="hud-bat"><i></i></div>
+          <span class="hud-pct">—</span>
+          <span class="hud-shots"></span>
+        </div>
+      </div>
+    </div>
+  </div>
   <span class="pulse" id="sync">STANDBY</span>
   <span id="host"></span>
-  <a href="/lab">MAGI</a>
+  <a href="/lab">LAB</a>
 </header>
-<div class="hazard"></div>
-<nav class="tabs">
-  <button type="button" class="on" data-tab="view">射撃 VIEW</button>
-  <button type="button" data-tab="usb">USB</button>
-  <button type="button" data-tab="pano">全景 PANO</button>
-  <button type="button" data-tab="files">記録 FILES</button>
-</nav>
+<div class="main">
+<div class="stage">
 <div id="tab-view" class="pane">
-<div class="previews">
+<div class="previews" id="previews">
   <figure class="t">
     <img id="lvT" alt="T">
     <div class="tag">T</div>
-    <div class="jp">初号機</div>
-    <div class="meta"><span>BACK +Y</span><span id="stT">—</span></div>
+    <div class="jp">+Y</div>
+    <div class="meta"><span>BACK</span><span id="stT">—</span></div>
   </figure>
   <figure class="r">
     <img id="lvR" alt="R">
     <div class="tag">R</div>
-    <div class="jp">零号機</div>
-    <div class="meta"><span>SIDE +X</span><span id="stR">—</span></div>
+    <div class="jp">+X</div>
+    <div class="meta"><span>SIDE</span><span id="stR">—</span></div>
+  </figure>
+  <figure class="p" id="panoPrevFig" hidden>
+    <canvas id="lvP"></canvas>
+    <div class="tag">P</div>
+    <div class="jp">20%</div>
+    <div class="meta"><span>LIVE STITCH</span><span id="stP">cut</span></div>
   </figure>
 </div>
-<div class="fire">
-  <div class="acts">
-    <button id="live">起動 LIVE</button>
-    <button id="liveStop">停止</button>
-  </div>
-  <label class="dlchk"><input type="checkbox" id="dl">回収</label>
-  <button id="shoot">射撃 FIRE</button>
-  <button id="gpio" hidden>同期 GPIO</button>
 </div>
+<div id="tab-usb" class="pane" hidden>
+<div class="row">
+  <button id="detect">DETECT</button>
+  <button id="status">STATUS</button>
+  <button id="swap" disabled>SWAP</button>
+</div>
+<div class="lbl">tap T / R · again to clear</div>
+<div id="cams"></div>
+</div>
+<div id="tab-pano" class="pane" hidden>
+<div class="row">
+  <button id="panoRefresh">LIST</button>
+  <label>Mode
+    <select id="panoMode">
+      <option value="open">Open</option>
+      <option value="match">Match</option>
+      <option value="blend">Blend</option>
+      <option value="cut">Cut</option>
+    </select>
+  </label>
+  <label class="dlchk"><input type="checkbox" id="flipR">flop R</label>
+</div>
+<div class="drag">
+  <div class="k">Overlap <b id="olVal">20%</b></div>
+  <input type="range" id="olDrag" min="5" max="45" value="20" step="1">
+</div>
+<div id="pairs"></div>
+</div>
+<div id="tab-files" class="pane" hidden>
+<div class="row">
+  <button id="filesRefresh">LIST</button>
+  <button id="filesToday">before today</button>
+  <button id="filesKeep5">keep 5</button>
+</div>
+<div id="files"></div>
+</div>
+<div id="tab-set" class="pane" hidden>
 <div class="drag">
   <div class="k">ISO <b id="isoVal">400</b></div>
   <input type="range" id="isoDrag" min="0" step="1">
@@ -337,47 +417,50 @@
     <select id="quality"></select>
   </label>
 </div>
-<div class="row"><button id="set">同期 SET</button></div>
-</div>
-<div id="tab-usb" class="pane" hidden>
-<div class="row">
-  <button id="detect">探知 DETECT</button>
-  <button id="status">計測 STATUS</button>
-  <button id="swap" disabled>入替 SWAP</button>
-</div>
-<div class="lbl">UNITS · tap T / R · again to clear</div>
-<div id="cams"></div>
-<div class="lbl">設定 SETTINGS</div>
+<div class="row"><button id="set">APPLY</button></div>
+<label class="dlchk"><input type="checkbox" id="dl">Download files</label>
+<label class="dlchk"><input type="checkbox" id="gpioOn">GPIO shutter</label>
 <label class="dlchk simpi"><input type="checkbox" id="simPi">Sim as Pi</label>
-</div>
-<div id="tab-pano" class="pane" hidden>
 <div class="row">
-  <button id="panoRefresh">更新 LIST</button>
-  <label>Mode
-    <select id="panoMode">
-      <option value="open">Open</option>
-      <option value="match">Match</option>
-      <option value="blend">Blend</option>
-      <option value="cut">Cut</option>
-    </select>
-  </label>
-  <label class="dlchk"><input type="checkbox" id="flipR">鏡面 R</label>
+  <button id="kioskExit" hidden>Desktop</button>
 </div>
-<div class="drag">
-  <div class="k">Overlap <b id="olVal">20%</b> <small style="color:var(--dim)">cut/blend</small></div>
-  <input type="range" id="olDrag" min="5" max="45" value="20" step="1">
 </div>
-<div id="pairs"></div>
+<pre id="log">wake a body · USB MTP/PTP</pre>
 </div>
-<div id="tab-files" class="pane" hidden>
-<div class="row">
-  <button id="filesRefresh">更新 LIST</button>
-  <button id="filesToday">今日以前</button>
-  <button id="filesKeep5">最新5</button>
+<aside class="side">
+  <nav class="tabs">
+    <button type="button" class="on" data-tab="view">VIEW</button>
+    <button type="button" data-tab="usb">USB</button>
+    <button type="button" data-tab="pano">PANO</button>
+    <button type="button" data-tab="files">FILES</button>
+    <button type="button" data-tab="set">SET</button>
+  </nav>
+  <div class="livebar" id="livebar">
+    <button id="live">LIVE</button>
+    <button id="liveStop" hidden>STOP</button>
+    <button type="button" id="panoPrev" hidden>PREVIEW</button>
+  </div>
+  <button type="button" id="exp">ISO</button>
+  <div class="side-fill"></div>
+  <button id="shoot">FIRE</button>
+  <div id="expModal" hidden>
+    <div class="vsliders">
+      <div class="vdrag">
+        <b id="isoFastVal">400</b>
+        <div class="slot"><input type="range" class="vert" id="isoFast" min="0" step="1"></div>
+        <span>ISO</span>
+      </div>
+      <div class="vdrag">
+        <b id="shutFastVal">1/125</b>
+        <div class="slot"><input type="range" class="vert" id="shutFast" min="0" step="1"></div>
+        <span>SHUT</span>
+      </div>
+    </div>
+    <button type="button" id="expDone">DONE</button>
+  </div>
+</aside>
 </div>
-<div id="files"></div>
 </div>
-<pre id="log">MAGI-01  wake a body · USB MTP/PTP · same Wi‑Fi</pre>
 <script>
 const ISO = ["100","125","160","200","250","320","400","500","640","800","1000","1250",
   "1600","2000","2500","3200","4000","5000","6400","12800","25600"];
@@ -391,7 +474,7 @@ const QUAL = [["JPEG Fine","JPEG Fine"],["JPEG Normal","JPEG Norm"],
   ["NEF+Fine","NEF+Fine"],["NEF (Raw)","NEF"]];
 const PROG = [["M","M"],["A","A"],["S","S"],["P","P"],["Auto","Auto"]];
 const state = { iso:"400", shutter:"1/125", wb:"Auto", quality:"JPEG Fine", program:"M",
-  t:"", r:"", live:false, timer:0, stamp:"", rows:[],
+  t:"", r:"", live:false, panoPrev:false, timer:0, stamp:"", rows:[],
   stats: { T: { on: false }, R: { on: false } } };
 const log = (m, err) => { const el = document.getElementById("log");
   el.textContent = m; el.className = err ? "err" : ""; };
@@ -405,20 +488,32 @@ const idxOf = (list, val) => {
   const s = String(val || "").replace(/^ISO\s+/i, "").trim();
   return list.findIndex(v => v === s || v === val);
 };
-const bindDrag = (id, list, key, label) => {
+const syncDrag = (id, list, key, label) => {
   const el = document.getElementById(id);
+  if (!el) return;
+  const i = idxOf(list, state[key]);
+  if (i >= 0) el.value = String(i);
+  const lab = document.getElementById(label);
+  if (lab) lab.textContent = state[key];
+};
+const paintExposure = () => {
+  syncDrag("isoDrag", ISO, "iso", "isoVal");
+  syncDrag("isoFast", ISO, "iso", "isoFastVal");
+  syncDrag("shutDrag", SHUT, "shutter", "shutVal");
+  syncDrag("shutFast", SHUT, "shutter", "shutFastVal");
+};
+const bindDrag = (id, list, key, applyFast) => {
+  const el = document.getElementById(id);
+  if (!el) return;
   el.max = String(list.length - 1);
-  const paint = () => {
+  el.oninput = () => {
     let i = parseInt(el.value, 10);
     if (i < 0) i = 0;
     if (i >= list.length) i = list.length - 1;
     state[key] = list[i];
-    document.getElementById(label).textContent = list[i];
+    paintExposure();
+    if (applyFast) scheduleApply();
   };
-  el.oninput = paint;
-  const i = idxOf(list, state[key]);
-  if (i >= 0) el.value = String(i);
-  paint();
 };
 const fillSelect = (id, items, key) => {
   const el = document.getElementById(id);
@@ -510,14 +605,12 @@ const ingestHud = (rows, blocks) => {
 const normShut = (s) => String(s || "").trim().replace(/\s+/g, "").replace(/s$/i, "").replace(/"$/, "");
 const modeOwnsShutter = (m) => /^(M|S)$/i.test(String(m || "").trim());
 const snapFromStatus = (b) => {
-  if (b.iso) { state.iso = String(b.iso).replace(/^ISO\s+/i, ""); bindDrag("isoDrag", ISO, "iso", "isoVal"); }
+  if (b.iso) state.iso = String(b.iso).replace(/^ISO\s+/i, "");
   if (b.shutterspeed && modeOwnsShutter(b.expprogram)) {
     const shut = normShut(b.shutterspeed);
-    if (idxOf(SHUT, shut) >= 0) {
-      state.shutter = shut;
-      bindDrag("shutDrag", SHUT, "shutter", "shutVal");
-    }
+    if (idxOf(SHUT, shut) >= 0) state.shutter = shut;
   }
+  paintExposure();
   if (b.whitebalance) { state.wb = b.whitebalance; fillSelect("wb", WB, "wb"); }
   if (b.imagequality) { state.quality = b.imagequality; fillSelect("quality", QUAL, "quality"); }
   if (b.expprogram) { state.program = b.expprogram; fillSelect("program", PROG, "program"); }
@@ -625,12 +718,69 @@ const bind = (id, fn) => {
     b.disabled = false;
   };
 };
+const liveOverlap = () => {
+  const el = document.getElementById("olDrag");
+  const n = el ? parseInt(el.value, 10) : 20;
+  return Math.min(0.45, Math.max(0.05, (n || 20) / 100));
+};
+const composePano = () => {
+  if (!state.panoPrev || !state.live) return;
+  const t = document.getElementById("lvT");
+  const r = document.getElementById("lvR");
+  const canvas = document.getElementById("lvP");
+  if (!canvas || !t.naturalWidth || !r.naturalWidth) return;
+  const flip = document.getElementById("flipR") && document.getElementById("flipR").checked;
+  const ol = liveOverlap();
+  const h = Math.min(t.naturalHeight, r.naturalHeight);
+  const tw = Math.round(t.naturalWidth * h / t.naturalHeight);
+  const rw = Math.round(r.naturalWidth * h / r.naturalHeight);
+  const seam = Math.max(1, Math.round(tw * (1 - ol)));
+  const width = seam + rw;
+  if (canvas.width !== width || canvas.height !== h) {
+    canvas.width = width;
+    canvas.height = h;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, width, h);
+  ctx.drawImage(t, 0, 0, t.naturalWidth, t.naturalHeight, 0, 0, tw, h);
+  ctx.save();
+  if (flip) {
+    ctx.translate(seam + rw, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, 0, 0, rw, h);
+  } else {
+    ctx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, seam, 0, rw, h);
+  }
+  ctx.restore();
+  ctx.fillStyle = "rgba(196,92,38,0.85)";
+  ctx.fillRect(seam, 0, 1, h);
+  const jp = document.querySelector("#panoPrevFig .jp");
+  if (jp) jp.textContent = Math.round(ol * 100) + "%" + (flip ? " flop" : "");
+  const st = document.getElementById("stP");
+  if (st) st.textContent = "cut";
+};
+const paintPanoPrev = () => {
+  const on = !!(state.live && state.panoPrev);
+  const box = document.getElementById("previews");
+  const fig = document.getElementById("panoPrevFig");
+  const btn = document.getElementById("panoPrev");
+  if (box) box.classList.toggle("pano-on", on);
+  if (fig) fig.hidden = !on;
+  if (btn) {
+    btn.hidden = !state.live;
+    btn.classList.toggle("on", on);
+  }
+  if (on) composePano();
+};
 const setLiveSrc = (on) => {
   state.live = on;
   document.body.classList.toggle("live", on);
   const sync = document.getElementById("sync");
   if (sync) sync.textContent = on ? "ACTIVE" : "STANDBY";
+  const liveBtn = document.getElementById("live");
+  if (liveBtn) liveBtn.textContent = on ? "STOP" : "LIVE";
   if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
+  paintPanoPrev();
   if (!on) {
     ["T","R"].forEach(role => { document.getElementById("lv"+role).src = ""; });
     return;
@@ -644,6 +794,7 @@ const setLiveSrc = (on) => {
           const url = URL.createObjectURL(await r.blob());
           const img = document.getElementById("lv"+role);
           const old = img.src;
+          img.onload = () => { if (state.panoPrev) composePano(); };
           img.src = url;
           if (old.startsWith("blob:")) URL.revokeObjectURL(old);
         }
@@ -687,43 +838,52 @@ bind("status", async () => { await usb(async () => {
     if (b.role === "T" || b.role === "R") snapFromStatus(b);
   });
 }); });
+const applyHud = (all) => {
+  ["T","R"].forEach(role => {
+    if (state.stats[role] && state.stats[role].on) {
+      state.stats[role].iso = state.iso;
+      state.stats[role].shutterspeed = state.shutter;
+      if (all) {
+        state.stats[role].expprogram = state.program;
+        state.stats[role].whitebalance = state.wb;
+        state.stats[role].imagequality = state.quality;
+      }
+    }
+  });
+  paintHud();
+};
+let applyTimer = 0;
+const applyExposure = () => usb(async () => {
+  const j = await api("/api/set", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ iso: state.iso, shutter: state.shutter }) });
+  applyHud(false);
+  log(j.message);
+});
+const scheduleApply = () => {
+  clearTimeout(applyTimer);
+  applyTimer = setTimeout(() => applyExposure().catch(e => log(e.message, true)), 400);
+};
 bind("set", async () => { await usb(async () => {
   const j = await api("/api/set", { method:"POST",
     headers:{"content-type":"application/json"},
     body: JSON.stringify({ iso: state.iso, shutter: state.shutter,
       program: state.program, wb: state.wb, quality: state.quality }) });
-  ["T","R"].forEach(role => {
-    if (state.stats[role] && state.stats[role].on) {
-      state.stats[role].iso = state.iso;
-      state.stats[role].shutterspeed = state.shutter;
-      state.stats[role].expprogram = state.program;
-      state.stats[role].whitebalance = state.wb;
-      state.stats[role].imagequality = state.quality;
-    }
-  });
-  paintHud();
+  applyHud(true);
   log(j.message);
 }); });
-const fire = (target) => usb(async () => {
+const fire = () => usb(async () => {
   const j = await api("/api/shoot", { method:"POST",
-    headers:{"content-type":"application/json"},
-    body: JSON.stringify({ target }) });
+    headers:{"content-type":"application/json"}, body: "{}" });
   log(j.message);
 });
-const shootTarget = () => document.getElementById("dl").checked ? "download" : "card";
-const paintShoot = () => {
-  document.getElementById("shoot").textContent =
-    document.getElementById("dl").checked ? "回収 FIRE" : "射撃 FIRE";
-};
-document.getElementById("dl").onchange = paintShoot;
-bind("shoot", () => fire(shootTarget()));
-bind("gpio", () => usb(async () => {
-  const j = await api("/api/shoot", { method:"POST",
-    headers:{"content-type":"application/json"},
-    body: JSON.stringify({ target: "gpio" }) });
-  log(j.message);
-}));
+bind("shoot", () => fire());
 bind("live", async () => {
+  if (state.live) {
+    setLiveSrc(false);
+    const j = await api("/api/live/stop", { method:"POST" }); log(j.message);
+    return;
+  }
   const j = await api("/api/live/start", { method:"POST" });
   setLiveSrc(true); log(j.message);
 });
@@ -731,6 +891,11 @@ bind("liveStop", async () => {
   setLiveSrc(false);
   const j = await api("/api/live/stop", { method:"POST" }); log(j.message);
 });
+document.getElementById("panoPrev").onclick = () => {
+  if (!state.live) return;
+  state.panoPrev = !state.panoPrev;
+  paintPanoPrev();
+};
 const stitchLine = (p) => {
   const s = p.stitch || {};
   if (s.running) return (s.message || "stitching…") + (s.log && s.log.length > 1 ? "\n" + s.log.slice(-3).join("\n") : "");
@@ -813,7 +978,8 @@ const startPano = async (stamp) => {
 const paintOl = () => {
   document.getElementById("olVal").textContent = document.getElementById("olDrag").value + "%";
 };
-document.getElementById("olDrag").oninput = paintOl;
+document.getElementById("olDrag").oninput = () => { paintOl(); composePano(); };
+document.getElementById("flipR").onchange = () => composePano();
 bind("panoRefresh", () => loadPairs());
 const fileThumb = (name, label) => name
   ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
@@ -874,20 +1040,50 @@ bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every cap
 bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
 const showTab = (name) => {
   document.querySelectorAll(".tabs [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  document.getElementById("tab-view").hidden = name !== "view";
-  document.getElementById("tab-usb").hidden = name !== "usb";
-  document.getElementById("tab-pano").hidden = name !== "pano";
-  document.getElementById("tab-files").hidden = name !== "files";
+  ["view","usb","pano","files","set"].forEach(tab => {
+    document.getElementById("tab-"+tab).hidden = tab !== name;
+  });
+  const livebar = document.getElementById("livebar");
+  if (livebar) livebar.hidden = name !== "view";
   if (name === "pano") loadPairs().catch(e => log(e.message, true));
   if (name === "files") loadFiles().catch(e => log(e.message, true));
 };
 document.querySelectorAll(".tabs [data-tab]").forEach(b => {
-  b.onclick = () => showTab(b.dataset.tab);
+  b.onclick = () => {
+    location.hash = b.dataset.tab;
+    showTab(b.dataset.tab);
+  };
 });
-showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano"
-  : location.hash === "#files" ? "files" : "view");
-bindDrag("isoDrag", ISO, "iso", "isoVal");
-bindDrag("shutDrag", SHUT, "shutter", "shutVal");
+const startParams = new URLSearchParams(location.search);
+const startTab = startParams.get("tab")
+  || (startParams.has("kiosk") ? "view" : (location.hash || "").replace("#","") || "view");
+showTab(["view","usb","pano","files","set"].includes(startTab) ? startTab : "view");
+bindDrag("isoDrag", ISO, "iso", false);
+bindDrag("isoFast", ISO, "iso", true);
+bindDrag("shutDrag", SHUT, "shutter", false);
+bindDrag("shutFast", SHUT, "shutter", true);
+paintExposure();
+const expModal = document.getElementById("expModal");
+const expBtn = document.getElementById("exp");
+const sizeVerts = () => {
+  document.querySelectorAll("#expModal .vdrag .slot").forEach(slot => {
+    slot.style.setProperty("--vh", slot.clientHeight + "px");
+  });
+};
+const showExp = (on) => {
+  expModal.hidden = !on;
+  expBtn.classList.toggle("on", on);
+  if (on) {
+    paintExposure();
+    requestAnimationFrame(sizeVerts);
+  }
+};
+window.addEventListener("resize", () => {
+  if (!expModal.hidden) sizeVerts();
+});
+expBtn.onclick = () => showExp(expModal.hidden);
+document.getElementById("expDone").onclick = () => showExp(false);
+if (startParams.has("exp")) showExp(true);
 fillSelect("program", PROG, "program");
 fillSelect("wb", WB, "wb");
 fillSelect("quality", QUAL, "quality");
@@ -897,10 +1093,33 @@ if (navigator.wakeLock) {
     if (document.visibilityState === "visible") lock();
   });
 }
+const inKiosk = new URLSearchParams(location.search).has("kiosk");
+if (inKiosk) document.body.classList.add("kiosk");
+const paintKiosk = (on) => {
+  document.getElementById("kioskExit").hidden = !(inKiosk || on);
+};
+const paintSettings = (s) => {
+  if (!s) return;
+  const dl = document.getElementById("dl");
+  const g = document.getElementById("gpioOn");
+  if (dl && "download" in s) dl.checked = !!s.download;
+  if (g && "gpio" in s) g.checked = !!s.gpio;
+};
+const saveSettings = async () => {
+  const j = await api("/api/settings", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({
+      download: document.getElementById("dl").checked,
+      gpio: document.getElementById("gpioOn").checked,
+    }) });
+  paintSettings(j);
+  log(j.message);
+};
+document.getElementById("dl").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("gpioOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 const paintGpio = (g) => {
   const box = document.getElementById("simPi");
   if (box) box.checked = !!(g && g.sim);
-  document.getElementById("gpio").hidden = !(g && g.available);
 };
 document.getElementById("simPi").onchange = async () => {
   try {
@@ -911,10 +1130,21 @@ document.getElementById("simPi").onchange = async () => {
     log(j.message);
   } catch (e) { log(e.message, true); }
 };
+bind("kioskExit", async () => {
+  if (!confirm("Leave kiosk and return to the desktop?")) return;
+  try {
+    const j = await api("/api/kiosk/exit", { method:"POST",
+      headers:{"content-type":"application/json"}, body: "{}" });
+    log(j.message);
+  } catch (e) { log(e.message, true); }
+});
 api("/api/meta").then(j => {
-  document.getElementById("host").textContent = (j.phone || "").replace("http://","");
+  document.getElementById("host").textContent = (j.phone || "").replace(/^https?:\/\//,"").replace(/:8787\/?$/,"");
   paintGpio(j.gpio);
+  paintSettings(j.settings);
+  paintKiosk(j.kiosk);
 }).catch(() => {});
+if (inKiosk) paintKiosk(true);
 api("/api/detect").then(async j => {
   fill(j.cameras, j.pair); log(j.message);
   if ((j.cameras || []).length) {

@@ -17,5 +17,6 @@ cam/__pycache__/
 cam/.venv/
 cam/cameras.json
 cam/gpio.json
+cam/settings.json
 captures/
 

@@ -1,4 +1,4 @@
-# Duals
+# D12600
 
 One taking lens. Two bodies. A **1.8×** stitch.
 
@@ -187,10 +187,29 @@ python3 cam/dual.py set --iso 400 --shutter 1/125 --program M
 python3 cam/dual.py shoot captures/
 ```
 
-USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves. On a Raspberry Pi the field/lab pages add **GPIO** — BCM 21 high 300 ms (Corona / Y-lead), then USB pulls the new card files into `captures/`. USB tab **Sim as Pi** shows that button on a Mac (no pulse).
+USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves. SET stores **GPIO shutter** (BCM 21 / Corona / Y-lead) and **Download files**; both default on on a Pi and survive restarts. USB **Sim as Pi** lets a Mac show the GPIO switch (no pulse).
 
 ```
 python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127.0.0.1:8787/lab
+```
+
+On the 10.1″ Pi (`airdamien@192.0.2.10`) the field page is **D12600**: Chromium kiosk, login autostart, respawn loop. SET **Desktop** returns to labwc. Tap **D12600** on the desktop to come back.
+
+Right stack is VIEW / USB / PANO / FILES / SET, then LIVE (VIEW only), PREVIEW (live only), ISO, FIRE. ISO is a modal over the buttons so T/R stay up. SET stores **GPIO shutter** and **Download files**.
+
+![VIEW](docs/cam/view.png)
+
+![USB](docs/cam/usb.png)
+
+![SET](docs/cam/set.png)
+
+![ISO](docs/cam/iso.png)
+
+![PREVIEW](docs/cam/preview.png)
+
+```
+./scripts/setup-pi-remote.sh airdamien@192.0.2.10
+./scripts/deploy-kiosk.sh                    # rsync cam/ + bounce Chromium
 ```
 
 ## Source
@@ -204,7 +223,7 @@ python3.12 -m venv kraken/.venv
 kraken/.venv/bin/pip install -r kraken/requirements.txt
 ```
 
-`docs/kraken/` and `docs/chassis/` are committed. `kraken/preview_*.png` is gitignored.
+`docs/kraken/`, `docs/chassis/`, and `docs/cam/` are committed. `kraken/preview_*.png` is gitignored.
 
 | Path | Role |
 |------|------|
@@ -226,3 +245,4 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `docs/monitor/` | 10.1″ panel datasheets / sibling drawings |
 | `cam/dual.py` | D7000 USB (gphoto2 PTP) |
 | `cam/gpio.py` | Pi BCM 21 / Corona Y-lead pulse |
+| `cam/kiosk/` | Pi labwc Chromium kiosk + Desktop launcher |

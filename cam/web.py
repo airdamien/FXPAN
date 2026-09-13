@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import re
 import socket
+import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,10 +25,12 @@ import dual
 import gpio
 import live
 import pano
+import settings
 
 HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
 PORT = 8787
+KIOSK_CHROME = "--class=duals-kiosk-chromium"
 
 
 def _shutdown():
@@ -105,6 +109,34 @@ def _live_message(snap):
         else:
             bits.append(f"{role} stopped" + (f" ({info['error']})" if info["error"] else ""))
     return "  ".join(bits)
+
+
+def _kiosk_stop_path():
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return Path(runtime) / "duals-kiosk.stop"
+
+
+def _kiosk_running():
+    return subprocess.run(
+        ["pgrep", "-f", "--", KIOSK_CHROME],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def _kiosk_enabled():
+    return os.environ.get("DUALS_KIOSK") == "1" or _kiosk_running()
+
+
+def _exit_kiosk():
+    path = _kiosk_stop_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("1\n")
+    except OSError as exc:
+        raise dual.CamError(f"cannot write kiosk stop file: {exc}") from exc
+    subprocess.run(["pkill", "-f", "--", KIOSK_CHROME], check=False)
+    return {"ok": True, "message": "desktop"}
 
 
 def _assignments(data):
@@ -203,6 +235,8 @@ class Handler(BaseHTTPRequestHandler):
                         "pair": dual.load_pair(),
                         "live": LIVE.snapshot(),
                         "gpio": gpio.snapshot(),
+                        "settings": settings.load(),
+                        "kiosk": _kiosk_enabled(),
                     },
                 )
             if path == "/api/live":
@@ -295,6 +329,19 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             data = _read_json(self)
+            if path == "/api/kiosk/exit":
+                return _json(self, 200, _exit_kiosk())
+            if path == "/api/settings":
+                prefs = settings.save(data)
+                return _json(
+                    self, 200,
+                    {**prefs, "message": (
+                        "settings  download="
+                        + ("on" if prefs["download"] else "off")
+                        + "  gpio="
+                        + ("on" if prefs["gpio"] else "off")
+                    )},
+                )
             if path == "/api/gpio":
                 if "sim" not in data:
                     raise dual.CamError("need sim")
@@ -363,7 +410,8 @@ class Handler(BaseHTTPRequestHandler):
                 from datetime import datetime
 
                 _stop_live()
-                target = (data.get("target") or "card").strip()
+                prefs = settings.load()
+                target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
                 if target == "gpio":
                     snap = gpio.snapshot()
                     if not snap["available"]:
@@ -375,7 +423,23 @@ class Handler(BaseHTTPRequestHandler):
                             {
                                 "message": (
                                     f"gpio sim  BCM {info['pin']}  (no pulse)  "
-                                    "on a Pi: Y-lead fire, then USB download → captures/"
+                                    "on a Pi: Y-lead fire"
+                                    + (
+                                        ", then USB download → captures/"
+                                        if prefs["download"]
+                                        else ", files stay on cards"
+                                    )
+                                )
+                            },
+                        )
+                    if not prefs["download"]:
+                        info = gpio.fire()
+                        return _json(
+                            self, 200,
+                            {
+                                "message": (
+                                    f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                                    "  cards"
                                 )
                             },
                         )
