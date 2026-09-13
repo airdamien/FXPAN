@@ -32,6 +32,10 @@ WORK = 360
 _jobs = {}
 _jobs_lock = threading.Lock()
 
+_EXIF_PROG = {1: "M", 2: "P", 3: "A", 4: "S", 5: "Creative", 6: "Action",
+              7: "Portrait", 8: "Landscape"}
+_EXIF_WB = {0: "Auto", 1: "Manual"}
+
 
 def _venv_site():
     root = Path(__file__).resolve().parent / ".venv"
@@ -130,6 +134,190 @@ def _stitch_of(root, stamp):
     return info
 
 
+def _u16(buf, off, le):
+    return int.from_bytes(buf[off:off + 2], "little" if le else "big")
+
+
+def _u32(buf, off, le):
+    return int.from_bytes(buf[off:off + 4], "little" if le else "big")
+
+
+def _rational(buf, off, le, signed=False):
+    if signed:
+        n = int.from_bytes(buf[off:off + 4], "little" if le else "big", signed=True)
+        d = int.from_bytes(buf[off + 4:off + 8], "little" if le else "big", signed=True)
+    else:
+        n = _u32(buf, off, le)
+        d = _u32(buf, off + 4, le)
+    return n, d
+
+
+def _ifd_values(buf, off, le):
+    if off + 2 > len(buf):
+        return {}
+    n = _u16(buf, off, le)
+    out = {}
+    for i in range(n):
+        e = off + 2 + i * 12
+        if e + 12 > len(buf):
+            break
+        tag = _u16(buf, e, le)
+        typ = _u16(buf, e + 2, le)
+        cnt = _u32(buf, e + 4, le)
+        val = buf[e + 8:e + 12]
+        size = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 9: 4, 10: 8}.get(typ)
+        if not size or cnt > 64:
+            continue
+        nbytes = size * cnt
+        data = val if nbytes <= 4 else buf[_u32(buf, e + 8, le):_u32(buf, e + 8, le) + nbytes]
+        if len(data) < nbytes:
+            continue
+        if typ == 2:
+            out[tag] = data.split(b"\x00", 1)[0].decode("ascii", "replace").strip()
+        elif typ == 3:
+            out[tag] = _u16(data, 0, le)
+        elif typ == 4:
+            out[tag] = _u32(data, 0, le)
+        elif typ == 5:
+            out[tag] = _rational(data, 0, le)
+        elif typ == 10:
+            out[tag] = _rational(data, 0, le, signed=True)
+    return out
+
+
+def _ratio_text(val):
+    if not isinstance(val, tuple) or len(val) != 2 or not val[1]:
+        return ""
+    n, d = val
+    if n == 0:
+        return "0"
+    if abs(n) >= abs(d):
+        sec = n / d
+        if abs(sec - round(sec)) < 0.05:
+            return str(int(round(sec)))
+        return f"{sec:.1f}".rstrip("0").rstrip(".")
+    inv = abs(d / n)
+    k = int(round(inv))
+    if k >= 2 and abs(inv - k) < 0.08 * k:
+        return f"1/{k}"
+    return f"{n}/{d}"
+
+
+def _format_exif(tags):
+    info = {}
+    iso = tags.get(0x8827) or tags.get(0x8833)
+    if iso:
+        info["iso"] = str(iso)
+    shut = _ratio_text(tags.get(0x829A))
+    if shut:
+        info["shutter"] = shut
+    fnum = _ratio_text(tags.get(0x829D))
+    if fnum and fnum not in ("0", "0.0"):
+        info["f"] = fnum
+    prog = _EXIF_PROG.get(tags.get(0x8822))
+    if prog:
+        info["program"] = prog
+    wb = _EXIF_WB.get(tags.get(0xA403))
+    if wb:
+        info["wb"] = wb
+    taken = tags.get(0x9003)
+    if isinstance(taken, str) and taken:
+        info["taken"] = taken.replace(":", "-", 2)
+    model = tags.get(0x0110)
+    if isinstance(model, str) and model:
+        info["model"] = model.replace("NIKON ", "").replace("Nikon ", "")
+    make = tags.get(0x010F)
+    if isinstance(make, str) and make:
+        info["make"] = make
+    ec = tags.get(0x9204)
+    if isinstance(ec, tuple) and ec[1]:
+        ev = ec[0] / ec[1]
+        if abs(ev) >= 0.05:
+            info["ec"] = f"{ev:+.1f}"
+    return info
+
+
+def read_exif(path):
+    """ISO / shutter / program from JPEG EXIF. Empty if the file has none."""
+    try:
+        data = Path(path).read_bytes()[:131072]
+    except OSError:
+        return {}
+    if data[:2] != b"\xff\xd8":
+        return {}
+    i = 2
+    while i + 4 <= len(data) and data[i] == 0xFF:
+        marker = data[i + 1]
+        if marker in (0xD8, 0xD9):
+            i += 2
+            continue
+        if marker == 0xDA:
+            break
+        seglen = int.from_bytes(data[i + 2:i + 4], "big")
+        if seglen < 2:
+            break
+        if marker == 0xE1:
+            payload = data[i + 4:i + 2 + seglen]
+            if payload.startswith(b"Exif\x00\x00") and len(payload) > 14:
+                tiff = payload[6:]
+                le = tiff[:2] == b"II"
+                if tiff[:2] not in (b"II", b"MM"):
+                    return {}
+                tags = _ifd_values(tiff, _u32(tiff, 4, le), le)
+                exif_off = tags.get(0x8769)
+                if isinstance(exif_off, int):
+                    tags.update(_ifd_values(tiff, exif_off, le))
+                return _format_exif(tags)
+        i += 2 + seglen
+    return {}
+
+
+def _exif_cache_path(root, stamp):
+    return Path(root) / f"X_{stamp}.json"
+
+
+def refresh_exif(root, stamp):
+    """Read T/R EXIF and write X_<stamp>.json. Returns {T: {...}, R: {...}}."""
+    root = Path(root or CAPTURES)
+    have = {}
+    if root.is_dir():
+        for path in root.iterdir():
+            m = PAIR_RE.match(path.name)
+            if m and m.group(2) == stamp:
+                have[m.group(1).upper()] = path.name
+    return pair_exif(root, stamp, have)
+
+
+def pair_exif(root, stamp, have):
+    root = Path(root)
+    cache = _exif_cache_path(root, stamp)
+    newest = 0.0
+    for name in have.values():
+        path = root / name
+        if path.is_file():
+            newest = max(newest, path.stat().st_mtime)
+    if cache.is_file() and newest and cache.stat().st_mtime >= newest:
+        try:
+            data = json.loads(cache.read_text())
+            if isinstance(data, dict):
+                return {k: v for k, v in data.items() if k in ("T", "R") and isinstance(v, dict)}
+        except (OSError, json.JSONDecodeError):
+            pass
+    out = {}
+    for role in ("T", "R"):
+        name = have.get(role)
+        if not name:
+            continue
+        info = read_exif(root / name)
+        if info:
+            out[role] = info
+    if out:
+        cache.write_text(json.dumps(out, indent=2) + "\n")
+    elif cache.is_file():
+        cache.unlink()
+    return out
+
+
 def list_pairs(root=None):
     root = Path(root or CAPTURES)
     sides = {}
@@ -157,6 +345,7 @@ def list_pairs(root=None):
                 "r": have.get("R"),
                 "pano": panos.get(stamp),
                 "ready": bool(have.get("T") and have.get("R")),
+                "exif": pair_exif(root, stamp, have),
                 "stitch": _stitch_of(root, stamp),
             }
         )
@@ -198,7 +387,10 @@ def thumb(name, width, root=None):
 
 def serve(name, width=None, root=None):
     if width:
-        return thumb(name, width, root)
+        try:
+            return thumb(name, width, root)
+        except dual.CamError:
+            pass
     return resolve(name, root)
 
 
@@ -546,6 +738,18 @@ def delete_stamp(stamp, root=None, sides=None):
     count = 0
     for name in names:
         count += _unlink_named(root, name)
+    left = False
+    if root.is_dir():
+        for path in root.iterdir():
+            m = PAIR_RE.match(path.name)
+            if m and m.group(2) == stamp:
+                left = True
+                break
+    if not left:
+        extra = _exif_cache_path(root, stamp)
+        if extra.is_file():
+            extra.unlink()
+            count += 1
     return {"stamp": stamp, "removed": names, "count": count}
 
 

@@ -35,8 +35,8 @@ rsync -az \
   -e "$RSYNC_RSH" \
   "$ROOT/cam/" "$TARGET:~/nikonduals/cam/"
 
-echo "==> apt gphoto2"
-"${SSH[@]}" "$TARGET" 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gphoto2'
+echo "==> apt gphoto2 + ImageMagick"
+"${SSH[@]}" "$TARGET" 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gphoto2 imagemagick'
 
 echo "==> install autostart + Desktop launcher"
 "${SSH[@]}" "$TARGET" 'bash ~/nikonduals/cam/kiosk/install.sh'

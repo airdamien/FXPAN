@@ -136,6 +136,20 @@ def _exit_kiosk():
     except OSError as exc:
         raise dual.CamError(f"cannot write kiosk stop file: {exc}") from exc
     subprocess.run(["pkill", "-f", "--", KIOSK_CHROME], check=False)
+    if sys.platform != "darwin":
+        subprocess.run(
+            ["systemctl", "--user", "unmask", "gvfs-gphoto2-volume-monitor.service"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            ["systemctl", "--user", "start", "gvfs-gphoto2-volume-monitor.service"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        dual._linux_ptp_clear = False
     return {"ok": True, "message": "desktop"}
 
 
@@ -153,15 +167,29 @@ def _assignments(data):
             continue
         if key == "expprogram" and val not in ("M", "A", "S", "P"):
             continue
+        if key == "iso":
+            if val.lower() == "auto":
+                out.append(("isoauto", "On"))
+                out.append(("autoiso", "On"))
+            else:
+                out.append(("isoauto", "Off"))
+                out.append(("autoiso", "Off"))
+                out.append(("iso", val))
+            continue
+        if key == "shutterspeed" and val.lower() == "auto":
+            continue
         out.append((key, val))
     return out
 
 
-def _send_path(handler, path, ctype):
+def _send_path(handler, path, ctype, download=None):
     body = Path(path).read_bytes()
+    name = download or Path(path).name
     handler.send_response(200)
     handler.send_header("Content-Type", ctype)
     handler.send_header("Cache-Control", "no-store")
+    if download:
+        handler.send_header("Content-Disposition", f'attachment; filename="{name}"')
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -273,21 +301,26 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/file/([\w.-]+)", path)
             if m:
                 q = parse_qs(urlparse(self.path).query)
+                dl = (q.get("dl", [""])[0] or "").lower() in ("1", "true", "yes")
                 width = q.get("w", [None])[0]
                 try:
                     width = int(width) if width else None
                 except ValueError:
                     raise dual.CamError("bad width")
-                dest = pano.serve(m.group(1), width)
-                return _send_path(self, dest, pano.content_type(dest))
+                dest = pano.serve(m.group(1), None if dl else width)
+                return _send_path(
+                    self, dest, pano.content_type(dest),
+                    download=m.group(1) if dl else None,
+                )
             if path == "/api/detect":
                 _stop_live()
                 rows = dual.detect_bodies()
-                msg = (
-                    f"{len(rows)} body(ies)"
-                    if rows
-                    else "no cameras. Setup → USB → MTP/PTP, wake, plug USB."
-                )
+                if not rows:
+                    msg = "no cameras. Setup → USB → MTP/PTP, wake, plug USB."
+                elif any(not row.get("serial") for row in rows):
+                    msg = f"{len(rows)} body(ies) — no serial (USB busy). Detect again."
+                else:
+                    msg = f"{len(rows)} body(ies)"
                 return _json(self, 200, {"cameras": rows, "pair": dual.load_pair(), "message": msg})
             if path == "/api/status":
                 _stop_live()
@@ -302,8 +335,8 @@ class Handler(BaseHTTPRequestHandler):
                 for row in rows:
                     extra = by_port.get(row["port"]) or {}
                     for key in (
-                        "iso", "shutterspeed", "batterylevel", "imagequality",
-                        "whitebalance", "expprogram", "exposurecompensation",
+                        "iso", "isoauto", "autoiso", "shutterspeed", "batterylevel",
+                        "imagequality", "whitebalance", "expprogram", "exposurecompensation",
                         "focusmode", "focusmode2", "meteringmode", "availableshots",
                     ):
                         if extra.get(key):
@@ -452,6 +485,7 @@ class Handler(BaseHTTPRequestHandler):
                     bits = "  ".join(
                         f"{role} {','.join(saved[role])}" for role in sorted(saved)
                     )
+                    pano.refresh_exif(dest, stamp)
                     return _json(
                         self, 200,
                         {
@@ -478,6 +512,8 @@ class Handler(BaseHTTPRequestHandler):
                     times = [fut.result() for fut in futs]
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
                 where = "cards" if target == "card" else "captures/"
+                if target != "card":
+                    pano.refresh_exif(dest, stamp)
                 return _json(self, 200, {"message": f"shot {stamp}  {msg}  → {where}"})
             if path == "/api/captures/delete":
                 stamp = (data.get("stamp") or "").strip()
