@@ -79,7 +79,7 @@ Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export wi
 3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
 4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter (`bs_t_comp`).
 5. Nuts in the wall traps; 4× M3 per cookie. Screw a 52 mm **F** reverse ring into each mouth; bayonet the D7000s. Or print `arm_*_f` (`ARM_MOUNT=1`) and dry-fit the printed F; add `F_MOUNT_CLOCK` if the first print locks 90° off.
-6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem for a **~0.61 m** subject. The 50/2.8 and the F 50/1.8 are close-up only. Landscape infinity is the **180**, not a shorter stem.
+6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem for a **~0.61 m** subject. The 50/2.8 and the F 50/1.8 are close-up only. The F 50 stem takes the **54 mm / 2 mm-cookie** camera tubes (`arm_*_s` / `arm_*_sf`), not the 72 mm 135/180 pair. Landscape infinity is the **180**, not a shorter stem.
 7. Shim one arm until both live-views are sharp on the same subject without touching the helicoid. MC-DC2 Y-lead for sync.
 
 Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) · [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png) (~14 cm object stitch at 0.61 m, 1.7× one DX). You already have the D7000s and the 50/2.8 (close-up only).

@@ -39,9 +39,12 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 | `hybrid_tray.stl` | 50×50 plate seat + roof pegs | as exported |
 | `lid.stl` | chamber lid, blind Pi holes + 4× M3 display bosses | outer face up |
 | `display_mount.stl` | bridge over the Pi; AMPS + 48 mm for the Wormfingers case | feet down |
-| `stem.stl` | lens tube, M42 helicoid nut | flange down |
-| `arm_r.stl` / `arm_t.stl` | toed camera tubes, 52×0.75 | flange down |
-| `arm_r_f.stl` / `arm_t_f.stl` | same tubes, printed F | flange down |
+| `stem.stl` | lens tube, M42 helicoid nut (135 / 180) | flange down |
+| `stem_f50.stl` | 1.6 mm cookie + female F (50 mm test) | flange down |
+| `arm_r.stl` / `arm_t.stl` | 72 mm toed tubes, 52×0.75 (135 / 180) | flange down |
+| `arm_r_f.stl` / `arm_t_f.stl` | same 72 mm tubes, printed F | flange down |
+| `arm_r_s.stl` / `arm_t_s.stl` | 54 mm F 50 tubes, 2 mm cookies, 52×0.75 | flange down |
+| `arm_r_sf.stl` / `arm_t_sf.stl` | same 54 mm tubes, printed F | flange down |
 | `shims.stl` | 0.2 / 0.5 / 1.0 mm focus rings | as exported |
 | `elnikkor_adapter.stl` | M42 male → L39×26 TPI | M42 male on the bed |
 
@@ -67,7 +70,7 @@ Non-sequential trace **on the print meshes** (`stls/hybrid/chassis.stl` + `hybri
 
 Same idea on the V (`stls/v/chassis.stl` + `mirror_tray.stl`). Two 45° first-surface mirrors, knife at the origin. Blue = L (−X). Red = R (+X). Incoming from the lens (−Y). Unique halves stay full brightness.
 
-On a D7000 + EL-Nikkor 135/5.6: focus **~608 mm**, stitch **~149 mm** of object / **42.5 mm** on the sensors, **~14°**, **~8870×3264**. T-only / overlap / R-only = 108 / 27 / 108. `ratio` must stay ≥ 1.6. Full budget: [OPTICS.md](OPTICS.md).
+On a D7000 + EL-Nikkor 135/5.6: focus **~608 mm**, stitch **~149 mm** of object / **42.5 mm** on the sensors, **~14°**, **~8870×3264**. T-only / overlap / R-only = 108 / 27 / 108. The **180/5.6** at 50 m (helicoid **+7.2 mm**, path **180.7 mm**) is the same angular stitch on a **~12 m** field. `ratio` must stay ≥ 1.6. Full budget: [OPTICS.md](OPTICS.md).
 
 Regenerate:
 
@@ -82,7 +85,7 @@ kraken/.venv/bin/python kraken/hybrid_scene.py       # countryside below
 
 Same Tuscany still through the toed windows. Scene: [Radek Hloch / CC BY-SA 4.0](https://commons.wikimedia.org/wiki/File:Landscape_of_Tuscany_3.jpg).
 
-D7000 / 5D III: 135 focuses **~0.61–0.64 m**. α7: E is 18 mm, so the same lens focuses at **~2 m** and the object field is much larger. That is the chassis, not a different lens.
+D7000 / 5D III: 135 focuses **~0.61–0.64 m**. α7: E is 18 mm, so the same lens focuses at **~2 m** and the object field is much larger. That is the chassis, not a different lens. Landscape on this box is the **180/5.6** at **50 m** (the 135 cannot get there).
 
 ### D7000 DX — 173.5 mm, ~0.61 m
 
@@ -127,6 +130,22 @@ Same still, V vs hybrid L. Hybrid is two toed full-frame windows on a 50/50 (1.8
 D7000 at 0.61 m is a postage stamp on the α7 field.
 
 ![D7000 vs α7](docs/kraken/el135_d7000_a7.png)
+
+### D7000 DX — EL-Nikkor 180, 50 m
+
+Infinity helicoid (**+7.2 mm**, path **180.7 mm**). Same Tuscany still as a distant landscape. One DX is **~6.5×4.3 m / 7.5°**; stitch is **~11.8 m / 13.4° / ~8870×3264** (1.8×). Angular FOV is almost the 135 at 0.61 m; the object is **~12 m**, not 15 cm. 135 cannot focus here. T-only / overlap / R-only = 108 / 27 / 108. `ratio` 1.67.
+
+![180 fold](docs/kraken/el180_paths.png)
+
+![D7000 180 countryside](docs/kraken/el180_scene.png)
+
+![D7000 180 T/R frames](docs/kraken/el180_frames.png)
+
+![D7000 180 stitch vs one DX](docs/kraken/el180_pano.png)
+
+Same DX window, D7000 vs D7200. Stars are native photosites on **0.5 m** of object (8 mm is invisible at 50 m).
+
+![D7000 vs D7200 at 50 m](docs/kraken/el180_d7200.png)
 
 ## Shadowgraph
 

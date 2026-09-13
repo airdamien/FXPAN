@@ -6,8 +6,23 @@
 
 FLANGE_F = 46.5;
 
-D_LENS_TO_PLATE  = 55;
-D_PLATE_TO_MOUNT = 72;
+D_LENS_TO_PLATE_LONG = 55;
+// F 50 stem sits on the cookie (no 10 mm stub). 135/180 keep 55.
+D_LENS_TO_PLATE_F50  = 45;
+D_LENS_TO_PLATE = (!is_undef(STEM) && STEM == 1)
+    ? D_LENS_TO_PLATE_F50 : D_LENS_TO_PLATE_LONG;
+// 72 mm for EL 135/180. F 50 camera tubes: 16 mm in (body clearance)
+// plus 2 mm thinner cookies. Do not mix.
+D_PLATE_TO_MOUNT_LONG  = 72;
+D_PLATE_TO_MOUNT_SHORT = 54;
+D_PLATE_TO_MOUNT = (
+    (!is_undef(ARMS) && ARMS)
+    || (!is_undef(STEM) && STEM == 1)
+    || (!is_undef(PART) && (
+        PART == "arm_r_s" || PART == "arm_t_s"
+        || PART == "arm_r_sf" || PART == "arm_t_sf"
+    ))
+) ? D_PLATE_TO_MOUNT_SHORT : D_PLATE_TO_MOUNT_LONG;
 PATH_FOLD        = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT;
 PATH_TOTAL       = PATH_FOLD + FLANGE_F;
 
@@ -36,6 +51,11 @@ JUNCTION_BOX  = 90;
 
 PORT_PATCH     = 90;
 PORT_PATCH_T   = 4;
+// F 50 camera cookies. 2 mm = 0.8 mm flange mark + ~3 perimeters.
+PORT_PATCH_T_SHORT = 2;
+// F 50 stem cookie is also the female-F back (no 3 mm stack). 1.6 mm
+// still holds M3 + the stamp.
+STEM_F50_PATCH = 1.6;
 PORT_SCREW_R   = 38.5;
 PORT_SCREW_D   = 3.2;
 PORT_NUT_AF    = 5.7;
@@ -91,5 +111,4 @@ BODY_D = 77;
 $fn = 96;
 EXPLODED = 0;
 SHOW_GHOSTS = 0;
-PART = is_undef(PART) ? "assembly" : PART;
-// assembly | chassis | stem | stem_f50 | arm_r | arm_t | lid | display_mount | hybrid_tray | shims | elnikkor_adapter | el180_adapter
+// PART is the Watch Me [Part] dropdown (WATCH_ME.scad).

@@ -16,6 +16,8 @@
 # Camera tubes export twice:
 #   arm_r.stl / arm_t.stl / arm_l.stl     female 52×0.75 (reverse ring)
 #   arm_r_f.stl / arm_t_f.stl / arm_l_f.stl  integrated F-bayonet
+# Hybrid F 50 also exports 16 mm shorter tubes:
+#   arm_r_s.stl / arm_t_s.stl / arm_r_sf.stl / arm_t_sf.stl
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")" && pwd)
@@ -32,7 +34,7 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter el180_adapter focus_sled)
+    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray shims elnikkor_adapter el180_adapter focus_sled)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -107,6 +109,7 @@ for req in "${parts[@]}"; do
         continue
     fi
     mount=0
+    arms=0
     scad_part=$req
     dest_stem=$req
     case $req in
@@ -115,11 +118,22 @@ for req in "${parts[@]}"; do
             mount=1
             dest_stem=$req
             ;;
+        arm_r_sf|arm_t_sf)
+            scad_part=${req%_sf}
+            mount=1
+            arms=1
+            dest_stem=$req
+            ;;
+        arm_r_s|arm_t_s)
+            scad_part=${req%_s}
+            arms=1
+            dest_stem=$req
+            ;;
     esac
     dest=$out/$dest_stem.stl
-    echo "export $dest_stem (ARM_MOUNT=$mount) -> $dest"
+    echo "export $dest_stem (ARM_MOUNT=$mount ARMS=$arms) -> $dest"
     "$osc" -o "$dest" --export-format binstl \
-        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" \
+        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" -D "ARMS=$arms" \
         -D "STAMP=\"$stamp\"" "$scad"
 done
 

@@ -55,7 +55,7 @@ A knife in the converging beam splits the **pupil**, not the picture — both bo
 
 One uncut 50×50 plate at the origin (same seat as bsplit): reflect → +X, transmit → +Y. Both unique halves are ~1 stop down.
 
-Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). On `PATH_TOTAL=173.5` it focuses at **~608 mm** (m≈0.29). Stitch is ~149 mm of object / 42.5 mm on the sensors (~1.7× one DX). The 50/2.8 you have is close-up only (~73 mm). Infinity on this chassis is an **EL-Nikkor / Componon / Rodagon 180** (helicoid out ~6.5 mm). The 135 cannot get there — the 90 mm box plus the D7000 register already exceed 135 mm. See [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) and [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png).
+Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). On `PATH_TOTAL=173.5` it focuses at **~608 mm** (m≈0.29). Stitch is ~149 mm of object / 42.5 mm on the sensors (~1.7× one DX). The 50/2.8 you have is close-up only (~73 mm). Infinity on this chassis is an **EL-Nikkor / Componon / Rodagon 180** (helicoid out ~6.5 mm; **+7.2 mm** at 50 m so path is **180.7 mm**). The 135 cannot get there — the 90 mm box plus the D7000 register already exceed 135 mm. 180 at 50 m is the same ~13.4° stitch on **~12 m** of object. See [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png), [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png), [`docs/kraken/el180_frames.png`](docs/kraken/el180_frames.png), and [`docs/kraken/el180_scene.png`](docs/kraken/el180_scene.png).
 
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
@@ -73,7 +73,7 @@ Same L, Sony **α7** (35.8×23.9 mm, E, **18.0 mm** register). `PATH_TOTAL` ≈ 
 
 ## What will not work
 
-- Native F-mount Nikkor on the stem for infinity (path already spent 46.5 mm inside each body).
+- Native F-mount Nikkor on the stem for infinity (path already spent 46.5 mm inside each body). The F 50 kit is a 1.6 mm `stem_f50` cookie that *is* the female-F back (no 3 mm stack) plus 54 mm / 2 mm-cookie camera tubes (`arm_*_s`). A 50/1.8 is still close-up (~75 mm, ~1.9×). Do not put those tubes on the 135 / 180.
 - El-Nikkor **50 mm** f/2.8 on this path (close-up only). Print `elnikkor_adapter` (L39×26 TPI) and use the **135 mm f/5.6** for a ~0.6 m subject. Infinity needs path ≈ f: that is a **180 mm** enlarger lens on this box (see [bom.md](bom.md)), not a shorter 135 stem.
 - Second-surface (household) mirrors — ghost images.
 - Fixed mirrors with no shims — one side will miss focus (see Hackaday A7 T-rig).
