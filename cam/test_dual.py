@@ -85,13 +85,24 @@ class Parse(unittest.TestCase):
         )
         self.assertNotEqual(dual.parse_currents(raw), dual.parse_widget_currents(raw))
 
+    def test_auto_iso_assigns(self):
+        import web
+        self.assertEqual(
+            web._assignments({"iso": "Auto"}),
+            [("isoauto", "On"), ("autoiso", "On")],
+        )
+        self.assertEqual(
+            web._assignments({"iso": "400", "shutter": "Auto"}),
+            [("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400")],
+        )
+        self.assertIn(("shutterspeed", "1/125"), web._assignments({"shutter": "1/125"}))
+
     def test_claim_err(self):
         self.assertTrue(dual._claim_fail("Could not claim the USB device"))
         self.assertEqual(
             dual._gp_err("*** Error (-53: 'Could not claim the USB device') ***"),
-            "USB busy (macOS ptpcamerad). Hit Status again.",
+            "USB busy (gvfs or ptpcamerad). Hit Detect again.",
         )
-
 
 class SplitJpeg(unittest.TestCase):
     def test_two_frames_and_text(self):
@@ -277,6 +288,59 @@ class Pano(unittest.TestCase):
             capture_output=True,
         )
         return dest
+
+    def _exif_jpeg(self, name, iso=400, shutter=(1, 125), program=1, wb=0):
+        dest = self._jpeg(name, "red")
+        model = b"NIKON D7000\x00"
+        pu16 = lambda n: n.to_bytes(2, "little")
+        pu32 = lambda n: n.to_bytes(4, "little")
+        def entry(tag, typ, cnt, val4):
+            return pu16(tag) + pu16(typ) + pu32(cnt) + val4
+        ifd0_off, ifd0_len = 8, 2 + 24 + 4
+        model_off = ifd0_off + ifd0_len
+        exif_off = model_off + len(model)
+        exif_len = 2 + 48 + 4
+        rat_off = exif_off + exif_len
+        tiff = (
+            b"II*\x00" + pu32(8)
+            + pu16(2)
+            + entry(0x0110, 2, len(model), pu32(model_off))
+            + entry(0x8769, 4, 1, pu32(exif_off))
+            + pu32(0)
+            + model
+            + pu16(4)
+            + entry(0x829A, 5, 1, pu32(rat_off))
+            + entry(0x8827, 3, 1, pu16(iso) + b"\x00\x00")
+            + entry(0x8822, 3, 1, pu16(program) + b"\x00\x00")
+            + entry(0xA403, 3, 1, pu16(wb) + b"\x00\x00")
+            + pu32(0)
+            + pu32(shutter[0]) + pu32(shutter[1])
+        )
+        app1 = b"Exif\x00\x00" + tiff
+        jpeg = dest.read_bytes()
+        dest.write_bytes(b"\xff\xd8" + b"\xff\xe1" + (len(app1) + 2).to_bytes(2, "big") + app1 + jpeg[2:])
+        return dest
+
+    def test_read_exif(self):
+        self.assertEqual(pano.read_exif(self._jpeg("plain.jpg", "red")), {})
+        info = pano.read_exif(self._exif_jpeg("shot.jpg"))
+        self.assertEqual(info["iso"], "400")
+        self.assertEqual(info["shutter"], "1/125")
+        self.assertEqual(info["program"], "M")
+        self.assertEqual(info["wb"], "Auto")
+        self.assertEqual(info["model"], "D7000")
+
+    def test_list_pairs_stores_exif(self):
+        self._exif_jpeg("T_20260101_120000.jpg", iso=640, shutter=(1, 60))
+        self._exif_jpeg("R_20260101_120000.jpg", iso=100, shutter=(1, 125), program=3)
+        rows = pano.list_pairs(self.root)
+        ready = [row for row in rows if row["ready"]][0]
+        self.assertEqual(ready["exif"]["T"]["iso"], "640")
+        self.assertEqual(ready["exif"]["T"]["shutter"], "1/60")
+        self.assertEqual(ready["exif"]["R"]["program"], "A")
+        self.assertTrue((self.root / "X_20260101_120000.json").is_file())
+        pano.delete_stamp("20260101_120000", self.root)
+        self.assertFalse((self.root / "X_20260101_120000.json").is_file())
 
     def test_list_pairs(self):
         self._jpeg("T_20260101_120000.jpg", "red")

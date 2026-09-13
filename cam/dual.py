@@ -40,12 +40,9 @@ KEYS = (
     "exposurecompensation",
     "capturetarget",
     "batterylevel",
+    "isoauto",
+    "autoiso",
 )
-EXTRA_KEYS = (
-    "focusmode2", "focusmode", "meteringmode", "availableshots",
-    "500e", "scenemode",
-)
-
 # D7000 mode dial. gphoto2 names 32790 "Night Landscape" — that is the
 # leftover SCENE submenu (scenemode), not the dial.
 D7000_DIAL = {
@@ -125,8 +122,42 @@ def ptp_hold(on=True):
     _hold_th.start()
 
 
+_linux_ptp_clear = False
+_last_detect = []
+
+
+def _free_linux_ptp(force=False):
+    """Stop GVFS from owning the D7000s so gphoto2 can claim them."""
+    global _linux_ptp_clear
+    if sys.platform == "darwin":
+        return
+    if _linux_ptp_clear and not force:
+        return
+    unit = "gvfs-gphoto2-volume-monitor.service"
+    if os.environ.get("DUALS_KIOSK") == "1":
+        subprocess.run(
+            ["systemctl", "--user", "mask", "--now", unit],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.run(
+            ["systemctl", "--user", "stop", unit],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    subprocess.run(
+        ["pkill", "-x", "-9", "gvfsd-gphoto2"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _linux_ptp_clear = True
+    time.sleep(0.12)
+
+
 def free_usb():
     _kill_ptp()
+    _free_linux_ptp()
 
 
 def _claim_fail(err):
@@ -136,7 +167,7 @@ def _claim_fail(err):
 
 def _gp_err(err):
     if _claim_fail(err):
-        return "USB busy (macOS ptpcamerad). Hit Status again."
+        return "USB busy (gvfs or ptpcamerad). Hit Detect again."
     lines = [ln.strip() for ln in (err or "").splitlines() if ln.strip()]
     for ln in reversed(lines):
         if ln.startswith("***") or ln.startswith("gphoto2"):
@@ -157,6 +188,7 @@ def gp(args, port=None, timeout=120, _retried=False):
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip()
         if not _retried and _claim_fail(err):
+            _free_linux_ptp(force=True)
             return gp(args, port=port, timeout=timeout, _retried=True)
         raise CamError(_gp_err(err))
     return proc.stdout
@@ -288,20 +320,53 @@ def swap_pair():
     return save_pair(old.get("R") or "", old.get("T") or "", replace=True)
 
 
-def detect_bodies():
-    ptp_disable()
-    free_usb()
-    rows = parse_detect(gp(["--auto-detect"]))
-    for row in rows:
-        try:
-            row["serial"] = parse_current(gp(["--get-config", "serialnumber"], port=row["port"]))
-        except CamError:
-            row["serial"] = ""
+def _read_serial(row):
+    try:
+        return parse_current(gp(["--get-config", "serialnumber"], port=row["port"]))
+    except CamError:
+        return ""
+
+
+def _apply_roles(rows):
     pair = load_pair()
     serial_role = {serial: role for role, serial in pair.items()}
     for row in rows:
-        row["role"] = serial_role.get(row["serial"], "")
+        row["role"] = serial_role.get(row.get("serial") or "", "")
     return rows
+
+
+def detect_bodies():
+    global _last_detect
+    ptp_disable()
+    free_usb()
+    rows = parse_detect(gp(["--auto-detect"]))
+    if len(rows) > 1:
+        with ThreadPoolExecutor(max_workers=len(rows)) as pool:
+            serials = list(pool.map(_read_serial, rows))
+        for row, serial in zip(rows, serials):
+            row["serial"] = serial
+    elif rows:
+        rows[0]["serial"] = _read_serial(rows[0])
+    _apply_roles(rows)
+    _last_detect = rows
+    return rows
+
+
+def detect_bodies_cached():
+    """Skip serial reads when the same USB ports are still on the bus."""
+    ptp_disable()
+    free_usb()
+    fresh = parse_detect(gp(["--auto-detect"]))
+    prev = {row["port"]: row for row in _last_detect if row.get("serial")}
+    if fresh and len(fresh) == len(prev) and all(row["port"] in prev for row in fresh):
+        rows = []
+        for row in fresh:
+            item = dict(row)
+            item["serial"] = prev[row["port"]]["serial"]
+            rows.append(item)
+        _apply_roles(rows)
+        return rows
+    return detect_bodies()
 
 
 def require_online(rows):
@@ -379,10 +444,6 @@ def _status_one(row):
     except CamError:
         for key in KEYS:
             vals[key] = _get_config(row["port"], key)
-    for key in EXTRA_KEYS:
-        val = _get_config(row["port"], key)
-        if val:
-            vals[key] = val
     if not vals.get("focusmode"):
         vals["focusmode"] = vals.get("focusmode2") or ""
     if vals.get("shutterspeed"):

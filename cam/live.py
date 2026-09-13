@@ -34,7 +34,7 @@ def split_jpegs(buf):
 
 
 def paired_on_usb():
-    return dual.require_online(dual.detect_bodies())
+    return dual.require_online(dual.detect_bodies_cached())
 
 
 class Live:
@@ -72,17 +72,16 @@ class Live:
     def start_from_usb(self):
         self.stop()
         have = paired_on_usb()
-        dual.free_usb()
         for role, row in have.items():
             self._spawn(role, row["port"])
-        deadline = time.time() + 1.2
+        deadline = time.time() + 0.4
         while time.time() < deadline:
             snap = self.snapshot()
             if snap["running"] or any(info["frames"] for info in snap["roles"].values()):
-                break
+                return have
             if snap["roles"] and not any(info["alive"] for info in snap["roles"].values()):
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
         snap = self.snapshot()
         if snap["roles"] and not snap["running"]:
             bits = [
