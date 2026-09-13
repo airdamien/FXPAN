@@ -34,7 +34,13 @@ def split_jpegs(buf):
 
 
 def paired_on_usb():
-    return dual.require_online(dual.detect_bodies_cached())
+    try:
+        rows = dual.detect_bodies_cached(timeout=8)
+    except dual.CamError:
+        return {}
+    if not rows:
+        return {}
+    return dual.require_online(rows)
 
 
 class Live:
@@ -72,6 +78,8 @@ class Live:
     def start_from_usb(self):
         self.stop()
         have = paired_on_usb()
+        if not have:
+            return {}
         for role, row in have.items():
             self._spawn(role, row["port"])
         deadline = time.time() + 0.4

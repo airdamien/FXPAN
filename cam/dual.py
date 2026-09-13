@@ -133,21 +133,19 @@ def _free_linux_ptp(force=False):
         return
     if _linux_ptp_clear and not force:
         return
-    unit = "gvfs-gphoto2-volume-monitor.service"
-    if os.environ.get("DUALS_KIOSK") == "1":
+    units = (
+        "gvfs-gphoto2-volume-monitor.service",
+        "gvfs-mtp-volume-monitor.service",
+    )
+    action = ["mask", "--now"] if os.environ.get("DUALS_KIOSK") == "1" else ["stop"]
+    for unit in units:
         subprocess.run(
-            ["systemctl", "--user", "mask", "--now", unit],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    else:
-        subprocess.run(
-            ["systemctl", "--user", "stop", unit],
+            ["systemctl", "--user", *action, unit],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
     subprocess.run(
-        ["pkill", "-x", "-9", "gvfsd-gphoto2"],
+        ["pkill", "-x", "-9", "gvfsd-gphoto2", "gvfsd-mtp"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -184,7 +182,10 @@ def gp(args, port=None, timeout=120, _retried=False):
     if port:
         cmd += ["--port", port]
     cmd += list(args)
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise CamError("gphoto2 timed out") from exc
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip()
         if not _retried and _claim_fail(err):
@@ -335,11 +336,11 @@ def _apply_roles(rows):
     return rows
 
 
-def detect_bodies():
+def detect_bodies(timeout=120):
     global _last_detect
     ptp_disable()
     free_usb()
-    rows = parse_detect(gp(["--auto-detect"]))
+    rows = parse_detect(gp(["--auto-detect"], timeout=timeout))
     if len(rows) > 1:
         with ThreadPoolExecutor(max_workers=len(rows)) as pool:
             serials = list(pool.map(_read_serial, rows))
@@ -352,11 +353,11 @@ def detect_bodies():
     return rows
 
 
-def detect_bodies_cached():
+def detect_bodies_cached(timeout=120):
     """Skip serial reads when the same USB ports are still on the bus."""
     ptp_disable()
     free_usb()
-    fresh = parse_detect(gp(["--auto-detect"]))
+    fresh = parse_detect(gp(["--auto-detect"], timeout=timeout))
     prev = {row["port"]: row for row in _last_detect if row.get("serial")}
     if fresh and len(fresh) == len(prev) and all(row["port"] in prev for row in fresh):
         rows = []
@@ -366,7 +367,7 @@ def detect_bodies_cached():
             rows.append(item)
         _apply_roles(rows)
         return rows
-    return detect_bodies()
+    return detect_bodies(timeout=timeout)
 
 
 def require_online(rows):
@@ -481,6 +482,54 @@ def _set_one(port, assignments):
     if errors and len(errors) == len(assignments):
         raise CamError("; ".join(errors))
     return errors
+
+
+def assignments_from_status(vals):
+    """ISO / shutter / WB / quality / EC from a body's status. No flash."""
+    vals = vals or {}
+    out = []
+    auto = (vals.get("isoauto") or vals.get("autoiso") or "").lower() == "on"
+    iso = str(vals.get("iso") or "").replace("ISO", "").strip()
+    if auto or iso.lower() == "auto":
+        out.append(("isoauto", "On"))
+        out.append(("autoiso", "On"))
+    elif iso:
+        out.append(("isoauto", "Off"))
+        out.append(("autoiso", "Off"))
+        out.append(("iso", iso))
+    shut = str(vals.get("shutterspeed") or "").strip()
+    if shut:
+        out.append(("shutterspeed", format_shutter(shut)))
+    for key in ("imagequality", "whitebalance", "exposurecompensation"):
+        val = str(vals.get(key) or "").strip()
+        if val:
+            out.append((key, val))
+    prog = str(vals.get("expprogram") or "").strip()
+    if prog in ("M", "A", "S", "P"):
+        out.append(("expprogram", prog))
+    return out
+
+
+def copy_from_master(have, master="T"):
+    """Push master's exposure onto the other body. Leaves flash alone on the slave."""
+    master = "R" if str(master or "").upper() == "R" else "T"
+    slave = "R" if master == "T" else "T"
+    if master not in have:
+        raise CamError(f"master {master} is not on USB")
+    if slave not in have:
+        raise CamError(f"slave {slave} is not on USB")
+    assignments = assignments_from_status(_status_one(have[master]))
+    if not assignments:
+        raise CamError("master has no settings to copy")
+    notes = _set_one(have[slave]["port"], assignments) or []
+    copied = " ".join(f"{k}={v}" for k, v in assignments)
+    return {
+        "master": master,
+        "slave": slave,
+        "assignments": assignments,
+        "notes": notes,
+        "message": f"{master} → {slave}  {copied}",
+    }
 
 
 def cmd_set(args):

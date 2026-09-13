@@ -10,7 +10,9 @@ APPS="$HOME/.local/share/applications"
 AUTO_NAME="duals-kiosk.desktop"
 DESK_NAME="D12600.desktop"
 
-chmod +x "$HERE/run-kiosk.sh" "$HERE/ensure-labwc-touch.sh" "$HERE/install.sh"
+chmod +x "$HERE/run-kiosk.sh" "$HERE/ensure-labwc-touch.sh" "$HERE/install.sh" \
+    "$HERE/ptp-quiet.sh" "$HERE/ptp-restore.sh" "$HERE/install-openstitching.sh"
+"$HERE/ptp-quiet.sh" || true
 mkdir -p "$DESK" "$AUTO" "$APPS" "$HOME/.config/labwc"
 
 write_desktop() {
