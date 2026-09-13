@@ -154,7 +154,7 @@
   }
   #log.err { color: #ff3b3b; }
   .fire {
-    display: flex; align-items: center; gap: 8px; margin: 10px 0 14px;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px;
   }
   .fire .acts { display: flex; gap: 8px; flex: 1; }
   .dlchk {
@@ -170,11 +170,16 @@
   }
   .dlchk input:checked { background: var(--r); }
   .dlchk:has(input:checked) { color: var(--r); }
+  .simpi { margin-left: 0; }
   #shoot {
     background: var(--fire); border-color: #ff2a2a; color: #fff;
     font-size: 22px; letter-spacing: 0.28em; font-weight: 800;
     min-height: 68px; min-width: 42%;
   }
+  #gpio {
+    min-height: 68px; letter-spacing: 0.12em;
+  }
+  #gpio[hidden] { display: none !important; }
   #pairs { display: grid; gap: 10px; margin: 10px 0; }
   .pair {
     display: grid; gap: 6px; width: 100%; padding: 8px; text-align: left;
@@ -311,6 +316,7 @@
   </div>
   <label class="dlchk"><input type="checkbox" id="dl">回収</label>
   <button id="shoot">射撃 FIRE</button>
+  <button id="gpio" hidden>同期 GPIO</button>
 </div>
 <div class="drag">
   <div class="k">ISO <b id="isoVal">400</b></div>
@@ -341,6 +347,8 @@
 </div>
 <div class="lbl">UNITS · tap T / R · again to clear</div>
 <div id="cams"></div>
+<div class="lbl">設定 SETTINGS</div>
+<label class="dlchk simpi"><input type="checkbox" id="simPi">Sim as Pi</label>
 </div>
 <div id="tab-pano" class="pane" hidden>
 <div class="row">
@@ -709,6 +717,12 @@ const paintShoot = () => {
 };
 document.getElementById("dl").onchange = paintShoot;
 bind("shoot", () => fire(shootTarget()));
+bind("gpio", () => usb(async () => {
+  const j = await api("/api/shoot", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ target: "gpio" }) });
+  log(j.message);
+}));
 bind("live", async () => {
   const j = await api("/api/live/start", { method:"POST" });
   setLiveSrc(true); log(j.message);
@@ -883,8 +897,23 @@ if (navigator.wakeLock) {
     if (document.visibilityState === "visible") lock();
   });
 }
+const paintGpio = (g) => {
+  const box = document.getElementById("simPi");
+  if (box) box.checked = !!(g && g.sim);
+  document.getElementById("gpio").hidden = !(g && g.available);
+};
+document.getElementById("simPi").onchange = async () => {
+  try {
+    const j = await api("/api/gpio", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ sim: document.getElementById("simPi").checked }) });
+    paintGpio(j);
+    log(j.message);
+  } catch (e) { log(e.message, true); }
+};
 api("/api/meta").then(j => {
   document.getElementById("host").textContent = (j.phone || "").replace("http://","");
+  paintGpio(j.gpio);
 }).catch(() => {});
 api("/api/detect").then(async j => {
   fill(j.cameras, j.pair); log(j.message);

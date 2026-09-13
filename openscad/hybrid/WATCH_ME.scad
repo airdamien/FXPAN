@@ -14,9 +14,14 @@ use <shims.scad>
 use <../d7000_body.scad>
 use <../taking_lens.scad>
 use <../f_mount_male.scad>
+use <../pi4_body.scad>
+use <../monitor/display_mount.scad>
+use <../monitor/monitor.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
+SHOW_MONITOR = 0; // [0:hide, 1:show]
+SHOW_PI = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:show]
 SHOW_LENS = 0; // [0:hide, 1:show]
 
@@ -32,16 +37,6 @@ LID_LIP   = 3;
 LID_GAP   = 0.3;
 // Inset from the outer wall. 4 put the Ø3.2 hole on the lip recess (no bite).
 LID_SCREW = 2.5;
-// Raspberry Pi HAT holes (58×49). Blind from the outer face so the lid stays light-tight.
-// Board centered; USB/ethernet toward blank −X. M2.5 thread-forming, 1.5 mm floor.
-PI_HOLE_D = 2.3;
-PI_HOLE_Z = 2.5;
-function pi_holes() = [
-    [42.5 - 3.5,  3.5 - 28],
-    [42.5 - 61.5, 3.5 - 28],
-    [42.5 - 3.5,  52.5 - 28],
-    [42.5 - 61.5, 52.5 - 28]
-];
 
 function mount_stack()       = ARM_MOUNT ? F_FMOUNT_STACK : F_REV_STACK;
 function stem_tube_len()     = D_LENS_TO_PLATE - JUNCTION_BOX / 2;
@@ -277,15 +272,6 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                     }
 }
 
-module pi_mount_cuts() {
-    for (p = pi_holes()) {
-        translate([p[0], p[1], LID_T - PI_HOLE_Z])
-            cylinder(h = PI_HOLE_Z + 0.2, d = PI_HOLE_D);
-        translate([p[0], p[1], LID_T - 0.7])
-            cylinder(h = 0.8, d1 = PI_HOLE_D, d2 = 4.0);
-    }
-}
-
 module part_lid() {
     s = JUNCTION_BOX;
     color("DarkSlateGray")
@@ -299,11 +285,12 @@ module part_lid() {
                           s - WALL - LID_GAP * 2,
                           LID_LIP], center = true);
                 lid_retain_tabs(lip = LID_LIP);
+                display_lid_bosses(LID_T);
             }
             for (x = [-1, 1], y = [-1, 1])
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
-            pi_mount_cuts();
+            display_lid_cuts(LID_T, LID_LIP);
         }
     }
 }
@@ -372,6 +359,17 @@ module assembly() {
 
     if (SHOW_LID)
         part_lid();
+    if (SHOW_MONITOR || SHOW_PI)
+        translate([0, 0, JUNCTION_BOX / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)]) {
+            if (SHOW_MONITOR)
+                display_mount();
+            monitor_easel() {
+                if (SHOW_MONITOR)
+                    monitor_ghost();
+                if (SHOW_PI)
+                    monitor_pi();
+            }
+        }
 
     at_reflect() {
         ghost_body_at();
@@ -404,6 +402,8 @@ module export_part() {
         part_elnikkor_adapter();
     else if (PART == "lid")
         part_lid();
+    else if (PART == "display_mount")
+        display_mount_print();
     else if (PART == "hybrid_tray")
         hybrid_cartridge(show_glass = false);
     else

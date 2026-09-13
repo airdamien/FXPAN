@@ -28,12 +28,12 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount hybrid_tray shims elnikkor_adapter focus_sled)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
     out=$root/stls/hybrid_shadowgraph
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount hybrid_tray shims elnikkor_adapter focus_sled)
 elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
     scad=$root/openscad/EFhybrid/WATCH_ME.scad

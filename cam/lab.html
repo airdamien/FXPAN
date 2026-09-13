@@ -49,6 +49,7 @@
            letter-spacing: 0.14em; }
   button.shoot { background: #d4000d; border-color: #ff2a2a; color: #fff; font-size: 1.05rem;
                  padding: 0.7rem 1.4rem; letter-spacing: 0.22em; margin-left: auto; }
+  #gpio[hidden] { display: none !important; }
   .dlchk { display: flex; flex-direction: row; align-items: center; gap: 0.4rem;
            color: #8a7a55; font-size: 0.75rem; letter-spacing: 0.12em;
            text-transform: uppercase; margin-left: auto; }
@@ -166,6 +167,7 @@
     <button id="liveStop">Stop</button>
     <label class="dlchk"><input type="checkbox" id="dl">Download</label>
     <button class="shoot" id="shoot">Shoot to cards</button>
+    <button id="gpio" hidden>GPIO + USB</button>
   </div>
   <div class="row">
     <label class="drag">ISO <b id="isoVal">400</b>
@@ -207,6 +209,7 @@
     <button id="detect">Detect</button>
     <button id="status">Status</button>
     <button id="swap" disabled>Swap T/R</button>
+    <label class="dlchk"><input type="checkbox" id="simPi">Sim as Pi</label>
   </div>
 </section>
 </div>
@@ -484,6 +487,12 @@ bind("shoot", async () => {
     headers:{"content-type":"application/json"}, body: JSON.stringify({ target }) });
   log(j.message);
 });
+bind("gpio", async () => {
+  liveSrc(false);
+  const j = await api("/api/shoot", { method:"POST",
+    headers:{"content-type":"application/json"}, body: JSON.stringify({ target: "gpio" }) });
+  log(j.message);
+});
 bind("live", async () => {
   const j = await api("/api/live/start", { method:"POST" }); liveSrc(true); log(j.message);
 });
@@ -636,6 +645,23 @@ showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano"
   : location.hash === "#files" ? "files" : "view");
 bindDrag("isoDrag", ISO, "isoVal", "400");
 bindDrag("shutDrag", SHUT, "shutVal", "1/125");
+const paintGpio = (g) => {
+  const box = document.getElementById("simPi");
+  if (box) box.checked = !!(g && g.sim);
+  document.getElementById("gpio").hidden = !(g && g.available);
+};
+document.getElementById("simPi").onchange = async () => {
+  try {
+    const j = await api("/api/gpio", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ sim: document.getElementById("simPi").checked }) });
+    paintGpio(j);
+    log(j.message);
+  } catch (e) { log(e.message, true); }
+};
+api("/api/meta").then(j => {
+  paintGpio(j.gpio);
+}).catch(() => {});
 api("/api/detect").then(async j => {
   fill(j.cameras, j.pair); log(j.message);
   if ((j.cameras || []).length) {

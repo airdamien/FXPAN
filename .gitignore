@@ -3,6 +3,8 @@
 !f-mount_raw.stl
 !openscad/d7000_body.stl
 !openscad/taking_lens.stl
+!openscad/pi4_body.stl
+!openscad/monitor/*.stl
 !stls/**/*.stl
 openscad/preview.png
 openscad/bsplit/preview.png
@@ -14,5 +16,6 @@ kraken/preview_*.png
 cam/__pycache__/
 cam/.venv/
 cam/cameras.json
+cam/gpio.json
 captures/
 

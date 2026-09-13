@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
+import gpio
 import live
 import pano
 
@@ -162,6 +163,104 @@ class Online(unittest.TestCase):
     def test_none(self):
         with self.assertRaises(dual.CamError):
             dual.require_online([])
+
+
+class Gpio(unittest.TestCase):
+    def setUp(self):
+        self.sim = Path(tempfile.mkdtemp()) / "gpio.json"
+        self._old_sim = gpio.SIM_PATH
+        gpio.SIM_PATH = self.sim
+        self.addCleanup(lambda: setattr(gpio, "SIM_PATH", self._old_sim))
+
+    def test_this_host_is_not_a_pi(self):
+        self.assertFalse(gpio.on_pi())
+        self.assertFalse(gpio.snapshot()["available"])
+        self.assertEqual(gpio.snapshot()["pin"], 21)
+        with self.assertRaises(dual.CamError):
+            gpio.fire()
+
+    def test_sim_shows_and_dry_fires(self):
+        self.assertFalse(gpio.snapshot()["available"])
+        snap = gpio.set_sim(True)
+        self.assertTrue(snap["sim"])
+        self.assertTrue(snap["available"])
+        self.assertFalse(snap["pi"])
+        info = gpio.fire()
+        self.assertEqual(info["backend"], "sim")
+        gpio.set_sim(False)
+        with self.assertRaises(dual.CamError):
+            gpio.fire()
+
+    def test_model_detects_pi(self):
+        path = Path(tempfile.mkdtemp()) / "model"
+        path.write_bytes(b"Raspberry Pi 5 Model B Rev 1.0\x00")
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        self.assertTrue(gpio.on_pi(path))
+        path.write_bytes(b"Apple Mac")
+        self.assertFalse(gpio.on_pi(path))
+
+    def test_find_chip_prefers_rp1(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        (root / "gpiochip0").mkdir()
+        (root / "gpiochip0" / "label").write_text("unused\n")
+        (root / "gpiochip4").mkdir()
+        (root / "gpiochip4" / "label").write_text("pinctrl-rp1\n")
+        self.assertEqual(gpio.find_chip(root), "/dev/gpiochip4")
+
+    def test_fire_mock_drive(self):
+        seen = []
+
+        def drive(pin, pulse_s):
+            seen.append((pin, pulse_s))
+            return "mock"
+
+        info = gpio.fire(drive=drive)
+        self.assertEqual(seen, [(21, 0.3)])
+        self.assertEqual(info["pin"], 21)
+        self.assertEqual(info["ms"], 300)
+        self.assertEqual(info["backend"], "mock")
+
+
+LIST_FILES = """\
+There are 2 files in folder '/store_00010001/DCIM/100D7000':
+#1     DSC_0001.JPG               rd  4500 KB 4928x3264 image/jpeg
+#2     DSC_0002.NEF               rd    20 MB 4928x3264 image/x-nikon-nef
+There are 0 files in folder '/store_00010001/DCIM':
+"""
+
+
+class CardPull(unittest.TestCase):
+    def test_parse_list_files(self):
+        rows = dual.parse_list_files(LIST_FILES)
+        self.assertEqual(
+            [(r["n"], r["name"]) for r in rows],
+            [(1, "DSC_0001.JPG"), (2, "DSC_0002.NEF")],
+        )
+        self.assertEqual(rows[0]["folder"], "/store_00010001/DCIM/100D7000")
+
+    def test_wait_new_images(self):
+        calls = {"n": 0}
+        before = [{"folder": "/dcim", "name": "A.JPG", "n": 1}]
+
+        def fake(_port):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise dual.CamError("busy")
+            return before + [{"folder": "/dcim", "name": "B.JPG", "n": 2}]
+
+        new = dual.wait_new_images(
+            "usb:1", before, timeout=2, interval=0.01, list_fn=fake
+        )
+        self.assertEqual(new[0]["name"], "B.JPG")
+
+    def test_wait_timeout(self):
+        before = [{"folder": "/dcim", "name": "A.JPG", "n": 1}]
+        with self.assertRaises(dual.CamError):
+            dual.wait_new_images(
+                "usb:1", before, timeout=0.05, interval=0.01,
+                list_fn=lambda _p: before,
+            )
 
 
 class Pano(unittest.TestCase):

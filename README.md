@@ -37,7 +37,8 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 |------|------|-----|
 | `chassis.stl` | 90 mm junction box | floor down |
 | `hybrid_tray.stl` | 50×50 plate seat + roof pegs | as exported |
-| `lid.stl` | chamber lid, blind Pi holes | outer face up |
+| `lid.stl` | chamber lid, blind Pi holes + 4× M3 display bosses | outer face up |
+| `display_mount.stl` | bridge over the Pi; AMPS + 48 mm for the Wormfingers case | feet down |
 | `stem.stl` | lens tube, M42 helicoid nut | flange down |
 | `arm_r.stl` / `arm_t.stl` | toed camera tubes, 52×0.75 | flange down |
 | `arm_r_f.stl` / `arm_t_f.stl` | same tubes, printed F | flange down |
@@ -186,7 +187,7 @@ python3 cam/dual.py set --iso 400 --shutter 1/125 --program M
 python3 cam/dual.py shoot captures/
 ```
 
-USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves.
+USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves. On a Raspberry Pi the field/lab pages add **GPIO** — BCM 21 high 300 ms (Corona / Y-lead), then USB pulls the new card files into `captures/`. USB tab **Sim as Pi** shows that button on a Mac (no pulse).
 
 ```
 python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127.0.0.1:8787/lab
@@ -213,6 +214,7 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `openscad/hybrid_shadowgraph/WATCH_ME.scad` | same-image T sharp / R shadowgraph |
 | `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III |
 | `openscad/Ehybrid/WATCH_ME.scad` | α7 |
+| `openscad/monitor/WATCH_ME.scad` | HAMTYSAN 10.1″ HCIK101V.CC ghost |
 | `kraken/hybrid_paths.py` | Fold + frames + stitch |
 | `kraken/hybrid_stl_paths.py` | Rays on the hybrid STLs |
 | `kraken/v_stl_paths.py` | Rays on the V STLs |
@@ -221,4 +223,6 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `kraken/shadowgraph_scene.py` | T slug / R cone |
 | `kraken/shadowgraph_wave.py` | Fresnel / knife / phase plate |
 | `OPTICS.md` / `bom.md` | Path math + buy + assembly |
+| `docs/monitor/` | 10.1″ panel datasheets / sibling drawings |
 | `cam/dual.py` | D7000 USB (gphoto2 PTP) |
+| `cam/gpio.py` | Pi BCM 21 / Corona Y-lead pulse |

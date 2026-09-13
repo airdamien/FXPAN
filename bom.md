@@ -19,7 +19,8 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 | 2 | Nikon D7000 bodies (no lenses) | (you have these) |
 | 2 | **Fotodiox Nikon F reverse ring, 52 mm** | [Fotodiox reverse adapter](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) (pick **52 mm**; screws into the printed 52×0.75 mouths) |
 | 1 | MC-DC2-compatible remote | [Kiwifotos MC-DC2](https://www.amazon.com/Kiwifotos-MC-DC2-Remote-Shutter-Release/dp/B071D9Y331) |
-| 1 | Dual-camera sync path | Prefer [FlashZebra #0236](http://flashzebra.com/products/0236/) (2.5 mm TRS, splitter-ready) + [2× MC-DC2 pigtails](https://www.amazon.com/dp/B0939SV7WP) + a **2.5 mm stereo Y-splitter** ([search](https://www.amazon.com/s?k=2.5mm+stereo+y+splitter+TRS)) |
+| 1 | Dual-camera sync path | Prefer [FlashZebra #0236](http://flashzebra.com/products/0236/) (2.5 mm TRS, splitter-ready) + [FlashZebra #0216](https://flashzebra.com/products/0216/index.shtml) Y (or Amazon [MyCableMart 3-conductor](https://www.amazon.com/dp/B0C7WHDT5P) / [Wideskall 2.5 mm stereo](https://www.amazon.com/dp/B01CRXGEDY)) + **2×** 2.5 mm→DC2 pigtails ([LGSHOP N10-DC2](https://www.amazon.com/dp/B076FV2WDB) · [HAPPYTOPSTAR](https://www.amazon.com/dp/B08ZJ3GD7T)). Must be **2.5 mm TRS (3-pole)**, not 3.5 mm and not 4-pole TRRS. |
+| 1 | 10.1″ Pi HDMI touch (HAMTYSAN HCIK101V.CC) | Field UI. Ghost + drawings in [`docs/monitor/`](docs/monitor/). | [Amazon B0B9M5SCG4](https://www.amazon.com/dp/B0B9M5SCG4) |
 
 ## Print / hardware
 
@@ -27,8 +28,9 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 |-----|------|------|
 | 1 spool | PETG or ABS (not brittle PLA for bayonets) | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | ~20 | M3 heat-set inserts | [Amazon M3 heat set inserts](https://www.amazon.com/s?k=M3+heat+set+inserts) |
-| ~20 | M3×8–16 socket screws | 12 for the three port cookies (4 each). [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
-| 12 | M3 hex nuts | Drop into the inner traps, then screw the tubes on. [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
+| ~28 | M3×8–16 socket screws | 12 for the three port cookies (4 each). 4× M3×10 lid bosses → `display_mount`. 4× M3 through the Wormfingers plate. [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
+| 16 | M3 hex nuts | 12 in the tube-wall traps. 4 drop into the lid display bosses. [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
+| 4 | M3×25 + nuts | Wormfingers case sandwich. Comes with their Printables note. |
 | 6 | M3 set screws (mirror tip/tilt) | [Amazon M3 set screws](https://www.amazon.com/s?k=M3+set+screw+kit) |
 | 1 | **1/4-20 heat-set insert**, short **6.4 mm** | Floor well Ø8.1 mm. Iron in from the bed face after printing. Do not punch through. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
 | 1 | 1/4-20 camera screw | Into that insert (tripod / clamp) | [Amazon 1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
@@ -90,7 +92,7 @@ Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.pn
 | 1 | **M42–M42 helicoid** 12–19 mm | Fine focus on the stem | [Fotasy 12–19](https://www.amazon.com/Fotasy-Helicord-Focusing-Helicoid-Extention/dp/B01N5V1QAC) · [Pixco 12–19](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01IGGQR7Y) |
 | 1 | **M42 extension tubes** (optional) | Extra travel if the 135 is short of 0.61 m | [M42 extension tube set](https://www.amazon.com/s?k=M42+extension+tube+set) |
 | 2 | **Fotodiox Nikon F reverse ring, 52 mm** | Arms are 52×0.75 | [Fotodiox 52 mm](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) |
-| 1 | Dual-camera sync | Same as the V | [FlashZebra #0236](http://flashzebra.com/products/0236/) + [2× MC-DC2 pigtails](https://www.amazon.com/dp/B0939SV7WP) + [2.5 mm stereo Y](https://www.amazon.com/s?k=2.5mm+stereo+y+splitter+TRS) |
+| 1 | Dual-camera sync | Same as the V | [FlashZebra #0236](http://flashzebra.com/products/0236/) + [#0216](https://flashzebra.com/products/0216/index.shtml) + 2× [2.5 mm→DC2](https://www.amazon.com/dp/B076FV2WDB) |
 | 1 spool | PETG or ABS | Chassis + tray | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | 12 | M3 hex nuts + 12× M3×10–16 | Three port cookies, 4 each | [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) · [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 4 | M3×10 lid screws | Corners of the lid | same assortment |

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -473,6 +474,109 @@ def _shoot_card(role, port):
         timeout=90,
     )
     return role, time.perf_counter() - t0
+
+
+LIST_FILE = re.compile(r"^#(\d+)\s+(\S+)")
+LIST_FOLDER = re.compile(r"folder '([^']+)'")
+
+
+def parse_list_files(text):
+    files = []
+    folder = ""
+    for line in text.splitlines():
+        fold = LIST_FOLDER.search(line)
+        if fold:
+            folder = fold.group(1)
+            continue
+        hit = LIST_FILE.match(line.strip())
+        if hit and folder:
+            files.append({"folder": folder, "name": hit.group(2), "n": int(hit.group(1))})
+    return files
+
+
+def list_images(port):
+    return parse_list_files(gp(["--list-files"], port=port, timeout=45))
+
+
+def list_cards(have):
+    with ThreadPoolExecutor(max_workers=len(have) or 1) as pool:
+        futs = {role: pool.submit(list_images, have[role]["port"]) for role in have}
+        return {role: fut.result() for role, fut in futs.items()}
+
+
+def _file_key(row):
+    return (row["folder"], row["name"])
+
+
+def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None):
+    """Poll the card until a new file appears after a remote / GPIO fire."""
+    seen = {_file_key(row) for row in before}
+    list_fn = list_images if list_fn is None else list_fn
+    deadline = time.perf_counter() + timeout
+    last = None
+    while time.perf_counter() < deadline:
+        try:
+            now = list_fn(port)
+            new = [row for row in now if _file_key(row) not in seen]
+            if new:
+                return new
+            last = None
+        except CamError as exc:
+            last = exc
+        time.sleep(interval)
+    if last:
+        raise last
+    raise CamError("GPIO fired; no new file on the card")
+
+
+def _download_one(port, row, dest_path):
+    gp(
+        [
+            "--folder",
+            row["folder"],
+            "--get-file",
+            str(row["n"]),
+            "--force-overwrite",
+            f"--filename={dest_path}",
+        ],
+        port=port,
+        timeout=180,
+    )
+
+
+def pull_role(role, port, before, dest, stamp, list_fn=None):
+    new = wait_new_images(port, before, list_fn=list_fn)
+    dest.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for row in sorted(new, key=lambda item: (item["folder"], -item["n"])):
+        ext = Path(row["name"]).suffix.lower() or ".jpg"
+        out = dest / f"{role}_{stamp}{ext}"
+        if out.exists():
+            out = dest / f"{role}_{stamp}_{Path(row['name']).stem}{ext}"
+        last = None
+        for _ in range(4):
+            try:
+                _download_one(port, row, out)
+                last = None
+                break
+            except CamError as exc:
+                last = exc
+                time.sleep(0.45)
+        if last:
+            raise last
+        saved.append(out.name)
+    return saved
+
+
+def pull_new(have, before, dest, stamp):
+    with ThreadPoolExecutor(max_workers=len(have) or 1) as pool:
+        futs = {
+            role: pool.submit(
+                pull_role, role, have[role]["port"], before[role], dest, stamp
+            )
+            for role in have
+        }
+        return {role: fut.result() for role, fut in futs.items()}
 
 
 def cmd_shoot(args):

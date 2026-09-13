@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dual
+import gpio
 import live
 import pano
 
@@ -201,6 +202,7 @@ class Handler(BaseHTTPRequestHandler):
                         "urls": phone,
                         "pair": dual.load_pair(),
                         "live": LIVE.snapshot(),
+                        "gpio": gpio.snapshot(),
                     },
                 )
             if path == "/api/live":
@@ -293,6 +295,26 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             data = _read_json(self)
+            if path == "/api/gpio":
+                if "sim" not in data:
+                    raise dual.CamError("need sim")
+                val = data["sim"]
+                if isinstance(val, str):
+                    on = val.lower() not in ("0", "false", "no", "")
+                else:
+                    on = bool(val)
+                snap = gpio.set_sim(on)
+                return _json(
+                    self, 200,
+                    {
+                        **snap,
+                        "message": (
+                            "sim as Pi — 同期 GPIO on VIEW"
+                            if snap["sim"]
+                            else "sim off"
+                        ),
+                    },
+                )
             if path == "/api/pair":
                 if data.get("swap"):
                     saved = dual.swap_pair()
@@ -341,8 +363,41 @@ class Handler(BaseHTTPRequestHandler):
                 from datetime import datetime
 
                 _stop_live()
-                have = dual.require_online(dual.detect_bodies())
                 target = (data.get("target") or "card").strip()
+                if target == "gpio":
+                    snap = gpio.snapshot()
+                    if not snap["available"]:
+                        raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
+                    if not snap["pi"]:
+                        info = gpio.fire()
+                        return _json(
+                            self, 200,
+                            {
+                                "message": (
+                                    f"gpio sim  BCM {info['pin']}  (no pulse)  "
+                                    "on a Pi: Y-lead fire, then USB download → captures/"
+                                )
+                            },
+                        )
+                    have = dual.require_online(dual.detect_bodies())
+                    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    dest = pano.CAPTURES
+                    before = dual.list_cards(have)
+                    info = gpio.fire()
+                    saved = dual.pull_new(have, before, dest, stamp)
+                    bits = "  ".join(
+                        f"{role} {','.join(saved[role])}" for role in sorted(saved)
+                    )
+                    return _json(
+                        self, 200,
+                        {
+                            "message": (
+                                f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                                f"  → {bits}"
+                            )
+                        },
+                    )
+                have = dual.require_online(dual.detect_bodies())
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dest = pano.CAPTURES
                 with ThreadPoolExecutor(max_workers=len(have)) as pool:
@@ -432,6 +487,10 @@ def main():
     httpd = Server(("0.0.0.0", port), Handler)
     print("field (iPhone)  " + "  ".join(u for u in urls_for(port) if "/lab" not in u))
     print(f"lab  (laptop)   http://127.0.0.1:{port}/lab")
+    if gpio.on_pi():
+        print(f"gpio           BCM {gpio.PIN} high {int(gpio.PULSE_S * 1000)}ms then USB download")
+    elif gpio.sim_on():
+        print("gpio           sim (USB tab) — no pulse on this Mac")
     print("ptpcamerad held down (python3 cam/dual.py ptp-on to restore Photos)")
     httpd.serve_forever()
 
