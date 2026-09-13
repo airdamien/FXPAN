@@ -10,6 +10,7 @@
 
 include <params.scad>
 include <../lib/threads.scad>
+include <../lib/part_stamp.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
 use <../d7000_body.scad>
@@ -223,6 +224,7 @@ module part_junction() {
         cube([JUNCTION_BOX, JUNCTION_BOX, JUNCTION_BOX], center = true);
         box_bore();
         box_fastener_cuts();
+        box_floor_stamp("chassis", JUNCTION_BOX, WALL);
     }
 }
 
@@ -256,10 +258,14 @@ module port_tube_solid(out_len, rx = 0, ry = 0) {
 }
 
 module part_stem() {
-    color("SlateGray") {
-        port_tube_solid(stem_tube_len());
-        translate([0, 0, PORT_PATCH_T + stem_tube_len()])
-            helicoid_nut();
+    color("SlateGray")
+    difference() {
+        union() {
+            port_tube_solid(stem_tube_len());
+            translate([0, 0, PORT_PATCH_T + stem_tube_len()])
+                helicoid_nut();
+        }
+        flange_stamp("stem", "", PORT_PATCH, PORT_PATCH_T);
     }
 }
 
@@ -281,6 +287,9 @@ module part_elnikkor_adapter() {
         }
         translate([0, 0, -0.2])
             cylinder(h = h1 + h2 + h3 + 0.4, d = EL_BORE);
+        translate([0, -(EL_ADAPTER_OD + EL_BORE) / 4 - 0.8,
+                   h1 + h2 + h3 - STAMP_DEPTH])
+            part_stamp_stack_cut("elnikkor", size = 2.4);
     }
     if ($preview && !SHOW_LENS)
         color("DimGray", 0.45)
@@ -306,6 +315,10 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                 knife_slot(out_len);
         if (mark != "")
             flange_marks(mark);
+        if (mark != "")
+            flange_stamp(str("arm_", mark == "T" ? "t" : "r",
+                             ARM_MOUNT ? "_f" : ""),
+                         mark, PORT_PATCH, PORT_PATCH_T);
     }
     if (ARM_MOUNT)
         color("Goldenrod")
@@ -343,6 +356,7 @@ module part_lid() {
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
             display_lid_cuts(LID_T, LID_LIP);
+            plate_stamp("lid", s, LID_T);
         }
     }
 }
@@ -420,8 +434,9 @@ module assembly() {
             monitor_easel() {
                 if (SHOW_MONITOR)
                     monitor_ghost();
-                if (SHOW_PI)
+                if (SHOW_PI) {
                     monitor_pi();
+                }
             }
         }
 

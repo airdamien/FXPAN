@@ -10,6 +10,8 @@
 // Print on the LEFT side (large flat X face) so the tilt is walls, no support.
 // =============================================================================
 
+include <lib/part_stamp.scad>
+
 /* [Ruler] */
 RAIL_W = 38.2;
 RAIL_T = 1.60;
@@ -86,6 +88,9 @@ module sled() {
         target_pocket();
         pointer_notches();
         lens_arrow();
+        translate([base_w / 2 - STAMP_DEPTH, -BASE_L / 2, BASE_H / 2])
+            rotate([90, 0, 90])
+                part_stamp_cut("focus_sled", size = 2.8);
     }
 }
 

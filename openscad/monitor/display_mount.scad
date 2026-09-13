@@ -3,6 +3,7 @@
 // https://www.printables.com/model/1041827-hamtysan-101-touchscreen-enclosure
 
 use <monitor.scad>
+include <../lib/part_stamp.scad>
 
 LID_DISP_X = 32;
 LID_HINGE_Y = 36;
@@ -76,6 +77,12 @@ module display_rail(side = 1) {
                 translate([p[0], p[1], -1])
                     cylinder(h = 2 * BEAM_R + 2, d = DISP_SCREW_D);
         case_easel_world_cutters();
+        // Inner face of the lid bar — up when the rail prints on its flat.
+        translate([side * LID_DISP_X - side * (RAIL_T / 2), -18, 3.6])
+            rotate([90, 0, side * 90])
+                translate([0, 0, -0.05])
+                    mirror([1, 0, 0])
+                        part_stamp_cut("display_mount", size = 3.0);
     }
 }
 

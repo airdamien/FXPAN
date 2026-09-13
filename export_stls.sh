@@ -11,6 +11,8 @@
 #   focus_sled is in every chassis default list → stls/tools/focus_sled.stl
 #   case_back is the Wormfingers bottom with easel + Pi holes.
 #
+# Each part is embossed with its name and the render minute (YYYYMMDDHHMM).
+#
 # Camera tubes export twice:
 #   arm_r.stl / arm_t.stl / arm_l.stl     female 52×0.75 (reverse ring)
 #   arm_r_f.stl / arm_t_f.stl / arm_l_f.stl  integrated F-bayonet
@@ -30,7 +32,7 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter el180_adapter focus_sled)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -76,6 +78,8 @@ else
 fi
 
 mkdir -p "$out"
+stamp=$(date +%Y%m%d%H%M)
+echo "STAMP=$stamp"
 
 for req in "${parts[@]}"; do
     if [[ "$req" == "focus_sled" ]]; then
@@ -83,21 +87,23 @@ for req in "${parts[@]}"; do
         mkdir -p "$(dirname "$dest")"
         echo "export focus_sled -> $dest"
         "$osc" -o "$dest" --export-format binstl \
-            -D "SHOW_RULERS=0" "$root/openscad/focus_sled.scad"
+            -D "SHOW_RULERS=0" -D "STAMP=\"$stamp\"" \
+            "$root/openscad/focus_sled.scad"
         continue
     fi
     if [[ "$req" == "case_back" ]]; then
         dest=$out/case_back.stl
         echo "export case_back -> $dest"
         "$osc" -o "$dest" --export-format binstl \
-            -D "PRINT_CASE_BACK=1" "$root/openscad/monitor/WATCH_ME.scad"
+            -D "PRINT_CASE_BACK=1" -D "STAMP=\"$stamp\"" \
+            "$root/openscad/monitor/WATCH_ME.scad"
         continue
     fi
     if [[ "$req" == "display_mount" && "$scad" == *"/monitor/WATCH_ME.scad" ]]; then
         dest=$out/display_mount.stl
         echo "export display_mount -> $dest"
         "$osc" -o "$dest" --export-format binstl \
-            -D "PRINT_LAYOUT=1" "$scad"
+            -D "PRINT_LAYOUT=1" -D "STAMP=\"$stamp\"" "$scad"
         continue
     fi
     mount=0
@@ -113,7 +119,8 @@ for req in "${parts[@]}"; do
     dest=$out/$dest_stem.stl
     echo "export $dest_stem (ARM_MOUNT=$mount) -> $dest"
     "$osc" -o "$dest" --export-format binstl \
-        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" "$scad"
+        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" \
+        -D "STAMP=\"$stamp\"" "$scad"
 done
 
 echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); display_mount rails on their flat face; case_back outer-back down; focus_sled on its left face."

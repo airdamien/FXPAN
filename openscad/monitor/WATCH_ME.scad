@@ -23,7 +23,8 @@ else {
         display_mount();
     monitor_easel() {
         monitor_ghost();
-        if (SHOW_PI)
+        if (SHOW_PI) {
             monitor_pi();
+        }
     }
 }

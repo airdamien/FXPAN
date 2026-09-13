@@ -56,6 +56,16 @@ EL_ADAPTER_HEX = 4;
 EL_ADAPTER_OD  = 50;
 EL_BORE        = 34;
 
+// EL-Nikkor 180/5.6 barrel (not L39). Pitch is often 1.0; dry-fit and
+// set EL180_M62_PITCH=0.75 if the first print binds or will not start.
+EL180_M62_MAJOR = 62;
+EL180_M62_PITCH = is_undef(EL180_M62_PITCH) ? 1.0 : EL180_M62_PITCH;
+EL180_M62_LEN   = 8;
+EL180_M62_TOL   = 0.45;
+EL180_ADAPTER_HEX = 6;
+EL180_ADAPTER_OD  = 72;
+EL180_BORE        = 56;
+
 F_REV_MAJOR    = 52;
 F_REV_PITCH    = 0.75;
 F_REV_LEN      = 7;
@@ -82,4 +92,4 @@ $fn = 96;
 EXPLODED = 0;
 SHOW_GHOSTS = 0;
 PART = is_undef(PART) ? "assembly" : PART;
-// assembly | chassis | stem | arm_r | arm_t | lid | display_mount | hybrid_tray | shims | elnikkor_adapter
+// assembly | chassis | stem | stem_f50 | arm_r | arm_t | lid | display_mount | hybrid_tray | shims | elnikkor_adapter | el180_adapter
