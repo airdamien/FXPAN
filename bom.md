@@ -79,18 +79,22 @@ Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export wi
 3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
 4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter (`bs_t_comp`).
 5. Nuts in the wall traps; 4× M3 per cookie. Screw a 52 mm **F** reverse ring into each mouth; bayonet the D7000s. Or print `arm_*_f` (`ARM_MOUNT=1`) and dry-fit the printed F; add `F_MOUNT_CLOCK` if the first print locks 90° off.
-6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem. The 50/2.8 you have is close-up only (~73 mm).
+6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem for a **~0.61 m** subject. The 50/2.8 and the F 50/1.8 are close-up only. Landscape infinity is the **180**, not a shorter stem.
 7. Shim one arm until both live-views are sharp on the same subject without touching the helicoid. MC-DC2 Y-lead for sync.
 
 Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) · [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png) (~14 cm object stitch at 0.61 m, 1.7× one DX). You already have the D7000s and the 50/2.8 (close-up only).
 
+The 90 mm box plus the D7000 46.5 mm register is already **~136 mm** before any tube or mount. A 135 cannot reach infinity on this chassis (floor is ~150 mm with L39 + reverse rings). Infinity needs **f ≈ PATH_TOTAL ≈ 174 mm**.
+
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
 | 1 | **Edmund 50×50×1 mm 50R/50T** #43-359 | The only optic in the box. Do not cut it. | [Edmund #43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) |
-| 1 | **EL-Nikkor 135 mm f/5.6** | Taking lens. 4×5 circle covers the 42.5 mm stitch. Same **L39×26 TPI** as the 50. Used often **$80–150**. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+135mm+f%2F5.6) · [Amazon](https://www.amazon.com/s?k=el-nikkor+135mm) |
-| 1 | Printed `elnikkor_adapter` | Male M42 into the helicoid, female L39 for the 135 (or the 50) | export `PART=elnikkor_adapter` |
-| 1 | **M42–M42 helicoid** 12–19 mm | Fine focus on the stem | [Fotasy 12–19](https://www.amazon.com/Fotasy-Helicord-Focusing-Helicoid-Extention/dp/B01N5V1QAC) · [Pixco 12–19](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01IGGQR7Y) |
-| 1 | **M42 extension tubes** (optional) | Extra travel if the 135 is short of 0.61 m | [M42 extension tube set](https://www.amazon.com/s?k=M42+extension+tube+set) |
+| 1 | **EL-Nikkor 135 mm f/5.6** | Taking lens at **~0.61 m**. 4×5 circle covers the 42.5 mm stitch. **L39×26 TPI**. Used often **$80–150**. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+135mm+f%2F5.6) · [Amazon](https://www.amazon.com/s?k=el-nikkor+135mm) |
+| 1 | **EL-Nikkor 180 mm f/5.6** (or Componon-S / Rodagon 180) | Landscape **infinity** on this path. Rack the 12–19 mm helicoid out **~6.5 mm** (173.5 → 180). 5×7 circle. Barrel is **62 mm**, not L39. Used often **$200–500**, scarcer than the 135. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+180mm+f%2F5.6) · [Componon-S 180](https://www.ebay.com/sch/i.html?_nkw=componon-s+180) · [Rodagon 180](https://www.ebay.com/sch/i.html?_nkw=rodagon+180) |
+| 1 | Printed `el180_adapter` (or bought **M62→M42**) | Male M42 into the helicoid, female **62 mm** for the 180. Customizer **STEM = EL-Nikkor 180**. Pitch default 1.0; set `EL180_M62_PITCH=0.75` if it will not start. | export `PART=el180_adapter` · [eBay M62 M42](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+62mm+m42) |
+| 1 | Printed `elnikkor_adapter` | Male M42 into the helicoid, female L39 for the **135** (or the 50) | export `PART=elnikkor_adapter` |
+| 1 | **M42–M42 helicoid** 12–19 mm | Fine focus. On the 180, the last ~6.5 mm of travel is infinity. | [Fotasy 12–19](https://www.amazon.com/Fotasy-Helicord-Focusing-Helicoid-Extention/dp/B01N5V1QAC) · [Pixco 12–19](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01IGGQR7Y) |
+| 1 | **M42 extension tubes** (optional) | If the 180 is still short of infinity at helicoid max, stack 5–10 mm. If the 135 is short of 0.61 m, same tubes. | [M42 extension tube set](https://www.amazon.com/s?k=M42+extension+tube+set) |
 | 2 | **Fotodiox Nikon F reverse ring, 52 mm** | Arms are 52×0.75 | [Fotodiox 52 mm](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) |
 | 1 | Dual-camera sync | Same as the V | [FlashZebra #0236](http://flashzebra.com/products/0236/) + [#0216](https://flashzebra.com/products/0216/index.shtml) + 2× [2.5 mm→DC2](https://www.amazon.com/dp/B076FV2WDB) |
 | 1 spool | PETG or ABS | Chassis + tray | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
@@ -100,7 +104,7 @@ Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.pn
 | 1 | 1/4-20 camera screw | Into that insert | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
-A 150 mm EL-Nikkor / Rodagon / Componon-S is the next step closer to “far” (focus ~1.1 m on this path). Infinity needs the chassis path ≈ the focal length (~174 mm), not a longer lens.
+A 150 mm EL-Nikkor / Rodagon / Componon-S focuses at **~1.1 m** on this path. Infinity is the **180** (helicoid +6.5 mm), not a shorter stem and not the 135.
 
 ## EF hybrid — 5D Mark III
 

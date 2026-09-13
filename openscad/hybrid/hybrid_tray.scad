@@ -3,6 +3,7 @@
 // Inward faces are sawtoothed so stray light dies instead of bouncing.
 
 include <params.scad>
+include <../lib/part_stamp.scad>
 
 CARTRIDGE_WALL = 4.5;
 POST_W         = 8.0;
@@ -146,16 +147,19 @@ module cartridge_posts() {
 
 module hybrid_cartridge(show_glass = true) {
     color("SteelBlue")
-    intersection() {
-        union() {
-            place_plate(glass = false);
-            locate_skirt();
-            inactive_beams();
-            corner_uprights();
-            cartridge_posts();
+    difference() {
+        intersection() {
+            union() {
+                place_plate(glass = false);
+                locate_skirt();
+                inactive_beams();
+                corner_uprights();
+                cartridge_posts();
+            }
+            translate([0, 0, floor_z() + (JUNCTION_BOX - WALL) / 2])
+                cube([inner(), inner(), JUNCTION_BOX - WALL], center = true);
         }
-        translate([0, 0, floor_z() + (JUNCTION_BOX - WALL) / 2])
-            cube([inner(), inner(), JUNCTION_BOX - WALL], center = true);
+        wall_ny_stamp("hybrid_tray", -half(), floor_z() + 4.2);
     }
     if (show_glass)
         intersection() {

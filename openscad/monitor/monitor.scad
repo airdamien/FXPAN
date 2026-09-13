@@ -5,6 +5,7 @@
 // Pi sits on the outer back (chips −Z). M2.5 nuts open into the tray.
 
 include <params.scad>
+include <../lib/part_stamp.scad>
 use <../pi4_body.scad>
 
 BEZEL_STL  = "bezel.stl";
@@ -29,8 +30,6 @@ EASEL_RAIL_Z  = 11;
 PI_SCREW_D = 2.8;
 PI_NUT_AF  = 5.0;
 PI_NUT_T   = 2.0;
-PI_BOSS_H  = 3.4;
-PI_BOSS_D  = 9.0;
 // USB toward +Y (chin / lid = screen bottom). Parked in the +X +Y corner.
 PI_CORNER_X = 70;
 PI_CORNER_Y = 36;
@@ -68,17 +67,11 @@ module case_easel_rail_cutters() {
 
 module pi_case_cutters() {
     for (p = monitor_pi_holes()) {
-        translate([p[0], p[1], -2])
-            cylinder(h = INNER_FLOOR + PI_BOSS_H + 4, d = PI_SCREW_D, $fn = 24);
-        translate([p[0], p[1], INNER_FLOOR])
+        translate([p[0], p[1], -1])
+            cylinder(h = INNER_FLOOR + 2, d = PI_SCREW_D, $fn = 24);
+        translate([p[0], p[1], INNER_FLOOR - PI_NUT_T])
             cylinder(h = PI_NUT_T + 0.2, d = PI_NUT_AF / cos(30), $fn = 6);
     }
-}
-
-module pi_inner_bosses() {
-    for (p = monitor_pi_holes())
-        translate([p[0], p[1], INNER_FLOOR])
-            cylinder(h = PI_BOSS_H, d = PI_BOSS_D);
 }
 
 module monitor_bezel() {
@@ -88,13 +81,12 @@ module monitor_bezel() {
 
 module monitor_bottom() {
     difference() {
-        union() {
-            translate(-BOTTOM_C)
-                import(BOTTOM_STL, convexity = 6);
-            pi_inner_bosses();
-        }
+        translate(-BOTTOM_C)
+            import(BOTTOM_STL, convexity = 6);
         case_easel_hole_cutters();
         pi_case_cutters();
+        translate([0, 72, INNER_FLOOR - STAMP_DEPTH])
+            part_stamp_cut("case_back");
     }
 }
 
