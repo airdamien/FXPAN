@@ -11,7 +11,7 @@ F_FEM_GROOVE_H  = 2.3;
 F_FEM_BACK_H    = 3.0;
 F_FEM_PIN_D     = 2.4;
 
-function f_fem_h() = F_FEM_BACK_H + F_FEM_GROOVE_H + F_FEM_REG_T;
+function f_fem_h(back = F_FEM_BACK_H) = back + F_FEM_GROOVE_H + F_FEM_REG_T;
 
 // Insert slots (looking +Z). Locked lugs sit 60° CW from these.
 function f_fem_slots() = [
@@ -40,9 +40,9 @@ module f_fem_ring(a0, sweep, r0, r1, h) {
                 square([r1 - r0, h]);
 }
 
-module f_mount_female_solid(od = 68) {
-    h = f_fem_h();
-    z_gr = F_FEM_BACK_H;
+module f_mount_female_solid(od = 68, back = F_FEM_BACK_H) {
+    h = f_fem_h(back);
+    z_gr = back;
     difference() {
         union() {
             difference() {
@@ -73,9 +73,9 @@ module f_mount_female_solid(od = 68) {
     }
 }
 
-module f_mount_female(clock = 0, od = 68) {
+module f_mount_female(clock = 0, od = 68, back = F_FEM_BACK_H) {
     rotate([0, 0, clock])
-        f_mount_female_solid(od);
+        f_mount_female_solid(od, back);
 }
 
 // Preview stand-in: AI-s 50/1.8 envelope. Origin = F register, +Z subject.

@@ -4,7 +4,8 @@
 Kraken maps each object point through the 135/5.6 onto the two toed
 hybrid windows. The V uses the hard-knife look-across in params.scad
 (no plate). Figures: D7000 DX, V, V-vs-hybrid, 5D Mk III, A7,
-D7000-vs-5D3, D7000-vs-A7, D7000-vs-D7200 stars.
+D7000-vs-5D3, D7000-vs-A7, D7000-vs-D7200 stars, and the 180/5.6
+at 50 m (el180_*).
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ DEST_A7 = hp.OUT.parent / "docs" / "kraken" / "el135_a7_scene.png"
 DEST_A7_CMP = hp.OUT.parent / "docs" / "kraken" / "el135_d7000_a7.png"
 DEST_V = hp.OUT.parent / "docs" / "kraken" / "el135_v_scene.png"
 DEST_V_CMP = hp.OUT.parent / "docs" / "kraken" / "el135_v_hybrid.png"
+DEST_180 = hp.OUT.parent / "docs" / "kraken" / "el180_scene.png"
+DEST_180_D7200 = hp.OUT.parent / "docs" / "kraken" / "el180_d7200.png"
 # 1280×853 still: lone tree on the left, farmhouse / cypresses on the right.
 CROP_XY = (330, 270, 1230, 660)
 BODIES = (
@@ -48,6 +51,9 @@ FF5D3 = dict(name="5D Mk III", flange=44.0, sw=36.0, sh=24.0,
 A7 = dict(name="A7", flange=18.0, sw=35.8, sh=23.9,
           px_w=6000, px_h=4000, mp=24.3, color="mediumorchid", stitch="gold")
 STAR_MM = 8.0
+# 8 mm is invisible at 50 m; a 0.5 m chart is ~0.57° and fills native-pixel stars.
+STAR_MM_180 = 500.0
+S_OBJ_180 = 50_000.0
 
 
 def _photo(path):
@@ -99,32 +105,47 @@ def _mask(thx, thy, t_frac, r_frac, xs, ys):
     return fn(np.stack([gy, gx], axis=-1))
 
 
-def _panel(ax, rgb, extent, title, interpolation="bilinear"):
-    ax.imshow(rgb, origin="lower", extent=extent, interpolation=interpolation)
+def _fmt_obj(s_obj):
+    if s_obj >= 1000.0:
+        return f"{s_obj / 1000.0:.0f} m"
+    return f"{s_obj:.0f} mm"
+
+
+def _fmt_span(mm, scale=1.0, unit="mm"):
+    if unit == "m":
+        return f"{mm * scale:.1f}"
+    return f"{mm:.0f}"
+
+
+def _panel(ax, rgb, extent, title, interpolation="bilinear", unit="mm", scale=1.0):
+    ext = [e * scale for e in extent]
+    ax.imshow(rgb, origin="lower", extent=ext, interpolation=interpolation)
     ax.set_aspect("equal")
     ax.set_title(title, color="0.92", fontsize=11)
-    ax.set_xlabel("object X (mm)", color="0.65")
-    ax.set_ylabel("object Y (mm)", color="0.65")
+    ax.set_xlabel(f"object X ({unit})", color="0.65")
+    ax.set_ylabel(f"object Y ({unit})", color="0.65")
     ax.tick_params(colors="0.55")
     for spine in ax.spines.values():
         spine.set_color("0.35")
 
 
-def _object_plane(ax, img, ext, boxes, title):
-    ax.imshow(img, origin="upper", extent=ext, interpolation="bilinear")
+def _object_plane(ax, img, ext, boxes, title, unit="mm", scale=1.0):
+    ext_d = np.asarray(ext, dtype=float) * scale
+    ax.imshow(img, origin="upper", extent=ext_d, interpolation="bilinear")
     for x, y, w, h, ec, label in boxes:
         ax.add_patch(Rectangle(
-            (x, y), w, h, fill=False, ec=ec, lw=1.8, label=label,
+            (x * scale, y * scale), w * scale, h * scale,
+            fill=False, ec=ec, lw=1.8, label=label,
         ))
     ax.set_aspect("equal")
-    pad_x = 0.08 * (ext[1] - ext[0])
-    pad_y = 0.06 * (ext[3] - ext[2])
-    ax.set_xlim(ext[0] - pad_x, ext[1] + pad_x)
-    ax.set_ylim(ext[2] - pad_y, ext[3] + pad_y)
+    pad_x = 0.08 * (ext_d[1] - ext_d[0])
+    pad_y = 0.06 * (ext_d[3] - ext_d[2])
+    ax.set_xlim(ext_d[0] - pad_x, ext_d[1] + pad_x)
+    ax.set_ylim(ext_d[2] - pad_y, ext_d[3] + pad_y)
     ax.legend(loc="lower right", frameon=False, labelcolor="white")
     ax.set_title(title, color="0.92", fontsize=11)
-    ax.set_xlabel("object X (mm)", color="0.65")
-    ax.set_ylabel("object Y (mm)", color="0.65")
+    ax.set_xlabel(f"object X ({unit})", color="0.65")
+    ax.set_ylabel(f"object Y ({unit})", color="0.65")
     ax.tick_params(colors="0.55")
     for spine in ax.spines.values():
         spine.set_color("0.35")
@@ -149,9 +170,10 @@ def _stitch_px(px_w, px_h, st_w, sw):
     return int(round(st_w / sw * px_w)), px_h
 
 
-def _setup(body):
+def _setup(body, lens_name="EL-Nikkor 135/5.6", lens_f=135.0, s_obj=None, extra=0.0):
+    hp.apply_helicoid(extra)
     hp.apply_chassis(body["flange"], body["sw"], body["sh"])
-    hp.apply_lens("EL-Nikkor 135/5.6", 135.0, 5.6)
+    hp.apply_lens(lens_name, lens_f, 5.6, s_obj=s_obj)
     return dict(
         name=body["name"],
         sw=hp.SENSOR_W, sh=hp.SENSOR_H, st=hp.STITCH_W,
@@ -196,8 +218,9 @@ def _boxes(f, extra=()):
     return rows
 
 
-def plot_d7200(img, ext, dx_w, dx_h, st_w, y0, one, hyb, xs_d, ys_d, xs_s, ys_s):
-    """Same DX field as el135_scene.png, plus native-pixel Siemens stars."""
+def plot_d7200(img, ext, dx_w, dx_h, st_w, y0, one, hyb, xs_d, ys_d, xs_s, ys_s,
+              dest=DEST_D7200, star_mm=STAR_MM, unit="mm", scale=1.0):
+    """Same DX field as the countryside scene, plus native-pixel Siemens stars."""
     fig = plt.figure(figsize=(12.4, 10.2), facecolor="0.08")
     gs = fig.add_gridspec(
         3, 1, height_ratios=[1.15, 1.0, 1.0],
@@ -213,26 +236,33 @@ def plot_d7200(img, ext, dx_w, dx_h, st_w, y0, one, hyb, xs_d, ys_d, xs_s, ys_s)
     for ax in (ax0, ax1, ax2, ax3, ax4):
         ax.set_facecolor("black")
 
+    star_label = (
+        f"{star_mm * scale:.1f} {unit} star" if unit == "m"
+        else f"{star_mm:.0f} mm star"
+    )
     _object_plane(
         ax0, img, ext,
         [
             (-dx_w / 2, y0, dx_w, dx_h, "deepskyblue", "single DX"),
             (-st_w / 2, y0, st_w, dx_h, "goldenrod", "hybrid stitch"),
-            (-STAR_MM / 2, -STAR_MM / 2, STAR_MM, STAR_MM, "tomato",
-             f"{STAR_MM:.0f} mm star"),
+            (-star_mm / 2, -star_mm / 2, star_mm, star_mm, "tomato", star_label),
         ],
-        f"{hp.EL_NAME} at {hp.S_OBJ:.0f} mm  ·  object plane  "
-        f"(one DX {dx_w:.0f}×{dx_h:.0f} mm,  stitch {st_w:.0f}×{dx_h:.0f} mm)",
+        f"{hp.EL_NAME} at {_fmt_obj(hp.S_OBJ)}  ·  object plane  "
+        f"(one DX {_fmt_span(dx_w, scale, unit)}×{_fmt_span(dx_h, scale, unit)} {unit},  "
+        f"stitch {_fmt_span(st_w, scale, unit)}×{_fmt_span(dx_h, scale, unit)} {unit})",
+        unit=unit, scale=scale,
     )
 
     _panel(ax1, one, [xs_d[0], xs_d[-1], ys_d[0], ys_d[-1]],
-           f"single DX  ·  {hp.SINGLE_FOV:.1f}°  ·  D7000 = D7200 window")
+           f"single DX  ·  {hp.SINGLE_FOV:.1f}°  ·  D7000 = D7200 window",
+           unit=unit, scale=scale)
     _panel(ax2, hyb, [xs_s[0], xs_s[-1], ys_s[0], ys_s[-1]],
-           f"hybrid T+R  ·  {hp.PANO_FOV:.1f}°  ·  {st_w / dx_w:.2f}×")
+           f"hybrid T+R  ·  {hp.PANO_FOV:.1f}°  ·  {st_w / dx_w:.2f}×",
+           unit=unit, scale=scale)
 
     for ax, (name, pw, ph, mp) in zip((ax3, ax4), BODIES):
         xs, ys = _native_xy(pw, ph, hp.SENSOR_W, hp.SENSOR_H,
-                            -STAR_MM / 2, STAR_MM / 2, -STAR_MM / 2, STAR_MM / 2,
+                            -star_mm / 2, star_mm / 2, -star_mm / 2, star_mm / 2,
                             hp.MAG)
         star = _siemens(xs, ys)
         sw, sh = _stitch_px(pw, ph, hp.STITCH_W, hp.SENSOR_W)
@@ -242,19 +272,24 @@ def plot_d7200(img, ext, dx_w, dx_h, st_w, y0, one, hyb, xs_d, ys_d, xs_s, ys_s)
             f"{name}  {mp:g} MP  ·  {pw}×{ph}  ·  {pitch:.1f} µm   "
             f"stitch {sw}×{sh}",
             interpolation="nearest",
+            unit=unit, scale=scale,
         )
 
+    star_note = (
+        f"{star_mm * scale:.1f}×{star_mm * scale:.1f} {unit}" if unit == "m"
+        else f"{star_mm:.0f}×{star_mm:.0f} mm"
+    )
     fig.text(
         0.50, 0.012,
         "DX window is the same (23.6×15.6 mm). Stars are native photosites on "
-        f"{STAR_MM:.0f}×{STAR_MM:.0f} mm of object.  "
+        f"{star_note} of object.  "
         "scene: Radek Hloch / CC BY-SA 4.0",
         ha="center", color="0.45", fontsize=8,
     )
-    DEST_D7200.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(DEST_D7200, dpi=150, facecolor=fig.get_facecolor())
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(dest, dpi=150, facecolor=fig.get_facecolor())
     plt.close(fig)
-    print(DEST_D7200)
+    print(dest)
 
 
 def _v_geom(f, overlap_frac=None):
@@ -413,7 +448,7 @@ def plot_v_hybrid(img, ext, f, vg, vgrab, hgrab, dest):
     print(dest)
 
 
-def _save_scene(img, ext, f, grab, dest, single_label):
+def _save_scene(img, ext, f, grab, dest, single_label, unit="mm", scale=1.0):
     fig = plt.figure(figsize=(12.4, 7.8), facecolor="0.08")
     gs = fig.add_gridspec(
         2, 2, height_ratios=[1.12, 1.0],
@@ -427,16 +462,21 @@ def _save_scene(img, ext, f, grab, dest, single_label):
         ax.set_facecolor("black")
     _object_plane(
         ax0, img, ext, _boxes(f),
-        f"{hp.EL_NAME} at {f['s_obj']:.0f} mm  ·  object plane  "
-        f"(one {f['name']} {f['dx_w']:.0f}×{f['dx_h']:.0f} mm,  "
-        f"stitch {f['st_w']:.0f}×{f['dx_h']:.0f} mm)",
+        f"{hp.EL_NAME} at {_fmt_obj(f['s_obj'])}  ·  object plane  "
+        f"(one {f['name']} {_fmt_span(f['dx_w'], scale, unit)}×"
+        f"{_fmt_span(f['dx_h'], scale, unit)} {unit},  "
+        f"stitch {_fmt_span(f['st_w'], scale, unit)}×"
+        f"{_fmt_span(f['dx_h'], scale, unit)} {unit})",
+        unit=unit, scale=scale,
     )
     _panel(ax1, grab["one"],
            [grab["xs_d"][0], grab["xs_d"][-1], grab["ys_d"][0], grab["ys_d"][-1]],
-           f"{single_label}  ·  {f['fov']:.1f}°")
+           f"{single_label}  ·  {f['fov']:.1f}°",
+           unit=unit, scale=scale)
     _panel(ax2, grab["hyb"],
            [grab["xs_s"][0], grab["xs_s"][-1], grab["ys_s"][0], grab["ys_s"][-1]],
-           f"hybrid T+R stitch  ·  {f['pano']:.1f}°  ·  {f['st_w'] / f['dx_w']:.2f}×")
+           f"hybrid T+R stitch  ·  {f['pano']:.1f}°  ·  {f['st_w'] / f['dx_w']:.2f}×",
+           unit=unit, scale=scale)
     fig.text(
         0.50, 0.015,
         "scene: Radek Hloch / CC BY-SA 4.0  ·  Wikimedia File:Landscape of Tuscany 3.jpg",
@@ -585,6 +625,32 @@ def main():
         "Same still. D7000 PATH=173.5 mm / 4.8 µm; A7 PATH=145 mm (E 18 mm) / 6.0 µm. "
         "135 focuses ~2 m on the A7 fork.",
     )
+    run_180(raw)
+
+
+def run_180(raw):
+    extra = hp.helicoid_extra(180.0, S_OBJ_180)
+    dx180 = _setup(
+        D7000, "EL-Nikkor 180/5.6", 180.0, s_obj=S_OBJ_180, extra=extra,
+    )
+    ext180 = _extent_fit(raw, dx180["st_w"] * 1.65, dx180["dx_h"] * 1.35)
+    g180 = _grab(raw, ext180, dx180)
+    _save_scene(
+        raw, ext180, dx180, g180, DEST_180, "single D7000 DX",
+        unit="m", scale=0.001,
+    )
+    print(
+        f"{hp.EL_NAME}  D7000  T-only={g180['counts']['left']}  "
+        f"overlap={g180['counts']['overlap']}  R-only={g180['counts']['right']}  "
+        f"PATH={hp.PATH_TOTAL:.1f} mm  helicoid +{extra:.1f} mm"
+    )
+    plot_d7200(
+        raw, ext180, dx180["dx_w"], dx180["dx_h"], dx180["st_w"], g180["y0"],
+        g180["one"], g180["hyb"], g180["xs_d"], g180["ys_d"],
+        g180["xs_s"], g180["ys_s"],
+        dest=DEST_180_D7200, star_mm=STAR_MM_180, unit="m", scale=0.001,
+    )
+    hp.apply_helicoid(0.0)
 
 
 if __name__ == "__main__":

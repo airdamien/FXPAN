@@ -7,9 +7,17 @@
 // F_MOUNT_CLOCK: add if the first F-print locks 90° off.
 // STEM 0 = helicoid + L39 (EL-Nikkor 135). STEM 1 = female F (50 mm test).
 // STEM 2 = helicoid + M62 (EL-Nikkor 180, infinity).
+// F 50 uses the 54 mm camera tubes + 2 mm cookies (ARMS=1). 135/180 keep 72 / 4.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
 // EL180_M62_PITCH: 1.0 default; 0.75 if the 180 will not start.
 // =============================================================================
+
+/* [Part] */
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135/180, stem_f50:Stem F 50, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
+
+/* [Stem] */
+STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
+ARMS = 0; // [0:72 mm 135/180, 1:54 mm F 50]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -36,8 +44,6 @@ SHOW_LENS = 0; // [0:hide, 1:show]
 ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
 F_MOUNT_CLOCK = 0;
 
-/* [Stem] */
-STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
 F_STEM_CLOCK = 0;
 EL180_M62_PITCH = 1.0; // [0.75, 1.0]
 
@@ -52,8 +58,19 @@ LID_SCREW = 5;
 // Nut center below the box top. M3×20: 4 lid + 12 to nut + nut + a bit past.
 LID_NUT_DROP = 12;
 
-function mount_stack()       = ARM_MOUNT ? F_FMOUNT_STACK : F_REV_STACK;
-function stem_tube_len()     = D_LENS_TO_PLATE - JUNCTION_BOX / 2;
+function printed_f()         =
+    ARM_MOUNT
+    || PART == "arm_r_f" || PART == "arm_t_f"
+    || PART == "arm_r_sf" || PART == "arm_t_sf";
+function mount_stack()       = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
+function f50_kit()           =
+    ARMS || STEM == 1 || PART == "stem_f50"
+    || PART == "arm_r_s" || PART == "arm_t_s"
+    || PART == "arm_r_sf" || PART == "arm_t_sf";
+function patch_t()           = f50_kit() ? PORT_PATCH_T_SHORT : PORT_PATCH_T;
+function stem_tube_len()     =
+    ((STEM == 1 || PART == "stem_f50") ? D_LENS_TO_PLATE_F50 : D_LENS_TO_PLATE_LONG)
+    - JUNCTION_BOX / 2;
 function reflect_tube_len()  = D_PLATE_TO_MOUNT - mount_stack() - JUNCTION_BOX / 2;
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
 
@@ -70,8 +87,8 @@ module port_screws() {
 }
 
 module port_flange() {
-    translate([0, 0, PORT_PATCH_T / 2])
-        cube([PORT_PATCH, PORT_PATCH, PORT_PATCH_T], center = true);
+    translate([0, 0, patch_t() / 2])
+        cube([PORT_PATCH, PORT_PATCH, patch_t()], center = true);
 }
 
 // Engraved on the camera-side face (print flange on the bed).
@@ -86,7 +103,7 @@ module flange_marks(kind) {
             text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
                  halign = "center", valign = "center");
     }
-    translate([0, 0, PORT_PATCH_T - t])
+    translate([0, 0, patch_t() - t])
         linear_extrude(t + 0.15) {
             if (kind == "R")
                 translate([-e, 0])
@@ -214,7 +231,7 @@ module part_junction() {
 }
 
 module along_tube(rx = 0, ry = 0) {
-    translate([0, 0, PORT_PATCH_T])
+    translate([0, 0, patch_t()])
         rotate([rx, ry, 0])
             children();
 }
@@ -223,10 +240,11 @@ module port_tube_solid(out_len, rx = 0, ry = 0) {
     difference() {
         union() {
             port_flange();
-            along_tube(rx, ry)
-                cylinder(h = out_len, d = TUBE_OD);
-            if (rx != 0 || ry != 0)
-                translate([0, 0, PORT_PATCH_T])
+            if (out_len > 0.05)
+                along_tube(rx, ry)
+                    cylinder(h = out_len, d = TUBE_OD);
+            if (out_len > 0.05 && (rx != 0 || ry != 0))
+                translate([0, 0, patch_t()])
                     hull() {
                         cylinder(h = 0.2, d = TUBE_OD);
                         rotate([rx, ry, 0])
@@ -234,11 +252,11 @@ module port_tube_solid(out_len, rx = 0, ry = 0) {
                     }
         }
         along_tube(rx, ry)
-            translate([0, 0, -PORT_PATCH_T - 2])
-                cylinder(h = PORT_PATCH_T + out_len + 4, d = TUBE_ID);
+            translate([0, 0, -patch_t() - 2])
+                cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
         port_screws()
             translate([0, 0, -1])
-                cylinder(h = PORT_PATCH_T + 2, d = PORT_SCREW_D);
+                cylinder(h = patch_t() + 2, d = PORT_SCREW_D);
     }
 }
 
@@ -247,22 +265,29 @@ module part_stem() {
     difference() {
         union() {
             port_tube_solid(stem_tube_len());
-            translate([0, 0, PORT_PATCH_T + stem_tube_len()])
+            translate([0, 0, patch_t() + stem_tube_len()])
                 helicoid_nut();
         }
-        flange_stamp("stem", "", PORT_PATCH, PORT_PATCH_T);
+        flange_stamp("stem", "", PORT_PATCH, patch_t());
     }
 }
 
 module part_stem_f50() {
+    t = STEM_F50_PATCH;
     color("SlateGray")
     difference() {
         union() {
-            port_tube_solid(stem_tube_len());
-            translate([0, 0, PORT_PATCH_T + stem_tube_len()])
-                f_mount_female(clock = F_STEM_CLOCK, od = TUBE_OD);
+            translate([0, 0, t / 2])
+                cube([PORT_PATCH, PORT_PATCH, t], center = true);
+            translate([0, 0, t])
+                f_mount_female(clock = F_STEM_CLOCK, od = TUBE_OD, back = 0);
         }
-        flange_stamp("stem_f50", "", PORT_PATCH, PORT_PATCH_T);
+        translate([0, 0, -1])
+            cylinder(h = t + f_fem_h(0) + 2, d = TUBE_ID);
+        port_screws()
+            translate([0, 0, -1])
+                cylinder(h = t + 2, d = PORT_SCREW_D);
+        flange_stamp("stem_f50", "", PORT_PATCH, t);
     }
 }
 
@@ -343,25 +368,36 @@ module el180_ghost() {
 
 module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
     color("SlateGray")
+    intersection() {
     difference() {
         port_tube_solid(out_len, rx, ry);
-        if (ARM_MOUNT == 0)
+        if (!printed_f())
             along_tube(rx, ry) {
-                translate([0, 0, out_len - F_REV_LEN])
+                // Keep the 52×0.75 above the print bed. On the 2 mm F 50
+                // cookies that is ~3 mm of thread, not a full F_REV_LEN.
+                translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
                     ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
                                 F_REV_LEN + 0.3,
                                 pitch = F_REV_PITCH, tolerance = F_REV_TOL);
-                rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
-                f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
+                // Short F 50 tubes have no meat for the reverse-ring lock nut.
+                if (out_len >= F_REV_LEN) {
+                    rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
+                    f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
+                } else
+                    f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
             }
         if (mark != "")
             flange_marks(mark);
         if (mark != "")
             flange_stamp(str("arm_", mark == "T" ? "t" : "r",
-                             ARM_MOUNT ? "_f" : ""),
-                         mark, PORT_PATCH, PORT_PATCH_T);
+                             f50_kit() ? "_s" : "",
+                             printed_f() ? (f50_kit() ? "f" : "_f") : ""),
+                         mark, PORT_PATCH, patch_t());
     }
-    if (ARM_MOUNT)
+        translate([-PORT_PATCH, -PORT_PATCH, 0])
+            cube([PORT_PATCH * 2, PORT_PATCH * 2, 80]);
+    }
+    if (printed_f())
         color("Goldenrod")
             along_tube(rx, ry)
                 translate([0, 0, out_len])
@@ -416,16 +452,16 @@ module taking_lens_at() {
         color("DimGray", 0.92)
             at_stem()
                 if (STEM == 1)
-                    translate([0, 0, PORT_PATCH_T + stem_tube_len() + f_fem_h()
+                    translate([0, 0, STEM_F50_PATCH + stem_tube_len() + f_fem_h(0)
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         f50_ghost();
                 else if (STEM == 2)
-                    translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                    translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
                                      + el180_adapter_h()
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         el180_ghost();
                 else
-                    translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                    translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
                                      + EL_M42_LEN + EL_ADAPTER_HEX + EL_M39_LEN
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         taking_lens();
@@ -435,7 +471,7 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0) {
     if (SHOW_BODIES)
         color("DimGray", 0.92)
             along_tube(rx, ry)
-                translate([0, 0, out_len + (ARM_MOUNT ? F_FMOUNT_STACK : 0) + ex])
+                translate([0, 0, out_len + (printed_f() ? F_FMOUNT_STACK : 0) + ex])
                     d7000_body(roll);
 }
 
@@ -461,12 +497,12 @@ module assembly() {
 
         if (STEM == 0)
             at_stem()
-                translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_elnikkor_adapter();
         if (STEM == 2)
             at_stem()
-                translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_el180_adapter();
 
@@ -509,7 +545,8 @@ module assembly() {
     optical_axis_guides();
     echo(str("hybrid L: 50x50x1 S1 toward lens; ARM_MOUNT=", ARM_MOUNT,
              " (", ARM_MOUNT ? "integrated F" : "reverse ring", ")",
-             " STEM=", STEM, " (", stem_label(), ")"));
+             " STEM=", STEM, " (", stem_label(), ")",
+             " ARMS=", ARMS, " (", ARMS ? "54 mm F 50" : "72 mm 135/180", ")"));
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
              " mm  field_toe=", field_toe(), " deg"));
 }
@@ -521,9 +558,11 @@ module export_part() {
         stem_chosen();
     else if (PART == "stem_f50")
         part_stem_f50();
-    else if (PART == "arm_r")
+    else if (PART == "arm_r" || PART == "arm_r_s"
+          || PART == "arm_r_f" || PART == "arm_r_sf")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
-    else if (PART == "arm_t")
+    else if (PART == "arm_t" || PART == "arm_t_s"
+          || PART == "arm_t_f" || PART == "arm_t_sf")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "shims")
         shim_set();

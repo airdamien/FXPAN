@@ -3,8 +3,9 @@
 
 Each DX sensor is aimed at a different half of a stitch_w image
 (sensor_shift). Writes kraken/preview_*.png for the El-Nikkor 50/2.8
-(close-up, object ~73 mm) and docs/kraken/el135_*.png for the 135/5.6
-(~0.61 m, recommended taking lens).
+(close-up, object ~73 mm), docs/kraken/el135_*.png for the 135/5.6
+(~0.61 m), and docs/kraken/el180_*.png for the 180/5.6 at 50 m
+(infinity helicoid).
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ import KrakenOS as Kos
 
 # openscad/hybrid/params.scad
 FLANGE_F = 46.5
-D_LENS_TO_PLATE = 55.0
+D_LENS_TO_PLATE_BOX = 55.0
+D_LENS_TO_PLATE = D_LENS_TO_PLATE_BOX
 D_PLATE_TO_MOUNT = 72.0
 PATH_TOTAL = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT + FLANGE_F
 PATH_AFTER = D_PLATE_TO_MOUNT + FLANGE_F
@@ -43,14 +45,44 @@ S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
 MAG = S_PRIME / S_OBJ
 
 
-def apply_lens(name, f, fnum):
-    global EL_NAME, EL_F, EL_FNUM, EL_EPD, S_OBJ, MAG
+def apply_helicoid(extra=0.0):
+    """extra mm of helicoid on the stem (6.5 mm → 180 mm at infinity)."""
+    global D_LENS_TO_PLATE, PATH_TOTAL, PATH_AFTER, S_PRIME
+    D_LENS_TO_PLATE = D_LENS_TO_PLATE_BOX + float(extra)
+    PATH_AFTER = D_PLATE_TO_MOUNT + FLANGE_F
+    PATH_TOTAL = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT + FLANGE_F
+    S_PRIME = PATH_TOTAL
+
+
+def apply_lens(name, f, fnum, s_obj=None):
+    global EL_NAME, EL_F, EL_FNUM, EL_EPD, S_OBJ, MAG, S_PRIME
+    global SINGLE_FOV, PANO_FOV
     EL_NAME = name
     EL_F = float(f)
     EL_FNUM = float(fnum)
     EL_EPD = EL_F / EL_FNUM
-    S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
+    if s_obj is None:
+        S_PRIME = PATH_TOTAL
+        S_OBJ = 1.0 / (1.0 / EL_F - 1.0 / S_PRIME)
+    else:
+        S_OBJ = float(s_obj)
+        S_PRIME = 1.0 / (1.0 / EL_F - 1.0 / S_OBJ)
     MAG = S_PRIME / S_OBJ
+    SINGLE_FOV = 2.0 * np.degrees(np.arctan(HALF_W / S_PRIME))
+    PANO_FOV = 2.0 * np.degrees(np.arctan(STITCH_W / 2.0 / S_PRIME))
+
+
+def helicoid_extra(f, s_obj):
+    """Helicoid rack so S_PRIME matches the (f, s_obj) conjugate."""
+    s_prime = 1.0 / (1.0 / float(f) - 1.0 / float(s_obj))
+    return s_prime - (D_LENS_TO_PLATE_BOX + D_PLATE_TO_MOUNT + FLANGE_F)
+
+
+def obj_unit():
+    """Axis scale for object-plane plots (mm, or m when the field is landscape)."""
+    if S_OBJ >= 1000.0:
+        return 0.001, "m"
+    return 1.0, "mm"
 
 
 def apply_chassis(flange=46.5, sensor_w=23.6, sensor_h=15.6):
@@ -330,19 +362,21 @@ def stitch_pano(thx, thy, t_frac, r_frac, nx=720, ny=240):
 
 
 def plot_frames(thx, thy, t_frac, r_frac, dest):
-    extent = [thx[0], thx[-1], thy[0], thy[-1]]
+    sc, unit = obj_unit()
+    extent = [thx[0] * sc, thx[-1] * sc, thy[0] * sc, thy[-1] * sc]
     fig, axes = plt.subplots(1, 2, figsize=(9.4, 4.6))
     for ax, img, title in (
         (axes[0], _chart(thx, thy, t_frac), "T / back  (image −X)"),
         (axes[1], _chart(thx, thy, r_frac), "R / side  (image +X)"),
     ):
         ax.imshow(img, origin="lower", extent=extent, aspect="auto")
-        ax.set_xlabel("object X (mm)")
-        ax.set_ylabel("object Y (mm)")
+        ax.set_xlabel(f"object X ({unit})")
+        ax.set_ylabel(f"object Y ({unit})")
         ax.set_title(title)
+    dist = f"{S_OBJ / 1000.0:.0f} m" if S_OBJ >= 1000.0 else f"{S_OBJ:.0f} mm"
     fig.suptitle(
-        f"{EL_NAME}  f={EL_F:g} mm at f/{EL_FNUM:g}  ·  object {S_OBJ:.0f} mm  "
-        f"(m={MAG:.2f})"
+        f"{EL_NAME}  f={EL_F:g} mm at f/{EL_FNUM:g}  ·  object {dist}  "
+        f"(m={MAG:.3f})"
     )
     fig.tight_layout()
     fig.savefig(dest, dpi=140)
@@ -351,16 +385,19 @@ def plot_frames(thx, thy, t_frac, r_frac, dest):
 
 def plot_pano(thx, thy, t_frac, r_frac, dest):
     gx, gy, pano = stitch_pano(thx, thy, t_frac, r_frac)
+    sc, unit = obj_unit()
     fig, ax = plt.subplots(figsize=(10.2, 3.4))
-    ax.imshow(pano, origin="lower", extent=[gx[0], gx[-1], gy[0], gy[-1]], aspect="auto")
+    ax.imshow(pano, origin="lower",
+              extent=[gx[0] * sc, gx[-1] * sc, gy[0] * sc, gy[-1] * sc],
+              aspect="auto")
     ax.axvline(0.0, color="white", ls=":", lw=0.8, alpha=0.7)
-    ax.set_xlabel("object X (mm)")
-    ax.set_ylabel("object Y (mm)")
+    ax.set_xlabel(f"object X ({unit})")
+    ax.set_ylabel(f"object Y ({unit})")
     obj_stitch = STITCH_W / MAG
     obj_single = SENSOR_W / MAG
     ax.set_title(
-        f"{EL_NAME} stitch  {obj_stitch:.1f} mm object / {STITCH_W:.1f} mm image  "
-        f"vs one DX {obj_single:.1f} mm object"
+        f"{EL_NAME} stitch  {obj_stitch * sc:.1f} {unit} object / {STITCH_W:.1f} mm image  "
+        f"vs one DX {obj_single * sc:.1f} {unit} object"
     )
     fig.tight_layout()
     fig.savefig(dest, dpi=160)
@@ -389,18 +426,21 @@ def run_lens(dest_dir, prefix, do_paths=False, require=True):
     obj_single = SENSOR_W / MAG
     ratio = span / obj_single if obj_single else 0.0
     pano_fov = 2.0 * np.degrees(np.arctan((span / 2.0) / S_OBJ)) if span else 0.0
+    mag_s = f"{MAG:.4f}" if MAG < 0.01 else f"{MAG:.2f}"
+    sc, unit = obj_unit()
+    dist = f"{S_OBJ / 1000.0:.0f} m" if S_OBJ >= 1000.0 else f"{S_OBJ:.1f} mm"
     print(
-        f"{EL_NAME}  f={EL_F:g} mm  f/{EL_FNUM:g}  S_OBJ={S_OBJ:.1f} mm  "
-        f"S_PRIME={S_PRIME:.1f} mm  m={MAG:.2f}"
+        f"{EL_NAME}  f={EL_F:g} mm  f/{EL_FNUM:g}  S_OBJ={dist}  "
+        f"S_PRIME={S_PRIME:.1f} mm  m={mag_s}"
     )
-    print(f"PATH_TOTAL={PATH_TOTAL} mm  stitch_w={STITCH_W:.1f} mm")
+    print(f"PATH_TOTAL={PATH_TOTAL:.1f} mm  stitch_w={STITCH_W:.1f} mm")
     print(
         "fields: "
         f"T-only={counts['left']}  overlap={counts['overlap']}  "
         f"R-only={counts['right']}  none={counts['none']}"
     )
     print(
-        f"object single={obj_single:.2f} mm  pano span={span:.2f} mm  "
+        f"object single={obj_single * sc:.2f} {unit}  pano span={span * sc:.2f} {unit}  "
         f"ratio={ratio:.2f}x"
     )
     print(f"object FOV single={SINGLE_FOV:.2f} deg  pano={pano_fov:.2f} deg")
@@ -421,6 +461,12 @@ def main():
     apply_lens("EL-Nikkor 135/5.6", 135.0, 5.6)
     docs = OUT.parent / "docs" / "kraken"
     run_lens(docs, "el135_", do_paths=True)
+    # Landscape: 50 m, helicoid out so PATH = 180.7 mm (∞ is +6.5 mm).
+    s_obj_180 = 50_000.0
+    apply_helicoid(helicoid_extra(180.0, s_obj_180))
+    apply_lens("EL-Nikkor 180/5.6", 180.0, 5.6, s_obj=s_obj_180)
+    run_lens(docs, "el180_", do_paths=True)
+    apply_helicoid(0.0)
 
 
 if __name__ == "__main__":
