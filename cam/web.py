@@ -21,11 +21,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import brightness
 import dual
 import gpio
 import live
 import pano
 import settings
+import wifi
 
 HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
@@ -136,21 +138,16 @@ def _exit_kiosk():
     except OSError as exc:
         raise dual.CamError(f"cannot write kiosk stop file: {exc}") from exc
     subprocess.run(["pkill", "-f", "--", KIOSK_CHROME], check=False)
-    if sys.platform != "darwin":
-        subprocess.run(
-            ["systemctl", "--user", "unmask", "gvfs-gphoto2-volume-monitor.service"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        subprocess.run(
-            ["systemctl", "--user", "start", "gvfs-gphoto2-volume-monitor.service"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        dual._linux_ptp_clear = False
     return {"ok": True, "message": "desktop"}
+
+
+def _maybe_sync(have, prefs):
+    if not prefs.get("sync", True) or len(have) < 2:
+        return ""
+    try:
+        return dual.copy_from_master(have, prefs.get("master") or "T").get("message") or ""
+    except dual.CamError as exc:
+        return str(exc)
 
 
 def _assignments(data):
@@ -264,9 +261,21 @@ class Handler(BaseHTTPRequestHandler):
                         "live": LIVE.snapshot(),
                         "gpio": gpio.snapshot(),
                         "settings": settings.load(),
+                        "brightness": brightness.snapshot(),
                         "kiosk": _kiosk_enabled(),
+                        "wifi": wifi.status(),
                     },
                 )
+            if path == "/api/wifi":
+                return _json(self, 200, wifi.status())
+            if path == "/api/brightness":
+                snap = brightness.snapshot()
+                msg = (
+                    f"screen {snap['value']}%"
+                    if snap.get("available")
+                    else "no HDMI brightness"
+                )
+                return _json(self, 200, {**snap, "message": msg})
             if path == "/api/live":
                 snap = LIVE.snapshot()
                 return _json(self, 200, {**snap, "message": _live_message(snap)})
@@ -284,6 +293,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "pairs": pairs,
                         "jobs": pano.jobs_snapshot(),
+                        "queue": pano.queue_status(),
                         "message": f"{n} JPEG pair(s) in captures/",
                     },
                 )
@@ -364,6 +374,26 @@ class Handler(BaseHTTPRequestHandler):
             data = _read_json(self)
             if path == "/api/kiosk/exit":
                 return _json(self, 200, _exit_kiosk())
+            if path == "/api/wifi/scan":
+                return _json(self, 200, wifi.scan())
+            if path == "/api/wifi/join":
+                ssid = str(data.get("ssid") or "").strip()
+                psk = str(data.get("psk") or "")
+                return _json(self, 200, wifi.join(ssid, psk))
+            if path == "/api/wifi/ap":
+                val = data.get("on")
+                if isinstance(val, str):
+                    on = val.lower() not in ("0", "false", "no", "")
+                else:
+                    on = bool(val)
+                return _json(self, 200, wifi.set_ap(on))
+            if path == "/api/brightness":
+                snap = brightness.set(data.get("value"))
+                settings.save({"brightness": snap["value"]})
+                return _json(
+                    self, 200,
+                    {**snap, "message": f"screen {snap['value']}%"},
+                )
             if path == "/api/settings":
                 prefs = settings.save(data)
                 return _json(
@@ -373,6 +403,13 @@ class Handler(BaseHTTPRequestHandler):
                         + ("on" if prefs["download"] else "off")
                         + "  gpio="
                         + ("on" if prefs["gpio"] else "off")
+                        + "  flop="
+                        + ("on" if prefs["flip_r"] else "off")
+                        + f"  ol={prefs['overlap']:.0%}"
+                        + "  master="
+                        + prefs.get("master", "T")
+                        + "  sync="
+                        + ("on" if prefs.get("sync") else "off")
                     )},
                 )
             if path == "/api/gpio":
@@ -409,8 +446,25 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, {"message": f"paired {bits}", "pair": saved})
             if path == "/api/live/start":
                 have = LIVE.start_from_usb()
+                snap = LIVE.snapshot()
+                if not have:
+                    return _json(
+                        self, 200,
+                        {
+                            **snap,
+                            "ok": False,
+                            "message": "no cameras. LIVE when they're on USB",
+                        },
+                    )
                 roles = " ".join(sorted(have))
-                return _json(self, 200, {"message": f"live view {roles}  (low-res PTP preview)"})
+                return _json(
+                    self, 200,
+                    {
+                        **snap,
+                        "ok": True,
+                        "message": f"live view {roles}  (low-res PTP preview)",
+                    },
+                )
             if path == "/api/live/stop":
                 _stop_live()
                 return _json(self, 200, {"message": "live view stopped"})
@@ -420,18 +474,33 @@ class Handler(BaseHTTPRequestHandler):
                 if not assignments:
                     raise dual.CamError("nothing to set")
                 have = dual.require_online(dual.detect_bodies())
-                from concurrent.futures import ThreadPoolExecutor
-
+                prefs = settings.load()
+                master = prefs.get("master") or "T"
                 notes = []
-                with ThreadPoolExecutor(max_workers=len(have)) as pool:
-                    futs = [
-                        pool.submit(dual._set_one, row["port"], assignments)
-                        for row in have.values()
-                    ]
-                    for fut in futs:
-                        notes.extend(fut.result() or [])
-                roles = " and ".join(sorted(have))
+                extra = []
+                if prefs.get("sync", True) and master in have and len(have) > 1:
+                    notes.extend(dual._set_one(have[master]["port"], assignments) or [])
+                    try:
+                        info = dual.copy_from_master(have, master)
+                        extra.append(info["message"])
+                        notes.extend(info.get("notes") or [])
+                    except dual.CamError as exc:
+                        extra.append(str(exc))
+                    roles = master
+                else:
+                    from concurrent.futures import ThreadPoolExecutor
+
+                    with ThreadPoolExecutor(max_workers=len(have)) as pool:
+                        futs = [
+                            pool.submit(dual._set_one, row["port"], assignments)
+                            for row in have.values()
+                        ]
+                        for fut in futs:
+                            notes.extend(fut.result() or [])
+                    roles = " and ".join(sorted(have))
                 msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
+                if extra:
+                    msg += "  " + "; ".join(extra)
                 if notes:
                     msg += "  (" + "; ".join(notes)
                     if any(n.startswith("expprogram=") for n in notes):
@@ -477,6 +546,7 @@ class Handler(BaseHTTPRequestHandler):
                             },
                         )
                     have = dual.require_online(dual.detect_bodies())
+                    copied = _maybe_sync(have, prefs)
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     dest = pano.CAPTURES
                     before = dual.list_cards(have)
@@ -492,10 +562,12 @@ class Handler(BaseHTTPRequestHandler):
                             "message": (
                                 f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
                                 f"  → {bits}"
+                                + (f"  {copied}" if copied else "")
                             )
                         },
                     )
                 have = dual.require_online(dual.detect_bodies())
+                copied = _maybe_sync(have, prefs)
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dest = pano.CAPTURES
                 with ThreadPoolExecutor(max_workers=len(have)) as pool:
@@ -514,7 +586,11 @@ class Handler(BaseHTTPRequestHandler):
                 where = "cards" if target == "card" else "captures/"
                 if target != "card":
                     pano.refresh_exif(dest, stamp)
-                return _json(self, 200, {"message": f"shot {stamp}  {msg}  → {where}"})
+                return _json(
+                    self, 200,
+                    {"message": f"shot {stamp}  {msg}  → {where}"
+                     + (f"  {copied}" if copied else "")},
+                )
             if path == "/api/captures/delete":
                 stamp = (data.get("stamp") or "").strip()
                 side = (data.get("side") or "").strip().upper()
@@ -552,24 +628,32 @@ class Handler(BaseHTTPRequestHandler):
                 stamp = (data.get("stamp") or "").strip()
                 if not stamp:
                     raise dual.CamError("select a T/R pair")
+                prefs = settings.load()
                 try:
                     overlap = data.get("overlap")
-                    overlap = float(overlap) if overlap is not None else pano.OVERLAP
+                    if overlap is None:
+                        overlap = prefs.get("overlap", pano.OVERLAP)
+                    overlap = float(overlap)
                 except (TypeError, ValueError):
                     raise dual.CamError("bad overlap")
-                flip_r = data.get("flip_r", False)
+                flip_r = data.get("flip_r")
+                if flip_r is None:
+                    flip_r = prefs.get("flip_r", False)
                 if isinstance(flip_r, str):
-                    flip_r = flip_r.lower() not in ("0", "false", "no")
+                    flip_r = flip_r.lower() not in ("0", "false", "no", "")
                 mode = (data.get("mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                 )
+                stat = pano.queue_status()
                 return _json(
                     self, 200,
                     {
                         **job,
-                        "pairs": pano.list_pairs(),
-                        "message": job.get("message") or f"stitch {mode} {stamp}",
+                        "queue": stat,
+                        "message": stat.get("message")
+                        or job.get("message")
+                        or f"queued {mode} {stamp}",
                     },
                 )
         except dual.CamError as exc:
@@ -592,6 +676,8 @@ def main():
     elif gpio.sim_on():
         print("gpio           sim (USB tab) — no pulse on this Mac")
     print("ptpcamerad held down (python3 cam/dual.py ptp-on to restore Photos)")
+    brightness.restore(settings.load().get("brightness"))
+    pano.warmup_open()
     httpd.serve_forever()
 
 

@@ -37,6 +37,8 @@ rsync -az \
 
 echo "==> apt gphoto2 + ImageMagick"
 "${SSH[@]}" "$TARGET" 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gphoto2 imagemagick'
+echo "==> OpenStitching venv (PANO Open)"
+"${SSH[@]}" "$TARGET" 'chmod +x ~/nikonduals/cam/kiosk/install-openstitching.sh && bash ~/nikonduals/cam/kiosk/install-openstitching.sh'
 
 echo "==> install autostart + Desktop launcher"
 "${SSH[@]}" "$TARGET" 'bash ~/nikonduals/cam/kiosk/install.sh'

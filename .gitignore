@@ -18,5 +18,6 @@ cam/.venv/
 cam/cameras.json
 cam/gpio.json
 cam/settings.json
+cam/wifi.json
 captures/
 

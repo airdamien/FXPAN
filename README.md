@@ -195,9 +195,13 @@ python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127
 
 On the 10.1″ Pi (`airdamien@192.0.2.10`) the field page is **D12600**: Chromium kiosk, login autostart, respawn loop. SET **Desktop** returns to labwc. Tap **D12600** on the desktop to come back.
 
-Right stack is VIEW / USB / PANO / FILES / SET, then LIVE (VIEW only), PREVIEW (live only), ISO, FIRE. ISO is a modal over the buttons so T/R stay up. SET stores **GPIO shutter** and **Download files**.
+Tabs are **LIVE / USB / PANO / FILES / SET**. LIVE is the home page and opens with no cameras on USB. The side stack is START / STOP (every tab), ISO, FIRE. T/R preview is LIVE only. ISO is a modal over the buttons.
 
-![VIEW](docs/cam/view.png)
+SET is grouped: **Exposure** (ISO / shutter / program / WB / quality + APPLY), **Master** (T or R, copy to the other body — not flash; T is usually master, a speedlight can stay on R), **Capture** (download, GPIO, flop R, overlap), **Screen** (HDMI DDC backlight), **Wi-Fi** (scan / join, AP `D12600`), **Pi** (Sim as Pi, Desktop).
+
+PANO **STITCH** queues on a background worker so you can keep shooting. Modes are match / blend / cut / open (OpenStitching). Each pair card keeps QUEUED / WORKING / OK / ERROR. Newest shots sit at the top. A pair needs T and R JPEGs; T-only until the splitter is in will say so on that card. FILES is the same list.
+
+![LIVE](docs/cam/view.png)
 
 ![USB](docs/cam/usb.png)
 
@@ -209,7 +213,7 @@ Right stack is VIEW / USB / PANO / FILES / SET, then LIVE (VIEW only), PREVIEW (
 
 ```
 ./scripts/setup-pi-remote.sh airdamien@192.0.2.10
-./scripts/deploy-kiosk.sh                    # rsync cam/ + bounce Chromium
+./scripts/redeploy-kiosk.sh                  # rsync cam/ + restart web.py + Chromium
 ```
 
 ## Source
@@ -243,6 +247,9 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 | `kraken/shadowgraph_wave.py` | Fresnel / knife / phase plate |
 | `OPTICS.md` / `bom.md` | Path math + buy + assembly |
 | `docs/monitor/` | 10.1″ panel datasheets / sibling drawings |
-| `cam/dual.py` | D7000 USB (gphoto2 PTP) |
+| `cam/dual.py` | D7000 USB (gphoto2 PTP) + master→slave copy |
+| `cam/wifi.py` | nmcli scan / join / AP |
+| `cam/brightness.py` | HDMI DDC/CI backlight (VCP 0x10) |
+| `cam/pano.py` | T/R pairs, stitch queue, OpenStitching |
 | `cam/gpio.py` | Pi BCM 21 / Corona Y-lead pulse |
-| `cam/kiosk/` | Pi labwc Chromium kiosk + Desktop launcher |
+| `cam/kiosk/` | labwc Chromium kiosk, OpenStitching venv, PTP quiet |

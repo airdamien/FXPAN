@@ -8,15 +8,19 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import brightness
 import dual
 import gpio
 import live
 import pano
 import settings
+import wifi
 
 
 DETECT = """\
@@ -175,6 +179,24 @@ class Online(unittest.TestCase):
     def test_none(self):
         with self.assertRaises(dual.CamError):
             dual.require_online([])
+
+
+class LiveStart(unittest.TestCase):
+    def test_start_without_cameras(self):
+        old = dual.detect_bodies_cached
+        dual.detect_bodies_cached = lambda timeout=120: []
+        self.addCleanup(lambda: setattr(dual, "detect_bodies_cached", old))
+        lv = live.Live()
+        self.assertEqual(lv.start_from_usb(), {})
+        self.assertFalse(lv.snapshot()["running"])
+
+    def test_start_detect_error_is_empty(self):
+        old = dual.detect_bodies_cached
+        def boom(timeout=120):
+            raise dual.CamError("gphoto2 timed out")
+        dual.detect_bodies_cached = boom
+        self.addCleanup(lambda: setattr(dual, "detect_bodies_cached", old))
+        self.assertEqual(live.Live().start_from_usb(), {})
 
 
 class Gpio(unittest.TestCase):
@@ -352,6 +374,33 @@ class Pano(unittest.TestCase):
         self.assertEqual(ready[0]["stamp"], "20260101_120000")
         self.assertEqual(ready[0]["t"], "T_20260101_120000.jpg")
 
+    def test_stitch_status_stays_on_pair(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        pano._write_sidecar(
+            self.root, "20260101_120000",
+            {"mode": "open", "phase": "error", "error": "SIFT failed", "message": "SIFT failed"},
+        )
+        row = pano.list_pairs(self.root)[0]
+        self.assertEqual(row["stitch"]["phase"], "error")
+        self.assertEqual(row["stitch"]["error"], "SIFT failed")
+        pano._write_sidecar(
+            self.root, "20260101_120000",
+            {"mode": "open", "phase": "done", "error": "", "message": "open  affine  70×20"},
+        )
+        row = pano.list_pairs(self.root)[0]
+        self.assertEqual(row["stitch"]["phase"], "done")
+        self.assertEqual(row["stitch"]["message"], "open  affine  70×20")
+
+    def test_list_pairs_newest_first(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        self._jpeg("T_20260913_150000.jpg", "red")
+        self._jpeg("R_20260913_150000.jpg", "blue")
+        stamps = [row["stamp"] for row in pano.list_pairs(self.root)]
+        self.assertEqual(stamps[0], "20260913_150000")
+        self.assertEqual(stamps[1], "20260101_120000")
+
     def test_stitch_width(self):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")
@@ -425,6 +474,125 @@ class Pano(unittest.TestCase):
         self.assertEqual(kept["count"], 3)
         self.assertEqual(len(pano.list_pairs(self.root)), 5)
 
+    def test_stitch_queue_serial(self):
+        pano._jobs.clear()
+        pano._queue.clear()
+        gate = threading.Event()
+        started = []
+
+        def fake(stamp, **_kw):
+            started.append(stamp)
+            self.assertTrue(gate.wait(2))
+            return {
+                "stamp": stamp, "message": f"done {stamp}", "width": 1, "height": 1,
+                "mode": "open", "overlap": 0.2, "overlap_frac": 0.2, "dy": 0,
+                "flip_r": False, "file": f"P_{stamp}.jpg",
+            }
+
+        old = pano.stitch_stamp
+        pano.stitch_stamp = fake
+        try:
+            first = pano.start_stitch("20260101_120000", mode="open", root=self.root)
+            second = pano.start_stitch("20260101_130000", mode="open", root=self.root)
+            self.assertEqual(first["phase"], "start")
+            self.assertTrue(first["running"])
+            self.assertEqual(second["phase"], "queued")
+            stat = pano.queue_status()
+            self.assertTrue(stat["running"])
+            self.assertEqual(stat["queued"], 1)
+            self.assertIn("queued", stat["message"])
+            self.assertTrue(second["running"])
+            with self.assertRaises(dual.CamError):
+                pano.start_stitch("20260101_120000", mode="open", root=self.root)
+            deadline = time.time() + 2
+            while time.time() < deadline and started != ["20260101_120000"]:
+                time.sleep(0.01)
+            self.assertEqual(started, ["20260101_120000"])
+            gate.set()
+            deadline = time.time() + 2
+            while time.time() < deadline:
+                if pano.job_get("20260101_130000").get("phase") == "done":
+                    break
+                time.sleep(0.02)
+            self.assertEqual(pano.job_get("20260101_120000")["phase"], "done")
+            self.assertEqual(pano.job_get("20260101_130000")["phase"], "done")
+            self.assertEqual(started, ["20260101_120000", "20260101_130000"])
+        finally:
+            gate.set()
+            pano.stitch_stamp = old
+            pano._jobs.clear()
+            pano._queue.clear()
+
+
+class CopyMaster(unittest.TestCase):
+    def test_assignments_skip_flash(self):
+        out = dual.assignments_from_status({
+            "iso": "400",
+            "isoauto": "Off",
+            "shutterspeed": "1/125",
+            "imagequality": "JPEG Fine",
+            "whitebalance": "Auto",
+            "exposurecompensation": "0",
+            "expprogram": "M",
+            "flashmode": "Fill flash",
+            "flash": "On",
+            "batterylevel": "75%",
+            "serialnumber": "123",
+            "capturetarget": "Memory card",
+        })
+        keys = [k for k, _ in out]
+        self.assertEqual(
+            keys,
+            [
+                "isoauto", "autoiso", "iso", "shutterspeed",
+                "imagequality", "whitebalance", "exposurecompensation", "expprogram",
+            ],
+        )
+        self.assertNotIn("flashmode", keys)
+        self.assertNotIn("flash", keys)
+        self.assertIn(("iso", "400"), out)
+        self.assertIn(("expprogram", "M"), out)
+
+    def test_assignments_auto_iso(self):
+        keys = [k for k, _ in dual.assignments_from_status({
+            "iso": "Auto", "isoauto": "On", "shutterspeed": "1/60",
+        })]
+        self.assertIn("isoauto", keys)
+        self.assertNotIn("iso", keys)
+
+    def test_copy_from_master(self):
+        calls = []
+
+        def status(row):
+            return {
+                "iso": "200", "isoauto": "Off", "shutterspeed": "1/250",
+                "whitebalance": "Auto", "imagequality": "JPEG Fine",
+                "exposurecompensation": "0", "expprogram": "M",
+                "flashmode": "Rear",
+            }
+
+        def set_one(port, assignments):
+            calls.append((port, list(assignments)))
+            return []
+
+        old_status, old_set = dual._status_one, dual._set_one
+        dual._status_one = status
+        dual._set_one = set_one
+        try:
+            have = {
+                "T": {"role": "T", "port": "usb:1", "model": "D7000"},
+                "R": {"role": "R", "port": "usb:2", "model": "D7000"},
+            }
+            info = dual.copy_from_master(have, "T")
+            self.assertEqual(info["master"], "T")
+            self.assertEqual(info["slave"], "R")
+            self.assertEqual(calls[0][0], "usb:2")
+            self.assertNotIn("flashmode", [k for k, _ in calls[0][1]])
+            self.assertIn("T → R", info["message"])
+        finally:
+            dual._status_one = old_status
+            dual._set_one = old_set
+
 
 class Settings(unittest.TestCase):
     def setUp(self):
@@ -435,14 +603,57 @@ class Settings(unittest.TestCase):
         self.addCleanup(lambda: setattr(settings, "PATH", self._old))
 
     def test_pi_defaults_both_on(self):
-        self.assertEqual(settings.load(pi=True), {"download": True, "gpio": True})
+        self.assertEqual(
+            settings.load(pi=True),
+            {
+                "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
+                "sync": True, "master": "T",
+            },
+        )
 
     def test_mac_defaults_both_off(self):
-        self.assertEqual(settings.load(pi=False), {"download": False, "gpio": False})
+        self.assertEqual(
+            settings.load(pi=False),
+            {
+                "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
+                "sync": True, "master": "T",
+            },
+        )
 
     def test_save_survives_reload(self):
-        settings.save({"download": False, "gpio": True}, pi=True)
-        self.assertEqual(settings.load(pi=True), {"download": False, "gpio": True})
+        settings.save(
+            {"download": False, "gpio": True, "flip_r": True, "overlap": 0.25},
+            pi=True,
+        )
+        self.assertEqual(
+            settings.load(pi=True),
+            {
+                "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
+                "sync": True, "master": "T",
+            },
+        )
+        settings.save({"download": True}, pi=True)
+        self.assertEqual(settings.load(pi=True)["overlap"], 0.25)
+        self.assertTrue(settings.load(pi=True)["flip_r"])
+
+    def test_overlap_percent(self):
+        settings.save({"overlap": 18}, pi=True)
+        self.assertEqual(settings.load(pi=True)["overlap"], 0.18)
+
+    def test_master_and_sync(self):
+        settings.save({"master": "R", "sync": False}, pi=True)
+        self.assertEqual(settings.load(pi=True)["master"], "R")
+        self.assertFalse(settings.load(pi=True)["sync"])
+        settings.save({"master": "X"}, pi=True)
+        self.assertEqual(settings.load(pi=True)["master"], "R")
+
+    def test_brightness_persists(self):
+        settings.save({"brightness": 40}, pi=True)
+        self.assertEqual(settings.load(pi=True)["brightness"], 40)
+        settings.save({"download": False}, pi=True)
+        self.assertEqual(settings.load(pi=True)["brightness"], 40)
+        settings.save({"brightness": 0}, pi=True)
+        self.assertEqual(settings.load(pi=True)["brightness"], 40)
 
     def test_shoot_target(self):
         self.assertEqual(
@@ -457,6 +668,111 @@ class Settings(unittest.TestCase):
             settings.shoot_target({"gpio": False, "download": False}, {"available": True}),
             "card",
         )
+
+
+class Brightness(unittest.TestCase):
+    def test_parse_getvcp(self):
+        cur, mx = brightness.parse_getvcp(bytes([
+            0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x06, 0xC6,
+        ]))
+        self.assertEqual((cur, mx), (6, 100))
+
+    def test_clamp(self):
+        self.assertEqual(brightness.clamp(6), 6)
+        self.assertEqual(brightness.clamp(0), 1)
+        self.assertEqual(brightness.clamp(140), 100)
+        self.assertIsNone(brightness.clamp("x"))
+
+    def test_invert(self):
+        self.assertEqual(brightness.invert(6, 100), 94)
+        self.assertEqual(brightness.invert(94, 100), 6)
+        self.assertEqual(brightness.invert(100, 100), 1)
+
+    def test_find_bus(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        a = root / "card1-HDMI-A-1"
+        b = root / "card1-HDMI-A-2"
+        a.mkdir(); b.mkdir()
+        (a / "status").write_text("disconnected\n")
+        (b / "status").write_text("connected\n")
+        i2c = root / "i2c-21"
+        i2c.mkdir()
+        (b / "ddc").symlink_to(i2c)
+        self.assertEqual(brightness.find_bus(root), 21)
+        self.assertIsNone(brightness.find_bus(root / "missing"))
+
+
+class Wifi(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        self._old_nmcli = wifi._nmcli
+        wifi._nmcli = self.fake
+        self.addCleanup(lambda: setattr(wifi, "_nmcli", self._old_nmcli))
+        self._old_path = wifi.PATH
+        wifi.PATH = root / "wifi.json"
+        self.addCleanup(lambda: setattr(wifi, "PATH", self._old_path))
+
+    def fake(self, args, timeout=25):
+        self.calls.append(list(args))
+        if "DEVICE,TYPE,STATE" in args:
+            return "wlan0:wifi:connected\n"
+        if "IP4.ADDRESS" in args:
+            return "IP4.ADDRESS:192.0.2.10/24\n"
+        if "--active" in args:
+            return "Home:wifi:wlan0\n"
+        if "-g" in args:
+            return "infrastructure\n"
+        if "list" in args:
+            return "*:Home:88:WPA2\n :Cafe:40:\n"
+        return ""
+
+    def test_fields_unescape(self):
+        self.assertEqual(
+            wifi._fields(r"*:cafe\:bar:80:WPA2"),
+            ["*", "cafe:bar", "80", "WPA2"],
+        )
+
+    def test_parse_keeps_strongest_and_open(self):
+        nets = wifi.parse_networks(" :Home:20:WPA2\n*:Home:88:WPA2\n :Cafe:40:\n")
+        self.assertEqual([n["ssid"] for n in nets], ["Home", "Cafe"])
+        self.assertTrue(nets[0]["in_use"])
+        self.assertEqual(nets[0]["signal"], 88)
+        self.assertEqual(nets[1]["security"], "")
+
+    def test_join_needs_ssid(self):
+        with self.assertRaises(dual.CamError):
+            wifi.join("  ")
+
+    def test_join_open(self):
+        out = wifi.join("Cafe")
+        self.assertTrue(any("connect" in a and "Cafe" in a for a in self.calls))
+        self.assertFalse(any("password" in a for a in self.calls))
+        self.assertEqual(out["ssid"], "Home")
+        self.assertIn("192.0.2.10", out["url"])
+
+    def test_ap_on(self):
+        def fake(args, timeout=25):
+            self.calls.append(list(args))
+            if "DEVICE,TYPE,STATE" in args:
+                return "wlan0:wifi:disconnected\n"
+            if "--active" in args:
+                return "D12600-AP:wifi:wlan0\n"
+            if "-g" in args:
+                return "ap\n"
+            if "IP4.ADDRESS" in args:
+                return "IP4.ADDRESS:10.42.0.1/24\n"
+            if args[:2] == ["-f", "NAME"]:
+                return "D12600-AP\n"
+            return ""
+        wifi._nmcli = fake
+        out = wifi.set_ap(True)
+        self.assertEqual(out["mode"], "ap")
+        self.assertEqual(out["ap_ssid"], "D12600")
+        self.assertGreaterEqual(len(out["ap_psk"]), 8)
+        self.assertIn("10.42.0.1", out["url"])
 
 
 if __name__ == "__main__":

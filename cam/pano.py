@@ -31,6 +31,8 @@ WORK = 360
 
 _jobs = {}
 _jobs_lock = threading.Lock()
+_queue = []
+_queue_lock = threading.Lock()
 
 _EXIF_PROG = {1: "M", 2: "P", 3: "A", 4: "S", 5: "Creative", 6: "Action",
               7: "Portrait", 8: "Landscape"}
@@ -93,7 +95,7 @@ def _write_sidecar(root, stamp, info):
         k: info[k]
         for k in (
             "mode", "overlap", "overlap_frac", "dy", "flip_r", "rmse",
-            "width", "height", "file", "message",
+            "width", "height", "file", "message", "phase", "error",
         )
         if k in info
     }
@@ -349,7 +351,7 @@ def list_pairs(root=None):
                 "stitch": _stitch_of(root, stamp),
             }
         )
-    rows.sort(key=lambda row: (row["ready"], row["stamp"]), reverse=True)
+    rows.sort(key=lambda row: row["stamp"], reverse=True)
     return rows
 
 
@@ -791,6 +793,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
         if on_log:
             on_log(msg)
 
+    log("OpenStitching  loading…")
     _venv_site()
     try:
         import cv2
@@ -875,6 +878,8 @@ def stitch_stamp(
         )
         info["stamp"] = stamp
         info["mode"] = "open"
+        info["phase"] = "done"
+        info["error"] = ""
         info["message"] = (
             f"open  {info.get('engine', '')}  "
             f"flip={'on' if info.get('flip_r') else 'off'}  "
@@ -902,6 +907,8 @@ def stitch_stamp(
     )
     info["stamp"] = stamp
     info["mode"] = requested
+    info["phase"] = "done"
+    info["error"] = ""
     if found:
         info["rmse"] = round(found["rmse"], 2)
     info["message"] = (
@@ -912,6 +919,95 @@ def stitch_stamp(
     return info
 
 
+def queue_status():
+    with _queue_lock:
+        queued = [item["stamp"] for item in _queue]
+    run = None
+    with _jobs_lock:
+        for job in _jobs.values():
+            if job.get("running") and job.get("phase") not in ("queued", "done", "error"):
+                run = dict(job)
+                break
+    nq = len(queued)
+    if run:
+        msg = (run.get("message") or run.get("phase") or "working").strip()
+        line = f"{run.get('mode') or ''}  {run.get('stamp') or ''}  {msg}".strip()
+        if nq:
+            line += f"  ·  {nq} queued"
+        return {
+            "running": True, "queued": nq, "stamp": run.get("stamp"),
+            "phase": run.get("phase"), "error": run.get("error") or "",
+            "message": line,
+        }
+    if nq:
+        return {
+            "running": False, "queued": nq, "stamp": queued[0],
+            "phase": "queued", "error": "",
+            "message": f"{nq} queued  next {queued[0]}",
+        }
+    return {
+        "running": False, "queued": 0, "stamp": "",
+        "phase": "", "error": "", "message": "idle",
+    }
+
+
+def _work_running():
+    with _jobs_lock:
+        return any(
+            j.get("running") and j.get("phase") not in ("queued", "done", "error")
+            for j in _jobs.values()
+        )
+
+
+def _refresh_queue_logs():
+    for i, item in enumerate(_queue):
+        ahead = i
+        job_put(
+            item["stamp"],
+            running=True, phase="queued", mode=item["mode"], error="",
+            log=("queued  next" if ahead == 0 else f"queued  {ahead} ahead"),
+        )
+
+
+def _run_item(item):
+    stamp = item["stamp"]
+    try:
+        def on_log(msg):
+            job_put(stamp, phase="work", log=msg)
+
+        info = stitch_stamp(
+            stamp, overlap=item["overlap"], flip_r=item["flip_r"],
+            mode=item["mode"], root=item.get("root"), on_log=on_log,
+        )
+        job_put(
+            stamp, running=False, phase="done", error="",
+            **{k: info[k] for k in info if k != "stamp"},
+            log=info["message"],
+        )
+    except Exception as exc:
+        err = str(exc)
+        job_put(stamp, running=False, phase="error", error=err, log=err)
+        _write_sidecar(
+            Path(item.get("root") or CAPTURES), stamp,
+            {"mode": item.get("mode"), "phase": "error", "error": err, "message": err},
+        )
+    finally:
+        _kick_queue()
+
+
+def _kick_queue():
+    with _queue_lock:
+        if _work_running() or not _queue:
+            return
+        item = _queue.pop(0)
+        _refresh_queue_logs()
+    job_put(
+        item["stamp"], running=True, phase="start", error="",
+        mode=item["mode"], log=f"start {item['mode']}",
+    )
+    threading.Thread(target=_run_item, args=(item,), name=f"pano-{item['stamp']}", daemon=True).start()
+
+
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
@@ -919,30 +1015,34 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None):
     mode = (mode or "match").strip().lower()
     if mode not in MODES:
         raise dual.CamError("mode is match, blend, cut, or open")
-    live = job_get(stamp)
-    if live.get("running"):
-        raise dual.CamError(f"already stitching {stamp}")
-    job_put(
-        stamp, running=True, phase="start", error="", mode=mode,
-        log=f"start {mode}",
-    )
-
-    def run():
-        try:
-            def on_log(msg):
-                job_put(stamp, phase="work", log=msg)
-
-            info = stitch_stamp(
-                stamp, overlap=overlap, flip_r=flip_r, mode=mode,
-                root=root, on_log=on_log,
-            )
-            job_put(
-                stamp, running=False, phase="done", error="",
-                **{k: info[k] for k in info if k != "stamp"},
-                log=info["message"],
-            )
-        except Exception as exc:
-            job_put(stamp, running=False, phase="error", error=str(exc), log=str(exc))
-
-    threading.Thread(target=run, name=f"pano-{stamp}", daemon=True).start()
+    item = {
+        "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode, "root": root,
+    }
+    with _queue_lock:
+        live = job_get(stamp)
+        if live.get("running"):
+            raise dual.CamError(f"already stitching {stamp}")
+        if any(q["stamp"] == stamp for q in _queue):
+            raise dual.CamError(f"already queued {stamp}")
+        if _work_running() or _queue:
+            _queue.append(item)
+            _refresh_queue_logs()
+            return job_get(stamp)
+        job_put(
+            stamp, running=True, phase="start", error="", mode=mode,
+            log=f"start {mode}",
+        )
+    threading.Thread(target=_run_item, args=(item,), name=f"pano-{stamp}", daemon=True).start()
     return job_get(stamp)
+
+
+def warmup_open():
+    def run():
+        _venv_site()
+        try:
+            import cv2  # noqa: F401
+            from stitching import AffineStitcher, Stitcher  # noqa: F401
+        except ImportError:
+            pass
+
+    threading.Thread(target=run, name="open-warmup", daemon=True).start()

@@ -79,11 +79,13 @@ ensure_web() {
     return 1
 }
 
-while true; do
-    if [ -f "$STOP" ]; then
-        exit 0
-    fi
-    ensure_web || exit 1
+# Main window only. The Debian chromium wrapper exits while the browser
+# stays up ("Opening in existing browser session"); do not relaunch then.
+chrome_main() {
+    pgrep -f -- --class=duals-kiosk-chromium
+}
+
+start_chrome() {
     mkdir -p "$PROFILE"
     "$CHROME" \
         --user-data-dir="$PROFILE" \
@@ -101,10 +103,34 @@ while true; do
         --password-store=basic \
         --check-for-update-interval=31536000 \
         --autoplay-policy=no-user-gesture-required \
-        "$URL" 9>&-
+        --renderer-process-limit=4 \
+        "$URL" 9>&- &
+    j=0
+    while [ "$j" -lt 40 ]; do
+        if chrome_main >/dev/null; then
+            return 0
+        fi
+        j=$((j + 1))
+        sleep 0.25
+    done
+    echo "chromium did not stay up" >&2
+    return 1
+}
+
+while true; do
     if [ -f "$STOP" ]; then
         exit 0
     fi
+    ensure_web || exit 1
+    if ! chrome_main >/dev/null; then
+        start_chrome || exit 1
+    fi
+    while chrome_main >/dev/null; do
+        if [ -f "$STOP" ]; then
+            exit 0
+        fi
+        sleep 1
+    done
     [ "$ONCE" = 1 ] && exit 0
     sleep 1
 done

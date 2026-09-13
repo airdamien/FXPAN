@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push cam/ to the Pi. If the kiosk loop is up, bounce Chromium so it reloads.
+# Push cam/ to the Pi. If the kiosk loop is up, restart web.py + Chromium.
 #   ./scripts/deploy-kiosk.sh
 #   ./scripts/deploy-kiosk.sh airdamien@192.0.2.10 --no-restart
 set -euo pipefail
@@ -33,13 +33,15 @@ rsync -az \
   --exclude '.venv/' \
   --exclude 'cameras.json' \
   --exclude 'gpio.json' \
+  --exclude 'settings.json' \
+  --exclude 'wifi.json' \
   -e "$RSYNC_RSH" \
   "$ROOT/cam/" "$TARGET:~/nikonduals/cam/"
 
 "${SSH[@]}" "$TARGET" 'chmod +x ~/nikonduals/cam/kiosk/*.sh'
 
 if [[ $RESTART -eq 1 ]]; then
-  echo "==> bounce kiosk Chromium if the loop is running"
+  echo "==> bounce web.py + Chromium if the kiosk loop is running"
   "${SSH[@]}" "$TARGET" \
     'if pgrep -f "/cam/kiosk/run-kiosk.sh" >/dev/null; then bash ~/nikonduals/cam/kiosk/bounce.sh; else echo "(kiosk loop not running)"; fi'
 else

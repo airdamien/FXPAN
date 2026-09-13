@@ -16,6 +16,7 @@ HAMTYSAN does not publish a STEP. The numbers below are the OEM outline plus the
 | Contrast | 800:1 |
 | Touch | 5-point capacitive, USB HID, driver-free |
 | Input | HDMI (accepts up to 1920×1080, panel is 1024×600) |
+| DDC/CI | Yes — VCP 0x10 backlight on HDMI-A-2 (`/dev/i2c-21`). This scaler’s scale is inverted; SET **Screen** maps 100% to brightest. No `/sys/class/backlight`. |
 | Power | 5 V × 2 A on the micro-USB |
 | Weight | ~770 g boxed (Ubuy) |
 
