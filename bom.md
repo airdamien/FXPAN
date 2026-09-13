@@ -28,7 +28,7 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 |-----|------|------|
 | 1 spool | PETG or ABS (not brittle PLA for bayonets) | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | ~20 | M3 heat-set inserts | [Amazon M3 heat set inserts](https://www.amazon.com/s?k=M3+heat+set+inserts) |
-| ~32 | M3×8–20 socket screws | 12 for the three port cookies (4 each). 4× M3×20 lid-to-body (nuts under the stem / T plates). 4× M3×10 lid → `display_mount`. 4× M3 through the Wormfingers plate. [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
+| ~36 | M3×8–20 socket screws | 12 for the three port cookies (4 each). 4× M3×20 lid-to-body (nuts under the stem / T plates). 6× M3×16 lid → `display_mount` (3 per rail). 6× M3 through the Wormfingers back into the rails (3 per rail). [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 16 | M3 hex nuts | 12 in the tube-wall traps. 4 slide into the lid-corner slots (stem / T plates cover them). [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
 | 4 | M3×25 + nuts | Wormfingers case sandwich. Comes with their Printables note. |
 | 6 | M3 set screws (mirror tip/tilt) | [Amazon M3 set screws](https://www.amazon.com/s?k=M3+set+screw+kit) |

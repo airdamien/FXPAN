@@ -49,7 +49,7 @@ module monitor_pi_at() {
 function monitor_case_height() = BOTTOM_H + BEZEL_T;
 
 function case_easel_holes() = [
-    for (x = [-EASEL_RAIL_X, EASEL_RAIL_X], y = [-EASEL_SCREW_Y, EASEL_SCREW_Y])
+    for (x = [-EASEL_RAIL_X, EASEL_RAIL_X], y = [-EASEL_SCREW_Y, 0, EASEL_SCREW_Y])
         [x, y]
 ];
 

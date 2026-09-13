@@ -13,12 +13,13 @@ DISP_SCREW_D = 3.2;
 RAIL_T   = 12;
 FOOT_H   = 6;
 BEAM_R   = 5.5;
+JOIN_R   = 2;
 TIP_S    = 125;
 MONITOR_TILT = 60;
 CASE_H   = 154;
 
 function lid_display_holes() = [
-    for (x = [-LID_DISP_X, LID_DISP_X], y = [-32, 10])
+    for (x = [-LID_DISP_X, LID_DISP_X], y = [-32, -11, 10])
         [x, y]
 ];
 
@@ -28,6 +29,9 @@ function _easel_up() = [-cos(MONITOR_TILT), sin(MONITOR_TILT)];
 function _easel_n()  = [sin(MONITOR_TILT), cos(MONITOR_TILT)];
 function _easel_pt(t) = [LID_HINGE_Y, FOOT_H] + t * _easel_up();
 function _rail_pt(t)  = _easel_pt(t) - BEAM_R * _easel_n();
+function _rail_t_for_y(y) =
+    let (p0 = _rail_pt(0))
+        (y - p0[1]) / _easel_up()[1];
 
 module display_lid_bosses(lid_t) { }
 
@@ -40,31 +44,20 @@ module display_lid_cuts(lid_t, lip = 3) {
     }
 }
 
-module _beam(pts, r = BEAM_R) {
-    for (i = [0 : len(pts) - 2])
-        hull() {
-            translate(pts[i]) circle(r);
-            translate(pts[i + 1]) circle(r);
-        }
-}
-
 module rail_profile() {
-    translate([-38, 2])
-        offset(r = 2)
-            square([54, FOOT_H - 4]);
-    _beam([
-        [12, FOOT_H],
-        _rail_pt(22),
-        _rail_pt(50),
-        _rail_pt(80),
-        _rail_pt(110),
-        _rail_pt(TIP_S),
-    ]);
-    // Heel to tip: closes the L so the beam cannot fold at the elbow.
-    _beam([
-        [-40, FOOT_H],
-        _rail_pt(TIP_S),
-    ], 5);
+    heel  = [-40, FOOT_H];
+    front = _rail_pt(_rail_t_for_y(FOOT_H));
+    tip   = _rail_pt(TIP_S);
+
+    // One frame: bottom bar is the same width as the legs and sits on the lid.
+    difference() {
+        offset(r = JOIN_R)
+            offset(delta = BEAM_R - JOIN_R)
+                polygon([heel, front, tip]);
+        offset(r = JOIN_R)
+            offset(delta = -(BEAM_R + JOIN_R))
+                polygon([heel, front, tip]);
+    }
 }
 
 module case_easel_world_cutters() {
@@ -81,7 +74,7 @@ module display_rail(side = 1) {
         for (p = lid_display_holes())
             if (p[0] == side * LID_DISP_X)
                 translate([p[0], p[1], -1])
-                    cylinder(h = FOOT_H + 2, d = DISP_SCREW_D);
+                    cylinder(h = 2 * BEAM_R + 2, d = DISP_SCREW_D);
         case_easel_world_cutters();
     }
 }

@@ -6,8 +6,10 @@
 #   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
+#   ./export_stls.sh --monitor               easel rails + holed case back → stls/monitor/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
 #   focus_sled is in every chassis default list → stls/tools/focus_sled.stl
+#   case_back is the Wormfingers bottom with easel + Pi holes.
 #
 # Camera tubes export twice:
 #   arm_r.stl / arm_t.stl / arm_l.stl     female 52×0.75 (reverse ring)
@@ -28,12 +30,17 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
     out=$root/stls/hybrid_shadowgraph
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled)
+elif [[ "${1:-}" == "--monitor" ]]; then
+    shift
+    scad=$root/openscad/monitor/WATCH_ME.scad
+    out=$root/stls/monitor
+    default_parts=(display_mount case_back)
 elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
     scad=$root/openscad/EFhybrid/WATCH_ME.scad
@@ -79,6 +86,20 @@ for req in "${parts[@]}"; do
             -D "SHOW_RULERS=0" "$root/openscad/focus_sled.scad"
         continue
     fi
+    if [[ "$req" == "case_back" ]]; then
+        dest=$out/case_back.stl
+        echo "export case_back -> $dest"
+        "$osc" -o "$dest" --export-format binstl \
+            -D "PRINT_CASE_BACK=1" "$root/openscad/monitor/WATCH_ME.scad"
+        continue
+    fi
+    if [[ "$req" == "display_mount" && "$scad" == *"/monitor/WATCH_ME.scad" ]]; then
+        dest=$out/display_mount.stl
+        echo "export display_mount -> $dest"
+        "$osc" -o "$dest" --export-format binstl \
+            -D "PRINT_LAYOUT=1" "$scad"
+        continue
+    fi
     mount=0
     scad_part=$req
     dest_stem=$req
@@ -95,5 +116,5 @@ for req in "${parts[@]}"; do
         -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" "$scad"
 done
 
-echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); focus_sled on its left face."
+echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); display_mount rails on their flat face; case_back outer-back down; focus_sled on its left face."
 echo "$out"
