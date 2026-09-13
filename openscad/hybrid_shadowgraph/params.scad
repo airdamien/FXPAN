@@ -36,7 +36,7 @@ TUBE_OD       = 68;
 WALL          = (TUBE_OD - TUBE_ID) / 2;
 JUNCTION_BOX  = 90;
 
-PORT_PATCH     = 86;
+PORT_PATCH     = 90;
 PORT_PATCH_T   = 4;
 PORT_SCREW_R   = 38.5;
 PORT_SCREW_D   = 3.2;

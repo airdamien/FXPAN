@@ -20,6 +20,7 @@ use <../monitor/monitor.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
+SHOW_PANELS = 1; // [0:hide, 1:show]
 SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:show]
@@ -35,8 +36,10 @@ ex = EXPLODED ? 55 : 0;
 LID_T     = 4;
 LID_LIP   = 3;
 LID_GAP   = 0.3;
-// Inset from the outer wall. 4 put the Ø3.2 hole on the lip recess (no bite).
-LID_SCREW = 2.5;
+// In from the outer corner so the hex sits under the 90 mm plates.
+LID_SCREW = 5;
+// Nut center below the box top. M3×20: 4 lid + 12 to nut + nut + a bit past.
+LID_NUT_DROP = 12;
 
 function mount_stack()       = ARM_MOUNT ? F_FMOUNT_STACK : F_REV_STACK;
 function stem_tube_len()     = D_LENS_TO_PLATE - JUNCTION_BOX / 2;
@@ -142,10 +145,6 @@ module box_bore() {
     translate([0, 0, s / 2 - LID_LIP / 2])
         cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
 
-    for (x = [-1, 1], y = [-1, 1])
-        translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), s / 2 - 12])
-            cylinder(h = 14, d = 3.2);
-
     mirror_groove_cutouts();
 
     translate([0, 0, -s / 2 - 0.05]) {
@@ -158,7 +157,32 @@ module box_bore() {
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
 }
 
+// M3 hex in each top corner. Slot opens on ±Y so the stem / T plates cover it.
+module lid_body_fastener_cuts() {
+    s = JUNCTION_BOX;
+    nut_z = s / 2 - LID_NUT_DROP;
+    module nut_hex() {
+        rotate([0, 0, 30])
+            cylinder(h = PORT_NUT_T + 0.25,
+                     d = PORT_NUT_AF / cos(30), $fn = 6, center = true);
+    }
+    for (sx = [-1, 1], sy = [-1, 1]) {
+        px = sx * (s / 2 - LID_SCREW);
+        py = sy * (s / 2 - LID_SCREW);
+        translate([px, py, nut_z - 4])
+            cylinder(h = s / 2 - nut_z + 5, d = PORT_SCREW_D);
+        // Hex tunnel to the ±Y face; stem / T plates cover the opening.
+        hull() {
+            translate([px, py, nut_z])
+                nut_hex();
+            translate([px, sy * (s / 2 + 0.2), nut_z])
+                nut_hex();
+        }
+    }
+}
+
 module box_fastener_cuts() {
+    lid_body_fastener_cuts();
     at_each_port()
         port_screws() {
             translate([0, 0, -WALL - 0.2])
@@ -337,22 +361,24 @@ module optical_axis_guides() {
 module assembly() {
     part_junction();
 
-    at_stem()
-        translate([0, 0, EXPLODED ? ex : 0])
-            part_stem();
+    if (SHOW_PANELS) {
+        at_stem()
+            translate([0, 0, EXPLODED ? ex : 0])
+                part_stem();
 
-    at_stem()
-        translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
-                         + (EXPLODED ? ex * 1.4 : 0)])
-            part_elnikkor_adapter();
+        at_stem()
+            translate([0, 0, PORT_PATCH_T + stem_tube_len() + HELICOID_LEN
+                             + (EXPLODED ? ex * 1.4 : 0)])
+                part_elnikkor_adapter();
 
-    at_reflect()
-        translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+        at_reflect()
+            translate([0, 0, EXPLODED ? ex : 0])
+                part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
 
-    at_transmit()
-        translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+        at_transmit()
+            translate([0, 0, EXPLODED ? ex : 0])
+                part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    }
 
     hybrid_pair(show_glass = $preview,
                 explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
