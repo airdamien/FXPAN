@@ -16,6 +16,7 @@ import dual
 import gpio
 import live
 import pano
+import settings
 
 
 DETECT = """\
@@ -359,6 +360,39 @@ class Pano(unittest.TestCase):
         kept = pano.keep_last(5, self.root)
         self.assertEqual(kept["count"], 3)
         self.assertEqual(len(pano.list_pairs(self.root)), 5)
+
+
+class Settings(unittest.TestCase):
+    def setUp(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        self._old = settings.PATH
+        settings.PATH = root / "settings.json"
+        self.addCleanup(lambda: setattr(settings, "PATH", self._old))
+
+    def test_pi_defaults_both_on(self):
+        self.assertEqual(settings.load(pi=True), {"download": True, "gpio": True})
+
+    def test_mac_defaults_both_off(self):
+        self.assertEqual(settings.load(pi=False), {"download": False, "gpio": False})
+
+    def test_save_survives_reload(self):
+        settings.save({"download": False, "gpio": True}, pi=True)
+        self.assertEqual(settings.load(pi=True), {"download": False, "gpio": True})
+
+    def test_shoot_target(self):
+        self.assertEqual(
+            settings.shoot_target({"gpio": True, "download": True}, {"available": True}),
+            "gpio",
+        )
+        self.assertEqual(
+            settings.shoot_target({"gpio": True, "download": True}, {"available": False}),
+            "download",
+        )
+        self.assertEqual(
+            settings.shoot_target({"gpio": False, "download": False}, {"available": True}),
+            "card",
+        )
 
 
 if __name__ == "__main__":

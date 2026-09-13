@@ -165,9 +165,7 @@
   <div class="row">
     <button id="live">Live view</button>
     <button id="liveStop">Stop</button>
-    <label class="dlchk"><input type="checkbox" id="dl">Download</label>
-    <button class="shoot" id="shoot">Shoot to cards</button>
-    <button id="gpio" hidden>GPIO + USB</button>
+    <button class="shoot" id="shoot">Shoot</button>
   </div>
   <div class="row">
     <label class="drag">ISO <b id="isoVal">400</b>
@@ -209,6 +207,8 @@
     <button id="detect">Detect</button>
     <button id="status">Status</button>
     <button id="swap" disabled>Swap T/R</button>
+    <label class="dlchk"><input type="checkbox" id="dl">Download files</label>
+    <label class="dlchk"><input type="checkbox" id="gpioOn">GPIO shutter</label>
     <label class="dlchk"><input type="checkbox" id="simPi">Sim as Pi</label>
   </div>
 </section>
@@ -475,22 +475,10 @@ bind("set", async () => {
   paintHud();
   log(j.message);
 });
-const paintShoot = () => {
-  document.getElementById("shoot").textContent =
-    document.getElementById("dl").checked ? "Shoot + download" : "Shoot to cards";
-};
-document.getElementById("dl").onchange = paintShoot;
 bind("shoot", async () => {
   liveSrc(false);
-  const target = document.getElementById("dl").checked ? "download" : "card";
   const j = await api("/api/shoot", { method:"POST",
-    headers:{"content-type":"application/json"}, body: JSON.stringify({ target }) });
-  log(j.message);
-});
-bind("gpio", async () => {
-  liveSrc(false);
-  const j = await api("/api/shoot", { method:"POST",
-    headers:{"content-type":"application/json"}, body: JSON.stringify({ target: "gpio" }) });
+    headers:{"content-type":"application/json"}, body: "{}" });
   log(j.message);
 });
 bind("live", async () => {
@@ -645,10 +633,28 @@ showTab(location.hash === "#usb" ? "usb" : location.hash === "#pano" ? "pano"
   : location.hash === "#files" ? "files" : "view");
 bindDrag("isoDrag", ISO, "isoVal", "400");
 bindDrag("shutDrag", SHUT, "shutVal", "1/125");
+const paintSettings = (s) => {
+  if (!s) return;
+  const dl = document.getElementById("dl");
+  const g = document.getElementById("gpioOn");
+  if (dl && "download" in s) dl.checked = !!s.download;
+  if (g && "gpio" in s) g.checked = !!s.gpio;
+};
+const saveSettings = async () => {
+  const j = await api("/api/settings", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({
+      download: document.getElementById("dl").checked,
+      gpio: document.getElementById("gpioOn").checked,
+    }) });
+  paintSettings(j);
+  log(j.message);
+};
+document.getElementById("dl").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("gpioOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 const paintGpio = (g) => {
   const box = document.getElementById("simPi");
   if (box) box.checked = !!(g && g.sim);
-  document.getElementById("gpio").hidden = !(g && g.available);
 };
 document.getElementById("simPi").onchange = async () => {
   try {
@@ -661,6 +667,7 @@ document.getElementById("simPi").onchange = async () => {
 };
 api("/api/meta").then(j => {
   paintGpio(j.gpio);
+  paintSettings(j.settings);
 }).catch(() => {});
 api("/api/detect").then(async j => {
   fill(j.cameras, j.pair); log(j.message);
