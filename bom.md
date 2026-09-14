@@ -55,12 +55,13 @@ Or set `PART` and F6:
 - `stem` / `arm_l` / `arm_r` / `arm_t` — tube + flange (print the square flange on the bed)
 - `lid` — chamber lid
 - `mirror_tray` / `bs_tray` / `hybrid_tray` — splitter cartridge
+- `brace` — hybrid tripod plate (print floor on the bed; insert from the bed)
 - `shims` — 0.2 / 0.5 / 1.0 mm focus rings
 - `elnikkor_adapter` — male M42 → female L39×26 TPI (print the M42 male on the bed)
 
 `--bsplit` parts: `chassis` / `stem` / `arm_r` (reflect, +X) / `arm_t` (transmit, +Y, shorter by `bs_t_comp`) / `lid` / `bs_tray` / `shims` / `elnikkor_adapter`
 
-`--hybrid` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` (right half, +X) / `arm_t` (left half, +Y) / `lid` / `hybrid_tray` / `shims` / `elnikkor_adapter`. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
+`--hybrid` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` (right half, +X) / `arm_t` (left half, +Y) / `lid` / `hybrid_tray` / `brace` (hybrid only) / `shims` / `elnikkor_adapter`. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
 
 `--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them. Bench setup and Kraken plates: [README — Shadowgraph](README.md#shadowgraph).
 
@@ -70,17 +71,18 @@ Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www
 
 ## Hybrid pano — D7000
 
-Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export with `./export_stls.sh --hybrid`. Print `chassis` (floor on the bed), `stem`, `arm_r`, `arm_t`, `lid`, `hybrid_tray`, `shims`, `elnikkor_adapter` (M42 male on the bed). Countryside: [`docs/kraken/el135_scene.png`](docs/kraken/el135_scene.png).
+Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export with `./export_stls.sh --hybrid`. Print `chassis` (floor on the bed), `stem`, `arm_r`, `arm_t`, `lid`, `hybrid_tray`, `brace` (floor on the bed), `shims`, `elnikkor_adapter` (M42 male on the bed). Countryside: [`docs/kraken/el135_scene.png`](docs/kraken/el135_scene.png). Brace is sized for the **72 mm** 135/180 arms.
 
 ### Assembly
 
-1. Box floor on the bed; tubes flange-on-bed. Black PETG/ABS. Iron a **1/4-20×6.4** heat-set into the floor well from the bed face. Do not punch through.
+1. Box floor on the bed; tubes flange-on-bed; **brace** floor on the bed. Black PETG/ABS. Iron a **1/4-20×6.4** heat-set into the **chassis** floor well and another into the **brace** well, both from the bed face. Do not punch through. Tripod goes in the brace, not the box.
 2. Drop the uncut 50×50×1 into the tray from +Z, **S1 toward the lens**. Roof pegs sit past the plate edge so it drops in. Seat the tray in the box corners. Lid forks over the two posts.
 3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
 4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter (`bs_t_comp`).
 5. Nuts in the wall traps; 4× M3 per cookie. Screw a 52 mm **F** reverse ring into each mouth; bayonet the D7000s. Or print `arm_*_f` (`ARM_MOUNT=1`) and dry-fit the printed F; add `F_MOUNT_CLOCK` if the first print locks 90° off.
 6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem for a **~0.61 m** subject. The 50/2.8 and the F 50/1.8 are close-up only. The F 50 stem takes the **54 mm / 2 mm-cookie** camera tubes (`arm_*_s` / `arm_*_sf`), not the 72 mm 135/180 pair. Landscape infinity is the **180**, not a shorter stem.
 7. Shim one arm until both live-views are sharp on the same subject without touching the helicoid. MC-DC2 Y-lead for sync.
+8. Both bodies **upright**. Bolt `brace` from below: one 1/4-20 up into the box insert, two 1/4-20s through the **slots** into the D7000 bases. The plate is solid with hex cutouts. Iron the tripod insert at the **centroid**. Mount the tripod there, not in the box.
 
 Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) · [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png) (~14 cm object stitch at 0.61 m, 1.7× one DX). You already have the D7000s and the 50/2.8 (close-up only).
 
@@ -100,8 +102,9 @@ The 90 mm box plus the D7000 46.5 mm register is already **~136 mm** before any 
 | 1 spool | PETG or ABS | Chassis + tray | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
 | 16 | M3 hex nuts + 12× M3×10–16 + 4× M3×20 | 12 in the port cookies. 4 lid-corner nuts (slide in from stem / T, plates cover the slots) with M3×20 through the lid | [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) · [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
 | 4 | M2.5×6 thread-forming | Blind Pi holes in the lid (58×49 HAT). Do not punch through. | [M2.5 screws](https://www.amazon.com/s?k=M2.5+6mm+screw) |
-| 1 | **1/4-20 heat-set**, short 6.4 mm | Floor well Ø8.1. Iron in from the bed face. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
-| 1 | 1/4-20 camera screw | Into that insert | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
+| 2 | **1/4-20 heat-set**, short 6.4 mm | Chassis floor + **centroid** well in `brace`. Ø8.1. Iron in from the bed face. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
+| 3 | 1/4-20 × **16–25 mm** | From below: brace → box insert, brace → each D7000 (slots). | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
+| 1 | 1/4-20 tripod screw | Into the **brace** insert (not the box). | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
 | 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
 A 150 mm EL-Nikkor / Rodagon / Componon-S focuses at **~1.1 m** on this path. Infinity is the **180** (helicoid +6.5 mm), not a shorter stem and not the 135.

@@ -8,12 +8,13 @@
 // STEM 0 = helicoid + L39 (EL-Nikkor 135). STEM 1 = female F (50 mm test).
 // STEM 2 = helicoid + M62 (EL-Nikkor 180, infinity).
 // F 50 uses the 54 mm camera tubes + 2 mm cookies (ARMS=1). 135/180 keep 72 / 4.
+// Brace: triangle under the box + both body 1/4-20s. Tripod insert in the brace.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
 // EL180_M62_PITCH: 1.0 default; 0.75 if the 180 will not start.
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135/180, stem_f50:Stem F 50, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135/180, stem_f50:Stem F 50, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
 
 /* [Stem] */
 STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
@@ -39,6 +40,7 @@ SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:show]
 SHOW_LENS = 0; // [0:hide, 1:show]
+SHOW_BRACE = 1; // [0:hide, 1:show]
 
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
@@ -475,6 +477,153 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0) {
                     d7000_body(roll);
 }
 
+// Both bodies upright (world +Z = camera top). R was −90 (upside down).
+function body_roll_r() = 90;
+function body_roll_t() = 180;
+
+function brace_cam_d() = D_PLATE_TO_MOUNT + D7000_TRIPOD_IN;
+function brace_r_xy() =
+    let (a = field_toe(), d = brace_cam_d())
+        [d * cos(a), d * sin(a)];
+function brace_t_xy() =
+    let (a = field_toe(), d = brace_cam_d())
+        [d * sin(a), d * cos(a)];
+function brace_tripod_xy() =
+    let (r = brace_r_xy(), t = brace_t_xy())
+        [(r.x + t.x) / 3, (r.y + t.y) / 3];
+function brace_cam_lift() =
+    max(1, JUNCTION_BOX / 2 - D7000_TRIPOD_BELOW);
+function brace_stamp_xy() =
+    let (r = brace_r_xy(), t = brace_t_xy(),
+         m = [(r.x + t.x) / 2, (r.y + t.y) / 2],
+         n = m / norm(m))
+        [m.x - n.x * 10, m.y - n.y * 10];
+
+module brace_hex_grid_2d() {
+    cell = BRACE_HEX_CELL;
+    for (j = [-2:22], i = [-2:22])
+        translate([(i + (j % 2) * 0.5) * cell, j * cell * sin(60)])
+            rotate(30)
+                circle(d = BRACE_HEX_D, $fn = 6);
+}
+
+module brace_hex_cuts_2d() {
+    r = brace_r_xy();
+    t = brace_t_xy();
+    q = brace_tripod_xy();
+    s = brace_stamp_xy();
+    intersection() {
+        difference() {
+            offset(-1.8)
+                offset(BRACE_WEB / 2)
+                    polygon([[0, 0], r, t]);
+            translate([0, 0])
+                circle(d = BRACE_PAD_D + 4);
+            translate(r)
+                circle(d = BRACE_PAD_D + 4);
+            translate(t)
+                circle(d = BRACE_PAD_D + 4);
+            translate(q)
+                circle(d = BRACE_PAD_D + 4);
+            translate(s)
+                rotate(135)
+                    square([78, 10], center = true);
+        }
+        brace_hex_grid_2d();
+    }
+}
+
+module brace_slot_2d(p) {
+    a = atan2(p.y, p.x);
+    translate(p)
+        rotate(a)
+            hull() {
+                translate([-BRACE_SLOT_L / 2, 0])
+                    circle(d = BRACE_SLOT_W);
+                translate([BRACE_SLOT_L / 2, 0])
+                    circle(d = BRACE_SLOT_W);
+            }
+}
+
+module brace_head_2d(p) {
+    a = atan2(p.y, p.x);
+    translate(p)
+        rotate(a)
+            hull() {
+                translate([-BRACE_SLOT_L / 2, 0])
+                    circle(d = BRACE_HEAD_D);
+                translate([BRACE_SLOT_L / 2, 0])
+                    circle(d = BRACE_HEAD_D);
+            }
+}
+
+module brace_blank() {
+    r = brace_r_xy();
+    t = brace_t_xy();
+    lift = brace_cam_lift();
+    union() {
+        linear_extrude(BRACE_T)
+            union() {
+                offset(BRACE_WEB / 2)
+                    polygon([[0, 0], r, t]);
+                translate([0, 0])
+                    circle(d = BRACE_PAD_D);
+                translate(r)
+                    circle(d = BRACE_PAD_D);
+                translate(t)
+                    circle(d = BRACE_PAD_D);
+                translate(brace_tripod_xy())
+                    circle(d = BRACE_PAD_D);
+            }
+        translate([r.x, r.y, BRACE_T])
+            cylinder(h = lift, d = BRACE_PAD_D);
+        translate([t.x, t.y, BRACE_T])
+            cylinder(h = lift, d = BRACE_PAD_D);
+    }
+}
+
+module part_brace() {
+    r = brace_r_xy();
+    t = brace_t_xy();
+    q = brace_tripod_xy();
+    h = BRACE_T + brace_cam_lift();
+    color("SlateGray")
+    difference() {
+        brace_blank();
+        translate([0, 0, -0.2])
+            cylinder(h = BRACE_T + 0.4, d = BRACE_SCREW_D);
+        translate([0, 0, -0.05])
+            cylinder(h = BRACE_HEAD_H + 0.1, d = BRACE_HEAD_D);
+        translate([0, 0, -0.2])
+            linear_extrude(h + 0.4)
+                union() {
+                    brace_slot_2d(r);
+                    brace_slot_2d(t);
+                }
+        translate([0, 0, -0.05])
+            linear_extrude(BRACE_HEAD_H + 0.1)
+                union() {
+                    brace_head_2d(r);
+                    brace_head_2d(t);
+                }
+        translate([q.x, q.y, -0.05]) {
+            cylinder(h = tripod_hole_h() + 0.15, d = TRIPOD_INSERT_D);
+            cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
+        }
+        translate([0, 0, -0.2])
+            linear_extrude(BRACE_T + 0.4)
+                brace_hex_cuts_2d();
+        translate([brace_stamp_xy().x, brace_stamp_xy().y, BRACE_T - STAMP_DEPTH])
+            rotate(135)
+                part_stamp_cut("brace");
+    }
+}
+
+module brace_at() {
+    translate([0, 0, -JUNCTION_BOX / 2 - BRACE_T])
+        part_brace();
+}
+
 module optical_axis_guides() {
     if ($preview)
         color("gold", 0.45) {
@@ -533,13 +682,16 @@ module assembly() {
             }
         }
 
+    if (SHOW_BRACE)
+        brace_at();
+
     at_reflect() {
         ghost_body_at();
-        camera_body_at(reflect_tube_len(), rx = -field_toe(), roll = -90);
+        camera_body_at(reflect_tube_len(), rx = -field_toe(), roll = body_roll_r());
     }
     at_transmit() {
         ghost_body_at();
-        camera_body_at(transmit_tube_len(), ry = -field_toe(), roll = 180);
+        camera_body_at(transmit_tube_len(), ry = -field_toe(), roll = body_roll_t());
     }
     taking_lens_at();
     optical_axis_guides();
@@ -576,6 +728,8 @@ module export_part() {
         display_mount_print();
     else if (PART == "hybrid_tray")
         hybrid_cartridge(show_glass = false);
+    else if (PART == "brace")
+        part_brace();
     else
         assembly();
 }
