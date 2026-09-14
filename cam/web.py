@@ -98,7 +98,10 @@ def _read_json(handler):
 
 
 def _stop_live():
+    running = bool(LIVE.snapshot().get("running"))
     LIVE.stop()
+    if running:
+        time.sleep(0.4)
 
 
 def _live_message(snap):
@@ -150,12 +153,76 @@ def _maybe_sync(have, prefs):
         return str(exc)
 
 
+def _merge_exposure(data, prefs):
+    data = data if isinstance(data, dict) else {}
+    prefs = prefs or {}
+    out = {}
+    for key in settings.EXPOSURE:
+        val = data.get(key)
+        if val is None or str(val).strip() == "":
+            val = prefs.get(key)
+        val = str(val).strip() if val is not None else ""
+        if val:
+            out[key] = val
+    return out
+
+
+def _apply_exposure(have, assignments):
+    notes = []
+    if not assignments or not have:
+        return notes
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(have)) as pool:
+        futs = [
+            pool.submit(dual._set_one, row["port"], assignments)
+            for row in have.values()
+        ]
+        for fut in futs:
+            notes.extend(fut.result() or [])
+    return notes
+
+
+def _status_now(rows):
+    rows = list(rows or [])
+    if not rows:
+        return [], []
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(rows)) as pool:
+        blocks = list(pool.map(dual._status_one, rows))
+    by_port = {b.get("port"): b for b in blocks}
+    cameras = []
+    for row in rows:
+        extra = dict(row)
+        got = by_port.get(row["port"]) or {}
+        for key, val in got.items():
+            if val:
+                extra[key] = val
+        cameras.append(extra)
+    return cameras, blocks
+
+
+def _shot_files(saved=None, dest=None, stamp=None):
+    names = []
+    if saved:
+        for role in sorted(saved):
+            names.extend(saved[role] or [])
+        return names
+    if dest and stamp:
+        for path in sorted(Path(dest).glob(f"*_{stamp}.*")):
+            if path.suffix.lower() in (".jpg", ".jpeg", ".png"):
+                names.append(path.name)
+    return names
+
+
 def _assignments(data):
     out = []
     for src, key in (
         ("program", "expprogram"),
         ("iso", "iso"),
         ("shutter", "shutterspeed"),
+        ("fstop", "f-number"),
         ("wb", "whitebalance"),
         ("quality", "imagequality"),
     ):
@@ -169,11 +236,20 @@ def _assignments(data):
                 out.append(("isoauto", "On"))
                 out.append(("autoiso", "On"))
             else:
+                iso = val.replace("ISO", "").replace("iso", "").strip()
                 out.append(("isoauto", "Off"))
                 out.append(("autoiso", "Off"))
-                out.append(("iso", val))
+                out.append(("iso", iso or val))
             continue
-        if key == "shutterspeed" and val.lower() == "auto":
+        if key == "shutterspeed":
+            if val.lower() == "auto":
+                continue
+            out.append((key, dual.format_shutter(val)))
+            continue
+        if key == "f-number":
+            if val.lower() == "auto":
+                continue
+            out.append((key, dual.format_aperture(val)))
             continue
         out.append((key, val))
     return out
@@ -337,31 +413,20 @@ class Handler(BaseHTTPRequestHandler):
                 rows = dual.detect_bodies()
                 if not rows:
                     raise dual.CamError("no cameras")
-                from concurrent.futures import ThreadPoolExecutor
-
-                with ThreadPoolExecutor(max_workers=len(rows)) as pool:
-                    blocks = list(pool.map(dual._status_one, rows))
-                by_port = {b.get("port"): b for b in blocks}
-                for row in rows:
-                    extra = by_port.get(row["port"]) or {}
-                    for key in (
-                        "iso", "isoauto", "autoiso", "shutterspeed", "batterylevel",
-                        "imagequality", "whitebalance", "expprogram", "exposurecompensation",
-                        "focusmode", "focusmode2", "meteringmode", "availableshots",
-                    ):
-                        if extra.get(key):
-                            row[key] = extra[key]
+                cameras, blocks = _status_now(rows)
                 lines = []
                 for b in blocks:
                     lines.append(
                         f"{b.get('role')}  {b.get('expprogram') or '-'}  "
                         f"iso={b.get('iso')}  shutter={b.get('shutterspeed')}  "
+                        f"f={b.get('f-number') or '-'}  "
+                        f"auto={b.get('isoauto') or b.get('autoiso') or '-'}  "
                         f"wb={b.get('whitebalance') or '-'}  bat={b.get('batterylevel')}  "
                         f"{b.get('port')}"
                     )
                 return _json(
                     self, 200,
-                    {"cameras": rows, "status": blocks, "pair": dual.load_pair(),
+                    {"cameras": cameras, "status": blocks, "pair": dual.load_pair(),
                      "message": "\n".join(lines)},
                 )
         except dual.CamError as exc:
@@ -410,6 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                         + prefs.get("master", "T")
                         + "  sync="
                         + ("on" if prefs.get("sync") else "off")
+                        + f"  preview={prefs.get('preview_s', 2)}s"
                     )},
                 )
             if path == "/api/gpio":
@@ -470,34 +536,17 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, {"message": "live view stopped"})
             if path == "/api/set":
                 _stop_live()
-                assignments = _assignments(data)
+                prefs = settings.load()
+                exp = _merge_exposure(data, prefs)
+                assignments = _assignments(exp or data)
                 if not assignments:
                     raise dual.CamError("nothing to set")
+                if exp:
+                    settings.save(exp)
                 have = dual.require_online(dual.detect_bodies())
-                prefs = settings.load()
-                master = prefs.get("master") or "T"
-                notes = []
+                notes = _apply_exposure(have, assignments)
                 extra = []
-                if prefs.get("sync", True) and master in have and len(have) > 1:
-                    notes.extend(dual._set_one(have[master]["port"], assignments) or [])
-                    try:
-                        info = dual.copy_from_master(have, master)
-                        extra.append(info["message"])
-                        notes.extend(info.get("notes") or [])
-                    except dual.CamError as exc:
-                        extra.append(str(exc))
-                    roles = master
-                else:
-                    from concurrent.futures import ThreadPoolExecutor
-
-                    with ThreadPoolExecutor(max_workers=len(have)) as pool:
-                        futs = [
-                            pool.submit(dual._set_one, row["port"], assignments)
-                            for row in have.values()
-                        ]
-                        for fut in futs:
-                            notes.extend(fut.result() or [])
-                    roles = " and ".join(sorted(have))
+                roles = " and ".join(sorted(have))
                 msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
                 if extra:
                     msg += "  " + "; ".join(extra)
@@ -505,48 +554,80 @@ class Handler(BaseHTTPRequestHandler):
                     msg += "  (" + "; ".join(notes)
                     if any(n.startswith("expprogram=") for n in notes):
                         msg += " — turn the mode dial to M"
+                    if any(n.startswith("f-number=") for n in notes):
+                        msg += " — f/ needs A or M, or a CPU lens"
                     msg += ")"
-                return _json(self, 200, {"message": msg})
+                cameras, blocks = _status_now(list(have.values()))
+                return _json(
+                    self, 200,
+                    {
+                        "message": msg,
+                        "cameras": cameras,
+                        "status": blocks,
+                        "pair": dual.load_pair(),
+                    },
+                )
             if path == "/api/shoot":
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
 
                 _stop_live()
                 prefs = settings.load()
+                exp = _merge_exposure(data, prefs)
+                if exp:
+                    settings.save(exp)
+                    prefs = settings.load()
+                assignments = _assignments(exp)
+                preview_s = prefs.get("preview_s", settings.PREVIEW_S)
                 target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
+
+                def shot_json(message, files=None):
+                    return _json(
+                        self, 200,
+                        {
+                            "message": message,
+                            "files": files or [],
+                            "preview_s": preview_s,
+                        },
+                    )
+
                 if target == "gpio":
                     snap = gpio.snapshot()
                     if not snap["available"]:
                         raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
                     if not snap["pi"]:
                         info = gpio.fire()
-                        return _json(
-                            self, 200,
-                            {
-                                "message": (
-                                    f"gpio sim  BCM {info['pin']}  (no pulse)  "
-                                    "on a Pi: Y-lead fire"
-                                    + (
-                                        ", then USB download → captures/"
-                                        if prefs["download"]
-                                        else ", files stay on cards"
-                                    )
-                                )
-                            },
+                        return shot_json(
+                            f"gpio sim  BCM {info['pin']}  (no pulse)  "
+                            "on a Pi: Y-lead fire"
+                            + (
+                                ", then USB download → captures/"
+                                if prefs["download"]
+                                else ", files stay on cards"
+                            ),
                         )
+                    have = None
+                    try:
+                        have = dual.require_online(dual.detect_bodies())
+                    except dual.CamError:
+                        have = None
+                    copied = ""
+                    if have and assignments:
+                        _apply_exposure(have, assignments)
+                        copied = " ".join(
+                            f"{k}={v}" for k, v in dual.shot_config(assignments)
+                        )
+                    elif have:
+                        copied = _maybe_sync(have, prefs)
                     if not prefs["download"]:
                         info = gpio.fire()
-                        return _json(
-                            self, 200,
-                            {
-                                "message": (
-                                    f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                                    "  cards"
-                                )
-                            },
+                        return shot_json(
+                            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                            "  cards"
+                            + (f"  {copied}" if copied else ""),
                         )
-                    have = dual.require_online(dual.detect_bodies())
-                    copied = _maybe_sync(have, prefs)
+                    if not have:
+                        raise dual.CamError("no cameras")
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     dest = pano.CAPTURES
                     before = dual.list_cards(have)
@@ -556,40 +637,57 @@ class Handler(BaseHTTPRequestHandler):
                         f"{role} {','.join(saved[role])}" for role in sorted(saved)
                     )
                     pano.refresh_exif(dest, stamp)
-                    return _json(
-                        self, 200,
-                        {
-                            "message": (
-                                f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                                f"  → {bits}"
-                                + (f"  {copied}" if copied else "")
-                            )
-                        },
+                    return shot_json(
+                        f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                        f"  → {bits}"
+                        + (f"  {copied}" if copied else ""),
+                        _shot_files(saved=saved),
                     )
                 have = dual.require_online(dual.detect_bodies())
-                copied = _maybe_sync(have, prefs)
+                copied = ""
+                if assignments:
+                    _apply_exposure(have, assignments)
+                    copied = " ".join(
+                        f"{k}={v}" for k, v in dual.shot_config(assignments)
+                    )
+                else:
+                    copied = _maybe_sync(have, prefs)
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dest = pano.CAPTURES
                 with ThreadPoolExecutor(max_workers=len(have)) as pool:
                     if target == "card":
                         futs = [
-                            pool.submit(dual._shoot_card, role, have[role]["port"])
+                            pool.submit(
+                                dual._shoot_card,
+                                role,
+                                have[role]["port"],
+                                assignments,
+                            )
                             for role in have
                         ]
                     else:
                         futs = [
-                            pool.submit(dual._shoot_one, role, have[role]["port"], dest, stamp)
+                            pool.submit(
+                                dual._shoot_one,
+                                role,
+                                have[role]["port"],
+                                dest,
+                                stamp,
+                                assignments,
+                            )
                             for role in have
                         ]
                     times = [fut.result() for fut in futs]
                 msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
                 where = "cards" if target == "card" else "captures/"
+                files = []
                 if target != "card":
                     pano.refresh_exif(dest, stamp)
-                return _json(
-                    self, 200,
-                    {"message": f"shot {stamp}  {msg}  → {where}"
-                     + (f"  {copied}" if copied else "")},
+                    files = _shot_files(dest=dest, stamp=stamp)
+                return shot_json(
+                    f"shot {stamp}  {msg}  → {where}"
+                    + (f"  {copied}" if copied else ""),
+                    files,
                 )
             if path == "/api/captures/delete":
                 stamp = (data.get("stamp") or "").strip()
