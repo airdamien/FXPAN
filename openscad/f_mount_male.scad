@@ -64,12 +64,17 @@ module f_fork_pads() {
 // in the raw mesh (not +Y). Clock so those forks sit 90° left of
 // flange-mark-up — that is where the D7000 body pin actually is.
 // Bored peg sinks into TUBE_ID; collar / pads stay behind the register.
-module f_mount_on_tube(clock = 0) {
+// peg_face: recede the tube-facing peg by this much so a PETG liner can
+// sit there without overlapping PCTG. Do not difference the STL.
+module f_mount_on_tube(clock = 0, peg_face = 0) {
     translate([0, 0, -F_PEG_H])
         difference() {
             cylinder(h = F_PEG_H + 0.4, d = F_STL_OD);
             translate([0, 0, -0.1])
                 cylinder(h = F_PEG_H + 0.6, d = F_BORE);
+            if (peg_face > 0)
+                translate([0, 0, -0.1])
+                    cylinder(h = peg_face + 0.1, d = F_STL_OD + 0.4);
         }
     translate([0, 0, F_COLLAR_Z0])
         difference() {
@@ -81,4 +86,19 @@ module f_mount_on_tube(clock = 0) {
         f_mount_stl_raw();
         f_fork_pads();
     }
+}
+
+// Light-path PETG: sleeve in the F throat + washer on the peg’s tube face.
+// Unions only — sits inside F_BORE, does not difference the import.
+module f_mount_path_liner(lining = 1.6) {
+    id = F_BORE - 2 * lining;
+    translate([0, 0, -F_PEG_H])
+        difference() {
+            union() {
+                cylinder(h = F_PEG_H + F_STL_HEIGHT + 0.3, d = F_BORE);
+                cylinder(h = lining, d = F_STL_OD);
+            }
+            translate([0, 0, -0.2])
+                cylinder(h = F_PEG_H + F_STL_HEIGHT + 0.8, d = id);
+        }
 }
