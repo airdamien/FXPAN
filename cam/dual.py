@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """USB control for the two D7000s via gphoto2 (PTP).
 
-The taking-lens iris lives on the enlarger, not the bodies. This matches
-ISO / shutter / WB and fires every paired body on USB (one is enough).
+ISO / shutter / f-number / WB on every paired body (one is enough).
+The enlarger iris is the taking-lens ring; a CPU F-mount can take PTP f/.
 USB skew is tens of ms — use the MC-DC2 Y-lead for anything that moves.
 
   python3 cam/dual.py detect
   python3 cam/dual.py pair --t SERIAL
   python3 cam/dual.py pair --t SERIAL --r SERIAL
   python3 cam/dual.py status
-  python3 cam/dual.py set --iso 400 --shutter 1/125
+  python3 cam/dual.py set --iso 400 --shutter 1/125 --fstop 5.6
   python3 cam/dual.py shoot captures/
 """
 
@@ -34,6 +34,7 @@ KEYS = (
     "serialnumber",
     "iso",
     "shutterspeed",
+    "f-number",
     "imagequality",
     "whitebalance",
     "expprogram",
@@ -265,6 +266,34 @@ def format_shutter(s):
     return raw
 
 
+def format_aperture(s):
+    raw = (s or "").strip()
+    if not raw:
+        return raw
+    t = raw.lower().replace(" ", "").replace("f/", "").replace("f", "")
+    try:
+        n = float(t)
+    except ValueError:
+        return raw
+    if n <= 0:
+        return raw
+    if abs(n - round(n)) < 0.05:
+        pretty = str(int(round(n)))
+    else:
+        pretty = f"{n:.1f}".rstrip("0").rstrip(".")
+    return f"f/{pretty}"
+
+
+def fstop_tries(value):
+    fmt = format_aperture(value)
+    n = fmt.replace("f/", "").replace("f", "").strip()
+    out = []
+    for val in (fmt, f"f/{n}" if n else "", n, str(value or "").strip()):
+        if val and val not in out:
+            out.append(val)
+    return out or [str(value or "").strip()]
+
+
 def decode_program(vals):
     code = str(vals.get("500e") or "").strip()
     name = D7000_DIAL.get(code)
@@ -449,6 +478,8 @@ def _status_one(row):
         vals["focusmode"] = vals.get("focusmode2") or ""
     if vals.get("shutterspeed"):
         vals["shutterspeed"] = format_shutter(vals["shutterspeed"])
+    if vals.get("f-number"):
+        vals["f-number"] = format_aperture(vals["f-number"])
     if (vals.get("whitebalance") or "").lower() == "automatic":
         vals["whitebalance"] = "Auto"
     prog = decode_program(vals)
@@ -471,14 +502,121 @@ def cmd_status(_args):
         print(f"{key:<14} {bits}")
 
 
+def onoff_tries(value):
+    s = str(value or "").strip()
+    low = s.lower()
+    if low in ("off", "0", "false", "no"):
+        return ["Off", "0"]
+    if low in ("on", "1", "true", "yes"):
+        return ["On", "1"]
+    return [s] or ["Off"]
+
+
+def iso_tries(value):
+    """Nikon PTP iso is sometimes '400' and sometimes 'ISO 400'."""
+    raw = str(value or "").strip()
+    n = raw.replace("ISO", "").replace("iso", "").strip()
+    out = []
+    for val in (raw, n, f"ISO {n}" if n.isdigit() else ""):
+        if val and val not in out:
+            out.append(val)
+    return out or [raw]
+
+
+def iso_variants(assignments):
+    """Same widgets, each ISO spelling Nikon might accept."""
+    assignments = list(assignments or [])
+    idx = [i for i, (key, _) in enumerate(assignments) if key == "iso"]
+    if not idx:
+        return [assignments]
+    variants = []
+    seen = set()
+    for val in iso_tries(assignments[idx[-1]][1]):
+        row = list(assignments)
+        for i in idx:
+            row[i] = ("iso", val)
+        key = tuple(row)
+        if key not in seen:
+            seen.add(key)
+            variants.append(row)
+    return variants or [assignments]
+
+
+def config_args(assignments):
+    args = []
+    for key, value in assignments or []:
+        args += ["--set-config", f"{key}={value}"]
+    return args
+
+
+def shot_config(assignments):
+    """ISO + shutter ride with capture. isoauto is prefixed separately."""
+    keep = {"iso", "shutterspeed"}
+    return [(k, v) for k, v in (assignments or []) if k in keep]
+
+
 def _set_one(port, assignments):
-    """Set each widget on its own. expprogram is the mode dial and often readonly."""
+    """isoauto Off + iso must not share a command with flaky autoiso."""
+    assignments = list(assignments or [])
+    if not assignments:
+        return []
+    primary = [(k, v) for k, v in assignments if k not in ("autoiso", "f-number")]
+    rest = [(k, v) for k, v in assignments if k in ("autoiso", "f-number")]
+    last = None
+    if primary:
+        for variant in iso_variants(primary):
+            try:
+                gp(config_args(variant), port=port)
+                return _set_widgets(port, rest)
+            except CamError as exc:
+                last = exc
+    return _set_widgets(port, assignments, last=last)
+
+
+def _set_widgets(port, assignments, last=None):
     errors = []
     for key, value in assignments:
-        try:
-            gp(["--set-config", f"{key}={value}"], port=port)
-        except CamError as exc:
-            errors.append(f"{key}={value}: {exc}")
+        if key == "iso":
+            tries = iso_tries(value)
+        elif key in ("isoauto", "autoiso"):
+            tries = onoff_tries(value)
+        elif key == "f-number":
+            tries = fstop_tries(value)
+        else:
+            tries = [value]
+        err = last
+        ok = False
+        for val in tries:
+            try:
+                gp(["--set-config", f"{key}={val}"], port=port)
+                ok = True
+                break
+            except CamError as exc:
+                err = exc
+        if not ok and key == "f-number":
+            for val in tries:
+                try:
+                    gp(["--set-config", f"aperture={val}"], port=port)
+                    ok = True
+                    break
+                except CamError as exc:
+                    err = exc
+            if not ok:
+                for val in tries:
+                    try:
+                        gp(
+                            [
+                                "--set-config", "viewfinder=0",
+                                "--set-config", f"f-number={val}",
+                            ],
+                            port=port,
+                        )
+                        ok = True
+                        break
+                    except CamError as exc:
+                        err = exc
+        if not ok:
+            errors.append(f"{key}={value}: {err}")
     if errors and len(errors) == len(assignments):
         raise CamError("; ".join(errors))
     return errors
@@ -488,7 +626,10 @@ def assignments_from_status(vals):
     """ISO / shutter / WB / quality / EC from a body's status. No flash."""
     vals = vals or {}
     out = []
-    auto = (vals.get("isoauto") or vals.get("autoiso") or "").lower() == "on"
+    auto = (
+        str(vals.get("isoauto") or "").lower() == "on"
+        or str(vals.get("autoiso") or "").lower() == "on"
+    )
     iso = str(vals.get("iso") or "").replace("ISO", "").strip()
     if auto or iso.lower() == "auto":
         out.append(("isoauto", "On"))
@@ -496,10 +637,13 @@ def assignments_from_status(vals):
     elif iso:
         out.append(("isoauto", "Off"))
         out.append(("autoiso", "Off"))
-        out.append(("iso", iso))
+        out.append(("iso", iso_tries(iso)[0] if iso.isdigit() else iso))
     shut = str(vals.get("shutterspeed") or "").strip()
     if shut:
         out.append(("shutterspeed", format_shutter(shut)))
+    fnum = str(vals.get("f-number") or vals.get("aperture") or "").strip()
+    if fnum and fnum.lower() != "auto":
+        out.append(("f-number", format_aperture(fnum)))
     for key in ("imagequality", "whitebalance", "exposurecompensation"):
         val = str(vals.get(key) or "").strip()
         if val:
@@ -540,6 +684,8 @@ def cmd_set(args):
         assignments.append(("iso", args.iso))
     if args.shutter is not None:
         assignments.append(("shutterspeed", args.shutter))
+    if getattr(args, "fstop", None) is not None:
+        assignments.append(("f-number", format_aperture(args.fstop)))
     if args.quality is not None:
         assignments.append(("imagequality", args.quality))
     if args.wb is not None:
@@ -558,31 +704,51 @@ def cmd_set(args):
         print(note)
 
 
-def _shoot_one(role, port, dest, stamp):
+def _capture_args(card, filename=None):
+    if card:
+        return ["--set-config", "capturetarget=1", "--capture-image"]
+    return [
+        "--set-config",
+        "capturetarget=0",
+        "--capture-image-and-download",
+        "--force-overwrite",
+        f"--filename={filename}",
+    ]
+
+
+def _gp_capture(port, capture, assignments, timeout):
+    """Exit live view, lock ISO auto off, then ISO/shutter + capture."""
+    shot = shot_config(assignments)
+    last = None
+    prefixes = (
+        ["--set-config", "viewfinder=0", "--set-config", "isoauto=Off"],
+        ["--set-config", "viewfinder=0", "--set-config", "isoauto=0"],
+        ["--set-config", "isoauto=Off"],
+        ["--set-config", "viewfinder=0"],
+        [],
+    )
+    for prefix in prefixes:
+        for variant in iso_variants(shot) if shot else [[]]:
+            try:
+                gp(list(prefix) + config_args(variant) + capture, port=port, timeout=timeout)
+                return
+            except CamError as exc:
+                last = exc
+    if last:
+        raise last
+
+
+def _shoot_one(role, port, dest, stamp, assignments=None):
     dest.mkdir(parents=True, exist_ok=True)
     filename = str(dest / f"{role}_{stamp}.%C")
     t0 = time.perf_counter()
-    gp(
-        [
-            "--set-config",
-            "capturetarget=0",
-            "--capture-image-and-download",
-            "--force-overwrite",
-            f"--filename={filename}",
-        ],
-        port=port,
-        timeout=180,
-    )
+    _gp_capture(port, _capture_args(False, filename), assignments, 180)
     return role, time.perf_counter() - t0
 
 
-def _shoot_card(role, port):
+def _shoot_card(role, port, assignments=None):
     t0 = time.perf_counter()
-    gp(
-        ["--set-config", "capturetarget=1", "--capture-image"],
-        port=port,
-        timeout=90,
-    )
+    _gp_capture(port, _capture_args(True), assignments, 90)
     return role, time.perf_counter() - t0
 
 
@@ -718,6 +884,7 @@ def build_parser():
     s = sub.add_parser("set", help="write the same exposure to both")
     s.add_argument("--iso")
     s.add_argument("--shutter")
+    s.add_argument("--fstop", help="lens f-number, e.g. 5.6")
     s.add_argument("--quality")
     s.add_argument("--wb")
     s.add_argument("--program", default=None, help="usually M")

@@ -63,6 +63,9 @@ class Parse(unittest.TestCase):
         self.assertEqual(dual.format_shutter("1/125"), "1/125")
         self.assertEqual(dual.format_shutter("4s"), "4")
         self.assertEqual(dual.format_shutter("4"), "4")
+        self.assertEqual(dual.format_aperture("5.6"), "f/5.6")
+        self.assertEqual(dual.format_aperture("f/8"), "f/8")
+        self.assertEqual(dual.fstop_tries("5.6")[0], "f/5.6")
 
     def test_decode_program_d7000_dial(self):
         self.assertEqual(
@@ -100,6 +103,21 @@ class Parse(unittest.TestCase):
             [("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400")],
         )
         self.assertIn(("shutterspeed", "1/125"), web._assignments({"shutter": "1/125"}))
+        self.assertEqual(
+            web._assignments({"fstop": "5.6"}),
+            [("f-number", "f/5.6")],
+        )
+        self.assertEqual(web._assignments({"fstop": "Auto"}), [])
+        self.assertEqual(dual.iso_tries("400"), ["400", "ISO 400"])
+        self.assertEqual(
+            dual.shot_config([("isoauto", "Off"), ("iso", "400"), ("expprogram", "M")]),
+            [("iso", "400")],
+        )
+        self.assertEqual(dual.onoff_tries("Off"), ["Off", "0"])
+        self.assertEqual(
+            dual.config_args([("iso", "400"), ("shutterspeed", "1/125")])[-4:],
+            ["--set-config", "iso=400", "--set-config", "shutterspeed=1/125"],
+        )
 
     def test_claim_err(self):
         self.assertTrue(dual._claim_fail("Could not claim the USB device"))
@@ -560,6 +578,13 @@ class CopyMaster(unittest.TestCase):
         self.assertIn("isoauto", keys)
         self.assertNotIn("iso", keys)
 
+    def test_autoiso_on_counts_as_auto(self):
+        keys = [k for k, _ in dual.assignments_from_status({
+            "iso": "6400", "isoauto": "Off", "autoiso": "On",
+        })]
+        self.assertIn("isoauto", keys)
+        self.assertNotIn("iso", keys)
+
     def test_copy_from_master(self):
         calls = []
 
@@ -607,7 +632,7 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T",
+                "sync": True, "master": "T", "preview_s": 2,
             },
         )
 
@@ -616,7 +641,7 @@ class Settings(unittest.TestCase):
             settings.load(pi=False),
             {
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T",
+                "sync": True, "master": "T", "preview_s": 2,
             },
         )
 
@@ -629,7 +654,7 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
-                "sync": True, "master": "T",
+                "sync": True, "master": "T", "preview_s": 2,
             },
         )
         settings.save({"download": True}, pi=True)
@@ -654,6 +679,18 @@ class Settings(unittest.TestCase):
         self.assertEqual(settings.load(pi=True)["brightness"], 40)
         settings.save({"brightness": 0}, pi=True)
         self.assertEqual(settings.load(pi=True)["brightness"], 40)
+
+    def test_preview_and_exposure(self):
+        settings.save({"preview_s": 4, "iso": "800", "shutter": "1/250", "fstop": "f/8"}, pi=True)
+        got = settings.load(pi=True)
+        self.assertEqual(got["preview_s"], 4)
+        self.assertEqual(got["iso"], "800")
+        self.assertEqual(got["shutter"], "1/250")
+        self.assertEqual(got["fstop"], "8")
+        settings.save({"download": False}, pi=True)
+        self.assertEqual(settings.load(pi=True)["preview_s"], 4)
+        settings.save({"preview_s": 0}, pi=True)
+        self.assertEqual(settings.load(pi=True)["preview_s"], 0)
 
     def test_shoot_target(self):
         self.assertEqual(

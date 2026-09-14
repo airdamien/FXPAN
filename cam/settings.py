@@ -9,7 +9,9 @@ import gpio
 
 PATH = Path(__file__).resolve().parent / "settings.json"
 BOOLS = ("download", "gpio", "flip_r", "sync")
+EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
 OVERLAP = 0.20
+PREVIEW_S = 2
 
 
 def _master(val):
@@ -39,11 +41,63 @@ def _overlap(val):
     return n
 
 
+def _preview_s(val):
+    try:
+        n = int(round(float(val)))
+    except (TypeError, ValueError):
+        return None
+    if n < 0 or n > 15:
+        return None
+    return n
+
+
+def _iso(val):
+    s = str(val or "").replace("ISO", "").replace("iso", "").strip()
+    if not s:
+        return None
+    if s.lower() == "auto":
+        return "Auto"
+    if s.isdigit():
+        return s
+    return None
+
+
+def _fstop(val):
+    s = str(val or "").strip()
+    if not s:
+        return None
+    if s.lower() == "auto":
+        return "Auto"
+    t = s.lower().replace(" ", "").replace("f/", "").replace("f", "")
+    try:
+        n = float(t)
+    except ValueError:
+        return None
+    if n <= 0 or n > 64:
+        return None
+    if abs(n - round(n)) < 0.05:
+        return str(int(round(n)))
+    return f"{n:.1f}".rstrip("0").rstrip(".")
+
+
+def _exposure_val(key, val):
+    if key == "iso":
+        return _iso(val)
+    if key == "fstop":
+        return _fstop(val)
+    s = str(val or "").strip()
+    if not s or len(s) > 40:
+        return None
+    if key == "program" and s not in ("M", "A", "S", "P", "Auto"):
+        return None
+    return s
+
+
 def defaults(pi=None):
     on = gpio.on_pi() if pi is None else bool(pi)
     return {
         "download": on, "gpio": on, "flip_r": False, "overlap": OVERLAP,
-        "sync": True, "master": "T",
+        "sync": True, "master": "T", "preview_s": PREVIEW_S,
     }
 
 
@@ -72,6 +126,16 @@ def load(pi=None):
         b = _brightness(data["brightness"])
         if b is not None:
             out["brightness"] = b
+    if "preview_s" in data:
+        n = _preview_s(data["preview_s"])
+        if n is not None:
+            out["preview_s"] = n
+    for key in EXPOSURE:
+        if key not in data:
+            continue
+        val = _exposure_val(key, data[key])
+        if val is not None:
+            out[key] = val
     return out
 
 
@@ -99,6 +163,16 @@ def save(data, pi=None):
         b = _brightness(data["brightness"])
         if b is not None:
             out["brightness"] = b
+    if "preview_s" in data:
+        n = _preview_s(data["preview_s"])
+        if n is not None:
+            out["preview_s"] = n
+    for key in EXPOSURE:
+        if key not in data:
+            continue
+        val = _exposure_val(key, data[key])
+        if val is not None:
+            out[key] = val
     PATH.write_text(json.dumps(out) + "\n")
     return out
 

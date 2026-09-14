@@ -197,26 +197,28 @@ kraken/.venv/bin/python kraken/shadowgraph_wave.py     # Fresnel / knife / phase
 
 ## Dual D7000 USB
 
-Nikon-only. Both bodies: Setup → USB → **MTP/PTP**. No lens on the F-mounts (the iris is on the enlarger). `gphoto2` is already the Mac driver.
+Nikon-only. Both bodies: Setup → USB → **MTP/PTP**. Pair T/R serials once; the kiosk claims those bodies on boot and fills the HUD. The taking-lens iris is the enlarger ring. A CPU/G glass on the F-mount can take PTP **f/** (mode dial **A** or **M**). `gphoto2` is already the Mac driver.
 
 ```
 python3 cam/dual.py detect
 python3 cam/dual.py pair --t SERIAL --r SERIAL
-python3 cam/dual.py set --iso 400 --shutter 1/125 --program M
+python3 cam/dual.py set --iso 400 --shutter 1/125 --fstop 5.6 --program M
 python3 cam/dual.py shoot captures/
 ```
 
-USB fire is tens of ms apart. Use the MC-DC2 Y-lead for anything that moves. SET stores **GPIO shutter** (BCM 21 / Corona / Y-lead) and **Download files**; both default on on a Pi and survive restarts. USB **Sim as Pi** lets a Mac show the GPIO switch (no pulse).
+ISO, shutter, and f/ write to **both** bodies. FIRE drops live view, forces ISO Auto off, then sets exposure in the same gphoto2 process as the still. USB fire is tens of ms apart — MC-DC2 Y-lead for anything that moves.
+
+SET stores **GPIO shutter** (BCM 21 / Corona / Y-lead), **Download files**, overlap, flop R, and **Preview** seconds (last stills on LIVE after a download). Defaults for download/GPIO are on on a Pi and survive restarts. USB **Sim as Pi** lets a Mac show the GPIO switch (no pulse).
 
 ```
 python3 cam/web.py          # iPhone: http://<lan-ip>:8787/   laptop: http://127.0.0.1:8787/lab
 ```
 
-On the 10.1″ Pi (`airdamien@192.0.2.10`) the field page is **D12600**: Chromium kiosk, login autostart, respawn loop. SET **Desktop** returns to labwc. Tap **D12600** on the desktop to come back.
+On the 10.1″ Pi (`airdamien@192.0.2.10`) the field page is **D12600**: Chromium kiosk, login autostart, respawn loop. SET **Desktop** returns to labwc. Tap **D12600** on the desktop to come back. Deploy: `./scripts/redeploy-kiosk.sh`.
 
-Tabs are **LIVE / USB / PANO / FILES / SET**. LIVE is the home page and opens with no cameras on USB. The side stack is START / STOP (every tab), ISO, FIRE. T/R preview is LIVE only. ISO is a modal over the buttons.
+Tabs are **LIVE / USB / PANO / FILES / SET**. LIVE is home. The side stack is START, **PREVIEW**, ISO, FIRE. PREVIEW stitches T/R with the SET overlap/flop — live frames if START is on, otherwise the last pair in `captures/`. ISO is a modal (ISO / shutter / f/). APPLY and FIRE re-read the bodies into the HUD.
 
-SET is grouped: **Exposure** (ISO / shutter / program / WB / quality + APPLY), **Master** (T or R, copy to the other body — not flash; T is usually master, a speedlight can stay on R), **Capture** (download, GPIO, flop R, overlap), **Screen** (HDMI DDC backlight), **Wi-Fi** (scan / join, AP `D12600`), **Pi** (Sim as Pi, Desktop).
+SET is grouped: **Exposure** (ISO / shutter / f/ / program / WB / quality + APPLY), **Master** (T or R), **Capture** (download, GPIO, flop R, overlap, preview seconds), **Screen** (HDMI DDC backlight), **Wi-Fi** (scan / join, AP `D12600`), **Pi** (Sim as Pi, Desktop).
 
 PANO **STITCH** queues on a background worker so you can keep shooting. Modes are match / blend / cut / open (OpenStitching). Each pair card keeps QUEUED / WORKING / OK / ERROR. Newest shots sit at the top. A pair needs T and R JPEGs; T-only until the splitter is in will say so on that card. FILES is the same list.
 
