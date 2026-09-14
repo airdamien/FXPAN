@@ -2,7 +2,7 @@
 # Export printable STLs.
 #   ./export_stls.sh [part ...]              panorama V → stls/v/
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
-#   ./export_stls.sh --hybrid [part ...]     pano L (one 50/50) → stls/hybrid/
+#   ./export_stls.sh --hybrid-shift [part ...] shifted-DX pano L → stls/hybrid_shift/
 #   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
@@ -35,6 +35,11 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
     default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
+elif [[ "${1:-}" == "--hybrid-shift" ]]; then
+    shift
+    scad=$root/openscad/hybrid_shift/WATCH_ME.scad
+    out=$root/stls/hybrid_shift
+    default_parts=(chassis chassis_inner chassis_outer stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -119,32 +124,41 @@ for req in "${parts[@]}"; do
     fi
     mount=0
     arms=0
-    scad_part=$req
+    shell=full
+    core=$req
     dest_stem=$req
-    case $req in
+    if [[ "$req" == *_inner ]]; then
+        shell=inner
+        core=${req%_inner}
+        dest_stem=$req
+    elif [[ "$req" == *_outer ]]; then
+        shell=outer
+        core=${req%_outer}
+        dest_stem=$req
+    fi
+    scad_part=$core
+    case $core in
         arm_l_f|arm_r_f|arm_t_f)
-            scad_part=${req%_f}
+            scad_part=${core%_f}
             mount=1
-            dest_stem=$req
             ;;
         arm_r_sf|arm_t_sf)
-            scad_part=${req%_sf}
+            scad_part=${core%_sf}
             mount=1
             arms=1
-            dest_stem=$req
             ;;
         arm_r_s|arm_t_s)
-            scad_part=${req%_s}
+            scad_part=${core%_s}
             arms=1
-            dest_stem=$req
             ;;
     esac
     dest=$out/$dest_stem.stl
-    echo "export $dest_stem (ARM_MOUNT=$mount ARMS=$arms) -> $dest"
+    echo "export $dest_stem (ARM_MOUNT=$mount ARMS=$arms SHELL=$shell) -> $dest"
     "$osc" -o "$dest" --export-format binstl \
         -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" -D "ARMS=$arms" \
+        -D "SHELL=\"$shell\"" \
         -D "STAMP=\"$stamp\"" "$scad"
 done
 
-echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
+echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); *_inner = PETG lining, *_outer = PCTG shell; display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
 echo "$out"

@@ -59,6 +59,12 @@ Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). O
 
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
+## Hybrid shift (pano L: shifted DX, no tube toe)
+
+Toeing each tube by `field_toe` (~4.6°) tilts the sensors relative to the taking-lens image plane. Image-side sag to the DX edge is ~0.9 mm vs ~0.22 mm depth of focus at f/5.6 — Scheimpflug. This fork keeps `field_toe() = 0` and **translates** the R/T bores by `sensor_shift()` (~9.4 mm) so each tube stays centered on its chip. Cookies and M3s stay on the 90 mm face centers. Same 42.5 mm stitch, same 50/50 plate, same `PATH_TOTAL`. Inner 1.6 mm of box/tube/lid walls export as `*_inner.stl` for PETG; `*_outer.stl` is the PCTG shell.
+
+Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad). Export with `./export_stls.sh --hybrid-shift`.
+
 ## Hybrid shadowgraph (same-image DX + one 50/50 plate)
 
 Same L and plate, but `field_toe() = 0`: both bodies see the same DX frame. T is the conjugate tube (`▲ T shadowgraph`). R is the longer razor-slot tube — 0.6 mm extra (~7.4 mm object-side defocus), `▲ R shadowgraph`. Not a stitch. Bright card at ~0.61 m. Export with `./export_stls.sh --shadowgraph`. Setup, what works, and the Kraken plates: [README — Shadowgraph](README.md#shadowgraph).

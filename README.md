@@ -22,7 +22,8 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 
 | Kit | Bodies | Mouth | Path | 135/5.6 | Stitch | Files |
 |-----|--------|-------|------|---------|--------|-------|
-| [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k | `--hybrid` |
+| [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k · **toed** | `--hybrid` |
+| [`stls/hybrid_shift/`](stls/hybrid_shift/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · **shifted**, no Scheimpflug | `--hybrid-shift` |
 | [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | same frame · T sharp / R shadowgraph | `--shadowgraph` |
 | [`stls/EFhybrid/`](stls/EFhybrid/) | 5D Mark III FF | 58 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | `--efhybrid` |
 | [`stls/Ehybrid/`](stls/Ehybrid/) | Sony α7 FF | 52 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | `--ehybrid` |
@@ -50,6 +51,31 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 | `brace.stl` | honeycomb triangle under the box + both D7000 1/4-20s (slots); tripod insert at the centroid | floor down |
 
 Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-359 plate in from above; do not cut it. Re-export with `./export_stls.sh --hybrid` (wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`).
+
+### Shift kit (`stls/hybrid_shift/`)
+
+Same path, plate, and stitch as hybrid, but the camera tubes are **not toed**. Cookies and M3s stay centered on the 90 mm faces; only the R/T bores shift by `sensor_shift()` (~9.4 mm) so each sensor stays parallel to the taking-lens image plane (no Scheimpflug). Stem stays centered.
+
+The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl` is the 1.6 mm lining (PETG / CF-PETG) on tubes, F-mount throats, and the lid ceiling; `*_outer.stl` is the rest (PCTG), including the F-bayonet. Load both in the slicer as one object, inner assigned to the dark filament. Bare `chassis.stl` / `arm_*.stl` / `lid.stl` are the single-material solids. Part stamps start with `hs_` so they are not mixed with the toed hybrid kit. Export: `./export_stls.sh --hybrid-shift` or `./export_hybrid_shift.sh`.
+
+| File | What | Bed / filament |
+|------|------|----------------|
+| `chassis.stl` | full 90 mm box | floor down · one material |
+| `chassis_inner.stl` / `chassis_outer.stl` | lining / PCTG shell | floor down · PETG + PCTG |
+| `stem.stl` + `_inner` / `_outer` | lens tube | flange down |
+| `arm_r.stl` / `arm_t.stl` + `_inner` / `_outer` | untilted 72 mm tubes, 90 mm cookies, shifted bore | flange down |
+| `lid.stl` + `_inner` / `_outer` | chamber lid; inner = rim + grooved ceiling + display-nut pads (PETG), outer = PCTG cap | outer face up |
+| `hybrid_tray.stl` | PETG: 50/50 slot + posts, walls to the lid lip, port windows, sawtooth; paint fuzzy skin on the **inside** | floor down |
+| `brace.stl` | honeycomb under the box; holes follow the shifted 1/4-20s | floor down |
+
+**Cartridge in Bambu Studio** (`hybrid_tray.stl`, dark PETG, floor on the bed). Fuzzy skin only jitters **walls**, not top/bottom — the V-grooves already do the floor. Do not fuzz the outside (0.4 mm slip into the box).
+
+1. Process → **Others** → **Fuzzy Skin** = `None (Allow Paint)`. Leave **Apply fuzzy skin to first layer** off.
+2. **Fuzzy Skin Thickness** `0.3` mm. **Fuzzy Skin Point Distance** `0.8` mm. ([Bambu wiki](https://wiki.bambulab.com/en/software/bambu-studio/parameter/fuzzy-skin))
+3. Prepare → **Fuzzy Skin painting** (the spray next to support painting). Paint the inner cup walls, the plate-frame cheeks, and the window rim. Skip the outer cup, the glass slot faces, the floor (already hatched), and the lid-fork posts.
+4. Slice and check Preview: jitter on the inner perimeters only. Outer walls stay smooth.
+
+A cube **modifier** filling the cavity with Fuzzy Skin = `All walls` also works; keep it inside the cup so it does not touch the outer skin.
 
 ### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
 
@@ -253,9 +279,10 @@ kraken/.venv/bin/pip install -r kraken/requirements.txt
 
 | Path | Role |
 |------|------|
-| `stls/{v,bsplit,hybrid,hybrid_shadowgraph,EFhybrid,Ehybrid}/` | Print STLs |
+| `stls/{v,bsplit,hybrid,hybrid_shift,hybrid_shadowgraph,EFhybrid,Ehybrid}/` | Print STLs |
 | `openscad/WATCH_ME.scad` | V |
-| `openscad/hybrid/WATCH_ME.scad` | D7000 hybrid L |
+| `openscad/hybrid/WATCH_ME.scad` | D7000 hybrid L (toed) |
+| `openscad/hybrid_shift/WATCH_ME.scad` | D7000 hybrid L (shifted, no Scheimpflug) |
 | `openscad/hybrid_shadowgraph/WATCH_ME.scad` | same-image T sharp / R shadowgraph |
 | `openscad/EFhybrid/WATCH_ME.scad` | 5D Mark III |
 | `openscad/Ehybrid/WATCH_ME.scad` | α7 |

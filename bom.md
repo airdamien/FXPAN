@@ -61,7 +61,7 @@ Or set `PART` and F6:
 
 `--bsplit` parts: `chassis` / `stem` / `arm_r` (reflect, +X) / `arm_t` (transmit, +Y, shorter by `bs_t_comp`) / `lid` / `bs_tray` / `shims` / `elnikkor_adapter`
 
-`--hybrid` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` (right half, +X) / `arm_t` (left half, +Y) / `lid` / `hybrid_tray` / `brace` (hybrid only) / `shims` / `elnikkor_adapter`. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
+`--hybrid` / `--hybrid-shift` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` / `arm_t` / `lid` / `hybrid_tray` / `brace` (D7000 hybrids) / `shims` / `elnikkor_adapter`. `--hybrid-shift` also writes `*_inner` / `*_outer` for PETG lining + PCTG shell. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
 
 `--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them. Bench setup and Kraken plates: [README — Shadowgraph](README.md#shadowgraph).
 
@@ -108,6 +108,10 @@ The 90 mm box plus the D7000 46.5 mm register is already **~136 mm** before any 
 | 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
 
 A 150 mm EL-Nikkor / Rodagon / Componon-S focuses at **~1.1 m** on this path. Infinity is the **180** (helicoid +6.5 mm), not a shorter stem and not the 135.
+
+## Hybrid shift — D7000 (no tube toe)
+
+Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad). Export with `./export_stls.sh --hybrid-shift`. Same plate, stem, and path as hybrid. Camera tubes are **square**; cookies sit on the cube faces and the bores sit `sensor_shift()` off center. Print `*_inner` in PETG or CF-PETG and `*_outer` in PCTG (lining 1.6 mm). Or print the unsplit `chassis` / `arm_r` / `arm_t` / `lid` / `stem` in one dark filament. Flanges stay **▲ R** / **▲ T** at the top — there is no toe to aim. Brace holes follow the shifted 1/4-20s. Cartridge: dark PETG, floor down; in Bambu Studio paint fuzzy skin on the **inner** walls only (Others → Fuzzy Skin = `None (Allow Paint)`, thickness 0.3 mm, point distance 0.8 mm) — see [README — Shift kit](README.md#shift-kit-stls/hybrid_shift/).
 
 ## EF hybrid — 5D Mark III
 
