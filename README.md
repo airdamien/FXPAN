@@ -6,7 +6,7 @@ Each camera is aimed at a different half of a wider image (20% overlap). The tak
 
 ![Hybrid L with two D7000s](docs/chassis/hybrid_bodies.png)
 
-Hybrid L — D7000s on **▲ R** (+X) and **▲ T** (+Y). Stem is the EL-Nikkor. Bodies are preview ghosts; the print is the box and tubes.
+Hybrid L — D7000s on **▲ R** (+X) and **▲ T** (+Y), both **upright**. Stem is the EL-Nikkor. Bodies are preview ghosts; the print is the box, tubes, and `brace`. Tripod goes in the brace, not the box.
 
 ![Hybrid L, lid off](docs/chassis/hybrid.png)
 
@@ -47,6 +47,7 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 | `arm_r_sf.stl` / `arm_t_sf.stl` | same 54 mm tubes, printed F | flange down |
 | `shims.stl` | 0.2 / 0.5 / 1.0 mm focus rings | as exported |
 | `elnikkor_adapter.stl` | M42 male → L39×26 TPI | M42 male on the bed |
+| `brace.stl` | honeycomb triangle under the box + both D7000 1/4-20s (slots); tripod insert at the centroid | floor down |
 
 Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-359 plate in from above; do not cut it. Re-export with `./export_stls.sh --hybrid` (wrappers: `./export_hybrid.sh`, `./export_efhybrid.sh`, `./export_ehybrid.sh`).
 
@@ -56,7 +57,7 @@ Same box, stem, tray, and lid as hybrid. Tubes are not toed — both bodies see 
 
 ## Light path
 
-The hybrid L is **one** 50/50 plate, not a knife in the pupil. Lens on −Y. Reflect → R (+X). Transmit → T (+Y). Each arm is toed by `field_toe` so its sensor window sits on a different half of a `stitch_w` image.
+The hybrid L is **one** 50/50 plate, not a knife in the pupil. Lens on −Y. Reflect → R (+X). Transmit → T (+Y). Each arm is toed by `field_toe` so its sensor window sits on a different half of a `stitch_w` image. Both bodies sit upright. `brace` takes the weight from below (box 1/4-20 + slotted body 1/4-20s); the tripod heat-set is at the triangle centroid.
 
 ![Fold schematic](docs/kraken/el135_paths.png)
 

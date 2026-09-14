@@ -4,8 +4,8 @@
 //
 // Mesh is ~175 mm wide; scale 0.75 → ~132 mm (D7000 envelope).
 // Origin after this module ≈ F-register. +Z into the body. +Y top. +X grip.
-// Flange-mark up: R local −X (roll −90), T local −Y (roll 180),
-// V left / −X arm local +X (roll 90).
+// Hybrid upright: R local +X (roll 90), T local −Y (roll 180).
+// Older R ghost was roll −90 (upside down). V left / −X arm local +X (roll 90).
 
 D7000_STL   = "d7000_body.stl";
 D7000_SCALE = 0.75;

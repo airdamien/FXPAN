@@ -34,7 +34,7 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray shims elnikkor_adapter el180_adapter focus_sled)
+    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -137,5 +137,5 @@ for req in "${parts[@]}"; do
         -D "STAMP=\"$stamp\"" "$scad"
 done
 
-echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); display_mount rails on their flat face; case_back outer-back down; focus_sled on its left face."
+echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); display_mount rails on their flat face; case_back outer-back down; focus_sled on its left face."
 echo "$out"
