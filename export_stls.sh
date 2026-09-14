@@ -8,7 +8,7 @@
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
 #   ./export_stls.sh --monitor               easel rails + holed case back → stls/monitor/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
-#   focus_sled is in every chassis default list → stls/tools/focus_sled.stl
+#   focus_sled / focus_anchor → stls/tools/ (also in every chassis default list)
 #   case_back is the Wormfingers bottom with easel + Pi holes.
 #
 # Each part is embossed with its name and the render minute (YYYYMMDDHHMM).
@@ -23,23 +23,23 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")" && pwd)
 scad=$root/openscad/WATCH_ME.scad
 out=$root/stls/v
-default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter focus_sled)
+default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter focus_sled focus_anchor)
 
 if [[ "${1:-}" == "--bsplit" ]]; then
     shift
     scad=$root/openscad/bsplit/WATCH_ME.scad
     out=$root/stls/bsplit
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid bs_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid bs_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled)
+    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
     out=$root/stls/hybrid_shadowgraph
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--monitor" ]]; then
     shift
     scad=$root/openscad/monitor/WATCH_ME.scad
@@ -49,17 +49,17 @@ elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
     scad=$root/openscad/EFhybrid/WATCH_ME.scad
     out=$root/stls/EFhybrid
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--ehybrid" ]]; then
     shift
     scad=$root/openscad/Ehybrid/WATCH_ME.scad
     out=$root/stls/Ehybrid
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--tools" ]]; then
     shift
     scad=$root/openscad/focus_sled.scad
     out=$root/stls/tools
-    default_parts=(focus_sled)
+    default_parts=(focus_sled focus_anchor)
 fi
 
 if [[ -n "${OPENSCAD:-}" && -x "$OPENSCAD" ]]; then
@@ -91,6 +91,15 @@ for req in "${parts[@]}"; do
         "$osc" -o "$dest" --export-format binstl \
             -D "SHOW_RULERS=0" -D "STAMP=\"$stamp\"" \
             "$root/openscad/focus_sled.scad"
+        continue
+    fi
+    if [[ "$req" == "focus_anchor" ]]; then
+        dest=$root/stls/tools/focus_anchor.stl
+        mkdir -p "$(dirname "$dest")"
+        echo "export focus_anchor -> $dest"
+        "$osc" -o "$dest" --export-format binstl \
+            -D "SHOW_GHOSTS=0" -D "STAMP=\"$stamp\"" \
+            "$root/openscad/focus_anchor.scad"
         continue
     fi
     if [[ "$req" == "case_back" ]]; then
@@ -137,5 +146,5 @@ for req in "${parts[@]}"; do
         -D "STAMP=\"$stamp\"" "$scad"
 done
 
-echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); display_mount rails on their flat face; case_back outer-back down; focus_sled on its left face."
+echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
 echo "$out"
