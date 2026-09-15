@@ -63,19 +63,25 @@ The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl`
 | `chassis.stl` | full 90 mm box | floor down · one material |
 | `chassis_inner.stl` / `chassis_outer.stl` | lining / PCTG shell | floor down · PETG + PCTG |
 | `stem.stl` + `_inner` / `_outer` | lens tube | flange down |
-| `arm_r.stl` / `arm_t.stl` + `_inner` / `_outer` | untilted 72 mm tubes, 90 mm cookies, shifted bore | flange down |
+| `arm_r.stl` / `arm_t.stl` + `_inner` / `_outer` | untilted 72 mm tubes, 90 mm cookies, shifted bore; inner has 45° ID baffles + F-throat glare plate | flange down |
 | `lid.stl` + `_inner` / `_outer` | chamber lid; inner = rim + grooved ceiling + display-nut pads (PETG), outer = PCTG cap | outer face up |
 | `hybrid_tray.stl` | PETG: 50/50 slot + posts, walls to the lid lip, port windows, sawtooth; paint fuzzy skin on the **inside** | floor down |
 | `brace.stl` | honeycomb under the box; holes follow the shifted 1/4-20s | floor down |
 
-**Cartridge in Bambu Studio** (`hybrid_tray.stl`, dark PETG, floor on the bed). Fuzzy skin only jitters **walls**, not top/bottom — the V-grooves already do the floor. Do not fuzz the outside (0.4 mm slip into the box).
+**Fuzzy skin (Bambu Studio)** — same numbers on every dark PETG light-path wall. Fuzzy only jitters **walls**, not top/bottom. ([Bambu wiki](https://wiki.bambulab.com/en/software/bambu-studio/parameter/fuzzy-skin))
 
-1. Process → **Others** → **Fuzzy Skin** = `None (Allow Paint)`. Leave **Apply fuzzy skin to first layer** off.
-2. **Fuzzy Skin Thickness** `0.3` mm. **Fuzzy Skin Point Distance** `0.8` mm. ([Bambu wiki](https://wiki.bambulab.com/en/software/bambu-studio/parameter/fuzzy-skin))
-3. Prepare → **Fuzzy Skin painting** (the spray next to support painting). Paint the inner cup walls, the plate-frame cheeks, and the window rim. Skip the outer cup, the glass slot faces, the floor (already hatched), and the lid-fork posts.
-4. Slice and check Preview: jitter on the inner perimeters only. Outer walls stay smooth.
+| | |
+|--|--|
+| Fuzzy Skin | `None (Allow Paint)` |
+| Apply fuzzy skin to first layer | off |
+| Thickness | `0.3` mm |
+| Point distance | `0.8` mm |
 
-A cube **modifier** filling the cavity with Fuzzy Skin = `All walls` also works; keep it inside the cup so it does not touch the outer skin.
+Prepare → **Fuzzy Skin painting** (spray next to support painting). Slice and check Preview: jitter on painted perimeters only.
+
+**Cartridge** (`hybrid_tray.stl`, floor on the bed). Do not fuzz the outside (0.4 mm slip into the box). Paint the inner cup walls, the plate-frame cheeks, and the window rim. Skip the outer cup, the glass slot faces, the floor (already hatched), and the lid-fork posts. A cube **modifier** filling the cavity with Fuzzy Skin = `All walls` also works; keep it inside the cup so it does not touch the outer skin.
+
+**Tube / box liners** (`arm_*_inner.stl`, `stem_inner.stl`, `chassis_inner.stl`, cookie on the bed). Paint the **bore** (baffle teeth and the glare-plate rim). Skip the cookie OD, the clamp pads, and anything that mates to PCTG. Do not paint `*_outer` or the gold F-bayonet — those stay smooth. The glare plate sits in the F throat on the chassis side of the register; it does not enter the mirror box.
 
 ### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
 

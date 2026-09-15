@@ -493,6 +493,42 @@ module d12600_inlay() {
                         d12600_2d();
 }
 
+module tube_baffle_tooth() {
+    rotate_extrude()
+        polygon([
+            [TUBE_ID / 2 - 0.02, 0],
+            [TUBE_ID / 2 - BAFFLE_H, BAFFLE_H],
+            [TUBE_ID / 2 - 0.02, BAFFLE_H]
+        ]);
+}
+
+module tube_baffles(out_len) {
+    z0 = 8;
+    z1 = out_len - (printed_f() ? F_PEG_H + MASK_T + 1.2 : F_REV_LEN + 1.2);
+    if (z1 > z0 + BAFFLE_H)
+        for (z = [z0 : BAFFLE_PITCH : z1 - BAFFLE_H])
+            translate([0, 0, z])
+                tube_baffle_tooth();
+}
+
+module f_glare_mask(out_len, mark) {
+    roll = mark == "T" ? 180 : 90;
+    z = printed_f() ? out_len - F_PEG_H - MASK_T : out_len - F_REV_LEN - MASK_T;
+    od = printed_f() ? F_BORE : TUBE_ID - 0.4;
+    translate([0, 0, z])
+        difference() {
+            cylinder(h = MASK_T, d = od);
+            translate([0, 0, -0.2])
+                linear_extrude(MASK_T + 0.4)
+                    rotate([0, 0, roll])
+                        offset(r = 2)
+                            offset(delta = -2)
+                                square([SENSOR_W + 2 * MASK_CLEAR,
+                                        SENSOR_H + 2 * MASK_CLEAR],
+                                       center = true);
+        }
+}
+
 module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", hel = 0) {
     L = INNER_LINING;
     ax = cam_axis(mark);
@@ -521,6 +557,11 @@ module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", hel = 0) {
         along_cam(rx, ry, mark)
             translate([0, 0, out_len])
                 f_mount_path_liner(L);
+    if (hel == 0 && mark != "")
+        along_cam(rx, ry, mark) {
+            tube_baffles(out_len);
+            f_glare_mask(out_len, mark);
+        }
 }
 
 module lid_lining_mask() {
@@ -730,6 +771,10 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
     difference() {
         union() {
             port_tube_solid(out_len, rx, ry, p, mark);
+            along_cam(rx, ry, mark) {
+                tube_baffles(out_len);
+                f_glare_mask(out_len, mark);
+            }
             if (printed_f() && SHELL != "full")
                 along_cam(rx, ry, mark)
                     translate([0, 0, out_len])
