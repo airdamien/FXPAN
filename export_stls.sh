@@ -6,10 +6,11 @@
 #   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
-#   ./export_stls.sh --monitor               easel rails + holed case back → stls/monitor/
+#   ./export_stls.sh --monitor               easel rails + case back + sunshade → stls/monitor/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
 #   focus_sled / focus_anchor → stls/tools/ (also in every chassis default list)
 #   case_back is the Wormfingers bottom with easel + Pi holes.
+#   sunshade → stls/monitor/ (also in hybrid / hybrid-shift / shadowgraph defaults)
 #
 # Each part is embossed with its name and the render minute (YYYYMMDDHHMM).
 #
@@ -34,22 +35,22 @@ elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
     scad=$root/openscad/hybrid/WATCH_ME.scad
     out=$root/stls/hybrid
-    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
+    default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back sunshade hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--hybrid-shift" ]]; then
     shift
     scad=$root/openscad/hybrid_shift/WATCH_ME.scad
     out=$root/stls/hybrid_shift
-    default_parts=(chassis chassis_inner chassis_outer chassis_logo stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back sunshade hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
     out=$root/stls/hybrid_shadowgraph
-    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
+    default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back sunshade hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--monitor" ]]; then
     shift
     scad=$root/openscad/monitor/WATCH_ME.scad
     out=$root/stls/monitor
-    default_parts=(display_mount case_back)
+    default_parts=(display_mount case_back sunshade)
 elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
     scad=$root/openscad/EFhybrid/WATCH_ME.scad
@@ -120,6 +121,15 @@ for req in "${parts[@]}"; do
         echo "export display_mount -> $dest"
         "$osc" -o "$dest" --export-format binstl \
             -D "PRINT_LAYOUT=1" -D "STAMP=\"$stamp\"" "$scad"
+        continue
+    fi
+    if [[ "$req" == "sunshade" ]]; then
+        dest=$root/stls/monitor/sunshade.stl
+        mkdir -p "$(dirname "$dest")"
+        echo "export sunshade -> $dest"
+        "$osc" -o "$dest" --export-format binstl \
+            -D "PRINT_SUNSHADE=1" -D "STAMP=\"$stamp\"" \
+            "$root/openscad/monitor/WATCH_ME.scad"
         continue
     fi
     mount=0
