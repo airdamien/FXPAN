@@ -100,6 +100,7 @@ F_REV_TOL      = 0.45;
 F_BORE         = 40.3;
 F_FMOUNT_STACK = 1.75;
 F_REGISTER_T   = F_REV_STACK;
+F_PEG_H        = 5.5;
 
 TRIPOD_INSERT_D = 8.1;
 TRIPOD_INSERT_L = 6.4;
@@ -123,6 +124,12 @@ BRACE_HEX_CELL     = 11;
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;     // chamber floor is inner PETG (was 0.4 PCTG cap)
 MARK_DEPTH   = 1.2;   // D12600 inlay on the blank −X wall
+// Tube ID baffles (PETG liner). 45° tooth, camera face flat — cookie on the bed.
+BAFFLE_H     = 1.6;
+BAFFLE_PITCH = 4.0;
+// Glare stop in the F throat, chassis side of the register (not into the body).
+MASK_CLEAR   = 4.0;
+MASK_T       = 1.4;
 
 SHIM_STEPS = [0.2, 0.5, 1.0];
 
