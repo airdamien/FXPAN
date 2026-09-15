@@ -39,7 +39,7 @@ elif [[ "${1:-}" == "--hybrid-shift" ]]; then
     shift
     scad=$root/openscad/hybrid_shift/WATCH_ME.scad
     out=$root/stls/hybrid_shift
-    default_parts=(chassis chassis_inner chassis_outer stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -138,6 +138,10 @@ for req in "${parts[@]}"; do
     fi
     scad_part=$core
     case $core in
+        chassis_logo)
+            scad_part=chassis
+            shell=logo
+            ;;
         arm_l_f|arm_r_f|arm_t_f)
             scad_part=${core%_f}
             mount=1

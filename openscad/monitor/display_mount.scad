@@ -37,11 +37,19 @@ function _rail_t_for_y(y) =
 module display_lid_bosses(lid_t) { }
 
 // Meat under each rail screw so a hex can sit in a rim-lip lid.
+// Overlaps into the lid plate so the bosses are not face-kissed islands.
 module display_lid_nut_pads(lip = 3) {
-    d = DISP_NUT_AF / cos(30) + 4;
+    d = DISP_NUT_AF / cos(30) + 5;
     for (p = lid_display_holes())
-        translate([p[0], p[1], -lip / 2])
-            cylinder(h = lip, d = d, center = true);
+        translate([p[0], p[1], -lip / 2 + 0.6])
+            cylinder(h = lip + 1.2, d = d, center = true);
+}
+
+module display_lid_pad_keepout(h = 10) {
+    d = DISP_NUT_AF / cos(30) + 7;
+    for (p = lid_display_holes())
+        translate([p[0], p[1], 0])
+            cylinder(h = h, d = d, center = true);
 }
 
 module display_lid_cuts(lid_t, lip = 3) {

@@ -52,9 +52,20 @@ JUNCTION_BOX  = 90;
 PORT_PATCH     = 90;
 PORT_PATCH_T   = 4;
 PORT_PATCH_T_SHORT = 2;
+// Port boss: cookies drop into a C-channel. Optical faces stay at
+// JUNCTION_BOX/2 so the stem tube does not shrink.
+PORT_FRAME        = 5;
+PORT_SLOT_LIP     = 8;
+PORT_SLOT_CLEAR   = 0.4;
+PORT_RETAIN       = 4;
+PORT_BOSS_R       = 12;
 STEM_F50_PATCH = 1.6;
 PORT_SCREW_R   = 38.5;
+PORT_CLAMP_R   = 38;
+PORT_CLAMP_SEP = 15;
 PORT_SCREW_D   = 3.2;
+PORT_HEAD_D    = 6.4;
+PORT_HEAD_H    = 3.4;
 PORT_NUT_AF    = 5.7;
 PORT_NUT_T     = 2.6;
 
@@ -110,6 +121,8 @@ BRACE_HEX_CELL     = 11;
 
 // Inner PETG / CF-PETG lining vs outer PCTG shell.
 INNER_LINING = 1.6;
+FLOOR_SKIN   = 0;     // chamber floor is inner PETG (was 0.4 PCTG cap)
+MARK_DEPTH   = 1.2;   // D12600 inlay on the blank −X wall
 
 SHIM_STEPS = [0.2, 0.5, 1.0];
 

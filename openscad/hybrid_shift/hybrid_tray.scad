@@ -119,26 +119,27 @@ module lid_inner_ribs() {
     }
 }
 
-// Shallow pockets on the cup skin at the chassis M3s (cookies + lid corners).
+// Shallow pockets on the cup skin at the two clamp M3s + lid corners.
 module chassis_fastener_relief() {
-    r = PORT_SCREW_R;
+    r  = PORT_CLAMP_R;
+    sep = PORT_CLAMP_SEP;
     d = FASTENER_RELIEF_D;
     h = FASTENER_RELIEF_H;
-    module port_dimples() {
-        for (a = [45, 135, 225, 315])
-            rotate([0, 0, a])
-                translate([r, 0, -h])
+    sh = sensor_shift();
+    for (side = [-1, 1]) {
+        translate([-side * sep, -half(), r])
+            rotate([90, 0, 0])
+                translate([0, 0, -h])
+                    cylinder(h = h + 0.3, d = d);
+        translate([half(), -sh - side * sep, r])
+            rotate([0, 90, 0])
+                translate([0, 0, -h])
+                    cylinder(h = h + 0.3, d = d);
+        translate([sh + side * sep, half(), r])
+            rotate([-90, 0, 0])
+                translate([0, 0, -h])
                     cylinder(h = h + 0.3, d = d);
     }
-    translate([0, -half(), 0])
-        rotate([90, 0, 0])
-            port_dimples();
-    translate([half(), 0, 0])
-        rotate([0, 90, 0])
-            port_dimples();
-    translate([0, half(), 0])
-        rotate([-90, 0, 0])
-            port_dimples();
     for (sx = [-1, 1], sy = [-1, 1])
         translate([sx * (half() + d / 2 - h),
                    sy * (half() + d / 2 - h),
@@ -278,13 +279,22 @@ module lid_retain_tabs(lip = 3) {
         p = retain_xy(side);
         translate([p[0], p[1], 0])
             difference() {
-                translate([0, 0, -lip - FORK_LEN / 2])
-                    cube([POST_W + 4, POST_D + 3.2, FORK_LEN], center = true);
+                translate([0, 0, (-lip - FORK_LEN + 1.2) / 2])
+                    cube([POST_W + 4, POST_D + 3.2,
+                          lip + FORK_LEN + 1.2], center = true);
                 translate([0, 0, -lip - FORK_LEN / 2 - 0.6])
                     cube([POST_W + FORK_CLEAR * 2,
                           POST_D + FORK_CLEAR * 2,
                           FORK_LEN], center = true);
             }
+    }
+}
+
+module lid_retain_keepout(h = 10) {
+    for (side = [-1, 1]) {
+        p = retain_xy(side);
+        translate([p[0], p[1], 0])
+            cube([POST_W + 6, POST_D + 5, h], center = true);
     }
 }
 
