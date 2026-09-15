@@ -1059,8 +1059,10 @@ module assembly() {
             if (SHOW_MONITOR)
                 display_mount();
             monitor_easel() {
-                if (SHOW_MONITOR)
+                if (SHOW_MONITOR) {
                     monitor_ghost();
+                    sunshade();
+                }
                 if (SHOW_PI) {
                     monitor_pi();
                 }

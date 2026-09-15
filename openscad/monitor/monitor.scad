@@ -19,6 +19,22 @@ WALL_PLATE = 5.0;
 BOTTOM_H   = 18.162;
 BEZEL_T    = 2.476;
 INNER_FLOOR = 2.5;
+CASE_OUT_W = 246.1;
+CASE_OUT_H = 154.0;
+
+CLIP_T     = 2.4;
+CLIP_SLIP  = 0.45;
+HOOK_Z     = 2.2;
+HOOK_Y     = 6.5;
+HOOD_DEPTH = 58;
+HOOD_FLARE = 18;
+HOOD_DROP  = 40;
+HOOD_CHIN  = 28;
+HOOD_SWEEP = 10;
+PORT_Y     = 36;
+PORT_L     = 46;
+PORT_Z     = 10;
+PORT_H     = 16;
 
 EASEL_RAIL_X  = 32;
 EASEL_SCREW_Y = 36;
@@ -111,4 +127,78 @@ module monitor_ghost() {
     color("#111318")
         translate([0, 0, BOTTOM_H + 0.4])
             cube([AA_W, AA_H, 0.3], center = true);
+}
+
+// Solid trapezoid: back on the glass, front dropped + flared. Chin is +Y.
+module sunshade_blob(inset, chin_extra = 0) {
+    z0 = monitor_case_height();
+    wb = CASE_OUT_W + 2 * CLIP_T - 2 * inset;
+    wf = wb + 2 * HOOD_FLARE;
+    ytb = -CASE_OUT_H / 2 - CLIP_T + inset;
+    ybb = CASE_OUT_H / 2 - HOOD_CHIN + chin_extra;
+    ytf = ytb + HOOD_DROP;
+    ybf = ybb + HOOD_SWEEP;
+    hull() {
+        translate([0, (ytb + ybb) / 2, z0])
+            cube([wb, ybb - ytb, 0.4], center = true);
+        translate([0, (ytf + ybf) / 2, z0 + HOOD_DEPTH])
+            cube([wf, ybf - ytf, 0.4], center = true);
+    }
+}
+
+module sunshade_hood() {
+    difference() {
+        sunshade_blob(0);
+        sunshade_blob(CLIP_T, chin_extra = CASE_OUT_H);
+    }
+}
+
+module sunshade_clip() {
+    w = CASE_OUT_W;
+    h = CASE_OUT_H;
+    t = monitor_case_height();
+    difference() {
+        translate([0, -HOOD_CHIN / 2, (t - HOOK_Z) / 2])
+            cube([w + 2 * CLIP_T,
+                  h + 2 * CLIP_T - HOOD_CHIN,
+                  t + HOOK_Z], center = true);
+        translate([0, 0, t / 2])
+            cube([w + 2 * CLIP_SLIP, h + 2 * CLIP_SLIP, t + 0.4],
+                 center = true);
+        translate([0, h / 2, t / 2])
+            cube([w + 20, HOOD_CHIN * 2, t + HOOK_Z + 8], center = true);
+        translate([0, HOOK_Y, -HOOK_Z / 2])
+            cube([w - 2 * HOOK_Y, h, HOOK_Z + 0.4], center = true);
+    }
+}
+
+module sunshade_port_cut() {
+    translate([CASE_OUT_W / 2 + CLIP_T + HOOD_FLARE / 2,
+               PORT_Y, PORT_Z])
+        cube([CLIP_T + HOOD_FLARE + 24, PORT_L, PORT_H], center = true);
+}
+
+module sunshade() {
+    color("#2b2a28")
+    difference() {
+        union() {
+            sunshade_clip();
+            sunshade_hood();
+        }
+        sunshade_port_cut();
+        translate([0, -CASE_OUT_H / 2 - CLIP_T + HOOD_DROP * 0.45 + 3,
+                   monitor_case_height() + HOOD_DEPTH * 0.45])
+            rotate([atan(HOOD_DROP / HOOD_DEPTH), 0, 180])
+                part_stamp_cut("sunshade", size = 3.0);
+    }
+}
+
+module sunshade_print() {
+    ang = atan(HOOD_DROP / HOOD_DEPTH);
+    t = monitor_case_height();
+    translate([0, 0, t * sin(ang)])
+        rotate([180, 0, 0])
+            rotate([-90 + ang, 0, 0])
+                translate([0, CASE_OUT_H / 2 + CLIP_T, 0])
+                    sunshade();
 }
