@@ -1,8 +1,10 @@
 // =============================================================================
 // hybrid_shift/WATCH_ME.scad  — pano L: shifted DX, no tube toe
 // =============================================================================
-// Same stitch as hybrid. Cookies and M3s stay on the 90 mm faces; only
-// the R/T tube axes shift by sensor_shift() (~9.4 mm). No tube toe.
+// Same stitch as hybrid. Rounded shell; three ports are C-channels
+// (open at the lid, retained on three sides). The lid matches the
+// shell and plugs the slot tops. Two M3s per port follow the tube
+// (R/T shifted). No tube toe.
 // SHELL inner = PETG lining, outer = PCTG.
 // Lens −Y. Plate at origin: R → +X, T → +Y. Open this file.
 // ARM_MOUNT 0 = female 52×0.75 + nut pocket; 1 = printed F-bayonet (clocked).
@@ -57,10 +59,11 @@ EL180_M62_PITCH = 1.0; // [0.75, 1.0]
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
-LID_T     = 4;
+LID_T     = 6;
 LID_LIP   = 3;
 LID_GAP   = 0.3;
-// In from the outer corner so the hex sits under the 90 mm plates.
+LID_CAP   = 5;
+// In from the outer corner of the 90 mm inner cube.
 LID_SCREW = 5;
 // Nut center below the box top. M3×20: 4 lid + 12 to nut + nut + a bit past.
 LID_NUT_DROP = 12;
@@ -98,6 +101,112 @@ function cam_patch() = PORT_PATCH;
 function cam_axis(mark) =
     mark == "R" ? [0, -sensor_shift()] :
     mark == "T" ? [sensor_shift(), 0] : [0, 0];
+// Face-local +XY toward world +Z (lid).
+function port_up(mark) =
+    mark == "R" ? [-1, 0] :
+    mark == "T" ? [0, -1] : [0, 1];
+
+// Two M3s on the lid side of the tube, tracking cam_axis, so the
+// plate can be screwed after it is in the slot.
+module port_clamp_screws(mark = "") {
+    ax = cam_axis(mark);
+    u  = port_up(mark);
+    v  = [-u.y, u.x];
+    r  = PORT_CLAMP_R;
+    sep = PORT_CLAMP_SEP;
+    for (side = [-1, 1])
+        translate([ax.x + u.x * r + v.x * side * sep,
+                   ax.y + u.y * r + v.y * side * sep, 0])
+            children();
+}
+
+module port_flange(patch = PORT_PATCH, mark = "") {
+    translate([0, 0, patch_t() / 2])
+        cube([patch, patch, patch_t()], center = true);
+}
+
+module round_rect(w, h, r) {
+    offset(r)
+        offset(-r)
+            square([w, h], center = true);
+}
+
+function chassis_shell_t() = patch_t() + PORT_RETAIN;
+function chassis_out()     = JUNCTION_BOX + 2 * chassis_shell_t();
+function port_u_fill_t()   = PORT_RETAIN - 0.25;
+
+// Fills the chassis U so the cookie is flush with the cube wall.
+// Stops short of LID_CAP so the lid plug still seats.
+module port_u_fill(mark = "") {
+    ax = cam_axis(mark);
+    u  = port_up(mark);
+    t  = port_u_fill_t();
+    d  = TUBE_OD + 0.2;
+    along = PORT_PATCH / 2 - LID_CAP - 0.6;
+    translate([0, 0, patch_t() + t / 2])
+        intersection() {
+            cube([PORT_PATCH - 0.6, PORT_PATCH - 0.6, t], center = true);
+            hull() {
+                translate([ax.x, ax.y, 0])
+                    cylinder(h = t, d = d, center = true);
+                translate([ax.x + u.x * along, ax.y + u.y * along, 0])
+                    cylinder(h = t, d = d, center = true);
+            }
+        }
+}
+
+module lid_port_plug(mark = "") {
+    ax  = cam_axis(mark);
+    u   = port_up(mark);
+    t   = chassis_shell_t() - 0.4;
+    w   = PORT_PATCH - 0.8;
+    cap = LID_CAP + 0.4;
+    along = PORT_PATCH / 2 - LID_CAP / 2 + 0.2;
+    difference() {
+        translate([u.x * along, u.y * along, t / 2 + 0.2])
+            cube([abs(u.x) > 0.5 ? cap : w,
+                  abs(u.y) > 0.5 ? cap : w,
+                  t], center = true);
+        // Plate pad now fills the U; keep the plug off that meat.
+        translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
+            hull() {
+                cylinder(h = PORT_RETAIN + 2.4, d = TUBE_OD + 1.2,
+                         center = true);
+                translate([u.x * (PORT_PATCH / 2 + 24),
+                           u.y * (PORT_PATCH / 2 + 24), 0])
+                    cylinder(h = PORT_RETAIN + 2.4, d = TUBE_OD + 1.2,
+                             center = true);
+            }
+    }
+}
+
+// Cookie pocket, open at the lid, stopped on the floor lip.
+module port_slide_slot(mark = "") {
+    u = port_up(mark);
+    w = PORT_PATCH + PORT_SLOT_CLEAR;
+    d = patch_t() + 0.35;
+    slot_h = PORT_PATCH + PORT_FRAME + 28;
+    along  = -(PORT_PATCH / 2 - PORT_SLOT_CLEAR / 2) + slot_h / 2;
+    translate([u.x * along, u.y * along, d / 2 - 0.2])
+        cube([abs(u.x) > 0.5 ? slot_h : w,
+              abs(u.y) > 0.5 ? slot_h : w,
+              d], center = true);
+}
+
+// Outer wall keeps the plate in; tube slides down the U.
+module port_retain_cut(mark = "") {
+    ax = cam_axis(mark);
+    u  = port_up(mark);
+    d  = TUBE_OD + 1.0;
+    h  = PORT_RETAIN + 2.4;
+    translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
+        hull() {
+            cylinder(h = h, d = d, center = true);
+            translate([u.x * (PORT_PATCH / 2 + 24),
+                       u.y * (PORT_PATCH / 2 + 24), 0])
+                cylinder(h = h, d = d, center = true);
+        }
+}
 function hs_tag(name) = str("hs_", name);
 function hs_arm_tag(mark) =
     str("hs_arm_", mark == "T" ? "t" : "r",
@@ -113,16 +222,10 @@ module mm_split() {
         children(0);
 }
 
-module port_flange(patch = PORT_PATCH) {
-    translate([0, 0, patch_t() / 2])
-        cube([patch, patch, patch_t()], center = true);
-}
-
-// Engraved on the camera-side face (print flange on the bed).
+// Engraved on the camera-side face (print flange on the bed),
+// between the two lid-side clamp screws.
 // kind "R": local −X is world +Z. kind "T": local −Y is world +Z.
-module flange_marks(kind, patch = PORT_PATCH) {
-    t = 0.8;
-    e = patch / 2 - 3.4;
+module port_letter_2d(kind) {
     module stamp(letter) {
         translate([-4.6, 0])
             polygon([[0, 2.6], [-1.7, -1.4], [1.7, -1.4]]);
@@ -130,17 +233,37 @@ module flange_marks(kind, patch = PORT_PATCH) {
             text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
                  halign = "center", valign = "center");
     }
-    translate([0, 0, patch_t() - t])
-        linear_extrude(t + 0.15) {
-            if (kind == "R")
-                translate([-e, 0])
-                    rotate(90)
-                        stamp("R");
-            else
-                translate([0, -e])
-                    rotate(180)
-                        stamp("T");
-        }
+    if (kind == "R")
+        rotate(90)
+            stamp("R");
+    else
+        rotate(180)
+            stamp("T");
+}
+
+// Engraved on the camera-side face (print flange on the bed),
+// between the two lid-side clamp screws.
+module flange_marks(kind, patch = PORT_PATCH) {
+    t = 0.8;
+    ax = cam_axis(kind);
+    u  = port_up(kind);
+    translate([ax.x + u.x * PORT_CLAMP_R,
+               ax.y + u.y * PORT_CLAMP_R,
+               patch_t() + port_u_fill_t() - t])
+        linear_extrude(t + 0.15)
+            port_letter_2d(kind);
+}
+
+// Same marks on the chassis pocket, between the clamp holes.
+module chassis_port_mark(kind) {
+    t = 0.8;
+    ax = cam_axis(kind);
+    u  = port_up(kind);
+    translate([ax.x + u.x * PORT_CLAMP_R,
+               ax.y + u.y * PORT_CLAMP_R,
+               -t])
+        linear_extrude(t + 0.15)
+            port_letter_2d(kind);
 }
 
 module hex_nut_cut() {
@@ -164,23 +287,38 @@ module rev_lock_cuts(out_len, az = 180) {
     }
 }
 
-module at_stem() {
+module at_stem_face() {
     translate([0, -JUNCTION_BOX / 2, 0])
         rotate([90, 0, 0])
             children();
 }
 
-module at_reflect() {
-    // Cookie + M3s on the +X face center. Bore is cam_axis("R") in this frame.
+module at_reflect_face() {
     translate([JUNCTION_BOX / 2, 0, 0])
         rotate([0, 90, 0])
             children();
 }
 
-module at_transmit() {
+module at_transmit_face() {
     translate([0, JUNCTION_BOX / 2, 0])
         rotate([-90, 0, 0])
             children();
+}
+
+// Parts: cookie sits in the U-frame on the cube face.
+module at_stem() {
+    at_stem_face()
+        children();
+}
+
+module at_reflect() {
+    at_reflect_face()
+        children();
+}
+
+module at_transmit() {
+    at_transmit_face()
+        children();
 }
 
 module at_each_port() {
@@ -190,11 +328,11 @@ module at_each_port() {
 }
 
 module at_each_bore() {
-    at_stem() children();
-    at_reflect()
+    at_stem_face() children();
+    at_reflect_face()
         translate([cam_axis("R").x, cam_axis("R").y, 0])
             children();
-    at_transmit()
+    at_transmit_face()
         translate([cam_axis("T").x, cam_axis("T").y, 0])
             children();
 }
@@ -213,7 +351,7 @@ module box_bore() {
 
     mirror_groove_cutouts();
 
-    translate([0, 0, -s / 2 - 0.05]) {
+    translate([0, 0, -s / 2 - PORT_SLOT_LIP - 0.05]) {
         cylinder(h = tripod_hole_h() + 0.1, d = TRIPOD_INSERT_D);
         cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
     }
@@ -223,7 +361,8 @@ module box_bore() {
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
 }
 
-// M3 hex in each top corner. Slot opens on ±Y so the stem / T plates cover it.
+// M3 hex in each top corner. Side slot into the chamber; roof stays
+// solid so the lid screw can clamp.
 module lid_body_fastener_cuts() {
     s = JUNCTION_BOX;
     nut_z = s / 2 - LID_NUT_DROP;
@@ -237,11 +376,11 @@ module lid_body_fastener_cuts() {
         py = sy * (s / 2 - LID_SCREW);
         translate([px, py, nut_z - 4])
             cylinder(h = s / 2 - nut_z + 5, d = PORT_SCREW_D);
-        // Hex tunnel to the ±Y face; stem / T plates cover the opening.
         hull() {
             translate([px, py, nut_z])
                 nut_hex();
-            translate([px, sy * (s / 2 + 0.2), nut_z])
+            translate([sx * (s / 2 - WALL - 2.5),
+                       sy * (s / 2 - WALL - 2.5), nut_z])
                 nut_hex();
         }
     }
@@ -249,13 +388,38 @@ module lid_body_fastener_cuts() {
 
 module box_fastener_cuts() {
     lid_body_fastener_cuts();
-    at_each_port()
-        port_screws() {
+    at_stem_face() {
+        port_slide_slot("");
+        port_retain_cut("");
+        port_clamp_screws("") {
             translate([0, 0, -WALL - 0.2])
                 cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
             translate([0, 0, -WALL - 0.05])
                 hex_nut_cut();
         }
+    }
+    at_reflect_face() {
+        port_slide_slot("R");
+        port_retain_cut("R");
+        port_clamp_screws("R") {
+            translate([0, 0, -WALL - 0.2])
+                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+            translate([0, 0, -WALL - 0.05])
+                hex_nut_cut();
+        }
+        chassis_port_mark("R");
+    }
+    at_transmit_face() {
+        port_slide_slot("T");
+        port_retain_cut("T");
+        port_clamp_screws("T") {
+            translate([0, 0, -WALL - 0.2])
+                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+            translate([0, 0, -WALL - 0.05])
+                hex_nut_cut();
+        }
+        chassis_port_mark("T");
+    }
 }
 
 module box_lining_mask() {
@@ -269,6 +433,12 @@ module box_lining_mask() {
         translate([0, 0, WALL / 2])
             cube([s - 2 * WALL, s - 2 * WALL, s - WALL + 0.4], center = true);
     }
+    // Floor lining sits below the cavity so the boolean keeps it as inner.
+    // Top FLOOR_SKIN of the chamber floor stays outer (PCTG).
+    translate([0, 0, -s / 2 + WALL - FLOOR_SKIN - (L - FLOOR_SKIN) / 2])
+        cube([s - 2 * WALL + 2 * L,
+              s - 2 * WALL + 2 * L,
+              L - FLOOR_SKIN], center = true);
     at_each_bore()
         translate([0, 0, -WALL / 2])
             difference() {
@@ -277,40 +447,127 @@ module box_lining_mask() {
             }
 }
 
-module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "") {
-    L = INNER_LINING;
-    along_cam(rx, ry, mark) {
+// D7000-style stencil D + SF Stencil Numeric 12600, on the blank −X wall.
+module d12600_2d() {
+    h = 12;
+    module stencil_d() {
+        t = h * 0.18;
+        w = h * 0.78;
         difference() {
-            translate([0, 0, -patch_t() - 0.2])
-                cylinder(h = patch_t() + out_len + 0.4, d = TUBE_ID + 2 * L);
-            translate([0, 0, -patch_t() - 0.6])
-                cylinder(h = patch_t() + out_len + 1.2, d = TUBE_ID);
+            union() {
+                translate([t / 2 - w / 2, 0])
+                    square([t, h], center = true);
+                difference() {
+                    translate([w / 2 - h * 0.42, 0])
+                        scale([0.78, 1])
+                            circle(d = h, $fn = 80);
+                    translate([-w, 0])
+                        square([w * 1.35, h + 1], center = true);
+                }
+            }
+            difference() {
+                translate([w / 2 - h * 0.42, 0])
+                    scale([0.78, 1])
+                        circle(d = h - 2 * t, $fn = 80);
+                translate([-w * 0.55, 0])
+                    square([w, h], center = true);
+            }
+            translate([w * 0.28, 0])
+                square([t * 0.95, t * 0.42], center = true);
         }
-        if (printed_f())
+    }
+    translate([-22.5, 0])
+        stencil_d();
+    translate([8, 0])
+        text("12600", size = h, font = ".SF Stencil Numeric:style=Black",
+             halign = "center", valign = "center");
+}
+
+module d12600_inlay() {
+    out = chassis_out();
+    translate([-out / 2 - 0.05, 0, 2])
+        rotate([90, 0, -90])
+            mirror([0, 0, 1])
+                linear_extrude(MARK_DEPTH + 0.15)
+                    offset(0.02)
+                        d12600_2d();
+}
+
+module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", hel = 0) {
+    L = INNER_LINING;
+    ax = cam_axis(mark);
+    h = patch_t() + out_len + 0.2;
+    translate([ax.x, ax.y, -0.2])
+        rotate([rx, ry, 0])
+            difference() {
+                cylinder(h = h, d = TUBE_ID + 2 * L);
+                translate([0, 0, -0.4])
+                    cylinder(h = h + 0.8, d = TUBE_ID - 0.4);
+            }
+    // Inner sleeve owns the M42 threads; PCTG is the nut OD meat.
+    if (hel > 0) {
+        z0 = patch_t() + out_len - 0.2;
+        translate([ax.x, ax.y, z0]) {
+            // Solid mask so the whole thread profile is inner, not a sliver on outer.
+            cylinder(h = hel + 0.4, d = HELICOID_MAJOR + 2 * L);
+            difference() {
+                cylinder(h = 2.4, d = TUBE_ID + 2 * L);
+                translate([0, 0, -0.4])
+                    cylinder(h = 3.2, d = HELICOID_MAJOR - 0.4);
+            }
+        }
+    }
+    if (printed_f())
+        along_cam(rx, ry, mark)
             translate([0, 0, out_len])
                 f_mount_path_liner(L);
-    }
 }
 
 module lid_lining_mask() {
     s = JUNCTION_BOX;
     L = INNER_LINING;
-    // Chamber side only: lip + tabs + lining. Not a core sandwich.
     translate([0, 0, s / 2 + ex * 0.4])
         translate([0, 0, (-40 + L) / 2])
             cube([s + 4, s + 4, 40 + L], center = true);
 }
 
+module chassis_blank() {
+    s   = JUNCTION_BOX;
+    dz  = PORT_SLOT_LIP;
+    h   = s + dz;
+    out = chassis_out();
+    r   = PORT_BOSS_R;
+    translate([0, 0, -s / 2 - dz])
+        linear_extrude(h)
+            round_rect(out, out, r);
+}
+
 module part_junction() {
     color("SlateGray")
+    if (SHELL == "logo")
+        intersection() {
+            difference() {
+                chassis_blank();
+                box_bore();
+                box_fastener_cuts();
+            }
+            d12600_inlay();
+        }
+    else
     mm_split() {
         difference() {
-            cube([JUNCTION_BOX, JUNCTION_BOX, JUNCTION_BOX], center = true);
+            chassis_blank();
             box_bore();
             box_fastener_cuts();
             box_floor_stamp(hs_tag("chassis"), JUNCTION_BOX, WALL);
+            if (SHELL == "full")
+                d12600_inlay();
         }
-        box_lining_mask();
+        union() {
+            box_lining_mask();
+            if (SHELL == "outer")
+                d12600_inlay();
+        }
     }
 }
 
@@ -331,7 +588,8 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
     ax = cam_axis(mark);
     difference() {
         union() {
-            port_flange(patch);
+            port_flange(patch, mark);
+            port_u_fill(mark);
             if (out_len > 0.05)
                 along_cam(rx, ry, mark)
                     cylinder(h = out_len, d = TUBE_OD);
@@ -346,9 +604,12 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
         along_cam(rx, ry, mark)
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
-        port_screws()
+        port_clamp_screws(mark) {
             translate([0, 0, -1])
-                cylinder(h = patch_t() + 2, d = PORT_SCREW_D);
+                cylinder(h = patch_t() + port_u_fill_t() + 2, d = PORT_SCREW_D);
+            translate([0, 0, patch_t() + port_u_fill_t() - PORT_HEAD_H])
+                cylinder(h = PORT_HEAD_H + 0.4, d = PORT_HEAD_D);
+        }
     }
 }
 
@@ -363,7 +624,7 @@ module part_stem() {
             }
             flange_stamp(hs_tag("stem"), "", PORT_PATCH, patch_t());
         }
-        tube_lining_mask(stem_tube_len());
+        tube_lining_mask(stem_tube_len(), hel = HELICOID_LEN);
     }
 }
 
@@ -379,7 +640,7 @@ module part_stem_f50() {
         }
         translate([0, 0, -1])
             cylinder(h = t + f_fem_h(0) + 2, d = TUBE_ID);
-        port_screws()
+        port_clamp_screws("")
             translate([0, 0, -1])
                 cylinder(h = t + 2, d = PORT_SCREW_D);
         flange_stamp(hs_tag("stem_f50"), "", PORT_PATCH, t);
@@ -519,14 +780,16 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
 }
 
 module part_lid() {
-    s = JUNCTION_BOX;
+    s   = JUNCTION_BOX;
+    out = chassis_out();
+    r   = PORT_BOSS_R;
     color("DarkSlateGray")
     mm_split() {
-    translate([0, 0, s / 2 + ex * 0.4]) {
-        difference() {
-            union() {
-                translate([0, 0, LID_T / 2])
-                    cube([s, s, LID_T], center = true);
+    difference() {
+        union() {
+            translate([0, 0, s / 2 + ex * 0.4]) {
+                linear_extrude(LID_T)
+                    round_rect(out, out, r);
                 translate([0, 0, -LID_LIP / 2 + 0.01])
                     difference() {
                         cube([s - WALL - LID_GAP * 2,
@@ -540,12 +803,24 @@ module part_lid() {
                 display_lid_bosses(LID_T);
                 display_lid_nut_pads(LID_LIP);
             }
+            at_stem_face()
+                lid_port_plug("");
+            at_reflect_face()
+                lid_port_plug("R");
+            at_transmit_face()
+                lid_port_plug("T");
+        }
+        translate([0, 0, s / 2 + ex * 0.4]) {
             for (x = [-1, 1], y = [-1, 1])
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
             display_lid_cuts(LID_T, LID_LIP);
             plate_stamp(hs_tag("lid"), s, LID_T);
-            lid_inner_ribs();
+            difference() {
+                lid_inner_ribs();
+                display_lid_pad_keepout();
+                lid_retain_keepout();
+            }
         }
     }
         lid_lining_mask();
@@ -600,7 +875,7 @@ function brace_tripod_xy() =
     let (r = brace_r_xy(), t = brace_t_xy())
         [(r.x + t.x) / 3, (r.y + t.y) / 3];
 function brace_cam_lift() =
-    max(1, JUNCTION_BOX / 2 - D7000_TRIPOD_BELOW);
+    max(1, JUNCTION_BOX / 2 + PORT_SLOT_LIP - D7000_TRIPOD_BELOW);
 function brace_stamp_xy() =
     let (r = brace_r_xy(), t = brace_t_xy(),
          m = [(r.x + t.x) / 2, (r.y + t.y) / 2],
@@ -728,7 +1003,7 @@ module part_brace() {
 }
 
 module brace_at() {
-    translate([0, 0, -JUNCTION_BOX / 2 - BRACE_T])
+    translate([0, 0, -JUNCTION_BOX / 2 - PORT_SLOT_LIP - BRACE_T])
         part_brace();
 }
 

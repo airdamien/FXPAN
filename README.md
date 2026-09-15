@@ -54,9 +54,9 @@ Do not swap R and T — T is shorter (`bs_t_comp`). Drop the whole Edmund #43-35
 
 ### Shift kit (`stls/hybrid_shift/`)
 
-Same path, plate, and stitch as hybrid, but the camera tubes are **not toed**. Cookies and M3s stay centered on the 90 mm faces; only the R/T bores shift by `sensor_shift()` (~9.4 mm) so each sensor stays parallel to the taking-lens image plane (no Scheimpflug). Stem stays centered.
+Same path, plate, and stitch as hybrid, but the camera tubes are **not toed**. Cookies drop into a rabbet from the lid and two M3s (above/below the tube) follow `sensor_shift()`. Stem stays centered. Lid clamps the plate tops.
 
-The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl` is the 1.6 mm lining (PETG / CF-PETG) on tubes, F-mount throats, and the lid ceiling; `*_outer.stl` is the rest (PCTG), including the F-bayonet. Load both in the slicer as one object, inner assigned to the dark filament. Bare `chassis.stl` / `arm_*.stl` / `lid.stl` are the single-material solids. Part stamps start with `hs_` so they are not mixed with the toed hybrid kit. Export: `./export_stls.sh --hybrid-shift` or `./export_hybrid_shift.sh`.
+The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl` is the 1.6 mm lining (PETG / CF-PETG) on tubes, F-mount throats, and the lid ceiling; `*_outer.stl` is the rest (PCTG), including the F-bayonet. Load both in the slicer as one object, inner assigned to the dark filament. Bare `chassis.stl` / `arm_*.stl` / `lid.stl` are the single-material solids. Part stamps start with `hs_` so they are not mixed with the toed hybrid kit. Lid off: slide each 90 mm plate down its face, then 2× M3 through the cookie into wall nuts. Export: `./export_stls.sh --hybrid-shift` or `./export_hybrid_shift.sh`.
 
 | File | What | Bed / filament |
 |------|------|----------------|
