@@ -63,17 +63,17 @@ module trap_ribs(len, h) {
 }
 
 // One window per port face — do not punch the opposite wall.
-module chamber_ports() {
+module chamber_ports(sh) {
     d = TUBE_ID + 0.6;
     t = SKIRT_T;
     w = t + 6;
     translate([0, -half() + t / 2, 0])
         rotate([90, 0, 0])
             cylinder(h = w, d = d, center = true);
-    translate([half() - t / 2, -sensor_shift(), 0])
+    translate([half() - t / 2, cam_axis("R", sh).y, 0])
         rotate([0, 90, 0])
             cylinder(h = w, d = d, center = true);
-    translate([sensor_shift(), half() - t / 2, 0])
+    translate([cam_axis("T", sh).x, half() - t / 2, 0])
         rotate([-90, 0, 0])
             cylinder(h = w, d = d, center = true);
 }
@@ -120,22 +120,22 @@ module lid_inner_ribs() {
 }
 
 // Shallow pockets on the cup skin at the two clamp M3s + lid corners.
-module chassis_fastener_relief() {
-    r  = PORT_CLAMP_R;
-    sep = PORT_CLAMP_SEP;
+module chassis_fastener_relief(sh) {
     d = FASTENER_RELIEF_D;
     h = FASTENER_RELIEF_H;
-    sh = sensor_shift();
     for (side = [-1, 1]) {
-        translate([-side * sep, -half(), r])
+        s = clamp_xy("", side, sh);
+        r = clamp_xy("R", side, sh);
+        t = clamp_xy("T", side, sh);
+        translate([s.x, -half(), s.y])
             rotate([90, 0, 0])
                 translate([0, 0, -h])
                     cylinder(h = h + 0.3, d = d);
-        translate([half(), -sh - side * sep, r])
+        translate([half(), r.y, -r.x])
             rotate([0, 90, 0])
                 translate([0, 0, -h])
                     cylinder(h = h + 0.3, d = d);
-        translate([sh + side * sep, half(), r])
+        translate([t.x, half(), -t.y])
             rotate([-90, 0, 0])
                 translate([0, 0, -h])
                     cylinder(h = h + 0.3, d = d);
@@ -197,7 +197,7 @@ module bs_frame() {
 }
 
 // Open-top cup: V-groove inner faces, then recut the three port windows.
-module chamber_walls() {
+module chamber_walls(sh) {
     z0 = floor_z();
     h  = wall_top() - z0;
     t  = SKIRT_T;
@@ -215,7 +215,7 @@ module chamber_walls() {
                         trap_ribs(inner() - 2 * t - 0.2, h - FLOOR_T - 0.2);
             tray_stamp();
         }
-        chamber_ports();
+        chamber_ports(sh);
     }
 }
 
@@ -249,17 +249,17 @@ module cartridge_posts() {
     }
 }
 
-module hybrid_cartridge(show_glass = true) {
+module hybrid_cartridge(show_glass = true, sh) {
     color("SteelBlue")
     intersection() {
         difference() {
             union() {
                 place_plate(glass = false);
-                chamber_walls();
+                chamber_walls(sh);
                 inactive_beams();
                 cartridge_posts();
             }
-            chassis_fastener_relief();
+            chassis_fastener_relief(sh);
         }
         translate([0, 0, floor_z() + (wall_top() - floor_z()) / 2])
             cube([inner(), inner(), wall_top() - floor_z() + 0.2],
@@ -298,7 +298,7 @@ module lid_retain_keepout(h = 10) {
     }
 }
 
-module hybrid_pair(show_glass = true, explode_z = 0) {
+module hybrid_pair(show_glass = true, explode_z = 0, sh) {
     translate([0, 0, explode_z])
-        hybrid_cartridge(show_glass = show_glass);
+        hybrid_cartridge(show_glass = show_glass, sh = sh);
 }

@@ -17,7 +17,7 @@
 // EL180_M62_PITCH: 1.0 default; 0.75 if the 180 will not start.
 // FX_MODE=1 (Customizer or ./export_hybrid_shift_fx.sh): D800 FX bores at
 // sensor_shift ~14.4 mm, stitch ~64.8 mm. Ghost uses openscad/d800_body.stl
-// (Thingiverse #4815092). Reuse stem/tray/tools from DX kit.
+// (Thingiverse #4815092). Reuse stem/tools from DX kit; print FX tray.
 // =============================================================================
 
 /* [Part] */
@@ -119,14 +119,6 @@ module port_screws() {
 }
 
 function cam_patch() = PORT_PATCH;
-// Local flange XY: R is world −Y, T is world +X.
-function cam_axis(mark) =
-    mark == "R" ? [0, -sensor_shift()] :
-    mark == "T" ? [sensor_shift(), 0] : [0, 0];
-// Face-local +XY toward world +Z (lid).
-function port_up(mark) =
-    mark == "R" ? [-1, 0] :
-    mark == "T" ? [0, -1] : [0, 1];
 // Outboard cookie edge in the shift direction. FX tubes stick past the
 // 90 mm plate; chord-cut that OD so the chassis can wrap the flat.
 function tube_flat_n(mark) =
@@ -149,15 +141,11 @@ module tube_flat_waste(mark, z0, h, inset = 0) {
 // Two M3s on the lid side of the tube, tracking cam_axis, so the
 // plate can be screwed after it is in the slot.
 module port_clamp_screws(mark = "") {
-    ax = cam_axis(mark);
-    u  = port_up(mark);
-    v  = [-u.y, u.x];
-    r  = PORT_CLAMP_R;
-    sep = PORT_CLAMP_SEP;
-    for (side = [-1, 1])
-        translate([ax.x + u.x * r + v.x * side * sep,
-                   ax.y + u.y * r + v.y * side * sep, 0])
+    for (side = [-1, 1]) {
+        p = clamp_xy(mark, side);
+        translate([p.x, p.y, 0])
             children();
+    }
 }
 
 module port_flange(patch = PORT_PATCH, mark = "") {
@@ -1129,7 +1117,8 @@ module assembly() {
     }
 
     hybrid_pair(show_glass = $preview,
-                explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
+                explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0,
+                sh = sensor_shift());
 
     if (SHOW_LID)
         part_lid();
@@ -1174,7 +1163,7 @@ module assembly() {
              field_toe(), " deg"));
     if (fx_mode())
         echo("FX print STLs: ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ "
-             + "(chassis, arms, lid, brace; reuse stem/tray from hybrid_shift)");
+             + "(chassis, arms, lid, brace, tray; reuse stem from hybrid_shift)");
 }
 
 module export_part() {
@@ -1201,7 +1190,7 @@ module export_part() {
     else if (PART == "display_mount")
         display_mount_print();
     else if (PART == "hybrid_tray")
-        hybrid_cartridge(show_glass = false);
+        hybrid_cartridge(show_glass = false, sh = sensor_shift());
     else if (PART == "brace")
         part_brace();
     else
