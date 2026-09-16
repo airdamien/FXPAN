@@ -143,8 +143,20 @@ module port_clamp_screws(mark = "") {
 }
 
 module port_flange(patch = PORT_PATCH, mark = "") {
-    translate([0, 0, patch_t() / 2])
-        cube([patch, patch, patch_t()], center = true);
+    ax = cam_axis(mark);
+    if (FX_MODE && mark != "") {
+        // FX bores are shifted off the cookie center.  Widen the camera-side
+        // cookie toward that bore so its top edge remains supported.
+        hull() {
+            translate([0, 0, patch_t() / 2])
+                cube([patch, patch, patch_t()], center = true);
+            translate([ax.x, ax.y, patch_t() / 2])
+                cube([patch, patch, patch_t()], center = true);
+        }
+    } else {
+        translate([0, 0, patch_t() / 2])
+            cube([patch, patch, patch_t()], center = true);
+    }
 }
 
 module round_rect(w, h, r) {
@@ -373,9 +385,13 @@ module corner_cookie_webs() {
     h  = JUNCTION_BOX / 2 - LID_LIP - z0;
     half = (JUNCTION_BOX - 2 * WALL) / 2;
     for (sx = [-1, 1], sy = [-1, 1])
-        translate([sx * (half - 3), sy * (half - 3), z0 + h / 2])
-            rotate([0, 0, sx == sy ? 45 : -45])
-                cube([30, 8, h], center = true);
+        translate([0, 0, z0 + h / 2])
+            hull() {
+                translate([sx * (half - 2), sy * (half - 2), 0])
+                    cube([10, 10, h], center = true);
+                translate([sx * (half + 11), sy * (half + 11), 0])
+                    cube([10, 10, h], center = true);
+            }
 }
 
 // M3 hex in each top corner. Side slot into the chamber; roof stays
