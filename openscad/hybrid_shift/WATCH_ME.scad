@@ -1,5 +1,5 @@
 // =============================================================================
-// hybrid_shift/WATCH_ME.scad  — pano L: shifted DX, no tube toe
+// hybrid_shift/WATCH_ME.scad  — pano L: shifted DX or FX, no tube toe
 // =============================================================================
 // Same stitch as hybrid. Rounded shell; three ports are C-channels
 // (open at the lid, retained on three sides). The lid matches the
@@ -15,10 +15,21 @@
 // Brace: triangle under the box + both body 1/4-20s. Tripod insert in the brace.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
 // EL180_M62_PITCH: 1.0 default; 0.75 if the 180 will not start.
+// FX_MODE=1 (Customizer or ./export_hybrid_shift_fx.sh): D800 FX bores at
+// sensor_shift ~14.4 mm, stitch ~64.8 mm. Ghost uses openscad/d800_body.stl
+// (Thingiverse #4815092). Reuse stem/tray/tools from DX kit.
 // =============================================================================
 
 /* [Part] */
 PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135/180, stem_f50:Stem F 50, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
+
+/* [Camera] */
+FX_MODE = 0; // [0:DX D7000, 1:FX D800]
+// FX_MODE=1: bores shift to 14.4 mm, ghost = ../d800_body.stl, print STLs
+// from ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ (not hybrid_shift/).
+D800_TRIPOD_ABOVE = 10.0; // mm, 1/4-20 above chassis bottom (measure yours)
+D800_TRIPOD_IN    = 44;   // mm, lens axis → tripod along base (measure yours)
+FX_FMOUNT_EXTRA   = 5.0;  // extra rear support behind the printed FX F-mount
 
 /* [Stem] */
 STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
@@ -29,7 +40,7 @@ include <../lib/threads.scad>
 include <../lib/part_stamp.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
-use <../d7000_body.scad>
+use <../camera_body.scad>
 use <../taking_lens.scad>
 use <../f_mount_male.scad>
 use <../f_mount_female.scad>
@@ -42,9 +53,19 @@ SHOW_LID = 1; // [0:hide, 1:show]
 SHOW_PANELS = 1; // [0:hide, 1:show]
 SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
-SHOW_BODIES = 0; // [0:hide, 1:show]
+SHOW_BODIES = 0; // [0:hide, 1:D7000, 2:D800]  — use 2 for the D800 mesh
 SHOW_LENS = 0; // [0:hide, 1:show]
 SHOW_BRACE = 1; // [0:hide, 1:show]
+
+/* [Body Alignment] */
+// Ghost offsets in each arm's local frame. Set these while fitting the bodies;
+// the final values can be copied into the body calibration afterward.
+BODY_R_X = 10; // [-20:0.5:20]
+BODY_R_Y = 13; // [-20:0.5:20]
+BODY_R_Z = -5; // [-20:0.5:20]
+BODY_T_X = -13; // [-20:0.5:20]
+BODY_T_Y = 10; // [-20:0.5:20]
+BODY_T_Z = -5; // [-20:0.5:20]
 
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG]
@@ -73,6 +94,7 @@ function printed_f()         =
     || PART == "arm_r_f" || PART == "arm_t_f"
     || PART == "arm_r_sf" || PART == "arm_t_sf";
 function mount_stack()       = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
+function fx_mount_extra()    = FX_MODE ? FX_FMOUNT_EXTRA : 0;
 function f50_kit()           =
     ARMS || STEM == 1 || PART == "stem_f50"
     || PART == "arm_r_s" || PART == "arm_t_s"
@@ -343,6 +365,19 @@ module box_bore() {
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
 }
 
+// Tie each rounded corner tower back into the chamber walls.  The diagonal
+// webs stay in the corners, leaving the three cookie windows open while
+// preventing the tall corner posts from flexing independently.
+module corner_cookie_webs() {
+    z0 = -JUNCTION_BOX / 2 + WALL;
+    h  = JUNCTION_BOX / 2 - LID_LIP - z0;
+    half = (JUNCTION_BOX - 2 * WALL) / 2;
+    for (sx = [-1, 1], sy = [-1, 1])
+        translate([sx * (half - 3), sy * (half - 3), z0 + h / 2])
+            rotate([0, 0, sx == sy ? 45 : -45])
+                cube([30, 8, h], center = true);
+}
+
 // M3 hex in each top corner. Side slot into the chamber; roof stays
 // solid so the lid screw can clamp.
 module lid_body_fastener_cuts() {
@@ -590,6 +625,7 @@ module part_junction() {
             if (SHELL == "full")
                 d12600_inlay();
         }
+        corner_cookie_webs();
         union() {
             box_lining_mask();
             if (SHELL == "outer")
@@ -795,8 +831,9 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                 translate([0, 0, out_len])
                     f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
                                     peg_face = (SHELL == "full" ? 0
-                                                : INNER_LINING));
-    else if ($preview && !SHOW_BODIES)
+                                                : INNER_LINING),
+                                    back_extra = fx_mount_extra());
+    else if ($preview && SHOW_BODIES == 0)
         color("Goldenrod", 0.55)
             along_cam(rx, ry, mark)
                 translate([0, 0, out_len])
@@ -872,19 +909,34 @@ module taking_lens_at() {
                         taking_lens();
 }
 
+function show_bodies() = SHOW_BODIES > 0;
+// which: 1 D7000, 2 D800. SHOW_BODIES=1 → D7000, =2 → D800.
+// FX_MODE=1 with SHOW_BODIES=1 also gets D800 (FX preview).
+function body_which() =
+    SHOW_BODIES >= 2 ? 2
+    : (SHOW_BODIES == 1 && fx_mode()) ? 2
+    : 1;
+
+function body_shift_x(mark) = mark == "T" ? BODY_T_X : BODY_R_X;
+function body_shift_y(mark) = mark == "T" ? BODY_T_Y : BODY_R_Y;
+function body_shift_z(mark) = mark == "T" ? BODY_T_Z : BODY_R_Z;
+
 module camera_body_at(out_len, rx = 0, ry = 0, roll = 0, mark = "") {
-    if (SHOW_BODIES)
+    if (show_bodies())
         color("DimGray", 0.92)
             along_cam(rx, ry, mark)
                 translate([0, 0, out_len + mount_stack() + ex])
-                    d7000_body(roll);
+                    translate([body_shift_x(mark),
+                               body_shift_y(mark),
+                               body_shift_z(mark)])
+                        camera_body(roll, which = body_which());
 }
 
 // Both bodies upright (world +Z = camera top). R was −90 (upside down).
 function body_roll_r() = 90;
 function body_roll_t() = 180;
 
-function brace_cam_d() = D_PLATE_TO_MOUNT + D7000_TRIPOD_IN;
+function brace_cam_d() = D_PLATE_TO_MOUNT + cam_tripod_in();
 function brace_r_xy() = [brace_cam_d(), -sensor_shift()];
 function brace_t_xy() = [sensor_shift(), brace_cam_d()];
 function brace_tripod_xy() =
@@ -1102,7 +1154,8 @@ module assembly() {
     }
     taking_lens_at();
     optical_axis_guides();
-    echo(str("hybrid_shift L: 50x50x1 S1 toward lens; ARM_MOUNT=", ARM_MOUNT,
+    echo(str("hybrid_shift L: ", fx_mode() ? "D800 FX" : "D7000 DX",
+             "; 50x50x1 S1 toward lens; ARM_MOUNT=", ARM_MOUNT,
              " (", ARM_MOUNT ? "integrated F" : "reverse ring", ")",
              " STEM=", STEM, " (", stem_label(), ")",
              " ARMS=", ARMS, " (", ARMS ? "54 mm F 50" : "72 mm 135/180", ")",
@@ -1110,6 +1163,9 @@ module assembly() {
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
              " mm  sensor_shift=", sensor_shift(), " mm  field_toe=",
              field_toe(), " deg"));
+    if (fx_mode())
+        echo("FX print STLs: ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ "
+             + "(chassis, arms, lid, brace; reuse stem/tray from hybrid_shift)");
 }
 
 module export_part() {

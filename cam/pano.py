@@ -562,8 +562,8 @@ def stitch_files(
     if mode not in MODES:
         raise dual.CamError("mode is match, blend, or cut")
     overlap = float(overlap)
-    if overlap < 0.05 or overlap > 0.45:
-        raise dual.CamError("overlap 0.05–0.45")
+    if overlap < 0.05 or overlap > 0.50:
+        raise dual.CamError("overlap 0.05–0.50")
     dy = int(dy)
     w, h = _size(t_path)
     rw, rh = _size(r_path)
@@ -891,15 +891,22 @@ def stitch_stamp(
         if on_log:
             on_log("match overlap + vertical + flop")
         found = find_overlap(t_path, r_path, try_flip=True, on_log=on_log)
-        overlap = found["overlap"]
-        flip_r = found["flip_r"]
-        tw, _ = _size(t_path)
-        dy = int(round(found["dy"] * (tw / WORK)))
-        if on_log:
-            on_log(
-                f"best ol={overlap:.0%} dy={dy:+d} "
-                f"flip={'on' if flip_r else 'off'}  {found['rmse']:.1f}"
-            )
+        if found["rmse"] > 0.42:
+            if on_log:
+                on_log(
+                    f"match weak ({found['rmse']:.2f}) — keep ol={overlap:.0%} "
+                    f"flip={'on' if flip_r else 'off'}"
+                )
+        else:
+            overlap = found["overlap"]
+            flip_r = found["flip_r"]
+            tw, _ = _size(t_path)
+            dy = int(round(found["dy"] * (tw / WORK)))
+            if on_log:
+                on_log(
+                    f"best ol={overlap:.0%} dy={dy:+d} "
+                    f"flip={'on' if flip_r else 'off'}  {found['rmse']:.1f}"
+                )
         mode = "blend"
     info = stitch_files(
         t_path, r_path, dest,
@@ -981,7 +988,8 @@ def _run_item(item):
         )
         job_put(
             stamp, running=False, phase="done", error="",
-            **{k: info[k] for k in info if k != "stamp"},
+            **{k: info[k] for k in info
+               if k not in ("stamp", "phase", "running", "error", "log")},
             log=info["message"],
         )
     except Exception as exc:

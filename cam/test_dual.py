@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brightness
 import dual
 import gpio
+import link
 import live
 import pano
 import settings
@@ -215,6 +216,76 @@ class LiveStart(unittest.TestCase):
         dual.detect_bodies_cached = boom
         self.addCleanup(lambda: setattr(dual, "detect_bodies_cached", old))
         self.assertEqual(live.Live().start_from_usb(), {})
+
+    def test_dead_roles_stale_no_frames(self):
+        class Alive:
+            def poll(self):
+                return None
+
+        lv = live.Live()
+        lv._procs["T"] = Alive()
+        lv._n["T"] = 0
+        lv._born["T"] = time.time() - (live.FIRST_S + 1)
+        lv._seen["T"] = 0
+        self.assertEqual(lv.dead_roles(["T"]), ["T"])
+        lv._n["T"] = 4
+        lv._seen["T"] = time.time()
+        self.assertEqual(lv.dead_roles(["T"]), [])
+
+
+class UsbBus(unittest.TestCase):
+    def test_parse_lsusb(self):
+        text = (
+            "Bus 001 Device 003: ID 1d6b:0002 Linux Foundation\n"
+            "Bus 020 Device 007: ID 04b0:0428 Nikon Corp.\n"
+            "Bus 020 Device 012: ID 04b0:0428 Nikon Corp.\n"
+        )
+        self.assertEqual(
+            dual.parse_lsusb(text),
+            ["usb:020,007", "usb:020,012"],
+        )
+
+    def test_sysfs_ports(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        a = root / "2-1"
+        a.mkdir()
+        (a / "idVendor").write_text("04b0\n")
+        (a / "busnum").write_text("20\n")
+        (a / "devnum").write_text("7\n")
+        b = root / "2-2"
+        b.mkdir()
+        (b / "idVendor").write_text("1d6b\n")
+        self.assertEqual(dual.nikon_usb_ports(root), ["usb:020,007"])
+        c = root / "2-1:1.0"
+        c.mkdir()
+        (c / "idVendor").write_text("04b0\n")
+        (c / "busnum").write_text("20\n")
+        (c / "devnum").write_text("7\n")
+        self.assertEqual(dual.nikon_usb_ports(root), ["usb:020,007"])
+
+
+class LinkKeep(unittest.TestCase):
+    def test_absorb_and_missing(self):
+        pair = Path(tempfile.mkdtemp()) / "pair.json"
+        pair.write_text(json.dumps({"T": "111", "R": "222"}))
+        old = dual.PAIR_PATH
+        dual.PAIR_PATH = pair
+        self.addCleanup(lambda: setattr(dual, "PAIR_PATH", old))
+        ln = link.Link(live.Live())
+        ln.absorb([
+            {"role": "T", "serial": "111", "port": "usb:020,007", "model": "D7000"},
+        ])
+        snap = ln.snapshot()
+        self.assertTrue(snap["roles"]["T"]["online"])
+        self.assertFalse(snap["roles"]["R"]["online"])
+        self.assertEqual(snap["missing"], ["R"])
+
+    def test_usb_pauses_live_flag(self):
+        ln = link.Link(live.Live())
+        with ln.usb():
+            self.assertGreater(ln._busy, 0)
+        self.assertEqual(ln._busy, 0)
 
 
 class Gpio(unittest.TestCase):
@@ -789,6 +860,80 @@ class Wifi(unittest.TestCase):
         self.assertFalse(any("password" in a for a in self.calls))
         self.assertEqual(out["ssid"], "Home")
         self.assertIn("192.0.2.10", out["url"])
+        saved = json.loads(wifi.PATH.read_text())["saved"]
+        self.assertEqual(saved[0]["ssid"], "Cafe")
+        self.assertEqual(saved[0]["psk"], "")
+
+    def test_join_remembers_psk(self):
+        wifi.join("Home", "secret123")
+        saved = json.loads(wifi.PATH.read_text())["saved"]
+        self.assertEqual(saved[0]["ssid"], "Home")
+        self.assertEqual(saved[0]["psk"], "secret123")
+
+    def test_near_saved(self):
+        saved = [{"ssid": "Home", "psk": "x"}, {"ssid": "Cafe", "psk": ""}]
+        nets = wifi.parse_networks("*:Home:50:WPA2\n :Cafe:20:WPA2\n :Other:90:WPA2\n")
+        near = wifi._near_saved(nets, saved, min_signal=35)
+        self.assertEqual([n[0]["ssid"] for n in near], ["Home"])
+
+    def test_watch_ok_when_ping_passes(self):
+        wifi.remember_network("Home", "secret")
+        old_status = wifi.status
+        old_gw = wifi._default_gateway
+        old_ping = wifi._ping
+        wifi.status = lambda *a, **k: {
+            "available": True,
+            "mode": "station",
+            "ssid": "Home",
+            "ip": "192.0.2.10",
+        }
+        wifi._default_gateway = lambda: "10.50.0.1"
+        wifi._ping = lambda host: host == "10.50.0.1"
+        self.addCleanup(lambda: setattr(wifi, "status", old_status))
+        self.addCleanup(lambda: setattr(wifi, "_default_gateway", old_gw))
+        self.addCleanup(lambda: setattr(wifi, "_ping", old_ping))
+        watch = wifi.Watch(interval_s=1)
+        watch._run_tick()
+        snap = watch.snapshot()
+        self.assertIn("ok", snap["message"])
+        self.assertTrue(snap["last_ping"])
+        self.assertEqual(snap["failures"], 0)
+
+    def test_watch_reconnect_after_ping_fails(self):
+        wifi.remember_network("Home", "secret")
+        old_status = wifi.status
+        old_gw = wifi._default_gateway
+        old_ping = wifi._ping
+        old_reconnect = wifi._reconnect_station
+        reconnects = []
+
+        def fake_status(*a, **k):
+            if reconnects:
+                return {
+                    "available": True,
+                    "mode": "station",
+                    "ssid": "Home",
+                    "ip": "192.0.2.10",
+                }
+            return {
+                "available": True,
+                "mode": "station",
+                "ssid": "Home",
+                "ip": "192.0.2.10",
+            }
+
+        wifi.status = fake_status
+        wifi._default_gateway = lambda: "10.50.0.1"
+        wifi._ping = lambda host: False
+        wifi._reconnect_station = lambda ssid, psk: reconnects.append((ssid, psk))
+        self.addCleanup(lambda: setattr(wifi, "status", old_status))
+        self.addCleanup(lambda: setattr(wifi, "_default_gateway", old_gw))
+        self.addCleanup(lambda: setattr(wifi, "_ping", old_ping))
+        self.addCleanup(lambda: setattr(wifi, "_reconnect_station", old_reconnect))
+        watch = wifi.Watch(interval_s=1)
+        watch._run_tick()
+        watch._run_tick()
+        self.assertEqual(reconnects, [("Home", "secret")])
 
     def test_ap_on(self):
         def fake(args, timeout=25):

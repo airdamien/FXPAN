@@ -16,6 +16,8 @@ import dual
 
 SOI = b"\xff\xd8"
 EOI = b"\xff\xd9"
+FIRST_S = 12.0
+STALE_S = 4.0
 
 
 def split_jpegs(buf):
@@ -51,6 +53,8 @@ class Live:
         self._n = {}
         self._err = {}
         self._ports = {}
+        self._born = {}
+        self._seen = {}
 
     def running(self):
         with self._lock:
@@ -75,35 +79,79 @@ class Live:
         with self._lock:
             return self._frames.get(role)
 
-    def start_from_usb(self):
+    def start_have(self, have):
         self.stop()
-        have = paired_on_usb()
-        if not have:
-            return {}
+        return self.ensure(have)
+
+    def ensure(self, have):
+        """Spawn missing/dead roles. Leave healthy capture-movie processes up."""
+        have = {
+            role: dict(row)
+            for role, row in dict(have or {}).items()
+            if (row or {}).get("port")
+        }
+        with self._lock:
+            extra = [role for role in self._procs if role not in have]
+        if extra:
+            self.stop_roles(extra)
         for role, row in have.items():
-            self._spawn(role, row["port"])
-        deadline = time.time() + 0.4
+            port = row["port"]
+            with self._lock:
+                proc = self._procs.get(role)
+                same = (
+                    proc is not None
+                    and proc.poll() is None
+                    and self._ports.get(role) == port
+                )
+            if same:
+                continue
+            self.stop_roles([role])
+            self._spawn(role, port)
+        deadline = time.time() + 1.6
         while time.time() < deadline:
             snap = self.snapshot()
-            if snap["running"] or any(info["frames"] for info in snap["roles"].values()):
+            if any(info["alive"] or info["frames"] for info in snap["roles"].values()):
                 return have
-            if snap["roles"] and not any(info["alive"] for info in snap["roles"].values()):
-                break
-            time.sleep(0.05)
-        snap = self.snapshot()
-        if snap["roles"] and not snap["running"]:
-            bits = [
-                f"{role}: {info['error'] or 'gphoto2 exited'}"
-                for role, info in snap["roles"].items()
-            ]
-            raise dual.CamError("live view failed. " + "  ".join(bits))
+            time.sleep(0.08)
         return have
+
+    def start_from_usb(self):
+        have = paired_on_usb()
+        return self.start_have(have)
+
+    def dead_roles(self, wanted):
+        now = time.time()
+        with self._lock:
+            out = []
+            for role in wanted:
+                proc = self._procs.get(role)
+                if proc is None or proc.poll() is not None:
+                    out.append(role)
+                    continue
+                n = self._n.get(role, 0)
+                born = self._born.get(role, now)
+                seen = self._seen.get(role, 0)
+                if n == 0 and now - born > FIRST_S:
+                    out.append(role)
+                elif n and now - seen > STALE_S:
+                    out.append(role)
+            return out
 
     def stop(self):
         with self._lock:
-            procs = list(self._procs.items())
-            self._procs = {}
-        for _role, proc in procs:
+            roles = list(self._procs)
+        self.stop_roles(roles)
+
+    def stop_roles(self, roles):
+        roles = list(roles or [])
+        with self._lock:
+            procs = []
+            for role in roles:
+                proc = self._procs.pop(role, None)
+                if proc is not None:
+                    procs.append(proc)
+                self._ports.pop(role, None)
+        for proc in procs:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGINT)
                 try:
@@ -126,6 +174,8 @@ class Live:
             self._ports[role] = port
             self._n[role] = 0
             self._err[role] = ""
+            self._born[role] = time.time()
+            self._seen[role] = 0
             self._frames.pop(role, None)
         threading.Thread(target=self._read, args=(role, proc), daemon=True).start()
         threading.Thread(target=self._stderr, args=(role, proc), daemon=True).start()
@@ -142,6 +192,7 @@ class Live:
             with self._lock:
                 self._frames[role] = frames[-1]
                 self._n[role] = self._n.get(role, 0) + len(frames)
+                self._seen[role] = time.time()
 
     def _stderr(self, role, proc):
         text = proc.stderr.read()

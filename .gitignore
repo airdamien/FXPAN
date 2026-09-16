@@ -2,6 +2,7 @@
 *.stl
 !f-mount_raw.stl
 !openscad/d7000_body.stl
+!openscad/d800_body.stl
 !openscad/taking_lens.stl
 !openscad/pi4_body.stl
 !openscad/monitor/*.stl

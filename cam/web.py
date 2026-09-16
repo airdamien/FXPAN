@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brightness
 import dual
 import gpio
+import link
 import live
 import pano
 import settings
@@ -31,11 +32,14 @@ import wifi
 
 HERE = Path(__file__).resolve().parent
 LIVE = live.Live()
+LINK = link.Link(LIVE)
 PORT = 8787
 KIOSK_CHROME = "--class=duals-kiosk-chromium"
 
 
 def _shutdown():
+    LINK.stop()
+    wifi.WATCH.stop()
     LIVE.stop()
     dual.ptp_hold(False)
 
@@ -98,10 +102,7 @@ def _read_json(handler):
 
 
 def _stop_live():
-    running = bool(LIVE.snapshot().get("running"))
-    LIVE.stop()
-    if running:
-        time.sleep(0.4)
+    LINK.set_live(False)
 
 
 def _live_message(snap):
@@ -167,15 +168,16 @@ def _merge_exposure(data, prefs):
     return out
 
 
-def _apply_exposure(have, assignments):
+def _apply_exposure(have, assignments, fast=False):
     notes = []
     if not assignments or not have:
         return notes
     from concurrent.futures import ThreadPoolExecutor
 
+    timeout = 6 if fast else 120
     with ThreadPoolExecutor(max_workers=len(have)) as pool:
         futs = [
-            pool.submit(dual._set_one, row["port"], assignments)
+            pool.submit(dual._set_one, row["port"], assignments, timeout)
             for row in have.values()
         ]
         for fut in futs:
@@ -340,8 +342,13 @@ class Handler(BaseHTTPRequestHandler):
                         "brightness": brightness.snapshot(),
                         "kiosk": _kiosk_enabled(),
                         "wifi": wifi.status(),
+                        "link": LINK.snapshot(),
                     },
                 )
+            if path == "/api/health":
+                return _json(self, 200, {"ok": True})
+            if path == "/api/link":
+                return _json(self, 200, LINK.snapshot())
             if path == "/api/wifi":
                 return _json(self, 200, wifi.status())
             if path == "/api/brightness":
@@ -399,21 +406,26 @@ class Handler(BaseHTTPRequestHandler):
                     download=m.group(1) if dl else None,
                 )
             if path == "/api/detect":
-                _stop_live()
-                rows = dual.detect_bodies()
+                with LINK.usb():
+                    rows = dual.detect_bodies()
+                    LINK.absorb(rows)
                 if not rows:
                     msg = "no cameras. Setup → USB → MTP/PTP, wake, plug USB."
                 elif any(not row.get("serial") for row in rows):
                     msg = f"{len(rows)} body(ies) — no serial (USB busy). Detect again."
                 else:
                     msg = f"{len(rows)} body(ies)"
-                return _json(self, 200, {"cameras": rows, "pair": dual.load_pair(), "message": msg})
+                return _json(self, 200, {
+                    "cameras": rows, "pair": dual.load_pair(),
+                    "link": LINK.snapshot(), "message": msg,
+                })
             if path == "/api/status":
-                _stop_live()
-                rows = dual.detect_bodies()
-                if not rows:
-                    raise dual.CamError("no cameras")
-                cameras, blocks = _status_now(rows)
+                with LINK.usb():
+                    rows = dual.detect_bodies()
+                    LINK.absorb(rows)
+                    if not rows:
+                        raise dual.CamError("no cameras")
+                    cameras, blocks = _status_now(rows)
                 lines = []
                 for b in blocks:
                     lines.append(
@@ -427,6 +439,7 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(
                     self, 200,
                     {"cameras": cameras, "status": blocks, "pair": dual.load_pair(),
+                     "link": LINK.snapshot(),
                      "message": "\n".join(lines)},
                 )
         except dual.CamError as exc:
@@ -511,31 +524,32 @@ class Handler(BaseHTTPRequestHandler):
                 bits = "  ".join(f"{k}={v}" for k, v in saved.items()) or "(cleared)"
                 return _json(self, 200, {"message": f"paired {bits}", "pair": saved})
             if path == "/api/live/start":
-                have = LIVE.start_from_usb()
-                snap = LIVE.snapshot()
-                if not have:
-                    return _json(
-                        self, 200,
-                        {
-                            **snap,
-                            "ok": False,
-                            "message": "no cameras. LIVE when they're on USB",
-                        },
-                    )
-                roles = " ".join(sorted(have))
+                LINK.set_live(True)
+                deadline = time.time() + 8.0
+                snap = LINK.snapshot()
+                while time.time() < deadline:
+                    snap = LINK.snapshot()
+                    roles = snap.get("roles") or {}
+                    if any((roles.get(role) or {}).get("live") for role in ("T", "R")):
+                        break
+                    time.sleep(0.15)
+                missing = snap.get("missing") or []
+                ok = any(
+                    (snap.get("roles") or {}).get(role, {}).get("live")
+                    for role in ("T", "R")
+                )
+                msg = snap.get("message") or "live"
+                if missing:
+                    msg += "  missing " + " ".join(missing)
                 return _json(
                     self, 200,
-                    {
-                        **snap,
-                        "ok": True,
-                        "message": f"live view {roles}  (low-res PTP preview)",
-                    },
+                    {**snap, "ok": ok, "message": msg, "live": LIVE.snapshot()},
                 )
             if path == "/api/live/stop":
                 _stop_live()
-                return _json(self, 200, {"message": "live view stopped"})
+                return _json(self, 200, {"message": "live view stopped",
+                                         "link": LINK.snapshot()})
             if path == "/api/set":
-                _stop_live()
                 prefs = settings.load()
                 exp = _merge_exposure(data, prefs)
                 assignments = _assignments(exp or data)
@@ -543,13 +557,20 @@ class Handler(BaseHTTPRequestHandler):
                     raise dual.CamError("nothing to set")
                 if exp:
                     settings.save(exp)
-                have = dual.require_online(dual.detect_bodies())
-                notes = _apply_exposure(have, assignments)
-                extra = []
+                LINK.remember(assignments)
+                light = bool(data.get("light"))
+                with LINK.usb():
+                    have = dict(LINK.have())
+                    if not have:
+                        have = dual.require_online(dual.detect_bodies())
+                        LINK.absorb(have.values())
+                    notes = _apply_exposure(have, assignments, fast=light)
+                    if light:
+                        cameras, blocks = [], []
+                    else:
+                        cameras, blocks = _status_now(list(have.values()))
                 roles = " and ".join(sorted(have))
                 msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
-                if extra:
-                    msg += "  " + "; ".join(extra)
                 if notes:
                     msg += "  (" + "; ".join(notes)
                     if any(n.startswith("expprogram=") for n in notes):
@@ -557,7 +578,6 @@ class Handler(BaseHTTPRequestHandler):
                     if any(n.startswith("f-number=") for n in notes):
                         msg += " — f/ needs A or M, or a CPU lens"
                     msg += ")"
-                cameras, blocks = _status_now(list(have.values()))
                 return _json(
                     self, 200,
                     {
@@ -565,130 +585,135 @@ class Handler(BaseHTTPRequestHandler):
                         "cameras": cameras,
                         "status": blocks,
                         "pair": dual.load_pair(),
+                        "link": LINK.snapshot(),
                     },
                 )
             if path == "/api/shoot":
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
 
-                _stop_live()
-                prefs = settings.load()
-                exp = _merge_exposure(data, prefs)
-                if exp:
-                    settings.save(exp)
+                with LINK.usb():
                     prefs = settings.load()
-                assignments = _assignments(exp)
-                preview_s = prefs.get("preview_s", settings.PREVIEW_S)
-                target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
+                    exp = _merge_exposure(data, prefs)
+                    if exp:
+                        settings.save(exp)
+                        prefs = settings.load()
+                    assignments = _assignments(exp)
+                    if assignments:
+                        LINK.remember(assignments)
+                    preview_s = prefs.get("preview_s", settings.PREVIEW_S)
+                    target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
 
-                def shot_json(message, files=None):
-                    return _json(
-                        self, 200,
-                        {
-                            "message": message,
-                            "files": files or [],
-                            "preview_s": preview_s,
-                        },
-                    )
-
-                if target == "gpio":
-                    snap = gpio.snapshot()
-                    if not snap["available"]:
-                        raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
-                    if not snap["pi"]:
-                        info = gpio.fire()
-                        return shot_json(
-                            f"gpio sim  BCM {info['pin']}  (no pulse)  "
-                            "on a Pi: Y-lead fire"
-                            + (
-                                ", then USB download → captures/"
-                                if prefs["download"]
-                                else ", files stay on cards"
-                            ),
+                    def shot_json(message, files=None):
+                        return _json(
+                            self, 200,
+                            {
+                                "message": message,
+                                "files": files or [],
+                                "preview_s": preview_s,
+                            },
                         )
-                    have = None
-                    try:
-                        have = dual.require_online(dual.detect_bodies())
-                    except dual.CamError:
+
+                    if target == "gpio":
+                        snap = gpio.snapshot()
+                        if not snap["available"]:
+                            raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
+                        if not snap["pi"]:
+                            info = gpio.fire()
+                            return shot_json(
+                                f"gpio sim  BCM {info['pin']}  (no pulse)  "
+                                "on a Pi: Y-lead fire"
+                                + (
+                                    ", then USB download → captures/"
+                                    if prefs["download"]
+                                    else ", files stay on cards"
+                                ),
+                            )
                         have = None
+                        try:
+                            have = dual.require_online(dual.detect_bodies())
+                        except dual.CamError:
+                            have = None
+                        copied = ""
+                        if have and assignments:
+                            _apply_exposure(have, assignments)
+                            copied = " ".join(
+                                f"{k}={v}" for k, v in dual.shot_config(assignments)
+                            )
+                        elif have:
+                            copied = _maybe_sync(have, prefs)
+                        if not prefs["download"]:
+                            info = gpio.fire()
+                            return shot_json(
+                                f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                                "  cards"
+                                + (f"  {copied}" if copied else ""),
+                            )
+                        if not have:
+                            raise dual.CamError("no cameras")
+                        LINK.absorb(have.values())
+                        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        dest = pano.CAPTURES
+                        before = dual.list_cards(have)
+                        info = gpio.fire()
+                        saved = dual.pull_new(have, before, dest, stamp)
+                        bits = "  ".join(
+                            f"{role} {','.join(saved[role])}" for role in sorted(saved)
+                        )
+                        pano.refresh_exif(dest, stamp)
+                        return shot_json(
+                            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
+                            f"  → {bits}"
+                            + (f"  {copied}" if copied else ""),
+                            _shot_files(saved=saved),
+                        )
+                    have = dual.require_online(dual.detect_bodies())
+                    LINK.absorb(have.values())
                     copied = ""
-                    if have and assignments:
+                    if assignments:
                         _apply_exposure(have, assignments)
                         copied = " ".join(
                             f"{k}={v}" for k, v in dual.shot_config(assignments)
                         )
-                    elif have:
+                    else:
                         copied = _maybe_sync(have, prefs)
-                    if not prefs["download"]:
-                        info = gpio.fire()
-                        return shot_json(
-                            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                            "  cards"
-                            + (f"  {copied}" if copied else ""),
-                        )
-                    if not have:
-                        raise dual.CamError("no cameras")
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     dest = pano.CAPTURES
-                    before = dual.list_cards(have)
-                    info = gpio.fire()
-                    saved = dual.pull_new(have, before, dest, stamp)
-                    bits = "  ".join(
-                        f"{role} {','.join(saved[role])}" for role in sorted(saved)
-                    )
-                    pano.refresh_exif(dest, stamp)
+                    with ThreadPoolExecutor(max_workers=len(have)) as pool:
+                        if target == "card":
+                            futs = [
+                                pool.submit(
+                                    dual._shoot_card,
+                                    role,
+                                    have[role]["port"],
+                                    assignments,
+                                )
+                                for role in have
+                            ]
+                        else:
+                            futs = [
+                                pool.submit(
+                                    dual._shoot_one,
+                                    role,
+                                    have[role]["port"],
+                                    dest,
+                                    stamp,
+                                    assignments,
+                                )
+                                for role in have
+                            ]
+                        times = [fut.result() for fut in futs]
+                    msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
+                    where = "cards" if target == "card" else "captures/"
+                    files = []
+                    if target != "card":
+                        pano.refresh_exif(dest, stamp)
+                        files = _shot_files(dest=dest, stamp=stamp)
                     return shot_json(
-                        f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                        f"  → {bits}"
+                        f"shot {stamp}  {msg}  → {where}"
                         + (f"  {copied}" if copied else ""),
-                        _shot_files(saved=saved),
+                        files,
                     )
-                have = dual.require_online(dual.detect_bodies())
-                copied = ""
-                if assignments:
-                    _apply_exposure(have, assignments)
-                    copied = " ".join(
-                        f"{k}={v}" for k, v in dual.shot_config(assignments)
-                    )
-                else:
-                    copied = _maybe_sync(have, prefs)
-                stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                dest = pano.CAPTURES
-                with ThreadPoolExecutor(max_workers=len(have)) as pool:
-                    if target == "card":
-                        futs = [
-                            pool.submit(
-                                dual._shoot_card,
-                                role,
-                                have[role]["port"],
-                                assignments,
-                            )
-                            for role in have
-                        ]
-                    else:
-                        futs = [
-                            pool.submit(
-                                dual._shoot_one,
-                                role,
-                                have[role]["port"],
-                                dest,
-                                stamp,
-                                assignments,
-                            )
-                            for role in have
-                        ]
-                    times = [fut.result() for fut in futs]
-                msg = "  ".join(f"{role} {dt:.2f}s" for role, dt in times)
-                where = "cards" if target == "card" else "captures/"
-                files = []
-                if target != "card":
-                    pano.refresh_exif(dest, stamp)
-                    files = _shot_files(dest=dest, stamp=stamp)
-                return shot_json(
-                    f"shot {stamp}  {msg}  → {where}"
-                    + (f"  {copied}" if copied else ""),
-                    files,
-                )
             if path == "/api/captures/delete":
                 stamp = (data.get("stamp") or "").strip()
                 side = (data.get("side") or "").strip().upper()
@@ -776,6 +801,11 @@ def main():
     print("ptpcamerad held down (python3 cam/dual.py ptp-on to restore Photos)")
     brightness.restore(settings.load().get("brightness"))
     pano.warmup_open()
+    LINK.start()
+    print("usb            link thread watching T/R")
+    if gpio.on_pi():
+        wifi.WATCH.start()
+        print("wifi           watch thread pinging gateway")
     httpd.serve_forever()
 
 

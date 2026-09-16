@@ -1,10 +1,13 @@
-// Nikon Dual — hybrid_shift pano L (shifted DX + one 50/50 plate)
-// Same 42.5 mm stitch as hybrid, but the tubes stay square to the image
-// plane. Cookies stay on the cube faces; each bore is translated by
-// sensor_shift() (~9.4 mm) so the DX window sits on a half-field
-// without Scheimpflug tilt.
+// Nikon Dual — hybrid_shift pano L (shifted DX or FX + one 50/50 plate)
+// FX_MODE=0: D7000 DX, sensor_shift ~9.4 mm, stitch ~42.5 mm.
+// FX_MODE=1: D800 FX, sensor_shift ~14.4 mm, stitch ~64.8 mm.
+// Tubes stay square; each bore is translated by sensor_shift() so each
+// sensor window sits on a half-field without Scheimpflug tilt.
 // One uncut 50×50 plate at the origin: R → +X, T → +Y.
 // https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/
+
+// FX_MODE, D800_TRIPOD_* — WATCH_ME customizer or -D FX_MODE=1 on export.
+function fx_mode() = is_undef(FX_MODE) ? 0 : FX_MODE;
 
 FLANGE_F = 46.5;
 
@@ -25,8 +28,8 @@ D_PLATE_TO_MOUNT = (
 PATH_FOLD        = D_LENS_TO_PLATE + D_PLATE_TO_MOUNT;
 PATH_TOTAL       = PATH_FOLD + FLANGE_F;
 
-SENSOR_W      = 23.6;
-SENSOR_H      = 15.6;
+SENSOR_W      = fx_mode() ? 36.0 : 23.6;
+SENSOR_H      = fx_mode() ? 23.9 : 15.6;
 OVERLAP_FRAC  = 0.20;
 function path_after_knife()   = D_PLATE_TO_MOUNT + FLANGE_F;
 function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
@@ -107,10 +110,18 @@ TRIPOD_INSERT_L = 6.4;
 TRIPOD_KEEP     = 1.2;
 function tripod_hole_h() = min(WALL - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0);
 
-D7000_TRIPOD_ABOVE = 9.4; // body 1/4-20 above chassis bottom plane (measured)
+D7000_TRIPOD_ABOVE = 9.4; // DX: measured on D7000
 D7000_TRIPOD_IN    = 40;
+function d800_tripod_above() =
+    is_undef(D800_TRIPOD_ABOVE) ? 10.0 : D800_TRIPOD_ABOVE;
+function d800_tripod_in() =
+    is_undef(D800_TRIPOD_IN) ? 44 : D800_TRIPOD_IN;
+function cam_tripod_above() =
+    fx_mode() ? d800_tripod_above() : D7000_TRIPOD_ABOVE;
+function cam_tripod_in() =
+    fx_mode() ? d800_tripod_in() : D7000_TRIPOD_IN;
 BRACE_T            = 8;
-BRACE_CAM_LIFT     = D7000_TRIPOD_ABOVE;
+BRACE_CAM_LIFT     = cam_tripod_above();
 BRACE_WEB          = 22;
 BRACE_PAD_D        = 34;
 BRACE_SLOT_L       = 18;
@@ -134,9 +145,9 @@ MASK_T       = 1.4;
 
 SHIM_STEPS = [0.2, 0.5, 1.0];
 
-BODY_W = 132;
-BODY_H = 105;
-BODY_D = 77;
+BODY_W = fx_mode() ? 146.0 : 132;
+BODY_H = fx_mode() ? 123.0 : 105;
+BODY_D = fx_mode() ? 81.5 : 77;
 
 $fn = 96;
 EXPLODED = 0;

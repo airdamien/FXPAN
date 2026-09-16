@@ -3,6 +3,7 @@
 #   ./export_stls.sh [part ...]              panorama V → stls/v/
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
 #   ./export_stls.sh --hybrid-shift [part ...] shifted-DX pano L → stls/hybrid_shift/
+#   ./export_stls.sh --hybrid-shift-fx [part ...] shifted-FX D800 → stls/hybrid_shift_fx/
 #   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
@@ -25,6 +26,7 @@ root=$(cd "$(dirname "$0")" && pwd)
 scad=$root/openscad/WATCH_ME.scad
 out=$root/stls/v
 default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter focus_sled focus_anchor)
+fx_extra=()
 
 if [[ "${1:-}" == "--bsplit" ]]; then
     shift
@@ -41,6 +43,12 @@ elif [[ "${1:-}" == "--hybrid-shift" ]]; then
     scad=$root/openscad/hybrid_shift/WATCH_ME.scad
     out=$root/stls/hybrid_shift
     default_parts=(chassis chassis_inner chassis_outer chassis_logo stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back sunshade hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
+elif [[ "${1:-}" == "--hybrid-shift-fx" ]]; then
+    shift
+    scad=$root/openscad/hybrid_shift/WATCH_ME.scad
+    out=$root/stls/hybrid_shift_fx
+    fx_extra=(-D "FX_MODE=1")
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer brace)
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -168,10 +176,17 @@ for req in "${parts[@]}"; do
     esac
     dest=$out/$dest_stem.stl
     echo "export $dest_stem (ARM_MOUNT=$mount ARMS=$arms SHELL=$shell) -> $dest"
-    "$osc" -o "$dest" --export-format binstl \
-        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" -D "ARMS=$arms" \
-        -D "SHELL=\"$shell\"" \
-        -D "STAMP=\"$stamp\"" "$scad"
+    cmd=(
+        "$osc" -o "$dest" --export-format binstl
+        -D "PART=\"$scad_part\"" -D "ARM_MOUNT=$mount" -D "ARMS=$arms"
+        -D "SHELL=\"$shell\""
+        -D "STAMP=\"$stamp\""
+    )
+    if ((${#fx_extra[@]})); then
+        cmd+=("${fx_extra[@]}")
+    fi
+    cmd+=("$scad")
+    "${cmd[@]}"
 done
 
 echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); *_inner = PETG lining, *_outer = PCTG shell; display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
