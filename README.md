@@ -24,6 +24,7 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 |-----|--------|-------|------|---------|--------|-------|
 | [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k · **toed** | `--hybrid` |
 | [`stls/hybrid_shift/`](stls/hybrid_shift/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · **shifted**, no Scheimpflug | `--hybrid-shift` |
+| [`stls/hybrid_shift_fx/`](stls/hybrid_shift_fx/) | D800 FX | 52 mm F | 173.5 mm | ~0.61 m | 64.8 mm · **shifted** · ~10.4k | `--hybrid-shift-fx` |
 | [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | same frame · T sharp / R shadowgraph | `--shadowgraph` |
 | [`stls/EFhybrid/`](stls/EFhybrid/) | 5D Mark III FF | 58 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | `--efhybrid` |
 | [`stls/Ehybrid/`](stls/Ehybrid/) | Sony α7 FF | 52 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | `--ehybrid` |
@@ -67,6 +68,16 @@ The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl`
 | `lid.stl` + `_inner` / `_outer` | chamber lid; inner = rim + grooved ceiling + display-nut pads (PETG), outer = PCTG cap | outer face up |
 | `hybrid_tray.stl` | PETG: 50/50 slot + posts, walls to the lid lip, port windows, sawtooth; paint fuzzy skin on the **inside** | floor down |
 | `brace.stl` | honeycomb under the box; holes follow the shifted 1/4-20s | floor down |
+
+### Shift FX kit (`stls/hybrid_shift_fx/`) — D800
+
+Same shift geometry as DX, but bores / lid notches / brace slots sit at **FX `sensor_shift()` (~14.4 mm)** for a **~64.8 mm** stitch. Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad), set **Camera → FX_MODE = 1** in the customizer to preview D800 ghosts, or export with `./export_hybrid_shift_fx.sh`.
+
+**Print from `hybrid_shift_fx/`:** `chassis` (+ `_inner` / `_outer`), `arm_r` / `arm_t` (+ `_inner` / `_outer` / `_f` variants), `lid` (+ `_inner` / `_outer`), `brace`.
+
+**Reuse from `hybrid_shift/`:** `stem`, `hybrid_tray`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path.
+
+Tune **D800_TRIPOD_ABOVE** / **D800_TRIPOD_IN** in the customizer after measuring your bodies (defaults are estimates).
 
 **Fuzzy skin (Bambu Studio)** — same numbers on every dark PETG light-path wall. Fuzzy only jitters **walls**, not top/bottom. ([Bambu wiki](https://wiki.bambulab.com/en/software/bambu-studio/parameter/fuzzy-skin))
 

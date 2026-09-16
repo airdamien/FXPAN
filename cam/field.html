@@ -50,16 +50,16 @@
   .main { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 8px 10px 8px 10px; }
   .stage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
   .side {
-    flex: 0 0 var(--side); min-width: var(--side);
+    flex: 0 0 var(--side); min-width: var(--side); min-height: 0;
     display: flex; flex-direction: column; gap: 8px;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
     z-index: 2;
   }
   #exp.on { background: var(--r); border-color: var(--r); color: #fff; }
   #live.on { background: var(--ok); border-color: var(--ok); color: #101214; }
   #expModal {
-    position: absolute; top: 0; right: 0; bottom: 0; left: auto;
+    position: absolute; top: 0; right: 0; bottom: 128px; left: auto;
     width: 252px; z-index: 5;
     background: #101214; border-radius: 8px;
     display: flex; flex-direction: column; gap: 8px; padding: 8px 4px;
@@ -112,19 +112,24 @@
     display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr);
     gap: 8px;
   }
-  .previews.pano-on { grid-template-rows: minmax(0, 1fr) minmax(72px, 32%); }
+  .previews.pano-on { grid-template-rows: minmax(0, 1fr) minmax(140px, 46%); }
   .previews figure {
     margin: 0; position: relative; background: #0b0d10; min-height: 0; overflow: hidden;
     outline: 1px solid var(--line);
   }
   .previews figure.t { outline-color: var(--t); }
   .previews figure.r { outline-color: var(--r); }
+  .previews figure.r.flop img { transform: scaleX(-1); }
   .previews figure.p {
     grid-column: 1 / -1; outline-color: #c9a227;
+    display: flex; align-items: center; justify-content: center;
   }
   .previews figure.p[hidden] { display: none !important; }
   .previews figure img, .previews figure canvas {
     width: 100%; height: 100%; object-fit: contain; display: block; background: #0b0d10;
+  }
+  .previews figure.p canvas {
+    width: auto; height: 100%; max-width: 100%; object-fit: contain;
   }
   .previews .tag {
     position: absolute; top: 6px; left: 8px; z-index: 1;
@@ -142,12 +147,15 @@
   }
   .t .tag, .t .meta, .t .jp { color: var(--t); }
   .r .tag, .r .meta, .r .jp { color: var(--r); }
-  .previews.shot figure.t, .previews.shot figure.r { outline-color: var(--ok); outline-width: 2px; }
+  .previews figure.out { outline-color: #c45c26; outline-width: 3px; }
+  .previews figure.out .tag { color: #c45c26; }
   .p .tag, .p .meta, .p .jp { color: #c9a227; }
   #panoPrev.on { background: var(--r); border-color: var(--r); color: #fff; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex: 0 0 auto; }
-  .livebar { display: flex; flex-direction: column; gap: 8px; }
-  .livebar[hidden] { display: none !important; }
+  .side-foot {
+    flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px;
+    margin-top: auto;
+  }
   button, .chip {
     appearance: none; border: 1px solid var(--line); background: var(--btn); color: var(--ink);
     font: 700 15px/1.1 "DejaVu Sans", sans-serif; letter-spacing: 0.08em;
@@ -258,6 +266,7 @@
   #shoot {
     background: var(--fire); border-color: var(--fire); color: #fff;
     font-size: 18px; letter-spacing: 0.16em; font-weight: 700; min-height: 72px;
+    flex: 0 0 auto; position: relative; z-index: 6;
   }
   body.kiosk { cursor: none; }
   body.kiosk header a[href="/lab"] { display: none; }
@@ -349,6 +358,26 @@
   .hud-cam.low .hud-bat i { background: var(--fire); }
   .hud-cam.low .hud-ico, .hud-cam.low .hud-pct { color: var(--fire); }
   .hud-cam.off { opacity: 0.35; }
+  #osk {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    background: #0b0d10; border-top: 1px solid var(--line);
+    padding: 6px 8px max(8px, env(safe-area-inset-bottom));
+    display: grid; gap: 4px;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  }
+  #osk[hidden] { display: none !important; }
+  .osk-row { display: flex; gap: 4px; justify-content: center; }
+  .osk-key {
+    flex: 1 1 0; min-width: 0; max-width: 76px;
+    min-height: 40px; padding: 0 4px; border-radius: 6px;
+    font: 700 15px/1 "DejaVu Sans", sans-serif; letter-spacing: 0.04em;
+    background: var(--btn); color: var(--ink); border: 1px solid var(--line);
+  }
+  .osk-key.on { background: var(--r); border-color: var(--r); color: #fff; }
+  .osk-key.wide { flex: 1.6 1 0; max-width: 112px; font-size: 12px; letter-spacing: 0.1em; }
+  .osk-key.enter { background: var(--ok); border-color: var(--ok); color: #101214; }
+  body.osk-open #wifiJoin { padding-bottom: 4px; }
+  body.osk-open.kiosk #tab-set { scroll-padding-bottom: 220px; }
   @media (max-width: 720px) {
     html, body { height: auto; min-height: 100%; overflow: auto; }
     .app { min-height: 100dvh; height: auto; }
@@ -359,14 +388,22 @@
     .tabs { flex-direction: row; flex: 1; }
     .tabs button { flex: 1; width: auto; padding: 0 6px; font-size: 12px; }
     .side button { width: auto; }
-    .livebar { flex-direction: row; }
     .side-fill { display: none; }
-    #shoot { min-width: 28%; }
+    .side-foot { flex-direction: row; width: 100%; }
+    .side-foot button { flex: 1; }
     #expModal {
       position: fixed; top: 56px; right: 8px; bottom: auto; left: auto;
-      width: min(252px, calc(100vw - 16px)); height: min(420px, calc(100dvh - 140px));
+      width: min(252px, calc(100vw - 16px)); height: min(420px, calc(100dvh - 160px));
     }
     #log { white-space: pre-wrap; max-height: none; }
+  }
+  @media (max-height: 640px) {
+    header { min-height: 40px; padding: 4px 10px; }
+    .tabs { gap: 6px; }
+    .tabs button, #exp, #panoPrev { min-height: 36px; font-size: 13px; }
+    .side-foot button { min-height: 48px; }
+    #shoot { min-height: 56px; }
+    #expModal { bottom: 120px; }
   }
 </style>
 <div class="app">
@@ -509,7 +546,7 @@
   <label class="dlchk"><input type="checkbox" id="flipR">Flop R</label>
   <div class="drag">
     <div class="k">Overlap <b id="olVal">20%</b></div>
-    <input type="range" id="olDrag" min="5" max="45" value="20" step="1">
+    <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
   </div>
   <div class="drag">
     <div class="k">Preview <b id="prevVal">2s</b></div>
@@ -533,7 +570,8 @@
   </div>
   <div id="wifiJoin" hidden>
     <div class="lbl" id="wifiJoinSsid"></div>
-    <input id="wifiPsk" type="password" autocomplete="off" placeholder="password" enterkeyhint="go">
+    <input id="wifiPsk" class="osk" type="password" autocomplete="off"
+           placeholder="password" enterkeyhint="go" inputmode="text" autocapitalize="off" spellcheck="false">
     <div class="row">
       <button type="button" id="wifiJoinBtn">JOIN</button>
       <button type="button" id="wifiJoinCancel">CANCEL</button>
@@ -551,6 +589,13 @@
 </div>
 <pre id="log">wake a body · USB MTP/PTP</pre>
 </div>
+<div id="osk" hidden aria-hidden="true">
+  <div class="osk-row" id="oskRow0"></div>
+  <div class="osk-row" id="oskRow1"></div>
+  <div class="osk-row" id="oskRow2"></div>
+  <div class="osk-row" id="oskRow3"></div>
+  <div class="osk-row" id="oskRow4"></div>
+</div>
 <aside class="side">
   <nav class="tabs">
     <button type="button" class="on" data-tab="live">LIVE</button>
@@ -560,13 +605,12 @@
     <button type="button" data-tab="set">SET</button>
   </nav>
   <button type="button" id="exp">ISO</button>
-  <div class="livebar" id="livebar">
-    <button id="live">START</button>
-    <button id="liveStop" hidden>STOP</button>
-    <button type="button" id="panoPrev">PREVIEW</button>
-  </div>
+  <button type="button" id="panoPrev">PREVIEW</button>
   <div class="side-fill"></div>
-  <button id="shoot">FIRE</button>
+  <div class="side-foot">
+    <button id="live">START</button>
+    <button id="shoot">FIRE</button>
+  </div>
   <div id="expModal" hidden>
     <div class="vsliders">
       <div class="vdrag">
@@ -654,7 +698,6 @@ const paintExposure = () => {
 const setAuto = (key) => {
   state[key] = "Auto";
   paintExposure();
-  scheduleApply();
 };
 const bindDrag = (id, list, key, applyFast) => {
   const el = document.getElementById(id);
@@ -732,20 +775,20 @@ const paintHud = () => {
     const pct = batPct(bat);
     const busy = bat && /USB busy|ptpcamerad|gphoto2/i.test(bat);
     el.classList.toggle("off", !s.on);
-    el.classList.toggle("low", pct != null && pct <= 25);
-    el.querySelector(".hud-mode").textContent = mode;
+    el.classList.toggle("low", pct != null && pct <= 25 && s.on);
+    el.querySelector(".hud-mode").textContent = s.on ? mode : "OUT";
     el.querySelector(".hud-iso").textContent = iso === "—" ? "ISO —" : iso === "AUTO" ? "ISO AUTO" : "ISO "+iso;
     el.querySelector(".hud-shut").textContent = fnum ? shut + "  " + fnum : shut;
     el.querySelector(".hud-wb").textContent = ev ? wb + "  " + ev : wb;
     el.querySelector(".hud-qual").textContent = qual;
     el.querySelector(".hud-af").textContent = [af, meter].filter(Boolean).join(" · ") || "—";
     el.querySelector(".hud-bat i").style.width = (pct == null ? 0 : pct) + "%";
-    el.querySelector(".hud-pct").textContent = busy ? "USB" : (bat || (s.on ? "USB" : "—"));
-    el.querySelector(".hud-shots").textContent = shots && !busy ? shots : "";
+    el.querySelector(".hud-pct").textContent = !s.on ? "OUT" : (busy ? "USB" : (bat || "USB"));
+    el.querySelector(".hud-shots").textContent = shots && !busy && s.on ? shots : "";
     const st = document.getElementById("st"+role);
     if (st) st.textContent = s.on
       ? [mode !== "—" ? mode : "", iso !== "—" ? iso : "", shut !== "—" ? shut : "", bat].filter(Boolean).join(" · ") || "USB"
-      : "—";
+      : "USB OUT";
   });
 };
 const ingestHud = (rows, blocks) => {
@@ -853,7 +896,7 @@ const paintCams = () => {
       if (st) st.textContent = (row.batterylevel || row.iso || "USB");
     }
   };
-  (state.rows || []).forEach(row => addCard(row, false));
+  (state.rows || []).forEach(row => addCard(row, !row.port));
   [["T", state.t], ["R", state.r]].forEach(([role, serial]) => {
     if (serial && !seen.has(serial))
       addCard({ serial, role, model: "saved" }, true);
@@ -938,10 +981,27 @@ const bindPaneScroll = (el) => {
 };
 ["files", "pairs", "cams", "tab-set"].forEach((id) =>
   bindPaneScroll(document.getElementById(id)));
+const flopOn = () => document.getElementById("flipR") && document.getElementById("flipR").checked;
+const paintFlop = () => {
+  const fig = document.querySelector(".previews figure.r");
+  if (fig) fig.classList.toggle("flop", flopOn());
+};
+const exposureBody = (all) => {
+  const body = { iso: state.iso, shutter: state.shutter, light: !all };
+  if (!isAuto(state.fstop) && modeOwnsF(state.program))
+    body.fstop = state.fstop;
+  if (all) {
+    body.light = false;
+    body.program = state.program;
+    body.wb = state.wb;
+    body.quality = state.quality;
+  }
+  return body;
+};
 const liveOverlap = () => {
   const el = document.getElementById("olDrag");
   const n = el ? parseInt(el.value, 10) : 20;
-  return Math.min(0.45, Math.max(0.05, (n || 20) / 100));
+  return Math.min(0.50, Math.max(0.05, (n || 20) / 100));
 };
 const composePano = () => {
   if (!state.panoPrev) return;
@@ -949,12 +1009,13 @@ const composePano = () => {
   const r = document.getElementById("lvR");
   const canvas = document.getElementById("lvP");
   if (!canvas || !t.naturalWidth || !r.naturalWidth) return;
-  const flip = document.getElementById("flipR") && document.getElementById("flipR").checked;
+  const flip = flopOn();
   const ol = liveOverlap();
   const h = Math.min(t.naturalHeight, r.naturalHeight);
   const tw = Math.round(t.naturalWidth * h / t.naturalHeight);
   const rw = Math.round(r.naturalWidth * h / r.naturalHeight);
-  const seam = Math.max(1, Math.round(tw * (1 - ol)));
+  const olPx = Math.max(8, Math.round(tw * ol));
+  const seam = Math.max(1, tw - olPx);
   const width = seam + rw;
   if (canvas.width !== width || canvas.height !== h) {
     canvas.width = width;
@@ -963,21 +1024,29 @@ const composePano = () => {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, width, h);
   ctx.drawImage(t, 0, 0, t.naturalWidth, t.naturalHeight, 0, 0, tw, h);
-  ctx.save();
+  const tmp = document.createElement("canvas");
+  tmp.width = rw;
+  tmp.height = h;
+  const tx = tmp.getContext("2d");
+  tx.save();
   if (flip) {
-    ctx.translate(seam + rw, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, 0, 0, rw, h);
-  } else {
-    ctx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, seam, 0, rw, h);
+    tx.translate(rw, 0);
+    tx.scale(-1, 1);
   }
-  ctx.restore();
-  ctx.fillStyle = "rgba(196,92,38,0.85)";
-  ctx.fillRect(seam, 0, 1, h);
+  tx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, 0, 0, rw, h);
+  tx.restore();
+  const fade = tx.createLinearGradient(0, 0, olPx, 0);
+  fade.addColorStop(0, "rgba(0,0,0,0)");
+  fade.addColorStop(0.55, "rgba(0,0,0,1)");
+  fade.addColorStop(1, "rgba(0,0,0,1)");
+  tx.globalCompositeOperation = "destination-in";
+  tx.fillStyle = fade;
+  tx.fillRect(0, 0, rw, h);
+  ctx.drawImage(tmp, seam, 0);
   const jp = document.querySelector("#panoPrevFig .jp");
   if (jp) jp.textContent = Math.round(ol * 100) + "%" + (flip ? " flop" : "");
   const st = document.getElementById("stP");
-  if (st) st.textContent = "cut";
+  if (st) st.textContent = "blend";
 };
 const paintLiveBtn = () => {
   const liveBtn = document.getElementById("live");
@@ -1008,39 +1077,50 @@ const setLiveSrc = (on) => {
   paintLiveBtn();
   if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
   paintPanoPrev();
+  const bust = Date.now();
   if (!on) {
     ["T","R"].forEach(role => {
       const img = document.getElementById("lv"+role);
-      const old = img.src;
+      img.onload = null;
       img.src = "";
-      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
     });
     if (state.panoPrev) loadLastStills().then(() => composePano()).catch(() => {});
     return;
   }
-  const tick = async () => {
+  ["T","R"].forEach(role => {
+    const img = document.getElementById("lv"+role);
+    img.onload = () => {
+      if (!state.liveOk) {
+        state.liveOk = true;
+        paintLiveBtn();
+        paintPanoPrev();
+      }
+      if (state.panoPrev) composePano();
+    };
+    img.onerror = () => {
+      if (!state.live) return;
+      setTimeout(() => {
+        if (!state.live) return;
+        img.src = "/api/live/"+role+".mjpg?t="+Date.now();
+      }, 500);
+    };
+    img.src = "/api/live/"+role+".mjpg?t="+bust;
+  });
+  setTimeout(() => {
+    if (!state.live || state.liveOk) return;
+    api("/api/live").then((j) => {
+      if (!state.live) return;
+      if (j && j.running) {
+        state.liveOk = true;
+        paintLiveBtn();
+        paintPanoPrev();
+      }
+    }).catch(() => {});
+  }, 700);
+  const tick = () => {
     if (!state.live) return;
-    let got = 0;
-    for (const role of ["T","R"]) {
-      try {
-        const r = await fetch("/api/live/"+role+".jpg", { cache:"no-store" });
-        if (r.ok && (r.headers.get("content-type") || "").includes("jpeg")) {
-          const url = URL.createObjectURL(await r.blob());
-          const img = document.getElementById("lv"+role);
-          const old = img.src;
-          img.onload = () => { if (state.panoPrev) composePano(); };
-          img.src = url;
-          if (old.startsWith("blob:")) URL.revokeObjectURL(old);
-          got += 1;
-        }
-      } catch (e) {}
-    }
-    if (got && !state.liveOk) {
-      state.liveOk = true;
-      paintLiveBtn();
-      paintPanoPrev();
-    }
-    state.timer = setTimeout(tick, got ? 280 : 80);
+    if (state.panoPrev) composePano();
+    state.timer = setTimeout(tick, 120);
   };
   tick();
 };
@@ -1096,28 +1176,36 @@ const applyHud = (all) => {
   paintHud();
 };
 let applyTimer = 0;
-const applyExposure = () => usb(async () => {
+const bustLive = () => {
+  if (!state.live) return;
+  const bust = Date.now();
+  ["T","R"].forEach(role => {
+    const img = document.getElementById("lv"+role);
+    if (img) img.src = "/api/live/"+role+".mjpg?t="+bust;
+  });
+};
+const applyExposure = async (all) => {
   const j = await api("/api/set", { method:"POST",
     headers:{"content-type":"application/json"},
-    body: JSON.stringify({ iso: state.iso, shutter: state.shutter, fstop: state.fstop }) });
+    body: JSON.stringify(exposureBody(!!all)) });
   if (j.cameras || j.status) ingestHud(j.cameras, j.status);
-  else applyHud(false);
+  else applyHud(!!all);
   let msg = j.message;
   if (isAuto(state.shutter) && /^M$/i.test(state.program))
     msg += "  — shutter AUTO needs the mode dial on A or P";
   if (!isAuto(state.fstop) && !modeOwnsF(state.program))
     msg += "  — f/ needs the mode dial on A or M";
   log(msg);
-});
+  bustLive();
+};
 const scheduleApply = () => {
   clearTimeout(applyTimer);
-  applyTimer = setTimeout(() => applyExposure().catch(e => log(e.message, true)), 400);
+  applyTimer = setTimeout(() => applyExposure(false).catch(e => log(e.message, true)), 1500);
 };
 bind("set", async () => { await usb(async () => {
   const j = await api("/api/set", { method:"POST",
     headers:{"content-type":"application/json"},
-    body: JSON.stringify({ iso: state.iso, shutter: state.shutter, fstop: state.fstop,
-      program: state.program, wb: state.wb, quality: state.quality }) });
+    body: JSON.stringify(exposureBody(true)) });
   if (j.cameras || j.status) ingestHud(j.cameras, j.status);
   else applyHud(true);
   log(j.message);
@@ -1144,16 +1232,31 @@ const showLastShot = async () => {
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const fire = async () => {
+  const b = document.getElementById("shoot");
+  if (b.disabled) return;
   const was = state.live;
   clearTimeout(applyTimer);
+  b.disabled = true;
   setLiveSrc(false);
-  const j = await api("/api/shoot", { method:"POST",
-    headers:{"content-type":"application/json"},
-    body: JSON.stringify({
-      iso: state.iso, shutter: state.shutter, fstop: state.fstop,
-      program: state.program, wb: state.wb, quality: state.quality,
-    }) });
-  log(j.message);
+  let j;
+  try {
+    j = await api("/api/shoot", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({
+        iso: state.iso, shutter: state.shutter, fstop: state.fstop,
+        program: state.program, wb: state.wb, quality: state.quality,
+      }) });
+    log(j.message);
+  } catch (e) {
+    log(e.message, true);
+    b.disabled = false;
+    if (was) {
+      try { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
+      catch (err) { log(err.message, true); }
+    }
+    return;
+  }
+  b.disabled = false;
   applyHud(false);
   const files = j.files || [];
   const secs = Number(j.preview_s);
@@ -1170,7 +1273,7 @@ const fire = async () => {
     catch (e) { log(e.message, true); }
   }
 };
-bind("shoot", () => fire());
+document.getElementById("shoot").onclick = () => fire();
 bind("live", async () => {
   if (state.liveOk) {
     setLiveSrc(false);
@@ -1187,10 +1290,6 @@ bind("live", async () => {
     setLiveSrc(false);
     throw e;
   }
-});
-bind("liveStop", async () => {
-  setLiveSrc(false);
-  const j = await api("/api/live/stop", { method:"POST" }); log(j.message);
 });
 document.getElementById("panoPrev").onclick = () => {
   state.panoPrev = !state.panoPrev;
@@ -1439,6 +1538,154 @@ bind("filesRefresh", () => loadFiles());
 bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every capture from before today?"));
 bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
 const inKiosk = new URLSearchParams(location.search).has("kiosk");
+const oskTouch = () =>
+  inKiosk || window.matchMedia("(pointer: coarse)").matches;
+const osk = (() => {
+  const panel = document.getElementById("osk");
+  const rows = [
+    document.getElementById("oskRow0"),
+    document.getElementById("oskRow1"),
+    document.getElementById("oskRow2"),
+    document.getElementById("oskRow3"),
+    document.getElementById("oskRow4"),
+  ];
+  const letters = [
+    "1","2","3","4","5","6","7","8","9","0",
+    "q","w","e","r","t","y","u","i","o","p",
+    "a","s","d","f","g","h","j","k","l",
+    "z","x","c","v","b","n","m",
+  ];
+  const symbols = "-_.@#!$%&*()+=:?";
+  let target = null;
+  let shift = false;
+  let sym = false;
+  let peek = false;
+  let hideTimer = 0;
+
+  const keyBtn = (label, cls, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "osk-key" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      fn(b);
+    });
+    return b;
+  };
+  const paintKeys = () => {
+    rows.forEach((row) => { row.innerHTML = ""; });
+    const ch = (c) => (shift && !sym ? c.toUpperCase() : c);
+    const row0 = letters.slice(0, 10).map((c) =>
+      keyBtn(ch(c), "", () => insert(ch(c))));
+    rows[0].append(...row0);
+    const row1 = letters.slice(10, 20).map((c) =>
+      keyBtn(ch(c), "", () => insert(ch(c))));
+    rows[1].append(...row1);
+    const row2 = letters.slice(20, 29).map((c) =>
+      keyBtn(ch(c), "", () => insert(ch(c))));
+    rows[2].append(...row2);
+    const row3 = letters.slice(29).map((c) =>
+      keyBtn(ch(c), "", () => insert(ch(c))));
+    const shiftBtn = keyBtn("SHIFT", shift ? "on" : "wide", () => {
+      shift = !shift;
+      paintKeys();
+    });
+    shiftBtn.classList.add("wide");
+    rows[3].append(shiftBtn, ...row3);
+    if (sym) {
+      rows[4].append(
+        keyBtn("ABC", "wide", () => { sym = false; paintKeys(); }),
+        ...symbols.split("").map((c) => keyBtn(c, "", () => insert(c))),
+        keyBtn("⌫", "wide", backspace),
+        keyBtn("DONE", "wide", hide),
+      );
+    } else {
+      rows[4].append(
+        keyBtn("SYM", "wide", () => { sym = true; paintKeys(); }),
+        keyBtn("SPACE", "wide", () => insert(" ")),
+        keyBtn("⌫", "wide", backspace),
+        keyBtn(peek ? "HIDE" : "SHOW", "wide", () => {
+          if (!target) return;
+          peek = !peek;
+          target.type = peek ? "text" : "password";
+          paintKeys();
+        }),
+        keyBtn("JOIN", "wide enter", () => {
+          if (target && target.id === "wifiPsk") joinWifi(target.value);
+          else hide();
+        }),
+        keyBtn("DONE", "wide", hide),
+      );
+    }
+  };
+  const insert = (text) => {
+    if (!target) return;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? start;
+    const val = target.value;
+    target.value = val.slice(0, start) + text + val.slice(end);
+    const pos = start + text.length;
+    target.setSelectionRange(pos, pos);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const backspace = () => {
+    if (!target) return;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? start;
+    if (start !== end) {
+      target.value = target.value.slice(0, start) + target.value.slice(end);
+      target.setSelectionRange(start, start);
+    } else if (start > 0) {
+      target.value = target.value.slice(0, start - 1) + target.value.slice(start);
+      target.setSelectionRange(start - 1, start - 1);
+    }
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const show = (input) => {
+    if (!oskTouch() || !input) return;
+    target = input;
+    peek = false;
+    if (input.type === "password") input.type = "password";
+    input.readOnly = true;
+    panel.hidden = false;
+    panel.setAttribute("aria-hidden", "false");
+    document.body.classList.add("osk-open");
+    paintKeys();
+    window.setTimeout(() => {
+      input.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 30);
+  };
+  const hide = () => {
+    window.clearTimeout(hideTimer);
+    if (target) {
+      target.readOnly = false;
+      if (target.id === "wifiPsk") target.type = "password";
+      target.blur();
+      target = null;
+    }
+    peek = false;
+    shift = false;
+    sym = false;
+    panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("osk-open");
+  };
+  panel.addEventListener("pointerdown", (ev) => ev.preventDefault());
+  const bind = (input) => {
+    input.addEventListener("focus", () => show(input));
+    input.addEventListener("blur", () => {
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => {
+        if (document.activeElement !== input && !panel.contains(document.activeElement))
+          hide();
+      }, 120);
+    });
+  };
+  paintKeys();
+  return { bind, hide, show };
+})();
+document.querySelectorAll("input.osk").forEach((el) => osk.bind(el));
 const MENUS = ["usb", "pano", "files", "set"];
 const showTab = (name) => {
   if (name === "view" || name === "start" || name === "live") name = "";
@@ -1469,11 +1716,11 @@ if (startTab === "view" || startTab === "start" || startTab === "live") startTab
 showTab(MENUS.includes(startTab) ? startTab : "");
 paintPanoPrev();
 bindDrag("isoDrag", ISO, "iso", false);
-bindDrag("isoFast", ISO, "iso", true);
+bindDrag("isoFast", ISO, "iso", false);
 bindDrag("shutDrag", SHUT, "shutter", false);
-bindDrag("shutFast", SHUT, "shutter", true);
+bindDrag("shutFast", SHUT, "shutter", false);
 bindDrag("fDrag", FSTOP, "fstop", false);
-bindDrag("fFast", FSTOP, "fstop", true);
+bindDrag("fFast", FSTOP, "fstop", false);
 ["isoAuto","isoFastAuto"].forEach(id => {
   document.getElementById(id).onclick = () => setAuto("iso");
 });
@@ -1503,7 +1750,11 @@ window.addEventListener("resize", () => {
   if (!expModal.hidden) sizeVerts();
 });
 expBtn.onclick = () => showExp(expModal.hidden);
-document.getElementById("expDone").onclick = () => showExp(false);
+document.getElementById("expDone").onclick = () => {
+  showExp(false);
+  clearTimeout(applyTimer);
+  applyExposure(false).catch(e => log(e.message, true));
+};
 if (startParams.has("exp")) showExp(true);
 fillSelect("program", PROG, "program");
 fillSelect("wb", WB, "wb");
@@ -1561,10 +1812,13 @@ const startJoin = (n) => {
   document.getElementById("wifiJoinSsid").textContent = n.ssid;
   document.getElementById("wifiPsk").value = "";
   document.getElementById("wifiJoin").hidden = false;
-  document.getElementById("wifiPsk").focus();
+  const psk = document.getElementById("wifiPsk");
+  psk.focus();
+  if (oskTouch()) osk.show(psk);
 };
 const hideJoin = () => {
   joinSsid = "";
+  osk.hide();
   document.getElementById("wifiJoin").hidden = true;
   document.getElementById("wifiPsk").value = "";
 };
@@ -1617,6 +1871,7 @@ const paintSettings = (s) => {
   if (dl && "download" in s) dl.checked = !!s.download;
   if (g && "gpio" in s) g.checked = !!s.gpio;
   if (flip && "flip_r" in s) flip.checked = !!s.flip_r;
+  paintFlop();
   const sync = document.getElementById("syncOn");
   if (sync && "sync" in s) sync.checked = !!s.sync;
   const master = (s.master === "R") ? "R" : "T";
@@ -1626,7 +1881,7 @@ const paintSettings = (s) => {
   if (mr) mr.classList.toggle("on", master === "R");
   if (ol && "overlap" in s) {
     const pct = Math.round((Number(s.overlap) || 0.20) * 100);
-    ol.value = String(Math.min(45, Math.max(5, pct)));
+    ol.value = String(Math.min(50, Math.max(5, pct)));
     paintOl();
   }
   const prev = document.getElementById("prevDrag");
@@ -1663,6 +1918,7 @@ document.getElementById("syncOn").onchange = () => saveSettings().catch(e => log
   };
 });
 document.getElementById("flipR").onchange = () => {
+  paintFlop();
   composePano();
   saveSettings().catch(e => log(e.message, true));
 };
@@ -1720,6 +1976,53 @@ bind("kioskExit", async () => {
     log(j.message);
   } catch (e) { log(e.message, true); }
 });
+const paintLink = (j) => {
+  if (!j || !j.roles) return;
+  const rows = [];
+  ["T","R"].forEach((role) => {
+    const r = j.roles[role] || {};
+    const fig = document.querySelector(".previews figure." + role.toLowerCase());
+    if (fig) fig.classList.toggle("out", !r.online);
+    const prev = state.stats[role] || {};
+    const on = !!r.online;
+    state.stats[role] = Object.assign({}, prev, {
+      on, serial: r.serial || prev.serial, port: r.port || "",
+      model: r.model || prev.model,
+    });
+    if (!on) state.stats[role].on = false;
+    if (r.serial || r.port) {
+      const old = (state.rows || []).find(x => x.role === role) || {};
+      rows.push({
+        role, serial: r.serial || old.serial, port: r.port,
+        model: r.model || old.model, batterylevel: old.batterylevel,
+      });
+    }
+  });
+  if (rows.length) {
+    state.rows = rows;
+    paintCams();
+  }
+  paintHud();
+  if (j.message && j.message !== state.linkMsg) {
+    state.linkMsg = j.message;
+    if (/out|gone|dead|waiting|missing|stall/i.test(j.message))
+      log(j.message, !!(j.missing && j.missing.length));
+  }
+  if (j.want_live && j.running && !state.live) setLiveSrc(true);
+  if (!j.want_live && state.live) setLiveSrc(false);
+  if (j.running) state.liveOk = true;
+  else if (!j.want_live) state.liveOk = false;
+  paintLiveBtn();
+};
+let linkTimer = 0;
+const pollLink = () => {
+  api("/api/link").then(paintLink).catch(() => {});
+};
+const startLinkPoll = () => {
+  if (linkTimer) return;
+  pollLink();
+  linkTimer = setInterval(pollLink, 1500);
+};
 api("/api/meta").then(j => {
   document.getElementById("host").textContent = (j.phone || "").replace(/^https?:\/\//,"").replace(/:8787\/?$/,"");
   paintGpio(j.gpio);
@@ -1732,7 +2035,8 @@ api("/api/meta").then(j => {
     state.fstop = String(j.settings.fstop).replace(/^f\/?/i, "");
     paintExposure();
   }
-  refreshStatus();
-}).catch(() => { refreshStatus(); });
+  if (j.link) paintLink(j.link);
+  startLinkPoll();
+}).catch(() => { startLinkPoll(); });
 if (inKiosk) paintKiosk(true);
 </script>

@@ -382,6 +382,51 @@ def detect_bodies(timeout=120):
     return rows
 
 
+NIKON_USB_VID = "04b0"
+USB_SYS = Path("/sys/bus/usb/devices")
+
+
+def parse_lsusb(text):
+    """gphoto port names from `lsusb` lines for Nikon PTP bodies."""
+    ports = []
+    for line in (text or "").splitlines():
+        m = re.match(
+            r"Bus\s+(\d+)\s+Device\s+(\d+):\s+ID\s+04b0:",
+            line,
+            re.I,
+        )
+        if m:
+            ports.append(f"usb:{int(m.group(1)):03d},{int(m.group(2)):03d}")
+    return sorted(set(ports))
+
+
+def nikon_usb_ports(root=None):
+    """Nikon devices on the bus, as gphoto `usb:BBB,DDD` ports.
+
+    Returns a list when the bus can be read without gphoto (sysfs or lsusb).
+    Returns None when this host cannot list USB without touching PTP.
+    """
+    base = Path(root) if root is not None else USB_SYS
+    if base.is_dir():
+        ports = []
+        for node in base.iterdir():
+            try:
+                vid = (node / "idVendor").read_text().strip().lower()
+                if vid != NIKON_USB_VID:
+                    continue
+                bus = int((node / "busnum").read_text().strip())
+                dev = int((node / "devnum").read_text().strip())
+            except (OSError, ValueError):
+                continue
+            ports.append(f"usb:{bus:03d},{dev:03d}")
+        return sorted(set(ports))
+    try:
+        out = subprocess.check_output(["lsusb"], timeout=2, text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+    return parse_lsusb(out)
+
+
 def detect_bodies_cached(timeout=120):
     """Skip serial reads when the same USB ports are still on the bus."""
     ptp_disable()
@@ -555,7 +600,7 @@ def shot_config(assignments):
     return [(k, v) for k, v in (assignments or []) if k in keep]
 
 
-def _set_one(port, assignments):
+def _set_one(port, assignments, timeout=120):
     """isoauto Off + iso must not share a command with flaky autoiso."""
     assignments = list(assignments or [])
     if not assignments:
@@ -566,14 +611,14 @@ def _set_one(port, assignments):
     if primary:
         for variant in iso_variants(primary):
             try:
-                gp(config_args(variant), port=port)
-                return _set_widgets(port, rest)
+                gp(config_args(variant), port=port, timeout=timeout)
+                return _set_widgets(port, rest, timeout=timeout)
             except CamError as exc:
                 last = exc
-    return _set_widgets(port, assignments, last=last)
+    return _set_widgets(port, assignments, last=last, timeout=timeout)
 
 
-def _set_widgets(port, assignments, last=None):
+def _set_widgets(port, assignments, last=None, timeout=120):
     errors = []
     for key, value in assignments:
         if key == "iso":
@@ -588,33 +633,19 @@ def _set_widgets(port, assignments, last=None):
         ok = False
         for val in tries:
             try:
-                gp(["--set-config", f"{key}={val}"], port=port)
+                gp(["--set-config", f"{key}={val}"], port=port, timeout=timeout)
                 ok = True
                 break
             except CamError as exc:
                 err = exc
-        if not ok and key == "f-number":
+        if not ok and key == "f-number" and timeout > 30:
             for val in tries:
                 try:
-                    gp(["--set-config", f"aperture={val}"], port=port)
+                    gp(["--set-config", f"aperture={val}"], port=port, timeout=timeout)
                     ok = True
                     break
                 except CamError as exc:
                     err = exc
-            if not ok:
-                for val in tries:
-                    try:
-                        gp(
-                            [
-                                "--set-config", "viewfinder=0",
-                                "--set-config", f"f-number={val}",
-                            ],
-                            port=port,
-                        )
-                        ok = True
-                        break
-                    except CamError as exc:
-                        err = exc
         if not ok:
             errors.append(f"{key}={value}: {err}")
     if errors and len(errors) == len(assignments):

@@ -62,14 +62,14 @@ else
 fi
 
 ensure_web() {
-    if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/meta; then
+    if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health; then
         return 0
     fi
     mkdir -p "$LOGDIR"
     DUALS_KIOSK=1 "$PY" "$CAM/web.py" >> "$LOGDIR/web.log" 2>&1 9>&- &
     j=0
     while [ "$j" -lt 50 ]; do
-        if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/meta; then
+        if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health; then
             return 0
         fi
         j=$((j + 1))

@@ -118,15 +118,18 @@ module f_pin_seat_floor() {
 // Bored peg sinks into TUBE_ID; collar / pads stay behind the register.
 // peg_face: recede the tube-facing peg by this much so a PETG liner can
 // sit there without overlapping PCTG. Do not difference the STL.
-module f_mount_on_tube(clock = 0, peg_face = 0) {
-    translate([0, 0, -F_PEG_H])
+module f_mount_on_tube(clock = 0, peg_face = 0, back_extra = 0) {
+    // FX body fitting can require a deeper rear support while preserving
+    // the calibrated register face and bayonet geometry.
+    translate([0, 0, -F_PEG_H - back_extra])
         difference() {
-            cylinder(h = F_PEG_H + 0.4, d = F_STL_OD);
+            cylinder(h = F_PEG_H + back_extra + 0.4, d = F_STL_OD);
             translate([0, 0, -0.1])
-                cylinder(h = F_PEG_H + 0.6, d = F_BORE);
+                cylinder(h = F_PEG_H + back_extra + 0.6, d = F_BORE);
             if (peg_face > 0)
                 translate([0, 0, -0.1])
-                    cylinder(h = peg_face + 0.1, d = F_STL_OD + 0.4);
+                    cylinder(h = peg_face + back_extra + 0.1,
+                             d = F_STL_OD + 0.4);
         }
     translate([0, 0, F_COLLAR_Z0])
         difference() {

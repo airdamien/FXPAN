@@ -36,7 +36,7 @@ def _overlap(val):
         return None
     if n > 1:
         n = n / 100.0
-    if n < 0.05 or n > 0.45:
+    if n < 0.05 or n > 0.50:
         return None
     return n
 
