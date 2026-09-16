@@ -127,6 +127,24 @@ function cam_axis(mark) =
 function port_up(mark) =
     mark == "R" ? [-1, 0] :
     mark == "T" ? [0, -1] : [0, 1];
+// Outboard cookie edge in the shift direction. FX tubes stick past the
+// 90 mm plate; chord-cut that OD so the chassis can wrap the flat.
+function tube_flat_n(mark) =
+    mark == "R" ? [0, -1] :
+    mark == "T" ? [1, 0] : [0, 0];
+TUBE_FLAT_CLEAR = 0.4;
+
+module tube_flat_waste(mark, z0, h, inset = 0) {
+    n = tube_flat_n(mark);
+    if (mark == "R" || mark == "T")
+        // Long along the face so the lid-side C-channel is wrapped too.
+        translate([n.x * (PORT_PATCH / 2 - inset + 12),
+                   n.y * (PORT_PATCH / 2 - inset + 12),
+                   z0 + h / 2])
+            cube([abs(n.x) > 0.5 ? 24 : 160,
+                  abs(n.y) > 0.5 ? 24 : 160,
+                  h], center = true);
+}
 
 // Two M3s on the lid side of the tube, tracking cam_axis, so the
 // plate can be screwed after it is in the slot.
@@ -220,13 +238,17 @@ module port_retain_cut(mark = "") {
     u  = port_up(mark);
     d  = TUBE_OD + 1.0;
     h  = PORT_RETAIN + 2.4;
-    translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
-        hull() {
-            cylinder(h = h, d = d, center = true);
-            translate([u.x * PORT_RETAIN_REACH,
-                       u.y * PORT_RETAIN_REACH, 0])
+    difference() {
+        translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
+            hull() {
                 cylinder(h = h, d = d, center = true);
-        }
+                translate([u.x * (PORT_PATCH / 2 + 24),
+                           u.y * (PORT_PATCH / 2 + 24), 0])
+                    cylinder(h = h, d = d, center = true);
+            }
+        // Leave chassis meat past the cookie edge so it wraps the flat.
+        tube_flat_waste(mark, patch_t() - 1, h + 4);
+    }
 }
 function hs_tag(name) = str("hs_", name);
 function hs_arm_tag(mark) =
@@ -653,6 +675,7 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
         along_cam(rx, ry, mark)
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
+        tube_flat_waste(mark, -2, patch_t() + out_len + 8, TUBE_FLAT_CLEAR);
         port_clamp_screws(mark) {
             translate([0, 0, -1])
                 cylinder(h = patch_t() + port_u_fill_t() + 2, d = PORT_SCREW_D);
