@@ -223,8 +223,8 @@ module port_retain_cut(mark = "") {
     translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
         hull() {
             cylinder(h = h, d = d, center = true);
-            translate([u.x * (PORT_PATCH / 2 + 24),
-                       u.y * (PORT_PATCH / 2 + 24), 0])
+            translate([u.x * PORT_RETAIN_REACH,
+                       u.y * PORT_RETAIN_REACH, 0])
                 cylinder(h = h, d = d, center = true);
         }
 }
