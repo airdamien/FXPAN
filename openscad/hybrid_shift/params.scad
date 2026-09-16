@@ -61,7 +61,6 @@ PORT_FRAME        = 5;
 PORT_SLOT_LIP     = 8;
 PORT_SLOT_CLEAR   = 0.4;
 PORT_RETAIN       = 4;
-PORT_RETAIN_REACH = 53; // keep chassis wrap around the shifted tube outer
 PORT_BOSS_R       = 12;
 STEM_F50_PATCH = 1.6;
 PORT_SCREW_R   = 38.5;
