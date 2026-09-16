@@ -166,7 +166,8 @@ module port_flange(patch = PORT_PATCH, mark = "") {
         // cookie toward that bore so its top edge remains supported.
         hull() {
             cookie_plate();
-            translate([ax.x, ax.y, 0])
+            translate([ax.x * FX_COOKIE_LEAD / sensor_shift(),
+                       ax.y * FX_COOKIE_LEAD / sensor_shift(), 0])
                 cookie_plate();
         }
     } else {
