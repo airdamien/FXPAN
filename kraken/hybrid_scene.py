@@ -37,6 +37,8 @@ DEST_V = hp.OUT.parent / "docs" / "kraken" / "el135_v_scene.png"
 DEST_V_CMP = hp.OUT.parent / "docs" / "kraken" / "el135_v_hybrid.png"
 DEST_180 = hp.OUT.parent / "docs" / "kraken" / "el180_scene.png"
 DEST_180_D7200 = hp.OUT.parent / "docs" / "kraken" / "el180_d7200.png"
+DEST_180_D800 = hp.OUT.parent / "docs" / "kraken" / "el180_d800_scene.png"
+DEST_180_D800_CMP = hp.OUT.parent / "docs" / "kraken" / "el180_d7000_d800.png"
 # 1280×853 still: lone tree on the left, farmhouse / cypresses on the right.
 CROP_XY = (330, 270, 1230, 660)
 BODIES = (
@@ -46,6 +48,8 @@ BODIES = (
 # flange mm, sensor mm, native pixels
 D7000 = dict(name="D7000", flange=46.5, sw=23.6, sh=15.6,
              px_w=4928, px_h=3264, mp=16.2, color="deepskyblue", stitch="steelblue")
+D800 = dict(name="D800", flange=46.5, sw=36.0, sh=23.9,
+            px_w=7360, px_h=4912, mp=36.3, color="mediumseagreen", stitch="yellowgreen")
 FF5D3 = dict(name="5D Mk III", flange=44.0, sw=36.0, sh=24.0,
              px_w=5760, px_h=3840, mp=22.3, color="coral", stitch="goldenrod")
 A7 = dict(name="A7", flange=18.0, sw=35.8, sh=23.9,
@@ -488,7 +492,8 @@ def _save_scene(img, ext, f, grab, dest, single_label, unit="mm", scale=1.0):
     print(dest)
 
 
-def plot_compare(img, ext, a, ga, b, gb, dest, note):
+def plot_compare(img, ext, a, ga, b, gb, dest, note, star_mm=STAR_MM,
+                 unit="mm", scale=1.0):
     fig = plt.figure(figsize=(13.0, 13.2), facecolor="0.08")
     gs = fig.add_gridspec(
         4, 1, height_ratios=[1.2, 1.0, 1.0, 0.95],
@@ -510,30 +515,36 @@ def plot_compare(img, ext, a, ga, b, gb, dest, note):
     _object_plane(
         ax0, img, ext,
         _boxes(a) + _boxes(b) + [
-            (-STAR_MM / 2, -STAR_MM / 2, STAR_MM, STAR_MM, "tomato",
-             f"{STAR_MM:.0f} mm star"),
+            (-star_mm / 2, -star_mm / 2, star_mm, star_mm, "tomato",
+             f"{star_mm * scale:.1f} {unit} star" if unit == "m"
+             else f"{star_mm:.0f} mm star"),
         ],
         f"{hp.EL_NAME}  ·  {a['name']} vs {b['name']} on the same countryside",
+        unit=unit, scale=scale,
     )
     _panel(ax1, ga["one"],
            [ga["xs_d"][0], ga["xs_d"][-1], ga["ys_d"][0], ga["ys_d"][-1]],
-           f"{a['name']} single  {a['sw']:.1f}×{a['sh']:.1f} mm  ·  {a['fov']:.1f}°")
+           f"{a['name']} single  {a['sw']:.1f}×{a['sh']:.1f} mm  ·  {a['fov']:.1f}°",
+           unit=unit, scale=scale)
     _panel(ax2, ga["hyb"],
            [ga["xs_s"][0], ga["xs_s"][-1], ga["ys_s"][0], ga["ys_s"][-1]],
            f"{a['name']} stitch  {a['st']:.1f} mm  ·  {a['pano']:.1f}°  ·  "
-           f"{a['st_w'] / a['dx_w']:.2f}×")
+           f"{a['st_w'] / a['dx_w']:.2f}×",
+           unit=unit, scale=scale)
     _panel(ax3, gb["one"],
            [gb["xs_d"][0], gb["xs_d"][-1], gb["ys_d"][0], gb["ys_d"][-1]],
-           f"{b['name']} single  {b['sw']:.1f}×{b['sh']:.1f} mm  ·  {b['fov']:.1f}°")
+           f"{b['name']} single  {b['sw']:.1f}×{b['sh']:.1f} mm  ·  {b['fov']:.1f}°",
+           unit=unit, scale=scale)
     _panel(ax4, gb["hyb"],
            [gb["xs_s"][0], gb["xs_s"][-1], gb["ys_s"][0], gb["ys_s"][-1]],
            f"{b['name']} stitch  {b['st']:.1f} mm  ·  {b['pano']:.1f}°  ·  "
-           f"{b['st_w'] / b['dx_w']:.2f}×")
+           f"{b['st_w'] / b['dx_w']:.2f}×",
+           unit=unit, scale=scale)
 
     for ax, f in ((ax5, a), (ax6, b)):
         xs, ys = _native_xy(
             f["px_w"], f["px_h"], f["sw"], f["sh"],
-            -STAR_MM / 2, STAR_MM / 2, -STAR_MM / 2, STAR_MM / 2, f["mag"],
+            -star_mm / 2, star_mm / 2, -star_mm / 2, star_mm / 2, f["mag"],
         )
         star = _siemens(xs, ys)
         sw, sh = _stitch_px(f["px_w"], f["px_h"], f["st"], f["sw"])
@@ -542,11 +553,16 @@ def plot_compare(img, ext, a, ga, b, gb, dest, note):
             f"{f['name']}  {f['mp']:g} MP  ·  {f['px_w']}×{f['px_h']}  ·  "
             f"{f['pitch']:.1f} µm   stitch {sw}×{sh}",
             interpolation="nearest",
+            unit=unit, scale=scale,
         )
 
+    star_note = (
+        f"{star_mm * scale:.1f}×{star_mm * scale:.1f} {unit}" if unit == "m"
+        else f"{star_mm:.0f}×{star_mm:.0f} mm"
+    )
     fig.text(
         0.50, 0.012,
-        note + f"  Stars are native photosites on {STAR_MM:.0f}×{STAR_MM:.0f} mm of object.  "
+        note + f"  Stars are native photosites on {star_note} of object.  "
         "scene: Radek Hloch / CC BY-SA 4.0",
         ha="center", color="0.45", fontsize=8,
     )
@@ -649,6 +665,37 @@ def run_180(raw):
         g180["one"], g180["hyb"], g180["xs_d"], g180["ys_d"],
         g180["xs_s"], g180["ys_s"],
         dest=DEST_180_D7200, star_mm=STAR_MM_180, unit="m", scale=0.001,
+    )
+
+    fx180 = _setup(
+        D800, "EL-Nikkor 180/5.6", 180.0, s_obj=S_OBJ_180, extra=extra,
+    )
+    extfx = _extent_fit(raw, fx180["st_w"] * 1.65, fx180["dx_h"] * 1.35)
+    gfx = _grab(raw, extfx, fx180)
+    _save_scene(
+        raw, extfx, fx180, gfx, DEST_180_D800, "single D800 FX",
+        unit="m", scale=0.001,
+    )
+    print(
+        f"{hp.EL_NAME}  D800  T-only={gfx['counts']['left']}  "
+        f"overlap={gfx['counts']['overlap']}  R-only={gfx['counts']['right']}  "
+        f"PATH={hp.PATH_TOTAL:.1f} mm  helicoid +{extra:.1f} mm  "
+        f"shift={hp.SHIFT:.1f} mm  stitch={hp.STITCH_W:.1f} mm"
+    )
+    extc = _extent_fit(raw, fx180["st_w"] * 1.65, fx180["dx_h"] * 1.35)
+    dx180 = _setup(
+        D7000, "EL-Nikkor 180/5.6", 180.0, s_obj=S_OBJ_180, extra=extra,
+    )
+    gdxc = _grab(raw, extc, dx180)
+    fx180 = _setup(
+        D800, "EL-Nikkor 180/5.6", 180.0, s_obj=S_OBJ_180, extra=extra,
+    )
+    gfxc = _grab(raw, extc, fx180)
+    plot_compare(
+        raw, extc, dx180, gdxc, fx180, gfxc, DEST_180_D800_CMP,
+        "Same 180/5.6 at 50 m, same 173.5+7.2 mm path. D7000 DX 23.6×15.6 / 4.8 µm; "
+        "D800 FX 36×23.9 / 4.9 µm on the shifted hybrid_shift chassis.",
+        star_mm=STAR_MM_180, unit="m", scale=0.001,
     )
     hp.apply_helicoid(0.0)
 
