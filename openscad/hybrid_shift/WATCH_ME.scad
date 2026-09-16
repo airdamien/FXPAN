@@ -144,18 +144,33 @@ module port_clamp_screws(mark = "") {
 
 module port_flange(patch = PORT_PATCH, mark = "") {
     ax = cam_axis(mark);
+    module cookie_outline(w = patch) {
+        c = min(COOKIE_CORNER_CUT, w / 2 - 0.5);
+        polygon([
+            [-w / 2 + c, -w / 2],
+            [ w / 2 - c, -w / 2],
+            [ w / 2, -w / 2 + c],
+            [ w / 2,  w / 2 - c],
+            [ w / 2 - c,  w / 2],
+            [-w / 2 + c,  w / 2],
+            [-w / 2,  w / 2 - c],
+            [-w / 2, -w / 2 + c]
+        ]);
+    }
+    module cookie_plate() {
+        linear_extrude(patch_t())
+            cookie_outline();
+    }
     if (FX_MODE && mark != "") {
         // FX bores are shifted off the cookie center.  Widen the camera-side
         // cookie toward that bore so its top edge remains supported.
         hull() {
-            translate([0, 0, patch_t() / 2])
-                cube([patch, patch, patch_t()], center = true);
-            translate([ax.x, ax.y, patch_t() / 2])
-                cube([patch, patch, patch_t()], center = true);
+            cookie_plate();
+            translate([ax.x, ax.y, 0])
+                cookie_plate();
         }
     } else {
-        translate([0, 0, patch_t() / 2])
-            cube([patch, patch, patch_t()], center = true);
+        cookie_plate();
     }
 }
 
