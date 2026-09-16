@@ -150,6 +150,9 @@ BRACE_SCREW_D      = 6.6;
 BRACE_HEAD_D       = 24;  // knurled 1/4-20 camera thumbscrew (was 13)
 BRACE_HEAD_COUNTER_H = 4; // chassis screw pocket; leave ~4 mm clamp
 BRACE_BOTTOM_RELIEF_H = 12; // through web + into pad underside
+// Pull the R–T web off the R battery-door corner. Pads stay round.
+BRACE_RT_ALONG = 52;  // along RT from R, past the pad
+BRACE_RT_INSET = 32;  // toward origin from that point
 BRACE_HEX_D        = 8.6;
 BRACE_HEX_CELL     = 11;
 

@@ -463,6 +463,13 @@ function body_roll_r() = 90;
 function body_roll_t() = 180;
 
 function brace_cam_d() = D_PLATE_TO_MOUNT + D7000_TRIPOD_IN;
+function brace_q_xy() =
+    let (r = brace_r_xy(), t = brace_t_xy(),
+         u = (t - r) / norm(t - r),
+         p = r + u * BRACE_RT_ALONG)
+        p * (1 - BRACE_RT_INSET / norm(p));
+function brace_web_pts() =
+    [[0, 0], brace_r_xy(), brace_q_xy(), brace_t_xy()];
 function brace_r_xy() =
     let (a = field_toe(), d = brace_cam_d())
         [d * cos(a), d * sin(a)];
@@ -496,7 +503,7 @@ module brace_hex_cuts_2d() {
         difference() {
             offset(-1.8)
                 offset(BRACE_WEB / 2)
-                    polygon([[0, 0], r, t]);
+                    polygon(brace_web_pts());
             translate([0, 0])
                 circle(d = BRACE_PAD_D + 4);
             translate(r)
@@ -549,7 +556,7 @@ module brace_blank() {
         linear_extrude(BRACE_T)
             union() {
                 offset(BRACE_WEB / 2)
-                    polygon([[0, 0], r, t]);
+                    polygon(brace_web_pts());
                 translate([0, 0])
                     circle(d = BRACE_PAD_D);
                 translate(r)

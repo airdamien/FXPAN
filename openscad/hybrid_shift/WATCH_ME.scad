@@ -125,6 +125,10 @@ function tube_flat_n(mark) =
     mark == "R" ? [0, -1] :
     mark == "T" ? [1, 0] : [0, 0];
 TUBE_FLAT_CLEAR = 0.4;
+// Camera-up chord at the F-mouth so the pentaprism / flash nose clears
+// the 68 mm OD. Angled back to full OD. Keep is ~flush with TUBE_ID.
+TUBE_FLASH_KEEP = 31.0;
+TUBE_FLASH_L    = 11;
 
 module tube_flat_waste(mark, z0, h, inset = 0) {
     n = tube_flat_n(mark);
@@ -136,6 +140,28 @@ module tube_flat_waste(mark, z0, h, inset = 0) {
             cube([abs(n.x) > 0.5 ? 24 : 160,
                   abs(n.y) > 0.5 ? 24 : 160,
                   h], center = true);
+}
+
+// Angled chord on camera-up (port_up) at the F-mouth. Cookie-frame XY.
+// Inner face of each slab sits on `dist` so the hull cannot cross the bore.
+module tube_flash_waste(mark, out_len) {
+    n = port_up(mark);
+    ax = cam_axis(mark);
+    z1 = patch_t() + out_len;
+    wn = 80;
+    wt = 80;
+    if (mark == "R" || mark == "T")
+        hull() {
+            translate([ax.x + n.x * (TUBE_FLASH_KEEP + wn / 2),
+                       ax.y + n.y * (TUBE_FLASH_KEEP + wn / 2), z1 + 8])
+                cube([abs(n.x) > 0.5 ? wn : wt,
+                      abs(n.y) > 0.5 ? wn : wt, 16], center = true);
+            translate([ax.x + n.x * (TUBE_OD / 2 + wn / 2),
+                       ax.y + n.y * (TUBE_OD / 2 + wn / 2),
+                       z1 - TUBE_FLASH_L])
+                cube([abs(n.x) > 0.5 ? wn : wt,
+                      abs(n.y) > 0.5 ? wn : wt, 2], center = true);
+        }
 }
 
 // Two M3s on the lid side of the tube, tracking cam_axis, so the
@@ -665,6 +691,7 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
         tube_flat_waste(mark, -2, patch_t() + out_len + 8, TUBE_FLAT_CLEAR);
+        tube_flash_waste(mark, out_len);
         port_clamp_screws(mark) {
             translate([0, 0, -1])
                 cylinder(h = patch_t() + port_u_fill_t() + 2, d = PORT_SCREW_D);
@@ -853,6 +880,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (mark != "")
             flange_stamp(hs_arm_tag(mark), mark, p, patch_t(),
                          STAMP_DEPTH, 2.8);
+        tube_flash_waste(mark, out_len);
     }
         translate([-p, -p, 0])
             cube([p * 2, p * 2,
@@ -863,12 +891,15 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
     if (SHELL != "inner") {
     if (printed_f())
         color("Goldenrod")
-            along_cam(rx, ry, mark)
-                translate([0, 0, out_len])
-                    f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
-                                    peg_face = (SHELL == "full" ? 0
-                                                : INNER_LINING),
-                                    back_extra = fx_mount_extra());
+            difference() {
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
+                                        peg_face = (SHELL == "full" ? 0
+                                                    : INNER_LINING),
+                                        back_extra = fx_mount_extra());
+                tube_flash_waste(mark, out_len);
+            }
     else if ($preview && SHOW_BODIES == 0)
         color("Goldenrod", 0.55)
             along_cam(rx, ry, mark)
@@ -973,6 +1004,13 @@ function body_roll_r() = 90;
 function body_roll_t() = 180;
 
 function brace_cam_d() = D_PLATE_TO_MOUNT + cam_tripod_in();
+function brace_q_xy() =
+    let (r = brace_r_xy(), t = brace_t_xy(),
+         u = (t - r) / norm(t - r),
+         p = r + u * BRACE_RT_ALONG)
+        p * (1 - BRACE_RT_INSET / norm(p));
+function brace_web_pts() =
+    [[0, 0], brace_r_xy(), brace_q_xy(), brace_t_xy()];
 function brace_r_xy() = [brace_cam_d(), -sensor_shift()];
 function brace_t_xy() = [sensor_shift(), brace_cam_d()];
 function brace_tripod_xy() =
@@ -1002,7 +1040,7 @@ module brace_hex_cuts_2d() {
         difference() {
             offset(-1.8)
                 offset(BRACE_WEB / 2)
-                    polygon([[0, 0], r, t]);
+                    polygon(brace_web_pts());
             translate([0, 0])
                 circle(d = BRACE_PAD_D + 4);
             translate(r)
@@ -1056,7 +1094,7 @@ module brace_blank() {
         linear_extrude(BRACE_T)
             union() {
                 offset(BRACE_WEB / 2)
-                    polygon([[0, 0], r, t]);
+                    polygon(brace_web_pts());
                 translate([0, 0])
                     circle(d = BRACE_PAD_D);
                 translate(r)
