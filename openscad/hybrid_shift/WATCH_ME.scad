@@ -143,14 +143,8 @@ module port_clamp_screws(mark = "") {
 }
 
 module port_flange(patch = PORT_PATCH, mark = "") {
-    base_t = min(COOKIE_BODY_FILL_T, patch_t() * 0.5);
-    top_t = patch_t() - base_t;
-    translate([0, 0, base_t / 2])
-        linear_extrude(base_t, center = true)
-            round_rect(chassis_out(), chassis_out(), PORT_BOSS_R);
-    translate([0, 0, base_t])
-        linear_extrude(top_t)
-            square([patch, patch], center = true);
+    translate([0, 0, patch_t() / 2])
+        cube([patch, patch, patch_t()], center = true);
 }
 
 module round_rect(w, h, r) {
