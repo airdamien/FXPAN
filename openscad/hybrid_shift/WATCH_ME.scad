@@ -388,9 +388,9 @@ module corner_cookie_webs() {
         translate([0, 0, z0])
             linear_extrude(h)
                 polygon([
-                    [half - 2, half - 2],
-                    [half + 5, half - 2],
-                    [half + 5, half + 5]
+                    [half - 8, half - 8],
+                    [half + 1, half - 8],
+                    [half + 1, half + 1]
                 ]);
     }
     for (sx = [-1, 1], sy = [-1, 1])
