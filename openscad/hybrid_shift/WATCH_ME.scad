@@ -461,42 +461,39 @@ module box_lining_mask() {
             }
 }
 
-// D + stencil number on the blank −X wall. DX D12600; FX D1440 (800×1.8).
+// D + number on the blank −X wall. DX D12600; FX D1440 (800×1.8).
+// Per-glyph + 1.4 mm stencil slots so the inlay is one piece (no overlapping D/1).
 module d12600_2d() {
     h = fx_mode() ? 18 : 12;
-    s = h / 12;
-    module stencil_d() {
-        t = h * 0.18;
-        w = h * 0.78;
+    font = "Liberation Sans:style=Bold";
+    chars = fx_mode() ? ["D", "1", "4", "4", "0"] : ["D", "1", "2", "6", "0", "0"];
+    g = h * 0.08;
+    slot = max(1.4, h * 0.12);
+    function glyph_w(ch) = (ch == "1" ? 0.55 : 0.78) * h;
+    w = [for (c = chars) glyph_w(c)];
+    lefts = [for (i = 0, a = 0; i < len(chars); a = a + w[i] + g, i = i + 1) a];
+    total = lefts[len(chars) - 1] + w[len(chars) - 1];
+
+    module glyph(ch) {
         difference() {
-            union() {
-                translate([t / 2 - w / 2, 0])
-                    square([t, h], center = true);
-                difference() {
-                    translate([w / 2 - h * 0.42, 0])
-                        scale([0.78, 1])
-                            circle(d = h, $fn = 80);
-                    translate([-w, 0])
-                        square([w * 1.35, h + 1], center = true);
-                }
-            }
-            difference() {
-                translate([w / 2 - h * 0.42, 0])
-                    scale([0.78, 1])
-                        circle(d = h - 2 * t, $fn = 80);
-                translate([-w * 0.55, 0])
-                    square([w, h], center = true);
-            }
-            translate([w * 0.28, 0])
-                square([t * 0.95, t * 0.42], center = true);
+            offset(delta = 0.15)
+                offset(delta = -0.15)
+                    text(ch, size = h, font = font,
+                         halign = "center", valign = "center");
+            // 3-o'clock gap only — a centered bar would bisect the stem.
+            if (ch == "4")
+                translate([h * 0.08, h * 0.16])
+                    square([slot, h * 0.28], center = true);
+            else if (len(search(ch, "D068")) > 0)
+                translate([h * 0.22, ch == "6" ? -h * 0.1 : 0])
+                    square([h * 0.4, slot], center = true);
         }
     }
-    translate([-22.5 * s, 0])
-        stencil_d();
-    translate([(fx_mode() ? 4 : 8) * s, 0])
-        text(fx_mode() ? "1440" : "12600", size = h,
-             font = ".SF Stencil Numeric:style=Black",
-             halign = "center", valign = "center");
+
+    translate([-total / 2, 0])
+        for (i = [0 : len(chars) - 1])
+            translate([lefts[i] + w[i] / 2, 0])
+                glyph(chars[i]);
 }
 
 module d12600_inlay() {
@@ -530,7 +527,9 @@ module tube_baffles(out_len) {
 module f_glare_mask(out_len, mark) {
     roll = mark == "T" ? 180 : 90;
     z = printed_f() ? out_len - F_PEG_H - MASK_T : out_len - F_REV_LEN - MASK_T;
-    od = printed_f() ? F_BORE : TUBE_ID - 0.4;
+    // Span the 52 mm bore so the plate is fused to the wall (FX window
+    // is wider than F_BORE, so a F_BORE disk was two loose slivers).
+    od = TUBE_ID + 0.6;
     translate([0, 0, z])
         difference() {
             cylinder(h = MASK_T, d = od);
@@ -1084,6 +1083,8 @@ module part_brace() {
         brace_blank();
         translate([0, 0, -0.2])
             cylinder(h = BRACE_T + 0.4, d = BRACE_SCREW_D);
+        translate([0, 0, -0.2])
+            cylinder(h = BRACE_HEAD_COUNTER_H + 0.2, d = BRACE_HEAD_D);
         translate([0, 0, -0.2])
             linear_extrude(h + 0.4)
                 union() {

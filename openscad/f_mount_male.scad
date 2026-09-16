@@ -28,7 +28,7 @@ F_COLLAR_Z0  = -1.6;
 F_COLLAR_H   = 2.0;
 // Body lock pin (measured ~1.95 mm). Groove bridges the open floor under
 // the STL fork tines so the body cannot roll once bayoneted.
-F_PIN_W      = 1.95;    // CAD; slicer ~+0.05 → 2.00 (pin 1.95)
+F_PIN_W      = 1.88;    // CAD; slicer ~+0.05 → 1.93 (pin 1.95)
 F_PIN_FLOOR_Z = 0;
 F_PIN_SEAT_Z1 = 1.35;   // pin pocket depth under fork tines
 F_PIN_X_IN   = 23.8;    // groove inner (toward bore), +X fork azimuth
@@ -94,8 +94,8 @@ module rev_lock_cut_one(out_len, az) {
 // Tine roots only (y ≈ ±2.55). Pin slot bridged by f_pin_seat_floor().
 module f_fork_pads() {
     for (s = [-1, 1])
-        translate([26.6, s * 2.55, 0.65])
-            cube([5.5, 2.2, 1.3], center = true);
+        translate([26.6, s * 2.38, 0.72])
+            cube([5.5, 2.45, 1.44], center = true);
 }
 
 // Solid floor under lock forks with a 2.0 mm y-centered pin groove (+X).
@@ -106,7 +106,7 @@ module f_pin_seat_floor() {
     x1 = F_PIN_X_OUT;
     difference() {
         translate([(x0 + x1) / 2, 0, (z0 + z1) / 2])
-            cube([x1 - x0, 5.4, z1 - z0 + 0.05], center = true);
+            cube([x1 - x0, 6.0, z1 - z0 + 0.05], center = true);
         translate([(x0 + x1) / 2, 0, (z0 + z1) / 2])
             cube([x1 - x0 + 0.4, F_PIN_W + 0.05, z1 - z0 + 0.1], center = true);
     }

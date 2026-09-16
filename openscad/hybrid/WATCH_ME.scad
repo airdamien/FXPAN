@@ -577,6 +577,8 @@ module part_brace() {
         translate([0, 0, -0.2])
             cylinder(h = BRACE_T + 0.4, d = BRACE_SCREW_D);
         translate([0, 0, -0.2])
+            cylinder(h = BRACE_HEAD_COUNTER_H + 0.2, d = BRACE_HEAD_D);
+        translate([0, 0, -0.2])
             linear_extrude(h + 0.4)
                 union() {
                     brace_slot_2d(r);
