@@ -157,21 +157,27 @@ module port_flange(patch = PORT_PATCH, mark = "") {
             [-w / 2, -w / 2 + c]
         ]);
     }
-    module cookie_plate() {
-        linear_extrude(patch_t())
-            cookie_outline();
-    }
+    base_t = min(COOKIE_BODY_FILL_T, patch_t() * 0.5);
+    top_t = patch_t() - base_t;
+    translate([0, 0, base_t / 2])
+        linear_extrude(base_t, center = true)
+            round_rect(chassis_out(), chassis_out(), PORT_BOSS_R);
     if (FX_MODE && mark != "") {
         // FX bores are shifted off the cookie center.  Widen the camera-side
         // cookie toward that bore so its top edge remains supported.
         hull() {
-            cookie_plate();
+            translate([0, 0, base_t])
+                linear_extrude(top_t)
+                    cookie_outline();
             translate([ax.x * FX_COOKIE_LEAD / sensor_shift(),
-                       ax.y * FX_COOKIE_LEAD / sensor_shift(), 0])
-                cookie_plate();
+                       ax.y * FX_COOKIE_LEAD / sensor_shift(), base_t])
+                linear_extrude(top_t)
+                    cookie_outline();
         }
     } else {
-        cookie_plate();
+        translate([0, 0, base_t])
+            linear_extrude(top_t)
+                cookie_outline();
     }
 }
 
