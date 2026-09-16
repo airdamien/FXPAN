@@ -94,9 +94,12 @@ module hex_nut_cut() {
     cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
 }
 
-// Camera-end rectangle for an M3 nut; radial 3.2 hole so a set screw
-// pinches the reverse ring. az is flange-mark up (R: 180, T: −90).
 module rev_lock_cuts(out_len, az = 180) {
+    for (a = [0, 120])
+        rev_lock_cut_one(out_len, az + a);
+}
+
+module rev_lock_cut_one(out_len, az) {
     z0 = out_len - EF_REV_LEN / 2;
     r_mid = (TUBE_ID + TUBE_OD) / 4;
     nw = 5.5 + 0.2;
@@ -251,9 +254,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (ARM_MOUNT == 0)
             along_tube(rx, ry) {
                 translate([0, 0, out_len - EF_REV_LEN])
-                    ScrewThread(1.01 * EF_REV_MAJOR + 1.25 * EF_REV_TOL,
-                                EF_REV_LEN + 0.3,
-                                pitch = EF_REV_PITCH, tolerance = EF_REV_TOL);
+                    ef_rev_thread_cut();
                 rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
             }
         if (mark != "")

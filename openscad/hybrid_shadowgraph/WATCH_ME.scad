@@ -120,21 +120,6 @@ module knife_slot(out_len) {
         cube([t, TUBE_OD / 2 + 2, insert], center = true);
 }
 
-module rev_lock_cuts(out_len, az = 180) {
-    z0 = out_len - F_REV_LEN / 2;
-    r_mid = (TUBE_ID + TUBE_OD) / 4;
-    nw = 5.5 + 0.2;
-    nt = 2.4 + 0.2;
-    floor_z = z0 - 5.5 / 2 - 0.2;
-    rotate([0, 0, az]) {
-        translate([0, 0, z0])
-            rotate([0, 90, 0])
-                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
-        translate([r_mid, 0, (out_len + floor_z) / 2])
-            cube([nt, nw, out_len - floor_z + 0.2], center = true);
-    }
-}
-
 module at_stem() {
     translate([0, -JUNCTION_BOX / 2, 0])
         rotate([90, 0, 0])
@@ -304,9 +289,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (ARM_MOUNT == 0)
             along_tube(rx, ry) {
                 translate([0, 0, out_len - F_REV_LEN])
-                    ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
-                                F_REV_LEN + 0.3,
-                                pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+                    f_rev_thread_cut();
                 rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
                 f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
             }

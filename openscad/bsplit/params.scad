@@ -49,11 +49,11 @@ EL_ADAPTER_HEX = 4;
 EL_ADAPTER_OD  = 50;
 EL_BORE        = 34;
 
-F_REV_MAJOR    = 52;
+F_REV_MAJOR    = 52.0;
 F_REV_PITCH    = 0.75;
-F_REV_LEN      = 7;
+F_REV_LEN      = 8;
 F_REV_STACK    = 8;
-F_REV_TOL      = 0.45;
+F_REV_TOL      = 0.12;
 F_BORE         = 40.3;
 F_FMOUNT_STACK = 1.75;
 F_REGISTER_T   = F_REV_STACK;

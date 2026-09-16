@@ -58,14 +58,16 @@ EL_ADAPTER_OD  = 50;
 EL_BORE        = 34;
 
 // Fotodiox-style Nikon F reverse ring: male F-bayonet + male 52 mm filter
-// thread. ARM_MOUNT=0 arms are female 52×0.75; the ring screws on, bodies
+// thread. ARM_MOUNT=0 arms are female M52×0.75; the ring screws on, bodies
 // bayonet on. ARM_MOUNT=1 prints the bayonet on the tube (no ring).
+// ISO 60°: male major 52.000, pitch 0.750, pitch Ø 51.513, minor 51.080.
+// Female cut = difference(ScrewThread) at F_REV_MAJOR; inner PETG owns it.
 // https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC
-F_REV_MAJOR    = 52;      // filter thread major (mm)
+F_REV_MAJOR    = 52.0;    // M52×0.75 mating male major (mm)
 F_REV_PITCH    = 0.75;
-F_REV_LEN      = 7;       // printed female thread length
-F_REV_STACK    = 8;       // ring, thread seat → F-register (tune on the real part)
-F_REV_TOL      = 0.45;
+F_REV_LEN      = 8;       // female thread length in the tube wall
+F_REV_STACK    = 8;       // ring seat → F-register
+F_REV_TOL      = 0.12;    // PETG female clearance (ScrewThread adds 0.25×tol)
 F_BORE         = 40.3;
 F_FMOUNT_STACK = 1.75;    // printed bayonet back → F-register (f-mount_raw.stl)
 F_REGISTER_T   = F_REV_STACK;
