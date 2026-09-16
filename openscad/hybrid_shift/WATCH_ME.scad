@@ -143,42 +143,14 @@ module port_clamp_screws(mark = "") {
 }
 
 module port_flange(patch = PORT_PATCH, mark = "") {
-    ax = cam_axis(mark);
-    module cookie_outline(w = patch) {
-        c = min(COOKIE_CORNER_CUT, w / 2 - 0.5);
-        polygon([
-            [-w / 2 + c, -w / 2],
-            [ w / 2 - c, -w / 2],
-            [ w / 2, -w / 2 + c],
-            [ w / 2,  w / 2 - c],
-            [ w / 2 - c,  w / 2],
-            [-w / 2 + c,  w / 2],
-            [-w / 2,  w / 2 - c],
-            [-w / 2, -w / 2 + c]
-        ]);
-    }
     base_t = min(COOKIE_BODY_FILL_T, patch_t() * 0.5);
     top_t = patch_t() - base_t;
     translate([0, 0, base_t / 2])
         linear_extrude(base_t, center = true)
             round_rect(chassis_out(), chassis_out(), PORT_BOSS_R);
-    if (FX_MODE && mark != "") {
-        // FX bores are shifted off the cookie center.  Widen the camera-side
-        // cookie toward that bore so its top edge remains supported.
-        hull() {
-            translate([0, 0, base_t])
-                linear_extrude(top_t)
-                    cookie_outline();
-            translate([ax.x * FX_COOKIE_LEAD / sensor_shift(),
-                       ax.y * FX_COOKIE_LEAD / sensor_shift(), base_t])
-                linear_extrude(top_t)
-                    cookie_outline();
-        }
-    } else {
-        translate([0, 0, base_t])
-            linear_extrude(top_t)
-                cookie_outline();
-    }
+    translate([0, 0, base_t])
+        linear_extrude(top_t)
+            square([patch, patch], center = true);
 }
 
 module round_rect(w, h, r) {
@@ -397,27 +369,6 @@ module box_bore() {
     at_each_bore()
         translate([0, 0, -WALL / 2])
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
-}
-
-// Tie each rounded corner tower back into the chamber walls.  The diagonal
-// webs stay in the corners, leaving the three cookie windows open while
-// preventing the tall corner posts from flexing independently.
-module corner_cookie_webs() {
-    z0 = -JUNCTION_BOX / 2 + WALL;
-    h  = JUNCTION_BOX / 2 - LID_LIP - z0;
-    half = (JUNCTION_BOX - 2 * WALL) / 2;
-    module corner_web_positive() {
-        translate([0, 0, z0])
-            linear_extrude(h)
-                polygon([
-                    [half - 8, half - 8],
-                    [half + 1, half - 8],
-                    [half + 1, half + 1]
-                ]);
-    }
-    for (sx = [-1, 1], sy = [-1, 1])
-        mirror([sx < 0 ? 1 : 0, sy < 0 ? 1 : 0, 0])
-            corner_web_positive();
 }
 
 // M3 hex in each top corner. Side slot into the chamber; roof stays
@@ -667,7 +618,6 @@ module part_junction() {
             if (SHELL == "full")
                 d12600_inlay();
         }
-        corner_cookie_webs();
         union() {
             box_lining_mask();
             if (SHELL == "outer")

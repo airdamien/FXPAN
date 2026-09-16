@@ -55,8 +55,6 @@ JUNCTION_BOX  = 90;
 PORT_PATCH     = 90;
 PORT_PATCH_T   = 4;
 PORT_PATCH_T_SHORT = 2;
-COOKIE_CORNER_CUT = 10; // 45° lead-in on shared cookie corners
-FX_COOKIE_LEAD    = 4;  // small top lead-in toward the shifted FX bore
 COOKIE_BODY_FILL_T = 2; // thick lower layer that reaches the chassis contour
 // Port boss: cookies drop into a C-channel. Optical faces stay at
 // JUNCTION_BOX/2 so the stem tube does not shrink.
