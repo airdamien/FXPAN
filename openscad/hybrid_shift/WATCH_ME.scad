@@ -61,7 +61,7 @@ screw_resolution = $preview ? 0.6 : 0.25;
 ex = EXPLODED ? 55 : 0;
 LID_T     = 6;
 LID_LIP   = 3;
-LID_GAP   = 0.3;
+LID_GAP   = 0.5;   // lip ↔ chassis seat; FDM needs >0.3 on the port faces
 LID_CAP   = 5;
 // In from the outer corner of the 90 mm inner cube.
 LID_SCREW = 5;
@@ -155,28 +155,27 @@ module port_u_fill(mark = "") {
         }
 }
 
-module lid_port_plug(mark = "") {
-    ax  = cam_axis(mark);
-    u   = port_up(mark);
-    t   = chassis_shell_t() - 0.4;
-    w   = PORT_PATCH - 0.8;
-    cap = LID_CAP + 0.4;
-    along = PORT_PATCH / 2 - LID_CAP / 2 + 0.2;
+// 3 mm ring into the chassis top shelf (82 mm OD, 74 mm ID). Notched at
+// the three port faces where the ledge is open — corners + blank −X only.
+module lid_align_lip() {
+    s = JUNCTION_BOX;
+    sh = sensor_shift();
+    half = s / 2;
+    span = PORT_PATCH + PORT_FRAME + 6;
+    bite = WALL + LID_GAP + 2.5;
     difference() {
-        translate([u.x * along, u.y * along, t / 2 + 0.2])
-            cube([abs(u.x) > 0.5 ? cap : w,
-                  abs(u.y) > 0.5 ? cap : w,
-                  t], center = true);
-        // Plate pad now fills the U; keep the plug off that meat.
-        translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
-            hull() {
-                cylinder(h = PORT_RETAIN + 2.4, d = TUBE_OD + 1.2,
-                         center = true);
-                translate([u.x * (PORT_PATCH / 2 + 24),
-                           u.y * (PORT_PATCH / 2 + 24), 0])
-                    cylinder(h = PORT_RETAIN + 2.4, d = TUBE_OD + 1.2,
-                             center = true);
-            }
+        cube([s - WALL - 2 * LID_GAP,
+              s - WALL - 2 * LID_GAP,
+              LID_LIP], center = true);
+        cube([s - 2 * WALL - 0.6,
+              s - 2 * WALL - 0.6,
+              LID_LIP + 0.4], center = true);
+        translate([0, -half + bite / 2, 0])
+            cube([span, bite, LID_LIP + 0.6], center = true);
+        translate([half - bite / 2, -sh, 0])
+            cube([bite, span, LID_LIP + 0.6], center = true);
+        translate([sh, half - bite / 2, 0])
+            cube([span, bite, LID_LIP + 0.6], center = true);
     }
 }
 
@@ -268,23 +267,6 @@ module chassis_port_mark(kind) {
 
 module hex_nut_cut() {
     cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
-}
-
-// Camera-end rectangle for an M3 nut; radial 3.2 hole so a set screw
-// pinches the reverse ring. az is flange-mark up (R: 180, T: −90).
-module rev_lock_cuts(out_len, az = 180) {
-    z0 = out_len - F_REV_LEN / 2;
-    r_mid = (TUBE_ID + TUBE_OD) / 4;
-    nw = 5.5 + 0.2;
-    nt = 2.4 + 0.2;
-    floor_z = z0 - 5.5 / 2 - 0.2;
-    rotate([0, 0, az]) {
-        translate([0, 0, z0])
-            rotate([0, 90, 0])
-                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
-        translate([r_mid, 0, (out_len + floor_z) / 2])
-            cube([nt, nw, out_len - floor_z + 0.2], center = true);
-    }
 }
 
 module at_stem_face() {
@@ -540,11 +522,10 @@ module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", hel = 0) {
                 translate([0, 0, -0.4])
                     cylinder(h = h + 0.8, d = TUBE_ID - 0.4);
             }
-    // Inner sleeve owns the M42 threads; PCTG is the nut OD meat.
+    // Inner PETG owns threaded zones; PCTG outer is nut-seat meat only.
     if (hel > 0) {
         z0 = patch_t() + out_len - 0.2;
         translate([ax.x, ax.y, z0]) {
-            // Solid mask so the whole thread profile is inner, not a sliver on outer.
             cylinder(h = hel + 0.4, d = HELICOID_MAJOR + 2 * L);
             difference() {
                 cylinder(h = 2.4, d = TUBE_ID + 2 * L);
@@ -552,6 +533,11 @@ module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", hel = 0) {
                     cylinder(h = 3.2, d = HELICOID_MAJOR - 0.4);
             }
         }
+    }
+    if (!printed_f() && mark != "") {
+        z0 = patch_t() + out_len - F_REV_LEN - 0.2;
+        translate([ax.x, ax.y, z0])
+            cylinder(h = F_REV_LEN + 0.6, d = F_REV_MAJOR + 2 * L + 0.4);
     }
     if (printed_f())
         along_cam(rx, ry, mark)
@@ -783,9 +769,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (!printed_f())
             along_cam(rx, ry, mark) {
                 translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
-                    ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
-                                F_REV_LEN + 0.3,
-                                pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+                    f_rev_thread_cut();
                 if (out_len >= F_REV_LEN) {
                     rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
                     f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
@@ -833,27 +817,14 @@ module part_lid() {
     difference() {
         union() {
             translate([0, 0, s / 2 + ex * 0.4]) {
+                // Flat cap; align_lip seats in the chassis 3 mm shelf.
                 linear_extrude(LID_T)
                     round_rect(out, out, r);
                 translate([0, 0, -LID_LIP / 2 + 0.01])
-                    difference() {
-                        cube([s - WALL - LID_GAP * 2,
-                              s - WALL - LID_GAP * 2,
-                              LID_LIP], center = true);
-                        cube([s - 2 * WALL - 0.4,
-                              s - 2 * WALL - 0.4,
-                              LID_LIP + 0.4], center = true);
-                    }
+                    lid_align_lip();
                 lid_retain_tabs(lip = LID_LIP);
                 display_lid_bosses(LID_T);
-                display_lid_nut_pads(LID_LIP);
             }
-            at_stem_face()
-                lid_port_plug("");
-            at_reflect_face()
-                lid_port_plug("R");
-            at_transmit_face()
-                lid_port_plug("T");
         }
         translate([0, 0, s / 2 + ex * 0.4]) {
             for (x = [-1, 1], y = [-1, 1])
@@ -905,7 +876,7 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0, mark = "") {
     if (SHOW_BODIES)
         color("DimGray", 0.92)
             along_cam(rx, ry, mark)
-                translate([0, 0, out_len + (printed_f() ? F_FMOUNT_STACK : 0) + ex])
+                translate([0, 0, out_len + mount_stack() + ex])
                     d7000_body(roll);
 }
 
@@ -919,8 +890,7 @@ function brace_t_xy() = [sensor_shift(), brace_cam_d()];
 function brace_tripod_xy() =
     let (r = brace_r_xy(), t = brace_t_xy())
         [(r.x + t.x) / 3, (r.y + t.y) / 3];
-function brace_cam_lift() =
-    max(1, JUNCTION_BOX / 2 + PORT_SLOT_LIP - D7000_TRIPOD_BELOW);
+function brace_cam_lift() = BRACE_CAM_LIFT;
 function brace_stamp_xy() =
     let (r = brace_r_xy(), t = brace_t_xy(),
          m = [(r.x + t.x) / 2, (r.y + t.y) / 2],
@@ -973,16 +943,21 @@ module brace_slot_2d(p) {
             }
 }
 
-module brace_head_2d(p) {
+// Head pocket from the print bed; clipped to the round pad so OD stays intact.
+module brace_bottom_relief_2d(p) {
     a = atan2(p.y, p.x);
-    translate(p)
-        rotate(a)
-            hull() {
-                translate([-BRACE_SLOT_L / 2, 0])
-                    circle(d = BRACE_HEAD_D);
-                translate([BRACE_SLOT_L / 2, 0])
-                    circle(d = BRACE_HEAD_D);
-            }
+    intersection() {
+        translate(p)
+            circle(d = BRACE_PAD_D);
+        translate(p)
+            rotate(a)
+                hull() {
+                    translate([-BRACE_SLOT_L / 2, 0])
+                        circle(d = BRACE_HEAD_D);
+                    translate([BRACE_SLOT_L / 2, 0])
+                        circle(d = BRACE_HEAD_D);
+                }
+    }
 }
 
 module brace_blank() {
@@ -1020,19 +995,17 @@ module part_brace() {
         brace_blank();
         translate([0, 0, -0.2])
             cylinder(h = BRACE_T + 0.4, d = BRACE_SCREW_D);
-        translate([0, 0, -0.05])
-            cylinder(h = BRACE_HEAD_H + 0.1, d = BRACE_HEAD_D);
         translate([0, 0, -0.2])
             linear_extrude(h + 0.4)
                 union() {
                     brace_slot_2d(r);
                     brace_slot_2d(t);
                 }
-        translate([0, 0, -0.05])
-            linear_extrude(BRACE_HEAD_H + 0.1)
+        translate([0, 0, -0.2])
+            linear_extrude(BRACE_BOTTOM_RELIEF_H + 0.2)
                 union() {
-                    brace_head_2d(r);
-                    brace_head_2d(t);
+                    brace_bottom_relief_2d(r);
+                    brace_bottom_relief_2d(t);
                 }
         translate([q.x, q.y, -0.05]) {
             cylinder(h = tripod_hole_h() + 0.15, d = TRIPOD_INSERT_D);

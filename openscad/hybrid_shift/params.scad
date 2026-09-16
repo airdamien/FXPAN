@@ -92,11 +92,11 @@ EL180_ADAPTER_HEX = 6;
 EL180_ADAPTER_OD  = 72;
 EL180_BORE        = 56;
 
-F_REV_MAJOR    = 52;
+F_REV_MAJOR    = 52.0;    // M52×0.75 — Fotodiox 52 mm filter thread, ISO major
 F_REV_PITCH    = 0.75;
-F_REV_LEN      = 7;
+F_REV_LEN      = 8;       // female thread in inner PETG sleeve
 F_REV_STACK    = 8;
-F_REV_TOL      = 0.45;
+F_REV_TOL      = 0.12;    // PETG 6H-ish; do not use ScrewHole’s 1.01×+1.25× formula
 F_BORE         = 40.3;
 F_FMOUNT_STACK = 1.75;
 F_REGISTER_T   = F_REV_STACK;
@@ -107,16 +107,17 @@ TRIPOD_INSERT_L = 6.4;
 TRIPOD_KEEP     = 1.2;
 function tripod_hole_h() = min(WALL - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0);
 
-D7000_TRIPOD_BELOW = 41;
+D7000_TRIPOD_ABOVE = 9.4; // body 1/4-20 above chassis bottom plane (measured)
 D7000_TRIPOD_IN    = 40;
 BRACE_T            = 8;
+BRACE_CAM_LIFT     = D7000_TRIPOD_ABOVE;
 BRACE_WEB          = 22;
 BRACE_PAD_D        = 34;
 BRACE_SLOT_L       = 18;
 BRACE_SLOT_W       = 7;
 BRACE_SCREW_D      = 6.6;
-BRACE_HEAD_D       = 13;
-BRACE_HEAD_H       = 4;
+BRACE_HEAD_D       = 13;  // 1/4-20 head pocket from print bed
+BRACE_BOTTOM_RELIEF_H = 12; // through web + into pad underside
 BRACE_HEX_D        = 8.6;
 BRACE_HEX_CELL     = 11;
 

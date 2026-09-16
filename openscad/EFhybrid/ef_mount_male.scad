@@ -4,6 +4,14 @@
 
 include <params.scad>
 
+module ef_rev_thread_cut(h = undef) {
+    _h = is_undef(h) ? EF_REV_LEN + 0.3 : h;
+    ScrewThread(EF_REV_MAJOR, _h,
+                pitch = EF_REV_PITCH,
+                tolerance = EF_REV_TOL,
+                tooth_angle = 30);
+}
+
 module ef_lug() {
     rotate_extrude(angle = EF_LUG_SWEEP)
         translate([EF_THROAT / 2, 0])

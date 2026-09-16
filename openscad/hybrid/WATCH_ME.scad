@@ -122,23 +122,6 @@ module hex_nut_cut() {
     cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
 }
 
-// Camera-end rectangle for an M3 nut; radial 3.2 hole so a set screw
-// pinches the reverse ring. az is flange-mark up (R: 180, T: −90).
-module rev_lock_cuts(out_len, az = 180) {
-    z0 = out_len - F_REV_LEN / 2;
-    r_mid = (TUBE_ID + TUBE_OD) / 4;
-    nw = 5.5 + 0.2;
-    nt = 2.4 + 0.2;
-    floor_z = z0 - 5.5 / 2 - 0.2;
-    rotate([0, 0, az]) {
-        translate([0, 0, z0])
-            rotate([0, 90, 0])
-                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
-        translate([r_mid, 0, (out_len + floor_z) / 2])
-            cube([nt, nw, out_len - floor_z + 0.2], center = true);
-    }
-}
-
 module at_stem() {
     translate([0, -JUNCTION_BOX / 2, 0])
         rotate([90, 0, 0])
@@ -378,9 +361,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                 // Keep the 52×0.75 above the print bed. On the 2 mm F 50
                 // cookies that is ~3 mm of thread, not a full F_REV_LEN.
                 translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
-                    ScrewThread(1.01 * F_REV_MAJOR + 1.25 * F_REV_TOL,
-                                F_REV_LEN + 0.3,
-                                pitch = F_REV_PITCH, tolerance = F_REV_TOL);
+                    f_rev_thread_cut();
                 // Short F 50 tubes have no meat for the reverse-ring lock nut.
                 if (out_len >= F_REV_LEN) {
                     rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
@@ -473,7 +454,7 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0) {
     if (SHOW_BODIES)
         color("DimGray", 0.92)
             along_tube(rx, ry)
-                translate([0, 0, out_len + (printed_f() ? F_FMOUNT_STACK : 0) + ex])
+                translate([0, 0, out_len + mount_stack() + ex])
                     d7000_body(roll);
 }
 
@@ -491,8 +472,7 @@ function brace_t_xy() =
 function brace_tripod_xy() =
     let (r = brace_r_xy(), t = brace_t_xy())
         [(r.x + t.x) / 3, (r.y + t.y) / 3];
-function brace_cam_lift() =
-    max(1, JUNCTION_BOX / 2 - D7000_TRIPOD_BELOW);
+function brace_cam_lift() = BRACE_CAM_LIFT;
 function brace_stamp_xy() =
     let (r = brace_r_xy(), t = brace_t_xy(),
          m = [(r.x + t.x) / 2, (r.y + t.y) / 2],
@@ -545,16 +525,20 @@ module brace_slot_2d(p) {
             }
 }
 
-module brace_head_2d(p) {
+module brace_bottom_relief_2d(p) {
     a = atan2(p.y, p.x);
-    translate(p)
-        rotate(a)
-            hull() {
-                translate([-BRACE_SLOT_L / 2, 0])
-                    circle(d = BRACE_HEAD_D);
-                translate([BRACE_SLOT_L / 2, 0])
-                    circle(d = BRACE_HEAD_D);
-            }
+    intersection() {
+        translate(p)
+            circle(d = BRACE_PAD_D);
+        translate(p)
+            rotate(a)
+                hull() {
+                    translate([-BRACE_SLOT_L / 2, 0])
+                        circle(d = BRACE_HEAD_D);
+                    translate([BRACE_SLOT_L / 2, 0])
+                        circle(d = BRACE_HEAD_D);
+                }
+    }
 }
 
 module brace_blank() {
@@ -592,19 +576,17 @@ module part_brace() {
         brace_blank();
         translate([0, 0, -0.2])
             cylinder(h = BRACE_T + 0.4, d = BRACE_SCREW_D);
-        translate([0, 0, -0.05])
-            cylinder(h = BRACE_HEAD_H + 0.1, d = BRACE_HEAD_D);
         translate([0, 0, -0.2])
             linear_extrude(h + 0.4)
                 union() {
                     brace_slot_2d(r);
                     brace_slot_2d(t);
                 }
-        translate([0, 0, -0.05])
-            linear_extrude(BRACE_HEAD_H + 0.1)
+        translate([0, 0, -0.2])
+            linear_extrude(BRACE_BOTTOM_RELIEF_H + 0.2)
                 union() {
-                    brace_head_2d(r);
-                    brace_head_2d(t);
+                    brace_bottom_relief_2d(r);
+                    brace_bottom_relief_2d(t);
                 }
         translate([q.x, q.y, -0.05]) {
             cylinder(h = tripod_hole_h() + 0.15, d = TRIPOD_INSERT_D);
@@ -674,8 +656,10 @@ module assembly() {
             if (SHOW_MONITOR)
                 display_mount();
             monitor_easel() {
-                if (SHOW_MONITOR)
+                if (SHOW_MONITOR) {
                     monitor_ghost();
+                    sunshade();
+                }
                 if (SHOW_PI) {
                     monitor_pi();
                 }

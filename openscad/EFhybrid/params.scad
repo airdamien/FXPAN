@@ -58,11 +58,11 @@ EL_ADAPTER_OD  = 50;
 EL_BORE        = 34;
 
 // Female 58×0.75 in the tube mouth — Canon EF reversing ring.
-EF_REV_MAJOR    = 58;
+EF_REV_MAJOR    = 58.0;
 EF_REV_PITCH    = 0.75;
-EF_REV_LEN      = 7;
+EF_REV_LEN      = 8;
 EF_REV_STACK    = 8;
-EF_REV_TOL      = 0.45;
+EF_REV_TOL      = 0.12;
 
 // Printed male EF (camera bayonets on). Wiki: 54 throat / 65 OD / 44 flange.
 EF_THROAT       = 54.0;
