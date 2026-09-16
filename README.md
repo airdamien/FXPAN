@@ -191,6 +191,20 @@ Same DX window, D7000 vs D7200. Stars are native photosites on **0.5 m** of obje
 
 ![D7000 vs D7200 at 50 m](docs/kraken/el180_d7200.png)
 
+### D800 FX — EL-Nikkor 180, 50 m (`hybrid_shift` FX_MODE)
+
+Same path (**+7.2 mm** helicoid, **180.7 mm**). Shift **14.4 mm**, stitch **64.8 mm**. One FX is **~10.0×6.6 m / 11.4°**; stitch is **~16.7 m / 18.9° / ~13248×4912** (1.67×). T-only / overlap / R-only = 108 / 27 / 108.
+
+![D800 180 fold](docs/kraken/el180_d800_paths.png)
+
+![D800 180 countryside](docs/kraken/el180_d800_scene.png)
+
+![D800 180 T/R frames](docs/kraken/el180_d800_frames.png)
+
+![D800 180 stitch vs one FX](docs/kraken/el180_d800_pano.png)
+
+![D7000 vs D800 at 50 m](docs/kraken/el180_d7000_d800.png)
+
 ## Shadowgraph
 
 The pano hybrid toes each body at a **different** half of a wider image. For air, vapor, or a shock you want the **same** DX pixels (`field_toe = 0`). That is [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/): same box, same uncut #43-359 plate, same 135/5.6. Different tubes.

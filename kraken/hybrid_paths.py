@@ -467,6 +467,19 @@ def main():
     apply_lens("EL-Nikkor 180/5.6", 180.0, 5.6, s_obj=s_obj_180)
     run_lens(docs, "el180_", do_paths=True)
     apply_helicoid(0.0)
+    run_d800_180(docs)
+
+
+# D800 FX, same F-mount path as D7000. 36×23.9, 7360×4912.
+def run_d800_180(docs=None):
+    docs = Path(docs) if docs is not None else OUT.parent / "docs" / "kraken"
+    s_obj_180 = 50_000.0
+    apply_chassis(46.5, 36.0, 23.9)
+    apply_helicoid(helicoid_extra(180.0, s_obj_180))
+    apply_lens("EL-Nikkor 180/5.6", 180.0, 5.6, s_obj=s_obj_180)
+    run_lens(docs, "el180_d800_", do_paths=True)
+    apply_helicoid(0.0)
+    apply_chassis()
 
 
 if __name__ == "__main__":

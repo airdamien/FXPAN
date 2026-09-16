@@ -10,18 +10,17 @@
 // ARM_MOUNT 0 = female 52×0.75 + nut pocket; 1 = printed F-bayonet (clocked).
 // F_MOUNT_CLOCK: add if the first F-print locks 90° off.
 // STEM 0 = helicoid + L39 (EL-Nikkor 135). STEM 1 = female F (50 mm test).
-// STEM 2 = helicoid + M62 (EL-Nikkor 180, infinity).
+// STEM 2 = M62 stem + M62 helicoid (or printed spacer) for EL-Nikkor 180/5.6N.
 // F 50 uses the 54 mm camera tubes + 2 mm cookies (ARMS=1). 135/180 keep 72 / 4.
 // Brace: triangle under the box + both body 1/4-20s. Tripod insert in the brace.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
-// EL180_M62_PITCH: 1.0 default; 0.75 if the 180 will not start.
 // FX_MODE=1 (Customizer or ./export_hybrid_shift_fx.sh): D800 FX bores at
 // sensor_shift ~14.4 mm, stitch ~64.8 mm. Ghost uses openscad/d800_body.stl
 // (Thingiverse #4815092). Reuse stem/tools from DX kit; print FX tray.
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135/180, stem_f50:Stem F 50, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135, stem_f50:Stem F 50, stem_el180:Stem EL 180, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
 
 /* [Camera] */
 FX_MODE = 0; // [0:DX D7000, 1:FX D800]
@@ -99,6 +98,7 @@ function f50_kit()           =
     ARMS || STEM == 1 || PART == "stem_f50"
     || PART == "arm_r_s" || PART == "arm_t_s"
     || PART == "arm_r_sf" || PART == "arm_t_sf";
+function el180_kit()         = STEM == 2 || PART == "stem_el180";
 function patch_t()           = f50_kit() ? PORT_PATCH_T_SHORT : PORT_PATCH_T;
 function stem_tube_len()     =
     ((STEM == 1 || PART == "stem_f50") ? D_LENS_TO_PLATE_F50 : D_LENS_TO_PLATE_LONG)
@@ -461,9 +461,10 @@ module box_lining_mask() {
             }
 }
 
-// D7000-style stencil D + SF Stencil Numeric 12600, on the blank −X wall.
+// D + stencil number on the blank −X wall. DX D12600; FX D1440 (800×1.8).
 module d12600_2d() {
-    h = 12;
+    h = fx_mode() ? 18 : 12;
+    s = h / 12;
     module stencil_d() {
         t = h * 0.18;
         w = h * 0.78;
@@ -490,10 +491,11 @@ module d12600_2d() {
                 square([t * 0.95, t * 0.42], center = true);
         }
     }
-    translate([-22.5, 0])
+    translate([-22.5 * s, 0])
         stencil_d();
-    translate([8, 0])
-        text("12600", size = h, font = ".SF Stencil Numeric:style=Black",
+    translate([(fx_mode() ? 4 : 8) * s, 0])
+        text(fx_mode() ? "1440" : "12600", size = h,
+             font = ".SF Stencil Numeric:style=Black",
              halign = "center", valign = "center");
 }
 
@@ -673,6 +675,12 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
     }
 }
 
+module m62_nut(h = EL180_NUT_H) {
+    ScrewHole(EL180_M62_MAJOR, h, pitch = EL180_M62_PITCH,
+              tolerance = EL180_M62_TOL)
+        cylinder(h = h, d = EL180_STEM_OD);
+}
+
 module part_stem() {
     color("SlateGray")
     mm_split() {
@@ -685,6 +693,36 @@ module part_stem() {
             flange_stamp(hs_tag("stem"), "", PORT_PATCH, patch_t());
         }
         tube_lining_mask(stem_tube_len(), hel = HELICOID_LEN);
+    }
+}
+
+// Female M62×1 nut on the 135-style cookie. Bought M62 helicoid (17–31 mm)
+// screws in; until it arrives, print el180_adapter at the collapsed length.
+module part_stem_el180() {
+    z0 = patch_t() + stem_tube_len();
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            union() {
+                port_tube_solid(stem_tube_len());
+                translate([0, 0, z0]) {
+                    hull() {
+                        cylinder(h = 0.2, d = TUBE_OD);
+                        translate([0, 0, 4])
+                            cylinder(h = 0.2, d = EL180_STEM_OD);
+                    }
+                    m62_nut();
+                }
+            }
+            translate([0, 0, -2])
+                cylinder(h = z0 + EL180_NUT_H + 4, d = TUBE_ID);
+            flange_stamp(hs_tag("stem_el180"), "", PORT_PATCH, patch_t());
+        }
+        union() {
+            tube_lining_mask(stem_tube_len());
+            translate([0, 0, z0 - 0.2])
+                cylinder(h = EL180_NUT_H + 0.4, d = EL180_M62_MAJOR + 8);
+        }
     }
 }
 
@@ -710,6 +748,8 @@ module part_stem_f50() {
 module stem_chosen() {
     if (STEM == 1)
         part_stem_f50();
+    else if (el180_kit())
+        part_stem_el180();
     else
         part_stem();
 }
@@ -717,8 +757,7 @@ module stem_chosen() {
 function stem_label() =
     STEM == 1 ? "F 50" : STEM == 2 ? "EL 180" : "EL 135";
 
-function el180_adapter_h() =
-    EL_M42_LEN + EL180_ADAPTER_HEX + EL180_M62_LEN;
+function el180_adapter_h() = EL180_HELI_MALE + EL180_HELI_MIN;
 
 module part_elnikkor_adapter() {
     h1 = EL_M42_LEN;
@@ -749,37 +788,38 @@ module part_elnikkor_adapter() {
 }
 
 module part_el180_adapter() {
-    h1 = EL_M42_LEN;
-    h2 = EL180_ADAPTER_HEX;
-    h3 = EL180_M62_LEN;
+    hm = EL180_HELI_MALE;
+    hb = EL180_HELI_MIN;
+    hf = EL180_M62_LEN;
     color("SlateGray")
     difference() {
         union() {
-            ScrewThread(HELICOID_MAJOR, h1, pitch = HELICOID_PITCH,
-                        tolerance = HELICOID_TOL);
-            translate([0, 0, h1])
-                cylinder(h = h2, d = EL180_ADAPTER_OD, $fn = 6);
-            translate([0, 0, h1 + h2])
-                ScrewHole(EL180_M62_MAJOR, h3, pitch = EL180_M62_PITCH,
-                          tolerance = EL180_M62_TOL)
-                    cylinder(h = h3, d = EL180_ADAPTER_OD);
+            ScrewThread(EL180_M62_MAJOR, hm, pitch = EL180_M62_PITCH,
+                        tolerance = EL180_M62_TOL);
+            translate([0, 0, hm])
+                rotate([0, 0, 30])
+                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                              tolerance = EL180_M62_TOL)
+                        cylinder(h = hb, d = EL180_ADAPTER_OD, $fn = 6);
         }
         translate([0, 0, -0.2])
-            cylinder(h = h1 + h2 + h3 + 0.4, d = EL180_BORE);
-        translate([0, -(EL180_ADAPTER_OD + EL180_BORE) / 4 - 0.8,
-                   h1 + h2 + h3 - STAMP_DEPTH])
-            part_stamp_stack_cut(hs_tag("el180"), size = 2.2);
+            cylinder(h = hm + hb + 0.4, d = EL180_BORE);
+        // Side flat, mid-height — not on the female rim.
+        translate([0, -EL180_ADAPTER_OD / 2 * cos(30) - 0.05,
+                   hm + hb * 0.55])
+            rotate([90, 0, 0])
+                part_stamp_stack_cut(hs_tag("el180"), size = 2.2);
     }
     if ($preview && !SHOW_LENS)
         color("DimGray", 0.45)
-            translate([0, 0, h1 + h2 + h3])
+            translate([0, 0, hm + hb])
                 el180_ghost();
 }
 
 module el180_ghost() {
-    cylinder(h = 14, d = 72);
-    translate([0, 0, 14])
-        cylinder(h = 72, d = 80);
+    translate([0, 0, -6])
+        cylinder(h = 6, d = EL180_SNOUT_D);
+    cylinder(h = EL180_LENS_L, d = EL180_LENS_OD);
 }
 
 module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
@@ -894,9 +934,9 @@ module taking_lens_at() {
                     translate([0, 0, STEM_F50_PATCH + stem_tube_len() + f_fem_h(0)
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         f50_ghost();
-                else if (STEM == 2)
-                    translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
-                                     + el180_adapter_h()
+                else if (el180_kit())
+                    translate([0, 0, patch_t() + stem_tube_len()
+                                     + EL180_NUT_H + EL180_HELI_MIN
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         el180_ghost();
                 else
@@ -1101,9 +1141,10 @@ module assembly() {
                 translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_elnikkor_adapter();
-        if (STEM == 2)
+        if (el180_kit())
             at_stem()
-                translate([0, 0, patch_t() + stem_tube_len() + HELICOID_LEN
+                translate([0, 0, patch_t() + stem_tube_len()
+                                 + EL180_NUT_H - EL180_HELI_MALE
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_el180_adapter();
 
@@ -1173,6 +1214,8 @@ module export_part() {
         stem_chosen();
     else if (PART == "stem_f50")
         part_stem_f50();
+    else if (PART == "stem_el180")
+        part_stem_el180();
     else if (PART == "arm_r" || PART == "arm_r_s"
           || PART == "arm_r_f" || PART == "arm_r_sf")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");

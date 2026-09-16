@@ -100,11 +100,20 @@ EL_BORE        = 34;
 
 EL180_M62_MAJOR = 62;
 EL180_M62_PITCH = is_undef(EL180_M62_PITCH) ? 1.0 : EL180_M62_PITCH;
-EL180_M62_LEN   = 8;
+EL180_M62_LEN   = 10;
 EL180_M62_TOL   = 0.45;
-EL180_ADAPTER_HEX = 6;
-EL180_ADAPTER_OD  = 72;
-EL180_BORE        = 56;
+EL180_ADAPTER_OD  = 76;
+EL180_BORE        = 52;
+// Pixco-style M62×1 helicoid, collapsed 17 mm / open 31 mm.
+EL180_HELI_MIN    = 17;
+EL180_HELI_MAX    = 31;
+EL180_HELI_MALE   = 8;
+EL180_NUT_H       = 20;
+EL180_STEM_OD     = 82;
+EL180_LENS_OD     = 76;
+EL180_LENS_L      = 62.6;
+EL180_SNOUT_D     = 40;
+function el180_nut_h() = EL180_NUT_H;
 
 F_REV_MAJOR    = 52.0;    // M52×0.75 — Fotodiox 52 mm filter thread, ISO major
 F_REV_PITCH    = 0.75;
