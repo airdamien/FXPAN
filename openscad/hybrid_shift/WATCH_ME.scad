@@ -384,14 +384,18 @@ module corner_cookie_webs() {
     z0 = -JUNCTION_BOX / 2 + WALL;
     h  = JUNCTION_BOX / 2 - LID_LIP - z0;
     half = (JUNCTION_BOX - 2 * WALL) / 2;
+    module corner_web_positive() {
+        translate([0, 0, z0])
+            linear_extrude(h)
+                polygon([
+                    [half - 2, half - 2],
+                    [half + 5, half - 2],
+                    [half + 5, half + 5]
+                ]);
+    }
     for (sx = [-1, 1], sy = [-1, 1])
-        translate([0, 0, z0 + h / 2])
-            hull() {
-                translate([sx * (half - 2), sy * (half - 2), 0])
-                    cube([8, 8, h], center = true);
-                translate([sx * (half + 3), sy * (half + 3), 0])
-                    cube([8, 8, h], center = true);
-            }
+        mirror([sx < 0 ? 1 : 0, sy < 0 ? 1 : 0, 0])
+            corner_web_positive();
 }
 
 // M3 hex in each top corner. Side slot into the chamber; roof stays
