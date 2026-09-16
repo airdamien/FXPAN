@@ -66,6 +66,17 @@ STEM_F50_PATCH = 1.6;
 PORT_SCREW_R   = 38.5;
 PORT_CLAMP_R   = 38;
 PORT_CLAMP_SEP = 15;
+function cam_axis(mark, sh = undef) =
+    let (s = is_undef(sh) ? sensor_shift() : sh)
+        mark == "R" ? [0, -s] :
+        mark == "T" ? [s, 0] : [0, 0];
+function port_up(mark) =
+    mark == "R" ? [-1, 0] :
+    mark == "T" ? [0, -1] : [0, 1];
+function clamp_xy(mark, side, sh = undef) =
+    let (ax = cam_axis(mark, sh), u = port_up(mark), v = [-u.y, u.x])
+        [ax.x + u.x * PORT_CLAMP_R + v.x * side * PORT_CLAMP_SEP,
+         ax.y + u.y * PORT_CLAMP_R + v.y * side * PORT_CLAMP_SEP];
 PORT_SCREW_D   = 3.2;
 PORT_HEAD_D    = 6.4;
 PORT_HEAD_H    = 3.4;

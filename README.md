@@ -73,9 +73,9 @@ The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl`
 
 Same shift geometry as DX, but bores / lid notches / brace slots sit at **FX `sensor_shift()` (~14.4 mm)** for a **~64.8 mm** stitch. Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad), set **Camera → FX_MODE = 1** in the customizer to preview D800 ghosts, or export with `./export_hybrid_shift_fx.sh`.
 
-**Print from `hybrid_shift_fx/`:** `chassis` (+ `_inner` / `_outer`), `arm_r` / `arm_t` (+ `_inner` / `_outer` / `_f` variants), `lid` (+ `_inner` / `_outer`), `brace`.
+**Print from `hybrid_shift_fx/`:** `chassis` (+ `_inner` / `_outer`), `arm_r` / `arm_t` (+ `_inner` / `_outer` / `_f` variants), `lid` (+ `_inner` / `_outer`), `brace`, `hybrid_tray`.
 
-**Reuse from `hybrid_shift/`:** `stem`, `hybrid_tray`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path.
+**Reuse from `hybrid_shift/`:** `stem`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path. The FX tray follows the 14.4 mm bores (port windows + clamp/nut reliefs); do not reuse the DX tray.
 
 Tune **D800_TRIPOD_ABOVE** / **D800_TRIPOD_IN** in the customizer after measuring your bodies (defaults are estimates).
 
