@@ -388,9 +388,9 @@ module corner_cookie_webs() {
         translate([0, 0, z0 + h / 2])
             hull() {
                 translate([sx * (half - 2), sy * (half - 2), 0])
-                    cube([10, 10, h], center = true);
-                translate([sx * (half + 11), sy * (half + 11), 0])
-                    cube([10, 10, h], center = true);
+                    cube([8, 8, h], center = true);
+                translate([sx * (half + 3), sy * (half + 3), 0])
+                    cube([8, 8, h], center = true);
             }
 }
 
