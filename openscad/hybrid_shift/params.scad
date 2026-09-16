@@ -55,6 +55,7 @@ JUNCTION_BOX  = 90;
 PORT_PATCH     = 90;
 PORT_PATCH_T   = 4;
 PORT_PATCH_T_SHORT = 2;
+COOKIE_CORNER_CUT = 10; // 45° lead-in on shared cookie corners
 // Port boss: cookies drop into a C-channel. Optical faces stay at
 // JUNCTION_BOX/2 so the stem tube does not shrink.
 PORT_FRAME        = 5;
