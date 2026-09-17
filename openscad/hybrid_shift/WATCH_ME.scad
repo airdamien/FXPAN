@@ -487,39 +487,21 @@ module box_lining_mask() {
             }
 }
 
-// D + number on the blank −X wall. DX D12600; FX D1440 (800×1.8).
-// Per-glyph + 1.4 mm stencil slots so the inlay is one piece (no overlapping D/1).
+// Name on the blank −X wall. DX D12600 (7000×1.8); FX is FXPan + 65MP.
+// Futura ships with macOS; re-export on Linux needs the same family installed.
 module d12600_2d() {
-    h = fx_mode() ? 18 : 12;
-    font = "Liberation Sans:style=Bold";
-    chars = fx_mode() ? ["D", "1", "4", "4", "0"] : ["D", "1", "2", "6", "0", "0"];
-    g = h * 0.08;
-    slot = max(1.4, h * 0.12);
-    function glyph_w(ch) = (ch == "1" ? 0.55 : 0.78) * h;
-    w = [for (c = chars) glyph_w(c)];
-    lefts = [for (i = 0, a = 0; i < len(chars); a = a + w[i] + g, i = i + 1) a];
-    total = lefts[len(chars) - 1] + w[len(chars) - 1];
-
-    module glyph(ch) {
-        difference() {
-            offset(delta = 0.15)
-                offset(delta = -0.15)
-                    text(ch, size = h, font = font,
-                         halign = "center", valign = "center");
-            // 3-o'clock gap only — a centered bar would bisect the stem.
-            if (ch == "4")
-                translate([h * 0.08, h * 0.16])
-                    square([slot, h * 0.28], center = true);
-            else if (len(search(ch, "D068")) > 0)
-                translate([h * 0.22, ch == "6" ? -h * 0.1 : 0])
-                    square([h * 0.4, slot], center = true);
-        }
+    if (fx_mode()) {
+        font = "Futura:style=Bold";
+        translate([0, 3.4])
+            text("FXPan", size = 14, font = font, spacing = 1.18,
+                 halign = "center", valign = "center");
+        translate([0, -10.4])
+            text("65MP", size = 6.4, font = font, spacing = 1.08,
+                 halign = "center", valign = "center");
+    } else {
+        text("D12600", size = 12, font = "Liberation Sans:style=Bold",
+             halign = "center", valign = "center");
     }
-
-    translate([-total / 2, 0])
-        for (i = [0 : len(chars) - 1])
-            translate([lefts[i] + w[i] / 2, 0])
-                glyph(chars[i]);
 }
 
 module d12600_inlay() {
