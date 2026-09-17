@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pinjig</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header>
+    <b>pinjig</b>
+    <span id="status">—</span>
+  </header>
+  <div class="app">
+    <canvas id="view"></canvas>
+    <aside>
+      <label>Header
+        <select id="board"></select>
+      </label>
+      <label>Plate <b id="thicknessVal">0.5 mm</b>
+        <input id="thickness" type="range" min="0.4" max="2" step="0.1" value="0.5">
+      </label>
+      <label>Pin hole Ø <b id="holeVal">0.95 mm</b>
+        <input id="hole" type="range" min="0.80" max="1.20" step="0.05" value="0.95">
+      </label>
+      <label class="chk"><input id="cap" type="checkbox" checked>Cap unused pins</label>
+      <p class="hint">Every hole is pin-tight so the header slides through. Cap unused is one shared cavity over neighboring unused pins — walls + roof, not a per-pin tube. Each device owns its 2.54 mm cells with a gap. Color is a flush inlay. Notch = pin 1. In the slicer, add the STLs as parts of one object and keep original coordinates.</p>
+      <div class="lbl">Devices — tap pins to assign</div>
+      <div id="devices"></div>
+      <div class="row">
+        <button type="button" id="add">Add device</button>
+        <button type="button" id="reset">Reset shutter</button>
+      </div>
+      <button type="button" id="stl" class="go">Download STLs</button>
+      <div id="map"></div>
+    </aside>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
