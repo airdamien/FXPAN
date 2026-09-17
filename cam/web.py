@@ -154,6 +154,27 @@ def _maybe_sync(have, prefs):
         return str(exc)
 
 
+def _align_for_shot(have, prefs, assignments):
+    """Meter T (or master), freeze those numbers on both; else app/sync."""
+    if not have:
+        return assignments, ""
+    if prefs.get("lock_t", True) and len(have) >= 2:
+        try:
+            info = dual.lock_from_master(have, prefs.get("master") or "T")
+            return info.get("assignments") or [], info.get("message") or ""
+        except dual.CamError as exc:
+            copied = str(exc)
+            if assignments:
+                _apply_exposure(have, assignments)
+                return assignments, copied
+            return assignments, copied or _maybe_sync(have, prefs)
+    if assignments:
+        _apply_exposure(have, assignments)
+        packed = dual.pack_assignments(assignments)
+        return assignments, " ".join(f"{k}={v}" for k, v in packed)
+    return assignments, _maybe_sync(have, prefs)
+
+
 def _merge_exposure(data, prefs):
     data = data if isinstance(data, dict) else {}
     prefs = prefs or {}
@@ -377,6 +398,7 @@ class Handler(BaseHTTPRequestHandler):
                         "pairs": pairs,
                         "jobs": pano.jobs_snapshot(),
                         "queue": pano.queue_status(),
+                        "disk": pano.disk_stats(),
                         "message": f"{n} JPEG pair(s) in captures/",
                     },
                 )
@@ -389,6 +411,7 @@ class Handler(BaseHTTPRequestHandler):
                         "job": pano.job_get(stamp) if stamp else {},
                         "jobs": pano.jobs_snapshot(),
                         "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
                     },
                 )
             m = re.fullmatch(r"/api/file/([\w.-]+)", path)
@@ -490,15 +513,34 @@ class Handler(BaseHTTPRequestHandler):
                         + ("on" if prefs["flip_r"] else "off")
                         + "  deghost="
                         + ("on" if prefs.get("deghost") else "off")
+                        + "  balance="
+                        + ("on" if prefs.get("balance", True) else "off")
                         + "  live-ae="
                         + ("cam" if prefs.get("follow_cam") else "app")
+                        + "  lock-t="
+                        + ("on" if prefs.get("lock_t", True) else "off")
                         + f"  ol={prefs['overlap']:.0%}"
                         + "  master="
                         + prefs.get("master", "T")
                         + "  sync="
                         + ("on" if prefs.get("sync") else "off")
                         + f"  preview={prefs.get('preview_s', settings.PREVIEW_S)}s"
+                        + f"  idle={prefs.get('idle_min', settings.IDLE_MIN)}m"
                     )},
+                )
+            if path == "/api/idle":
+                on = data.get("idle")
+                if isinstance(on, str):
+                    on = on.lower() not in ("0", "false", "no", "")
+                LINK.set_idle(bool(on))
+                snap = LINK.snapshot()
+                return _json(
+                    self, 200,
+                    {
+                        **snap,
+                        "idle": bool(on),
+                        "message": "idle  live off  slow poll" if on else "idle off",
+                    },
                 )
             if path == "/api/gpio":
                 if "sim" not in data:
@@ -663,13 +705,13 @@ class Handler(BaseHTTPRequestHandler):
                         except dual.CamError:
                             have = None
                         copied = ""
-                        if have and assignments:
-                            _apply_exposure(have, assignments)
-                            copied = " ".join(
-                                f"{k}={v}" for k, v in dual.pack_assignments(assignments)
-                            )
-                        elif have:
-                            copied = _maybe_sync(have, prefs)
+                        clock_msg = ""
+                        if have:
+                            try:
+                                clock_msg = (dual.sync_clocks(have) or {}).get("message") or ""
+                            except dual.CamError:
+                                clock_msg = ""
+                            assignments, copied = _align_for_shot(have, prefs, assignments)
                         if not prefs["download"]:
                             info = gpio.fire()
                             return shot_json(
@@ -698,13 +740,12 @@ class Handler(BaseHTTPRequestHandler):
                         )
                     have = dual.require_online(dual.detect_bodies())
                     LINK.absorb(have.values())
-                    copied = ""
-                    if follow:
-                        copied = _maybe_sync(have, prefs)
-                    elif assignments:
-                        copied = " ".join(
-                            f"{k}={v}" for k, v in dual.pack_assignments(assignments)
-                        )
+                    clock_msg = ""
+                    try:
+                        clock_msg = (dual.sync_clocks(have) or {}).get("message") or ""
+                    except dual.CamError:
+                        clock_msg = ""
+                    assignments, copied = _align_for_shot(have, prefs, assignments)
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     dest = pano.CAPTURES
                     with ThreadPoolExecutor(max_workers=len(have)) as pool:
@@ -739,7 +780,8 @@ class Handler(BaseHTTPRequestHandler):
                         files = _shot_files(dest=dest, stamp=stamp)
                     return shot_json(
                         f"shot {stamp}  {msg}  → {where}"
-                        + (f"  {copied}" if copied else ""),
+                        + (f"  {copied}" if copied else "")
+                        + (f"  {clock_msg}" if clock_msg else ""),
                         files,
                         stamp,
                     )
@@ -752,6 +794,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         **info,
                         "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
                         "message": f"deleted {stamp}" + (f" {side}" if side else "")
                         + f"  ({info['count']} file(s))",
                     },
@@ -763,6 +806,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         **info,
                         "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
                         "message": f"removed {info['count']} before {info['today']}",
                     },
                 )
@@ -773,7 +817,40 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         **info,
                         "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
                         "message": f"kept {len(info['kept'])}, removed {info['count']}",
+                    },
+                )
+            if path == "/api/captures/protect":
+                stamp = (data.get("stamp") or "").strip()
+                on = data.get("protected")
+                if isinstance(on, str):
+                    on = on.lower() not in ("0", "false", "no", "")
+                info = pano.set_protected(stamp, bool(on))
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
+                        "message": (
+                            f"protected {stamp}" if info["protected"]
+                            else f"unlocked {stamp}"
+                        ),
+                    },
+                )
+            if path == "/api/captures/delete-unprotected":
+                info = pano.delete_unprotected()
+                return _json(
+                    self, 200,
+                    {
+                        **info,
+                        "pairs": pano.list_pairs(),
+                        "disk": pano.disk_stats(),
+                        "message": (
+                            f"deleted {info['count']}"
+                            + (f"  kept {len(info['skipped'])} locked" if info["skipped"] else "")
+                        ),
                     },
                 )
             if path == "/api/pano":
@@ -798,10 +875,15 @@ class Handler(BaseHTTPRequestHandler):
                     deghost = prefs.get("deghost", False)
                 if isinstance(deghost, str):
                     deghost = deghost.lower() not in ("0", "false", "no", "")
+                balance = data.get("balance")
+                if balance is None:
+                    balance = prefs.get("balance", True)
+                if isinstance(balance, str):
+                    balance = balance.lower() not in ("0", "false", "no", "")
                 mode = (data.get("mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
-                    deghost=bool(deghost),
+                    deghost=bool(deghost), balance=bool(balance),
                 )
                 stat = pano.queue_status()
                 return _json(

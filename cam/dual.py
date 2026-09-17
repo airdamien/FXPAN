@@ -672,9 +672,12 @@ def pack_assignments(assignments):
 
 
 def shot_config(assignments):
-    """ISO + shutter ride with capture. isoauto is prefixed separately."""
-    keep = {"iso", "shutterspeed"}
-    return [(k, v) for k, v in (assignments or []) if k in keep]
+    """ISO lock must ride with capture or Auto ISO meters again at the shutter."""
+    keep = {
+        "isoauto", "autoiso", "iso", "shutterspeed", "exposurecompensation",
+        "whitebalance", "imagequality",
+    }
+    return [(k, v) for k, v in pack_assignments(assignments) if k in keep]
 
 
 def _set_one(port, assignments, timeout=120):
@@ -778,6 +781,217 @@ def copy_from_master(have, master="T"):
     }
 
 
+def prepare_shot(port):
+    """AF/meter nudge so get-config sees the taking exposure, not LV leftovers."""
+    try:
+        gp(["--set-config", "autofocusdrive=1"], port=port, timeout=8)
+    except CamError:
+        pass
+
+
+def locked_assignments(vals):
+    """Freeze metered ISO/shutter as numbers. Copy EV/WB/quality. Skip body f/."""
+    out = []
+    iso = str(vals.get("iso") or "").replace("ISO", "").replace("iso", "").strip()
+    if iso and iso.lower() not in ("auto", "unknown", ""):
+        out.append(("isoauto", "Off"))
+        out.append(("autoiso", "Off"))
+        out.append(("iso", iso_tries(iso)[0] if iso.replace(" ", "").isdigit() else iso))
+    shut = str(vals.get("shutterspeed") or "").strip()
+    if shut and shut.lower() not in ("auto", "bulb", "unknown", ""):
+        out.append(("shutterspeed", format_shutter(shut)))
+    for key in ("exposurecompensation", "imagequality", "whitebalance"):
+        val = str(vals.get(key) or "").strip()
+        if val:
+            out.append((key, val))
+    return out
+
+
+def _iso_num(val):
+    return str(val or "").replace("ISO", "").replace("iso", "").replace(" ", "").strip()
+
+
+def apply_locked(port, assignments, timeout=20):
+    """Two packed gphoto2 commands: Auto ISO off, then ISO+shutter+EV+WB+quality."""
+    packed = pack_assignments(assignments)
+    auto = [(k, v) for k, v in packed if k in ("isoauto", "autoiso")]
+    rest = [(k, v) for k, v in packed if k not in ("isoauto", "autoiso")]
+    notes = []
+    if auto:
+        notes.extend(_set_one(port, auto, timeout=timeout) or [])
+    if rest:
+        notes.extend(_set_one(port, rest, timeout=timeout) or [])
+    return notes
+
+
+def freeze_iso(port, iso):
+    """Packed Auto ISO off + ISO number. Widget-by-widget set-config is too slow."""
+    iso = _iso_num(iso)
+    rows = [("isoauto", "Off"), ("autoiso", "Off")]
+    if iso:
+        rows.append(("iso", iso))
+    return apply_locked(port, rows, timeout=20)
+
+
+def lock_from_master(have, master="T"):
+    """Meter on master, then write those numbers onto both bodies in parallel."""
+    master = "R" if str(master or "").upper() == "R" else "T"
+    if master not in have:
+        raise CamError(f"master {master} is not on USB")
+    prepare_shot(have[master]["port"])
+    assignments = locked_assignments(_status_one(have[master]))
+    if not assignments:
+        raise CamError("master has no exposure to lock")
+    notes = []
+    iso = next((v for k, v in assignments if k == "iso"), "")
+    with ThreadPoolExecutor(max_workers=len(have)) as pool:
+        futs = [
+            pool.submit(apply_locked, have[role]["port"], assignments)
+            for role in have
+        ]
+        for fut in futs:
+            notes.extend(fut.result() or [])
+    slave = "R" if master == "T" else "T"
+    if iso and slave in have:
+        got = _status_one(have[slave])
+        auto = (
+            str(got.get("isoauto") or "").lower() == "on"
+            or str(got.get("autoiso") or "").lower() == "on"
+        )
+        if auto or _iso_num(got.get("iso")) != _iso_num(iso):
+            notes.extend(apply_locked(have[slave]["port"], assignments) or [])
+    copied = " ".join(f"{k}={v}" for k, v in assignments)
+    return {
+        "master": master,
+        "assignments": assignments,
+        "notes": notes,
+        "message": f"lock {master} → {','.join(sorted(have))}  {copied}",
+    }
+
+
+def parse_cam_time(text):
+    """gphoto2 Current: unix seconds or YYYY:MM:DD HH:MM:SS."""
+    s = str(text or "").strip()
+    if not s:
+        return None
+    if s.isdigit():
+        n = int(s)
+        if n > 10_000_000_000:
+            n //= 1000
+        try:
+            return datetime.fromtimestamp(n)
+        except (OSError, OverflowError, ValueError):
+            return None
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y:%m:%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(s[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def plausible_time(dt):
+    return bool(dt) and 2020 <= dt.year <= 2036
+
+
+def pick_clock(times):
+    """Newest plausible RTC among pi / T / R. 2010 Nikon defaults lose."""
+    cands = []
+    for src, dt in (times or {}).items():
+        if plausible_time(dt):
+            cands.append((src, dt))
+    if cands:
+        return max(cands, key=lambda row: row[1])
+    pi = (times or {}).get("pi")
+    return "pi", pi
+
+
+def get_cam_time(port):
+    last = ""
+    for key in ("datetime", "dateandtime"):
+        try:
+            raw = gp(["--get-config", key], port=port, timeout=8)
+        except CamError:
+            continue
+        last = parse_current(raw) or ""
+        dt = parse_cam_time(last)
+        if dt:
+            return dt
+    raise CamError(f"no camera clock ({last or 'empty'})")
+
+
+def set_cam_time(port, dt):
+    stamp = dt.strftime("%Y-%m-%d %H:%M:%S")
+    last = None
+    for args in (
+        ["--set-config", "datetime=now"],
+        ["--set-config", f"datetime={stamp}"],
+        ["--set-config", f"dateandtime={stamp}"],
+    ):
+        try:
+            gp(args, port=port, timeout=12)
+            return
+        except CamError as exc:
+            last = exc
+    raise last or CamError("cannot set camera clock")
+
+
+def set_host_time(dt):
+    stamp = dt.strftime("%Y-%m-%d %H:%M:%S")
+    for cmd in (
+        ["timedatectl", "set-time", stamp],
+        ["sudo", "-n", "timedatectl", "set-time", stamp],
+        ["sudo", "-n", "date", "-s", stamp],
+    ):
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=8)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if proc.returncode == 0:
+            return True
+    return False
+
+
+def sync_clocks(have):
+    """Point Pi and both bodies at the newest plausible clock."""
+    times = {"pi": datetime.now()}
+    for role, row in (have or {}).items():
+        try:
+            times[role] = get_cam_time(row["port"])
+        except CamError:
+            times[role] = None
+    src, when = pick_clock(times)
+    if when is None:
+        return {"source": src, "message": "clock unknown"}
+    notes = []
+    target = when
+    if src != "pi":
+        if set_host_time(when):
+            notes.append(f"pi←{src}")
+            target = datetime.now()
+        else:
+            notes.append("pi skipped")
+    for role, row in (have or {}).items():
+        cam = times.get(role)
+        if cam is not None and abs((cam - target).total_seconds()) <= 2:
+            continue
+        try:
+            set_cam_time(row["port"], target)
+            notes.append(f"{role}←{src}")
+        except CamError as exc:
+            notes.append(f"{role} {exc}")
+    msg = "clock " + (" ".join(notes) if notes else f"ok  {src}")
+    return {
+        "source": src,
+        "when": target.strftime("%Y-%m-%d %H:%M:%S"),
+        "times": {
+            k: (v.strftime("%Y-%m-%d %H:%M:%S") if v else "")
+            for k, v in times.items()
+        },
+        "message": msg,
+    }
+
+
 def cmd_set(args):
     assignments = []
     if args.program is not None:
@@ -819,8 +1033,8 @@ def _capture_args(card, filename=None):
 
 
 def _gp_capture(port, capture, assignments, timeout):
-    """One gphoto2 process: close LV, set exposure, capture."""
-    packed = pack_assignments(assignments)
+    """One gphoto2 process: close LV, freeze ISO, capture."""
+    packed = shot_config(assignments)
     tries = []
     if packed:
         tries.append(["--set-config", "viewfinder=0"] + config_args(packed) + list(capture))

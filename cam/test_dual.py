@@ -112,7 +112,17 @@ class Parse(unittest.TestCase):
         self.assertEqual(dual.iso_tries("400"), ["400", "ISO 400"])
         self.assertEqual(
             dual.shot_config([("isoauto", "Off"), ("iso", "400"), ("expprogram", "M")]),
-            [("iso", "400")],
+            [("isoauto", "Off"), ("iso", "400")],
+        )
+        self.assertEqual(
+            dual.shot_config([
+                ("isoauto", "Off"), ("iso", "400"),
+                ("exposurecompensation", "0.3"), ("whitebalance", "Auto"),
+            ]),
+            [
+                ("isoauto", "Off"), ("iso", "400"),
+                ("exposurecompensation", "0.3"), ("whitebalance", "Auto"),
+            ],
         )
         self.assertEqual(dual.onoff_tries("Off"), ["Off", "0"])
         self.assertEqual(
@@ -151,6 +161,28 @@ class Parse(unittest.TestCase):
         self.assertIn("iso=400", joined)
         self.assertIn("shutterspeed=1/125", joined)
         self.assertNotIn("autoiso", joined)
+
+    def test_apply_locked_two_packs(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            return ""
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        dual.apply_locked("usb:1", [
+            ("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400"),
+            ("shutterspeed", "1/125"), ("exposurecompensation", "0.3"),
+        ])
+        self.assertEqual(len(calls), 2)
+        first, second = " ".join(calls[0]), " ".join(calls[1])
+        self.assertIn("isoauto=Off", first)
+        self.assertNotIn("iso=", first)
+        self.assertIn("iso=400", second)
+        self.assertIn("shutterspeed=1/125", second)
+        self.assertIn("exposurecompensation=0.3", second)
 
     def test_capture_one_command(self):
         calls = []
@@ -697,6 +729,15 @@ class Pano(unittest.TestCase):
         self.assertEqual(rows[0]["pano"], "P_20260101_120000.jpg")
         self.assertEqual(rows[0]["stitch"].get("mode"), "blend")
 
+    def test_cut_joins_both_frames(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        info = pano.stitch_stamp(
+            "20260101_120000", overlap=0.25, flip_r=False, mode="cut", root=self.root
+        )
+        self.assertEqual(info["width"], 70)
+        self.assertEqual(info["height"], 20)
+
     def test_open_import(self):
         pano._venv_site()
         try:
@@ -784,6 +825,80 @@ class Pano(unittest.TestCase):
         self.assertGreater(found["gain"], 0.03)
         self.assertLess(found["gain"], 0.11)
 
+    def test_estimate_t_ghost_weaker_gain(self):
+        pano._venv_site()
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        ghosted = self.root / "t_ghost.png"
+        subprocess.run(
+            [
+                "magick", "-size", "240x120", "xc:black",
+                "-fill", "white", "-draw", "rectangle 150,40 175,85",
+                "(", "+clone", "-roll", "-28+0", "-evaluate", "multiply", "0.02", ")",
+                "-compose", "plus", "-composite", str(ghosted),
+            ],
+            check=True, capture_output=True,
+        )
+        found = pano.estimate_plate_ghost(ghosted, tag="T")
+        self.assertIsNotNone(found)
+        self.assertAlmostEqual(found["dx"], -28, delta=8)
+        self.assertGreater(found["gain"], 0.011)
+        self.assertLess(found["gain"], 0.11)
+
+    def test_overlap_scale_ignores_unique_halves(self):
+        t = self.root / "t_bal.jpg"
+        r = self.root / "r_bal.jpg"
+        # Unique halves disagree (T bright, R dark) but the 20% overlap is
+        # T gray vs R brighter — full-frame scale would go the wrong way.
+        subprocess.run(
+            [
+                "magick", "(", "-size", "80x40", "xc:#999999", ")",
+                "(", "-size", "20x40", "xc:#4d4d4d", ")",
+                "+append", str(t),
+            ],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            [
+                "magick", "(", "-size", "20x40", "xc:#808080", ")",
+                "(", "-size", "80x40", "xc:#333333", ")",
+                "+append", str(r),
+            ],
+            check=True, capture_output=True,
+        )
+        full = pano._mean(t) / pano._mean(r)
+        ol = pano._overlap_scale(t, r, overlap=0.20)
+        self.assertGreater(full, 1.3)
+        self.assertAlmostEqual(ol, 0.60, delta=0.08)
+        dest = self.root / "r_scaled.jpg"
+        used = pano._balance_r(t, r, dest, overlap=0.20)
+        self.assertEqual(used, dest)
+        self.assertAlmostEqual(pano._overlap_scale(t, dest, overlap=0.20), 1.0, delta=0.05)
+
+    def test_disk_stats_counts_sets(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        info = pano.disk_stats(self.root)
+        self.assertGreater(info["free"], 0)
+        self.assertGreaterEqual(info["sets"], 1)
+        self.assertGreater(info["shots"], 0)
+
+    def test_match_seam_scales_right(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        img = np.zeros((80, 800, 3), dtype=np.uint8)
+        img[:, :400] = 80
+        img[:, 400:] = 140
+        out, note = pano._match_seam_img(img)
+        self.assertIn("seam", note)
+        self.assertLess(float(out[:, 700].mean()), float(img[:, 700].mean()) - 5)
+
     def test_resolve_rejects_traversal(self):
         with self.assertRaises(dual.CamError):
             pano.resolve("../secret.jpg", self.root)
@@ -795,6 +910,25 @@ class Pano(unittest.TestCase):
         pano.delete_stamp("20260101_120000", self.root, sides=["P"])
         self.assertFalse((self.root / "P_20260101_120000.jpg").is_file())
         self.assertTrue((self.root / "T_20260101_120000.jpg").is_file())
+        pano.delete_stamp("20260101_120000", self.root)
+        self.assertEqual(pano.list_pairs(self.root), [])
+
+    def test_protect_blocks_delete(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        self._jpeg("T_20260102_120000.jpg", "red")
+        info = pano.set_protected("20260101_120000", True, self.root)
+        self.assertTrue(info["protected"])
+        by = {row["stamp"]: row for row in pano.list_pairs(self.root)}
+        self.assertTrue(by["20260101_120000"]["protected"])
+        self.assertFalse(by["20260102_120000"]["protected"])
+        with self.assertRaises(dual.CamError):
+            pano.delete_stamp("20260101_120000", self.root)
+        gone = pano.delete_unprotected(self.root)
+        self.assertEqual(gone["removed"], ["20260102_120000"])
+        self.assertEqual(gone["skipped"], ["20260101_120000"])
+        self.assertTrue((self.root / "T_20260101_120000.jpg").is_file())
+        pano.set_protected("20260101_120000", False, self.root)
         pano.delete_stamp("20260101_120000", self.root)
         self.assertEqual(pano.list_pairs(self.root), [])
 
@@ -891,6 +1025,7 @@ class CopyMaster(unittest.TestCase):
         self.assertNotIn("flashmode", keys)
         self.assertNotIn("flash", keys)
         self.assertIn(("iso", "400"), out)
+        self.assertIn(("exposurecompensation", "0"), out)
         self.assertIn(("expprogram", "M"), out)
 
     def test_assignments_auto_iso(self):
@@ -940,6 +1075,78 @@ class CopyMaster(unittest.TestCase):
             dual._status_one = old_status
             dual._set_one = old_set
 
+    def test_lock_from_master_freezes_auto_iso(self):
+        packs = []
+        af = []
+
+        def status(row):
+            if row.get("role") == "T":
+                return {
+                    "iso": "200", "isoauto": "On", "autoiso": "On",
+                    "shutterspeed": "1/125", "whitebalance": "Auto",
+                    "imagequality": "JPEG Fine",
+                    "exposurecompensation": "0.3",
+                }
+            return {
+                "iso": "200", "isoauto": "Off", "autoiso": "Off",
+                "shutterspeed": "1/125", "exposurecompensation": "0",
+            }
+
+        def apply(port, assignments, timeout=20):
+            packs.append((port, list(assignments)))
+            return []
+
+        def prep(port):
+            af.append(port)
+
+        old_status = dual._status_one
+        old_apply = dual.apply_locked
+        old_prep = dual.prepare_shot
+        dual._status_one = status
+        dual.apply_locked = apply
+        dual.prepare_shot = prep
+        try:
+            have = {
+                "T": {"role": "T", "port": "usb:1", "model": "D7000"},
+                "R": {"role": "R", "port": "usb:2", "model": "D7000"},
+            }
+            info = dual.lock_from_master(have, "T")
+            self.assertEqual(af, ["usb:1"])
+            keys = {k: v for k, v in info["assignments"]}
+            self.assertEqual(keys["isoauto"], "Off")
+            self.assertEqual(keys["iso"], "200")
+            self.assertEqual(keys["shutterspeed"], "1/125")
+            self.assertEqual(keys["exposurecompensation"], "0.3")
+            self.assertEqual({p for p, _ in packs}, {"usb:1", "usb:2"})
+            self.assertEqual(packs[0][1], packs[1][1])
+            self.assertIn("lock T", info["message"])
+        finally:
+            dual._status_one = old_status
+            dual.apply_locked = old_apply
+            dual.prepare_shot = old_prep
+
+    def test_pick_clock_drops_nikon_2010(self):
+        pi = dual.datetime(2026, 9, 17, 0, 20, 0)
+        dead = dual.datetime(2010, 1, 5, 21, 40, 12)
+        src, when = dual.pick_clock({"pi": pi, "T": dead, "R": dead})
+        self.assertEqual(src, "pi")
+        self.assertEqual(when, pi)
+        newer = dual.datetime(2026, 9, 17, 0, 25, 0)
+        src, when = dual.pick_clock({"pi": pi, "T": newer, "R": dead})
+        self.assertEqual(src, "T")
+        self.assertEqual(when, newer)
+        src, when = dual.pick_clock({
+            "pi": dual.datetime(1970, 1, 1), "T": newer, "R": dead,
+        })
+        self.assertEqual(src, "T")
+
+    def test_parse_cam_time(self):
+        dt = dual.parse_cam_time("2010:01:05 21:40:12")
+        self.assertEqual(dt.year, 2010)
+        self.assertFalse(dual.plausible_time(dt))
+        unix = dual.parse_cam_time(str(int(dual.datetime(2026, 9, 17, 12, 0).timestamp())))
+        self.assertEqual(unix.year, 2026)
+
 
 class Settings(unittest.TestCase):
     def setUp(self):
@@ -954,8 +1161,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T", "preview_s": 10,
-                "deghost": False, "follow_cam": False,
+                "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
         )
 
@@ -964,8 +1171,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=False),
             {
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T", "preview_s": 10,
-                "deghost": False, "follow_cam": False,
+                "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
         )
 
@@ -978,8 +1185,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
-                "sync": True, "master": "T", "preview_s": 10,
-                "deghost": False, "follow_cam": False,
+                "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
         )
         settings.save({"download": True}, pi=True)
@@ -1006,6 +1213,16 @@ class Settings(unittest.TestCase):
         self.assertFalse(settings.load(pi=True)["deghost"])
         self.assertTrue(settings.load(pi=True)["follow_cam"])
 
+    def test_lock_t_and_idle_min(self):
+        self.assertTrue(settings.load(pi=True)["lock_t"])
+        self.assertEqual(settings.load(pi=True)["idle_min"], 10)
+        settings.save({"lock_t": False, "idle_min": 0}, pi=True)
+        got = settings.load(pi=True)
+        self.assertFalse(got["lock_t"])
+        self.assertEqual(got["idle_min"], 0)
+        settings.save({"idle_min": 99}, pi=True)
+        self.assertEqual(settings.load(pi=True)["idle_min"], 0)
+
     def test_brightness_persists(self):
         settings.save({"brightness": 40}, pi=True)
         self.assertEqual(settings.load(pi=True)["brightness"], 40)
@@ -1025,6 +1242,13 @@ class Settings(unittest.TestCase):
         self.assertEqual(settings.load(pi=True)["preview_s"], 4)
         settings.save({"preview_s": 0}, pi=True)
         self.assertEqual(settings.load(pi=True)["preview_s"], 0)
+        settings.save({"iso": "Auto", "shutter": "Auto"}, pi=True)
+        got = settings.load(pi=True)
+        self.assertEqual(got["iso"], "Auto")
+        self.assertEqual(got["shutter"], "Auto")
+        settings.save({"download": True}, pi=True)
+        self.assertEqual(settings.load(pi=True)["iso"], "Auto")
+        self.assertEqual(settings.load(pi=True)["shutter"], "Auto")
 
     def test_shoot_target(self):
         self.assertEqual(

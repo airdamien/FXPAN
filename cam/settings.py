@@ -8,10 +8,14 @@ from pathlib import Path
 import gpio
 
 PATH = Path(__file__).resolve().parent / "settings.json"
-BOOLS = ("download", "gpio", "flip_r", "sync", "deghost", "follow_cam")
+BOOLS = (
+    "download", "gpio", "flip_r", "sync", "lock_t", "deghost", "balance",
+    "follow_cam",
+)
 EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
 OVERLAP = 0.20
 PREVIEW_S = 10
+IDLE_MIN = 10
 
 
 def _master(val):
@@ -47,6 +51,16 @@ def _preview_s(val):
     except (TypeError, ValueError):
         return None
     if n < 0 or n > 15:
+        return None
+    return n
+
+
+def _idle_min(val):
+    try:
+        n = int(round(float(val)))
+    except (TypeError, ValueError):
+        return None
+    if n < 0 or n > 60:
         return None
     return n
 
@@ -97,8 +111,8 @@ def defaults(pi=None):
     on = gpio.on_pi() if pi is None else bool(pi)
     return {
         "download": on, "gpio": on, "flip_r": False, "overlap": OVERLAP,
-        "sync": True, "master": "T", "preview_s": PREVIEW_S,
-        "deghost": False, "follow_cam": False,
+        "sync": True, "lock_t": True, "master": "T", "preview_s": PREVIEW_S,
+        "idle_min": IDLE_MIN, "deghost": False, "balance": True, "follow_cam": False,
     }
 
 
@@ -131,6 +145,10 @@ def load(pi=None):
         n = _preview_s(data["preview_s"])
         if n is not None:
             out["preview_s"] = n
+    if "idle_min" in data:
+        n = _idle_min(data["idle_min"])
+        if n is not None:
+            out["idle_min"] = n
     for key in EXPOSURE:
         if key not in data:
             continue
@@ -168,6 +186,10 @@ def save(data, pi=None):
         n = _preview_s(data["preview_s"])
         if n is not None:
             out["preview_s"] = n
+    if "idle_min" in data:
+        n = _idle_min(data["idle_min"])
+        if n is not None:
+            out["idle_min"] = n
     for key in EXPOSURE:
         if key not in data:
             continue

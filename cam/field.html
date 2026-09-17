@@ -24,6 +24,11 @@
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
       -webkit-user-select: none; user-select: none; }
+  html { scrollbar-gutter: stable; }
+  ::-webkit-scrollbar { width: 48px; height: 48px; }
+  ::-webkit-scrollbar-track { background: #1a1e24; }
+  ::-webkit-scrollbar-thumb { background: #6a7380; border-radius: 12px; min-height: 64px; }
+  ::-webkit-scrollbar-thumb:active { background: #8b939e; }
   input, textarea { -webkit-user-select: text; user-select: text; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
   body {
@@ -60,7 +65,7 @@
   #live.on { background: var(--ok); border-color: var(--ok); color: #101214; }
   #expModal {
     position: absolute; top: 0; right: 0; bottom: 128px; left: auto;
-    width: 252px; z-index: 5;
+    width: 176px; z-index: 5;
     background: #101214; border-radius: 8px;
     display: flex; flex-direction: column; gap: 8px; padding: 8px 4px;
     overflow: hidden;
@@ -68,7 +73,7 @@
   #expModal[hidden] { display: none !important; }
   .vsliders {
     flex: 1; min-height: 0;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
   }
   .vdrag {
     display: flex; flex-direction: column; align-items: center;
@@ -231,8 +236,14 @@
   #cams { touch-action: none; }
   #pairs, #files { touch-action: pan-y; }
   #pairs figure, #files .thumbs img { cursor: zoom-in; }
-  #tab-set { touch-action: none; }
+  #tab-set { touch-action: pan-y; }
   #tab-set { display: flex; flex-direction: column; }
+  .set-tabs {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    flex: 0 0 auto; padding: 0 0 10px;
+  }
+  .set-tabs button { min-height: 40px; font-size: 12px; letter-spacing: 0.12em; }
+  .set-tabs button.on { border-color: var(--r); color: #fff; }
   .set-foot {
     margin-top: auto; display: flex; justify-content: flex-end;
     padding: 10px 0 4px; position: sticky; bottom: 0;
@@ -317,7 +328,23 @@
   .pair-frames {
     display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; align-items: start;
   }
-  .pair-frames figure { margin: 0; }
+  .pair-frames figure.flop img, .file .thumbs img.flop { transform: scaleX(-1); }
+  .space {
+    display: grid; gap: 6px; padding: 4px 0 10px;
+  }
+  .space-track {
+    height: 10px; border-radius: 6px; background: #1a1e24;
+    border: 1px solid var(--line); overflow: hidden;
+  }
+  .space-track i {
+    display: block; height: 100%; width: 0; background: var(--ok);
+    border-radius: 6px;
+  }
+  .space.low .space-track i { background: var(--fire); }
+  .space span {
+    color: var(--dim); font: 12px/1.3 ui-monospace, Menlo, monospace;
+    letter-spacing: 0;
+  }
   .pair-frames figcaption { color: var(--dim); font-size: 10px; letter-spacing: 0.12em; }
   .pair img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
   .pair-pano img { aspect-ratio: 16/6; object-fit: contain; }
@@ -347,8 +374,19 @@
     display: grid; gap: 8px; padding: 10px;
     border: 1px solid var(--line); border-radius: 8px; background: #0b0d10;
   }
-  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; position: relative; }
   .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .lock {
+    position: absolute; top: 6px; left: 6px; z-index: 2;
+    width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 8px;
+    display: grid; place-items: center;
+    background: rgba(10, 12, 16, 0.78); border: 1px solid var(--line); color: var(--dim);
+  }
+  .lock svg { width: 18px; height: 18px; fill: currentColor; }
+  .lock.on { color: var(--ok); border-color: var(--ok); }
+  .file.locked { border-color: var(--ok); }
+  .pic-big { position: relative; }
+  .pic-big .lock { top: 10px; left: 10px; }
   .file .who { color: var(--dim); font-size: 10px; letter-spacing: 0.14em; }
   .file .exif, .pair .exif {
     color: var(--dim); font: 11px/1.35 ui-monospace, Menlo, monospace;
@@ -432,7 +470,7 @@
     .side-foot button { flex: 1; }
     #expModal {
       position: fixed; top: 56px; right: 8px; bottom: auto; left: auto;
-      width: min(252px, calc(100vw - 16px)); height: min(420px, calc(100dvh - 160px));
+      width: min(176px, calc(100vw - 16px)); height: min(420px, calc(100dvh - 160px));
     }
     #log { white-space: pre-wrap; max-height: none; }
   }
@@ -518,10 +556,10 @@
   <button id="panoRefresh">LIST</button>
   <label>Mode
     <select id="panoMode">
+      <option value="open" selected>Open</option>
       <option value="match">Match</option>
       <option value="blend">Blend</option>
       <option value="cut">Cut</option>
-      <option value="open">Open</option>
     </select>
   </label>
   <div id="panoStat" class="pano-stat">idle</div>
@@ -533,10 +571,22 @@
   <button id="filesRefresh">LIST</button>
   <button id="filesToday">Delete older</button>
   <button id="filesKeep5">Keep last 5</button>
+  <button id="filesAll" class="danger">Delete all</button>
+</div>
+<div class="space" id="filesSpace">
+  <div class="space-track"><i id="filesSpaceBar"></i></div>
+  <span id="filesSpaceTxt">—</span>
 </div>
 <div id="files"></div>
 </div>
 <div id="tab-set" class="pane" hidden>
+<nav class="set-tabs">
+  <button type="button" class="on" data-set="cam">CAM</button>
+  <button type="button" data-set="stitch">STITCH</button>
+  <button type="button" data-set="wifi">WIFI</button>
+  <button type="button" data-set="pi">PI</button>
+</nav>
+<div class="set-page" data-set="cam">
 <div class="sect">
   <div class="lbl">Exposure</div>
   <div class="drag">
@@ -575,24 +625,37 @@
     <button type="button" class="chip on" id="masterT">T</button>
     <button type="button" class="chip" id="masterR">R</button>
   </div>
+  <label class="dlchk"><input type="checkbox" id="lockTOn" checked>Lock T onto R at fire</label>
   <label class="dlchk"><input type="checkbox" id="syncOn" checked>Copy to slave (not flash)</label>
+  <label class="dlchk"><input type="checkbox" id="followCam">Live AE (camera decides)</label>
 </div>
 <div class="sect">
   <div class="lbl">Capture</div>
   <label class="dlchk"><input type="checkbox" id="dl">Download files</label>
   <label class="dlchk"><input type="checkbox" id="gpioOn">GPIO shutter</label>
-  <label class="dlchk"><input type="checkbox" id="flipR">Flop R</label>
-  <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost before stitch</label>
-  <label class="dlchk"><input type="checkbox" id="followCam">Live AE (camera decides)</label>
-  <div class="drag">
-    <div class="k">Overlap <b id="olVal">20%</b></div>
-    <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
-  </div>
   <div class="drag">
     <div class="k">Review auto-close <b id="prevVal">10s</b></div>
     <input type="range" id="prevDrag" min="0" max="15" value="10" step="1">
   </div>
+  <div class="drag">
+    <div class="k">Idle sleep <b id="idleVal">10m</b></div>
+    <input type="range" id="idleDrag" min="0" max="60" value="10" step="1">
+  </div>
 </div>
+</div>
+<div class="set-page" data-set="stitch" hidden>
+<div class="sect">
+  <div class="lbl">Stitch</div>
+  <label class="dlchk"><input type="checkbox" id="flipR">Flop R</label>
+  <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost T and R before stitch</label>
+  <label class="dlchk"><input type="checkbox" id="balanceOn" checked>Match T/R brightness</label>
+  <div class="drag">
+    <div class="k">Overlap <b id="olVal">20%</b></div>
+    <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
+  </div>
+</div>
+</div>
+<div class="set-page" data-set="wifi" hidden>
 <div class="sect" id="brightSect" hidden>
   <div class="lbl">Screen</div>
   <div class="drag" id="brightRow" hidden>
@@ -619,12 +682,15 @@
   </div>
   <div id="wifiNets"></div>
 </div>
+</div>
+<div class="set-page" data-set="pi" hidden>
 <div class="sect">
   <div class="lbl">Pi</div>
   <label class="dlchk simpi"><input type="checkbox" id="simPi">Sim as Pi</label>
   <div class="row">
     <button id="kioskExit" hidden>Desktop</button>
   </div>
+</div>
 </div>
 <div class="set-foot"><button id="set">APPLY</button></div>
 </div>
@@ -666,12 +732,6 @@
         <span>SHUT</span>
         <button type="button" class="auto" id="shutFastAuto">AUTO</button>
       </div>
-      <div class="vdrag">
-        <b id="fFastVal">f/5.6</b>
-        <div class="slot"><input type="range" class="vert" id="fFast" min="0" step="1"></div>
-        <span>f</span>
-        <button type="button" class="auto" id="fFastAuto">AUTO</button>
-      </div>
     </div>
     <button type="button" id="expDone">DONE</button>
   </div>
@@ -680,7 +740,10 @@
 </div>
 <div id="picModal" hidden>
   <div class="pic-box">
-    <div class="pic-big"><img id="picBig" alt=""></div>
+    <div class="pic-big">
+      <button type="button" class="lock" id="picLock" hidden aria-label="protect"></button>
+      <img id="picBig" alt="">
+    </div>
     <div class="pic-thumbs" id="picThumbs"></div>
     <div class="pic-acts">
       <span class="who" id="picWho"></span>
@@ -708,6 +771,8 @@ const PROG = [["M","M"],["A","A"],["S","S"],["P","P"],["Auto","Auto"]];
 const state = { iso:"400", shutter:"1/125", fstop:"5.6", wb:"Auto", quality:"JPEG Fine", program:"M",
   t:"", r:"", live:false, liveOk:false, panoPrev:false, timer:0, stamp:"", rows:[],
   previewS: 10,
+  idleMin: 10,
+  idle: false,
   followCam: false,
   stats: { T: { on: false }, R: { on: false } } };
 const log = (m, err) => { const el = document.getElementById("log");
@@ -736,7 +801,7 @@ const syncDrag = (id, list, key, label) => {
 };
 const paintAuto = () => {
   [["isoAuto", "iso"], ["isoFastAuto", "iso"], ["shutAuto", "shutter"], ["shutFastAuto", "shutter"],
-   ["fAuto", "fstop"], ["fFastAuto", "fstop"]].forEach(([id, key]) => {
+   ["fAuto", "fstop"]].forEach(([id, key]) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("on", isAuto(state[key]));
   });
@@ -747,12 +812,12 @@ const paintExposure = () => {
   syncDrag("shutDrag", SHUT, "shutter", "shutVal");
   syncDrag("shutFast", SHUT, "shutter", "shutFastVal");
   syncDrag("fDrag", FSTOP, "fstop", "fVal");
-  syncDrag("fFast", FSTOP, "fstop", "fFastVal");
   paintAuto();
 };
 const setAuto = (key) => {
   state[key] = "Auto";
   paintExposure();
+  if (key === "iso" || key === "shutter") persistExposure();
   scheduleApply();
 };
 const bindDrag = (id, list, key, applyFast) => {
@@ -765,6 +830,7 @@ const bindDrag = (id, list, key, applyFast) => {
     if (i >= list.length) i = list.length - 1;
     state[key] = list[i];
     paintExposure();
+    if (key === "iso" || key === "shutter") persistExposure();
     if (applyFast) scheduleApply();
   };
 };
@@ -1047,9 +1113,36 @@ const bindPaneScroll = (el) => {
 ["files", "pairs", "cams", "tab-set"].forEach((id) =>
   bindPaneScroll(document.getElementById(id)));
 const flopOn = () => document.getElementById("flipR") && document.getElementById("flipR").checked;
+const orderTr = (parent, tNode, rNode) => {
+  if (!parent || !tNode || !rNode) return;
+  const wantRFirst = flopOn();
+  const first = parent.children[0];
+  if (wantRFirst) {
+    if (first !== rNode) parent.insertBefore(rNode, tNode);
+  } else if (first !== tNode) {
+    parent.insertBefore(tNode, rNode);
+  }
+};
+const paintFlopThumbs = () => {
+  const on = flopOn();
+  document.querySelectorAll(".pair-frames").forEach((frames) => {
+    const t = frames.querySelector("figure:has(.pt)");
+    const r = frames.querySelector("figure:has(.pr)");
+    if (r) r.classList.toggle("flop", on);
+    orderTr(frames, t, r);
+  });
+  document.querySelectorAll(".file .thumbs").forEach((thumbs) => {
+    const imgs = [...thumbs.querySelectorAll("img")];
+    const t = imgs.find((im) => (im.dataset.label || im.alt) === "T");
+    const r = imgs.find((im) => (im.dataset.label || im.alt) === "R");
+    if (r) r.classList.toggle("flop", on);
+    orderTr(thumbs, t, r);
+  });
+};
 const paintFlop = () => {
   const fig = document.querySelector(".previews figure.r");
   if (fig) fig.classList.toggle("flop", flopOn());
+  paintFlopThumbs();
 };
 const exposureBody = (all) => {
   const body = { iso: state.iso, shutter: state.shutter };
@@ -1124,7 +1217,7 @@ const paintLiveBtn = () => {
     liveBtn.classList.toggle("on", state.liveOk);
   }
   const sync = document.getElementById("sync");
-  if (sync) sync.textContent = state.liveOk ? "ACTIVE" : "STANDBY";
+  if (sync) sync.textContent = state.idle ? "IDLE" : (state.liveOk ? "ACTIVE" : "STANDBY");
   document.body.classList.toggle("live", state.liveOk);
 };
 const paintPanoPrev = () => {
@@ -1240,6 +1333,17 @@ const applyHud = (all) => {
   paintHud();
 };
 let applyTimer = 0;
+let persistTimer = 0;
+const persistExposure = () => {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    api("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ iso: state.iso, shutter: state.shutter }),
+    }).catch(() => {});
+  }, 250);
+};
 const applyExposure = async (all) => {
   if (state.followCam) {
     applyHud(!!all);
@@ -1294,10 +1398,28 @@ const showLastShot = async () => {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let picTimer = 0;
 let picLeft = 0;
-const picState = { stamp: "", files: [], review: false, idx: 0 };
-const fileRole = (name) => {
-  const m = String(name || "").match(/^([TRP])_/i);
-  return m ? m[1].toUpperCase() : "IMG";
+const picState = { stamp: "", files: [], review: false, idx: 0, protected: false };
+const LOCK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v13h14V9h-2zm-8 0V7a3 3 0 0 1 6 0v2H9z"/></svg>';
+const paintLockBtn = (el, on) => {
+  if (!el) return;
+  el.classList.toggle("on", !!on);
+  el.innerHTML = LOCK_SVG;
+  el.hidden = false;
+};
+const setProtect = async (stamp, on) => {
+  const j = await api("/api/captures/protect", { method:"POST",
+    headers:{"content-type":"application/json"},
+    body: JSON.stringify({ stamp, protected: !!on }) });
+  log(j.message);
+  const card = document.querySelector(`.file[data-stamp="${stamp}"]`);
+  if (card) card.dataset.protected = on ? "1" : "0";
+  picState.protected = stamp === picState.stamp ? !!on : picState.protected;
+  paintLockBtn(document.getElementById("picLock"), picState.protected);
+  document.getElementById("picDel").disabled = !!picState.protected && picState.stamp === stamp;
+  await loadFiles(j.pairs, j.message, j.disk);
+  if (document.getElementById("tab-pano") && !document.getElementById("tab-pano").hidden)
+    await loadPairs(true);
+  return j;
 };
 const closePic = () => {
   clearInterval(picTimer);
@@ -1325,10 +1447,11 @@ const showPicAt = (i, fromUser) => {
   });
   if (fromUser) holdPicTimer();
 };
-const openPic = ({ stamp, files, review, autoS, start }) => {
+const openPic = ({ stamp, files, review, autoS, start, protected: locked }) => {
   picState.stamp = stamp || "";
   picState.files = (files || []).filter(f => f && f.name);
   picState.review = !!review;
+  picState.protected = !!locked;
   if (!picState.files.length) return Promise.resolve("empty");
   const modal = document.getElementById("picModal");
   const thumbs = document.getElementById("picThumbs");
@@ -1341,8 +1464,12 @@ const openPic = ({ stamp, files, review, autoS, start }) => {
     b.onclick = (ev) => { ev.stopPropagation(); showPicAt(i, true); };
     thumbs.appendChild(b);
   });
+  const lock = document.getElementById("picLock");
+  if (picState.stamp) paintLockBtn(lock, picState.protected);
+  else { lock.hidden = true; lock.classList.remove("on"); }
   document.getElementById("picKeep").hidden = !review;
   document.getElementById("picDel").hidden = !picState.stamp;
+  document.getElementById("picDel").disabled = !!picState.protected;
   document.getElementById("picClose").hidden = !!review;
   showPicAt(Math.max(0, Number(start) || 0), false);
   modal.hidden = false;
@@ -1381,8 +1508,18 @@ document.getElementById("picClose").onclick = () => {
   closePic();
   if (done) done("keep");
 };
+document.getElementById("picLock").onclick = (ev) => {
+  ev.stopPropagation();
+  if (!picState.stamp) return;
+  holdPicTimer();
+  setProtect(picState.stamp, !picState.protected).catch(e => log(e.message, true));
+};
 document.getElementById("picDel").onclick = async () => {
   if (!picState.stamp) return;
+  if (picState.protected) {
+    log("protected  unlock first", true);
+    return;
+  }
   if (!confirm("Delete " + picState.stamp + "?")) return;
   try {
     const j = await api("/api/captures/delete", { method:"POST",
@@ -1538,18 +1675,25 @@ const loadPairs = async (silent) => {
     }
     const at = box.querySelectorAll(".pair")[i];
     if (at !== el) box.insertBefore(el, at || null);
-    const setImg = (sel, name, w, label) => {
+    const setImg = (sel, name, w, label, mtime) => {
       const img = el.querySelector(sel);
       img.dataset.name = name || "";
       img.dataset.label = label || "";
-      if (!name) { img.removeAttribute("src"); return; }
-      const next = "/api/file/"+encodeURIComponent(name)+"?w="+w;
-      if (!img.src.includes(encodeURIComponent(name))) img.src = next + "&t="+Date.now();
-      else if ((p.stitch || {}).phase === "done") img.src = next + "&t="+Date.now();
+      if (!name) { img.removeAttribute("src"); img.dataset.key = ""; return; }
+      const key = name + "@" + w + ":" + (mtime || 0);
+      if (img.dataset.key === key) return;
+      img.dataset.key = key;
+      img.src = "/api/file/"+encodeURIComponent(name)+"?w="+w+"&t="+(mtime || 0);
     };
     setImg(".pt", p.t, 240, "T");
     setImg(".pr", p.r, 240, "R");
-    setImg(".pp", p.pano, 240, "P");
+    setImg(".pp", p.pano, 240, "P", p.pano_mtime);
+    const frames = el.querySelector(".pair-frames");
+    if (frames) {
+      orderTr(frames, frames.querySelector("figure:has(.pt)"), frames.querySelector("figure:has(.pr)"));
+      const rfig = frames.querySelector("figure:has(.pr)");
+      if (rfig) rfig.classList.toggle("flop", flopOn());
+    }
     el.dataset.ready = p.ready ? "1" : "0";
     el.querySelector(".go").disabled = !!(p.stitch && p.stitch.running);
     const ex = el.querySelector(".pair-exif");
@@ -1629,6 +1773,10 @@ const paintPrev = () => {
   const n = parseInt(document.getElementById("prevDrag").value, 10) || 0;
   document.getElementById("prevVal").textContent = n ? n + "s" : "off";
 };
+const paintIdle = () => {
+  const n = parseInt(document.getElementById("idleDrag").value, 10) || 0;
+  document.getElementById("idleVal").textContent = n ? n + "m" : "off";
+};
 bind("panoRefresh", () => loadPairs());
 const fileThumb = (name, label) => name
   ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=480">`
@@ -1642,26 +1790,52 @@ const exifBits = (e) => {
 };
 const exifBlock = (exif) => {
   exif = exif || {};
-  const lines = ["T","R"].map(role => {
+  const roles = flopOn() ? ["R","T"] : ["T","R"];
+  const lines = roles.map(role => {
     const bits = exifBits(exif[role]);
     return bits ? `<div class="exif"><span class="${role.toLowerCase()}">${role}</span>  ${bits}${exif[role].taken ? "  "+exif[role].taken : ""}</div>` : "";
   });
   return lines.join("");
 };
-const loadFiles = async (pairs, message) => {
+const fmtBytes = (n) => {
+  n = Number(n) || 0;
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + " TB";
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + " GB";
+  if (n >= 1e6) return (n / 1e6).toFixed(0) + " MB";
+  return Math.round(n / 1e3) + " KB";
+};
+const paintSpace = (d) => {
+  const wrap = document.getElementById("filesSpace");
+  const bar = document.getElementById("filesSpaceBar");
+  const txt = document.getElementById("filesSpaceTxt");
+  if (!wrap || !bar || !txt || !d) return;
+  const pct = d.total ? Math.min(100, Math.round(100 * d.used / d.total)) : 0;
+  bar.style.width = pct + "%";
+  wrap.classList.toggle("low", pct >= 90);
+  const shots = Number(d.shots) || 0;
+  txt.textContent = fmtBytes(d.free) + " free  ·  ~" + shots + " sets left";
+};
+const loadFiles = async (pairs, message, disk) => {
   let rows = pairs;
   if (!rows) {
     const j = await api("/api/captures");
     rows = j.pairs || [];
     if (message == null) message = j.message;
+    disk = j.disk;
   }
+  if (disk) paintSpace(disk);
   const box = document.getElementById("files");
   box.innerHTML = "";
   (rows || []).forEach(p => {
     const el = document.createElement("div");
-    el.className = "file";
+    el.className = "file" + (p.protected ? " locked" : "");
     el.dataset.stamp = p.stamp;
-    el.innerHTML = `<div class="thumbs">${fileThumb(p.t,"T")}${fileThumb(p.r,"R")}${fileThumb(p.pano,"P")}</div>
+    el.dataset.protected = p.protected ? "1" : "0";
+    el.innerHTML = `<div class="thumbs"><button type="button" class="lock${p.protected ? " on" : ""}" aria-label="protect">${LOCK_SVG}</button>${
+      flopOn()
+        ? fileThumb(p.r,"R")+fileThumb(p.t,"T")+fileThumb(p.pano,"P")
+        : fileThumb(p.t,"T")+fileThumb(p.r,"R")+fileThumb(p.pano,"P")
+    }</div>
       <span class="who">${p.stamp}${p.ready ? "" : " · incomplete"}</span>
       ${exifBlock(p.exif)}
       <div class="acts"></div>`;
@@ -1681,6 +1855,17 @@ const loadFiles = async (pairs, message) => {
       a.textContent = "Download "+label;
       acts.appendChild(a);
     });
+    const lockBtn = el.querySelector(".thumbs .lock");
+    if (lockBtn) {
+      lockBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        setProtect(p.stamp, !p.protected).catch(e => log(e.message, true));
+      };
+    }
+    if (p.protected) {
+      box.appendChild(el);
+      return;
+    }
     [["T","T",p.t],["R","R",p.r],["P","pano",p.pano],["","pair",true]].forEach(([side, label, have]) => {
       if (!have) return;
       const b = document.createElement("button");
@@ -1695,7 +1880,7 @@ const loadFiles = async (pairs, message) => {
             headers:{"content-type":"application/json"},
             body: JSON.stringify({ stamp: p.stamp, side }) });
           log(j.message);
-          await loadFiles(j.pairs, j.message);
+          await loadFiles(j.pairs, j.message, j.disk);
           if (document.getElementById("tab-pano") && !document.getElementById("tab-pano").hidden)
             await loadPairs();
         } catch (e) { log(e.message, true); }
@@ -1704,6 +1889,7 @@ const loadFiles = async (pairs, message) => {
     });
     box.appendChild(el);
   });
+  paintFlopThumbs();
   if (!(rows || []).length) {
     box.innerHTML = "<div class='cam'><div><b>NO FILES</b><span>captures/ is empty</span></div></div>";
   }
@@ -1715,17 +1901,26 @@ const filesPost = (path, body, warn) => async () => {
     headers:{"content-type":"application/json"},
     body: JSON.stringify(body || {}) });
   log(j.message);
-  await loadFiles(j.pairs, j.message);
+  await loadFiles(j.pairs, j.message, j.disk);
 };
 bind("filesRefresh", () => loadFiles());
 bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every capture from before today?"));
-bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
+bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest unlocked captures?"));
+bind("filesAll", filesPost(
+  "/api/captures/delete-unprotected", {},
+  "Delete every unlocked set? Locked sets stay.",
+));
 const zoomFromCard = (card, img) => {
   if (!card || !img || !img.dataset.name) return;
   const files = [...card.querySelectorAll("img[data-name]")].filter(im => im.dataset.name)
     .map(im => ({ name: im.dataset.name, label: im.dataset.label || "" }));
   const start = files.findIndex(f => f.name === img.dataset.name);
-  openPic({ stamp: card.dataset.stamp || "", files, start: Math.max(0, start) });
+  openPic({
+    stamp: card.dataset.stamp || "",
+    files,
+    start: Math.max(0, start),
+    protected: card.dataset.protected === "1",
+  });
 };
 document.getElementById("pairs").addEventListener("click", (ev) => {
   if (ev.target.closest("button")) return;
@@ -1916,22 +2111,31 @@ const startParams = new URLSearchParams(location.search);
 let startTab = startParams.get("tab") || (inKiosk ? "" : (location.hash || "").replace("#",""));
 if (startTab === "view" || startTab === "start" || startTab === "live") startTab = "";
 showTab(MENUS.includes(startTab) ? startTab : "");
+document.querySelectorAll(".set-tabs [data-set]").forEach((b) => {
+  b.onclick = () => {
+    const name = b.dataset.set;
+    document.querySelectorAll(".set-tabs [data-set]").forEach((x) => {
+      x.classList.toggle("on", x.dataset.set === name);
+    });
+    document.querySelectorAll(".set-page").forEach((p) => {
+      p.hidden = p.dataset.set !== name;
+    });
+    if (name === "wifi") loadWifi().catch((e) => log(e.message, true));
+  };
+});
 paintPanoPrev();
 bindDrag("isoDrag", ISO, "iso", true);
 bindDrag("isoFast", ISO, "iso", true);
 bindDrag("shutDrag", SHUT, "shutter", true);
 bindDrag("shutFast", SHUT, "shutter", true);
 bindDrag("fDrag", FSTOP, "fstop", true);
-bindDrag("fFast", FSTOP, "fstop", true);
 ["isoAuto","isoFastAuto"].forEach(id => {
   document.getElementById(id).onclick = () => setAuto("iso");
 });
 ["shutAuto","shutFastAuto"].forEach(id => {
   document.getElementById(id).onclick = () => setAuto("shutter");
 });
-["fAuto","fFastAuto"].forEach(id => {
-  document.getElementById(id).onclick = () => setAuto("fstop");
-});
+document.getElementById("fAuto").onclick = () => setAuto("fstop");
 paintExposure();
 const expModal = document.getElementById("expModal");
 const expBtn = document.getElementById("exp");
@@ -2082,6 +2286,8 @@ const paintSettings = (s) => {
   if (flip && "flip_r" in s) flip.checked = !!s.flip_r;
   const dg = document.getElementById("deghostOn");
   if (dg && "deghost" in s) dg.checked = !!s.deghost;
+  const bal = document.getElementById("balanceOn");
+  if (bal && "balance" in s) bal.checked = !!s.balance;
   const fc = document.getElementById("followCam");
   if (fc && "follow_cam" in s) {
     fc.checked = !!s.follow_cam;
@@ -2090,6 +2296,8 @@ const paintSettings = (s) => {
   paintFlop();
   const sync = document.getElementById("syncOn");
   if (sync && "sync" in s) sync.checked = !!s.sync;
+  const lock = document.getElementById("lockTOn");
+  if (lock && "lock_t" in s) lock.checked = !!s.lock_t;
   const master = (s.master === "R") ? "R" : "T";
   const mt = document.getElementById("masterT");
   const mr = document.getElementById("masterR");
@@ -2107,6 +2315,14 @@ const paintSettings = (s) => {
     state.previewS = n;
     paintPrev();
   }
+  const idle = document.getElementById("idleDrag");
+  if (idle && "idle_min" in s) {
+    const n = Math.min(60, Math.max(0, parseInt(s.idle_min, 10) || 0));
+    idle.value = String(n);
+    state.idleMin = n;
+    paintIdle();
+    armIdle();
+  }
 };
 const saveSettings = async () => {
   const j = await api("/api/settings", { method:"POST",
@@ -2116,9 +2332,14 @@ const saveSettings = async () => {
       gpio: document.getElementById("gpioOn").checked,
       flip_r: document.getElementById("flipR").checked,
       deghost: document.getElementById("deghostOn").checked,
+      balance: document.getElementById("balanceOn").checked,
       follow_cam: document.getElementById("followCam").checked,
+      lock_t: document.getElementById("lockTOn").checked,
+      iso: state.iso,
+      shutter: state.shutter,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
       preview_s: parseInt(document.getElementById("prevDrag").value, 10),
+      idle_min: parseInt(document.getElementById("idleDrag").value, 10),
       sync: document.getElementById("syncOn").checked,
       master: document.getElementById("masterR").classList.contains("on") ? "R" : "T",
     }) });
@@ -2128,6 +2349,7 @@ const saveSettings = async () => {
 document.getElementById("dl").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("gpioOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("syncOn").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("lockTOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 ["masterT", "masterR"].forEach((id) => {
   document.getElementById(id).onclick = () => {
     document.getElementById("masterT").classList.toggle("on", id === "masterT");
@@ -2141,11 +2363,14 @@ document.getElementById("flipR").onchange = () => {
   saveSettings().catch(e => log(e.message, true));
 };
 document.getElementById("deghostOn").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("balanceOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("followCam").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("olDrag").oninput = () => { paintOl(); composePano(); };
 document.getElementById("olDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("prevDrag").oninput = () => paintPrev();
 document.getElementById("prevDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("idleDrag").oninput = () => paintIdle();
+document.getElementById("idleDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
 const paintBright = (s) => {
   const row = document.getElementById("brightRow");
   const drag = document.getElementById("brightDrag");
@@ -2257,14 +2482,61 @@ const paintLink = (j) => {
   paintLiveBtn();
 };
 let linkTimer = 0;
+let linkMs = 1500;
+let idleTimer = 0;
 const pollLink = () => {
   api("/api/link").then(paintLink).catch(() => {});
 };
-const startLinkPoll = () => {
-  if (linkTimer) return;
+const startLinkPoll = (ms) => {
+  if (ms) linkMs = ms;
+  if (linkTimer) {
+    clearInterval(linkTimer);
+    linkTimer = 0;
+  }
   pollLink();
-  linkTimer = setInterval(pollLink, 1500);
+  linkTimer = setInterval(pollLink, linkMs);
 };
+const armIdle = () => {
+  clearTimeout(idleTimer);
+  idleTimer = 0;
+  const m = state.idleMin || 0;
+  if (!m || state.idle) return;
+  idleTimer = setTimeout(goIdle, m * 60000);
+};
+const goIdle = async () => {
+  if (state.idle) return;
+  state.idle = true;
+  if (state.liveOk || state.live) {
+    setLiveSrc(false);
+    try { await api("/api/live/stop", { method: "POST" }); }
+    catch (e) {}
+  }
+  startLinkPoll(15000);
+  api("/api/idle", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ idle: true }),
+  }).catch(() => {});
+  log("idle  live off  slow poll");
+  paintLiveBtn();
+};
+const wakeIdle = () => {
+  if (!state.idle) {
+    armIdle();
+    return;
+  }
+  state.idle = false;
+  startLinkPoll(1500);
+  api("/api/idle", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ idle: false }),
+  }).catch(() => {});
+  armIdle();
+};
+["pointerdown", "keydown"].forEach((ev) => {
+  document.addEventListener(ev, () => wakeIdle(), { passive: true });
+});
 api("/api/meta").then(j => {
   document.getElementById("host").textContent = (j.phone || "").replace(/^https?:\/\//,"").replace(/:8787\/?$/,"");
   paintGpio(j.gpio);
