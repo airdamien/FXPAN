@@ -79,21 +79,30 @@ class Link:
             busy = self._busy
             hud = {role: dict(row) for role, row in self._hud.items()}
             extras = [dict(row) for row in self._extras]
+        speeds = dual.nikon_usb_info() or {}
         for role in ROLES:
             row = have.get(role) or {}
             info = (live.get("roles") or {}).get(role) or {}
             paired = bool(pair.get(role))
             online = bool(row.get("port"))
+            port = row.get("port") or ""
+            link = (speeds.get(port) or {}).get("speed") or row.get("usb_speed") or ""
             roles[role] = {
                 "paired": paired,
                 "serial": row.get("serial") or pair.get(role) or "",
-                "port": row.get("port") or "",
+                "port": port,
                 "model": row.get("model") or "",
+                "usb_speed": link,
                 "online": online,
                 "live": bool(info.get("alive")),
                 "frames": int(info.get("frames") or 0),
                 "error": info.get("error") or "",
             }
+        extras = [
+            dict(row, usb_speed=(speeds.get(row.get("port") or "") or {}).get("speed")
+                 or row.get("usb_speed") or "")
+            for row in extras
+        ]
         missing = [
             role for role in ROLES
             if pair.get(role) and not roles[role]["online"]

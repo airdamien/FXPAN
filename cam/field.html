@@ -995,6 +995,7 @@ const camBits = (row) => {
   const bits = [];
   if (row.serial) bits.push("#" + shortSerial(row.serial));
   if (row.port) bits.push(row.port);
+  if (row.usb_speed) bits.push(row.usb_speed);
   if (row.batterylevel) bits.push(row.batterylevel);
   else if (row.iso) bits.push("ISO " + row.iso);
   return { title: model, sub: bits.join(" · ") || "USB" };
@@ -2471,6 +2472,7 @@ const paintLink = (j) => {
       rows.push({
         role, serial: r.serial || old.serial, port: r.port || "",
         model: r.model || old.model, batterylevel: old.batterylevel,
+        usb_speed: r.usb_speed || old.usb_speed || "",
       });
     }
   });
@@ -2481,6 +2483,7 @@ const paintLink = (j) => {
     rows.push({
       role: row.role || "", serial: row.serial || "",
       port: row.port, model: row.model || "",
+      usb_speed: row.usb_speed || "",
     });
   });
   if (rows.length) {

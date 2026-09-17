@@ -1,8 +1,9 @@
 """List downloaded T/R JPEG pairs and stitch a hybrid pano.
 
-T is image −X (left), R is image +X (right). Designed overlap is 0.20
-(openscad/hybrid/params.scad). Match searches overlap, vertical shift, and
-whether R needs a flop. Uses ImageMagick (`magick`) already on this Mac.
+After R flop, R is image −X (left) and T is image +X (right) — same order
+as LIVE PREVIEW. Designed overlap is 0.20 (openscad/hybrid/params.scad).
+Match searches overlap, vertical shift, and whether R needs a flop.
+Uses ImageMagick (`magick`) already on this Mac.
 """
 
 from __future__ import annotations
@@ -21,7 +22,14 @@ from pathlib import Path
 import dual
 
 MAGICK = os.environ.get("MAGICK", "magick")
+_MAGICK_CMDS = {
+    "identify", "convert", "mogrify", "composite", "compare", "montage",
+}
 CAPTURES = Path(__file__).resolve().parent.parent / "captures"
+
+
+def _cpu_count():
+    return max(1, os.cpu_count() or 2)
 OVERLAP = 0.20
 PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
@@ -51,13 +59,33 @@ def _venv_site():
             sys.path.insert(0, p)
 
 
-def _magick(args, timeout=180, binary=False):
+def _magick(args, timeout=600, binary=False):
+    n = _cpu_count()
+    env = os.environ.copy()
+    env["OMP_NUM_THREADS"] = str(n)
+    # Policy default is ~1 GiB / 3 threads; D800 36 MP composites need RAM
+    # or Magick spills to disk and looks single-core.
+    # Limits after identify/convert: `magick -limit … identify` treats
+    # identify as a filename → "no decode delegate for this image format `'".
+    limits = [
+        "-limit", "thread", str(n),
+        "-limit", "memory", "4GiB",
+        "-limit", "map", "6GiB",
+    ]
+    env["MAGICK_THREAD_LIMIT"] = str(n)
+    env["MAGICK_MEMORY_LIMIT"] = "4GiB"
+    env["MAGICK_MAP_LIMIT"] = "6GiB"
+    if args and args[0] in _MAGICK_CMDS:
+        prefixed = [args[0], *limits, *args[1:]]
+    else:
+        prefixed = [*limits, *args]
     try:
         proc = subprocess.run(
-            [MAGICK, *args],
+            [MAGICK, *prefixed],
             capture_output=True,
             text=not binary,
             timeout=timeout,
+            env=env,
         )
     except FileNotFoundError as exc:
         raise dual.CamError("ImageMagick `magick` not found") from exc
@@ -565,7 +593,7 @@ def _score_ol(t, r, ol, dy):
     rows = min(t.h - y0t, r.h - y0r)
     if rows < 8 or ol < 4 or ol >= t.w or ol >= r.w:
         return 1e9
-    xt = t.w - ol
+    xr = r.w - ol
     tp, rp = t.pix, r.pix
     tw, rw = t.w, r.w
     i0 = int(rows * 0.22)
@@ -573,8 +601,8 @@ def _score_ol(t, r, ol, dy):
     n = (i1 - i0) * ol
     sumt = sumr = sumt2 = sumr2 = sumtr = 0
     for i in range(i0, i1):
-        toff = (y0t + i) * tw + xt
-        roff = (y0r + i) * rw
+        toff = (y0t + i) * tw
+        roff = (y0r + i) * rw + xr
         for x in range(ol):
             tv = tp[toff + x]
             rv = rp[roff + x]
@@ -656,7 +684,7 @@ def _mean(path):
 
 
 def _overlap_scale(t_path, r_path, overlap=OVERLAP):
-    """T-east / R-west strip mean. Paths must already be oriented (R flopped if needed).
+    """R-east / T-west strip mean. Paths must already be oriented (R flopped if needed).
 
     Full-frame means are the wrong signal on a hybrid pano: T and R see different
     halves of the scene, so a dark unique half on T and a bright unique half on R
@@ -669,12 +697,12 @@ def _overlap_scale(t_path, r_path, overlap=OVERLAP):
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         _magick([
-            str(t_path), "-colorspace", "sRGB",
-            "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "tol.png"),
+            str(r_path), "-colorspace", "sRGB",
+            "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "rol.png"),
         ])
         _magick([
-            str(r_path), "-colorspace", "sRGB",
-            "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "rol.png"),
+            str(t_path), "-colorspace", "sRGB",
+            "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "tol.png"),
         ])
         t_m, r_m = _mean(tmp / "tol.png"), _mean(tmp / "rol.png")
     if r_m <= 0.02 or t_m <= 0.02:
@@ -771,31 +799,35 @@ def stitch_files(
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         r_use = tmp / "r.jpg"
+        t_use = tmp / "t.jpg"
         args = [str(r_path), "-colorspace", "sRGB"]
         if flip_r:
             args += ["-flop"]
         if (rw, rh) != (w, h):
             args += ["-resize", f"{w}x{h}!"]
-        _magick(args + [str(r_use)])
-        t_use = tmp / "t.jpg"
-        _magick([str(t_path), "-colorspace", "sRGB", str(t_use)])
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fr = pool.submit(_magick, args + [str(r_use)])
+            ft = pool.submit(_magick, [str(t_path), "-colorspace", "sRGB", str(t_use)])
+            fr.result()
+            ft.result()
         if balance:
             r_use = _balance_r(t_use, r_use, tmp / "r_bal.jpg", overlap, on_log=log)
-        _magick([str(t_use), "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "tol.png")])
-        _magick([str(r_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "rol.png")])
+        _magick([str(r_use), "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "rol.png")])
+        _magick([str(t_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "tol.png")])
         if mode == "cut":
             keep = w - ol + ol // 2
             take = w - (ol - ol // 2)
             _magick(
-                [str(t_use), "-crop", f"{keep}x{h}+0+0", "+repage", str(tmp / "tcut.png")]
+                [str(r_use), "-crop", f"{keep}x{h}+0+0", "+repage", str(tmp / "rcut.png")]
             )
             _magick(
                 [
-                    str(r_use),
+                    str(t_use),
                     "-crop",
                     f"{take}x{h}+{ol - ol // 2}+0",
                     "+repage",
-                    str(tmp / "rcut.png"),
+                    str(tmp / "tcut.png"),
                 ]
             )
             _magick(
@@ -803,13 +835,13 @@ def stitch_files(
                     "-size",
                     f"{out_w}x{out_h}",
                     "xc:black",
-                    str(tmp / "tcut.png"),
-                    "-geometry",
-                    f"+0+{ty}",
-                    "-composite",
                     str(tmp / "rcut.png"),
                     "-geometry",
-                    f"+{keep}+{ry}",
+                    f"+0+{ry}",
+                    "-composite",
+                    str(tmp / "tcut.png"),
+                    "-geometry",
+                    f"+{keep}+{ty}",
                     "-composite",
                     "-quality",
                     "92",
@@ -833,8 +865,8 @@ def stitch_files(
                 )
             _magick(
                 [
-                    str(tmp / "tol.png"),
                     str(tmp / "rol.png"),
+                    str(tmp / "tol.png"),
                     str(tmp / "mask.png"),
                     "-compose",
                     "over",
@@ -847,17 +879,17 @@ def stitch_files(
                     "-size",
                     f"{out_w}x{out_h}",
                     "xc:black",
-                    str(t_use),
-                    "-geometry",
-                    f"+0+{ty}",
-                    "-composite",
                     str(r_use),
                     "-geometry",
-                    f"+{x}+{ry}",
+                    f"+0+{ry}",
+                    "-composite",
+                    str(t_use),
+                    "-geometry",
+                    f"+{x}+{ty}",
                     "-composite",
                     str(tmp / "ol.png"),
                     "-geometry",
-                    f"+{x}+{ry}",
+                    f"+{x}+{ty}",
                     "-composite",
                     "-quality",
                     "92",
@@ -1094,6 +1126,22 @@ def _deghost_path(path, tmp, tag, on_log=None):
     return dest, info
 
 
+def _overlap_feature_masks(w, h, overlap, tmp):
+    import cv2
+    import numpy as np
+
+    band = max(int(w * overlap * 1.5), int(w * 0.22))
+    band = min(band, w // 2)
+    tmask = np.zeros((h, w), np.uint8)
+    tmask[:, :band] = 255
+    rmask = np.zeros((h, w), np.uint8)
+    rmask[:, w - band :] = 255
+    tp, rp = Path(tmp) / "tmask.png", Path(tmp) / "rmask.png"
+    cv2.imwrite(str(tp), tmask)
+    cv2.imwrite(str(rp), rmask)
+    return tp, rp, band
+
+
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
                 balance=True, overlap=OVERLAP):
     """Feature-match stitch via OpenStitching (OpenCV). https://github.com/OpenStitching/stitching"""
@@ -1105,7 +1153,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
     _venv_site()
     try:
         import cv2
-        from stitching import AffineStitcher, Stitcher
+        from stitching import AffineStitcher
         from stitching.stitching_error import StitchingError
     except ImportError as exc:
         raise dual.CamError(
@@ -1119,8 +1167,11 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
     if try_both and not flip_r:
         flips.append(True)
     last = None
+    tw, th = _size(t_path)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
+        tmask, rmask, band = _overlap_feature_masks(tw, th, overlap, tmp)
+        log(f"OpenStitching  SIFT only in R-right / T-left {band}px (hybrid overlap)")
         for flop in flips:
             r_use = Path(r_path)
             if flop:
@@ -1129,49 +1180,55 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
                 log("OpenStitching  R flopped")
             else:
                 log("OpenStitching  R as-shot")
-            # Affine default is compensator=no. Gain uses the warped overlap.
             comp = "channel" if balance else "no"
             if balance:
                 log("balance OpenStitching channel (warped overlap)")
-            for name, cls in (("affine", AffineStitcher), ("pano", Stitcher)):
-                log(f"OpenStitching  {name} sift")
-                try:
-                    stitcher = cls(
-                        detector="sift", nfeatures=2000, confidence_threshold=0.2,
-                        compensator=comp, nr_feeds=3 if balance else 1,
+            log("OpenStitching  affine sift")
+            try:
+                stitcher = AffineStitcher(
+                    detector="sift",
+                    nfeatures=6000,
+                    confidence_threshold=0.05,
+                    match_conf=0.3,
+                    compensator=comp,
+                    nr_feeds=3 if balance else 1,
+                    crop=False,
+                    medium_megapix=0.8,
+                )
+                img = stitcher.stitch(
+                    [str(r_use), str(t_path)],
+                    feature_masks=[str(rmask), str(tmask)],
+                )
+                if img is None or getattr(img, "size", 0) == 0:
+                    raise StitchingError("empty panorama")
+                if balance:
+                    img, note = _match_seam_img(img)
+                    if note:
+                        log(note)
+                if not cv2.imwrite(
+                    str(dest), img, [int(cv2.IMWRITE_JPEG_QUALITY), 92]
+                ):
+                    raise dual.CamError("OpenStitching write failed")
+                w, h = _size(dest)
+                if w < int(tw * 1.15):
+                    raise StitchingError(
+                        f"affine too narrow {w}×{h} (need a wide T+R pano)"
                     )
-                    img = stitcher.stitch([str(t_path), str(r_use)])
-                    if img is None or getattr(img, "size", 0) == 0:
-                        raise StitchingError("empty panorama")
-                    if balance:
-                        img, note = _match_seam_img(img)
-                        if note:
-                            log(note)
-                    if not cv2.imwrite(
-                        str(dest), img, [int(cv2.IMWRITE_JPEG_QUALITY), 92]
-                    ):
-                        raise dual.CamError("OpenStitching write failed")
-                    w, h = _size(dest)
-                    tw, _ = _size(t_path)
-                    if w < int(tw * 1.15):
-                        raise StitchingError(
-                            f"{name} too narrow {w}×{h} (need a wide T+R pano)"
-                        )
-                    log(f"OpenStitching  {name}  {w}×{h}  flip={'on' if flop else 'off'}")
-                    return {
-                        "file": dest.name,
-                        "width": w,
-                        "height": h,
-                        "overlap": 0,
-                        "overlap_frac": 0,
-                        "dy": 0,
-                        "flip_r": flop,
-                        "mode": "open",
-                        "engine": name,
-                    }
-                except Exception as exc:
-                    last = exc
-                    log(f"{name} failed: {exc}")
+                log(f"OpenStitching  affine  {w}×{h}  flip={'on' if flop else 'off'}")
+                return {
+                    "file": dest.name,
+                    "width": w,
+                    "height": h,
+                    "overlap": 0,
+                    "overlap_frac": 0,
+                    "dy": 0,
+                    "flip_r": flop,
+                    "mode": "open",
+                    "engine": "affine",
+                }
+            except Exception as exc:
+                last = exc
+                log(f"affine failed: {exc}")
     raise dual.CamError(str(last) if last else "OpenStitching failed")
 
 
@@ -1188,7 +1245,9 @@ def stitch_stamp(
     requested = mode
     found = None
     ghost = {}
-    tmp_ghost = tempfile.TemporaryDirectory() if deghost else None
+    # Independent T/R deghost shifts wreck SIFT on FX; deghost after a
+    # geometric fallback instead.
+    tmp_ghost = tempfile.TemporaryDirectory() if (deghost and mode != "open") else None
     try:
         if tmp_ghost:
             t_path, ghost["T"] = _deghost_path(t_path, tmp_ghost.name, "T", on_log)
@@ -1196,21 +1255,52 @@ def stitch_stamp(
         if mode == "open":
             if on_log:
                 on_log("OpenStitching SIFT  https://github.com/OpenStitching/stitching")
-            info = stitch_open(
-                t_path, r_path, dest,
-                flip_r=flip_r, try_both=not flip_r, on_log=on_log,
-                balance=balance, overlap=overlap,
-            )
+            try:
+                info = stitch_open(
+                    t_path, r_path, dest,
+                    flip_r=flip_r, try_both=not flip_r, on_log=on_log,
+                    balance=balance, overlap=overlap,
+                )
+            except dual.CamError as exc:
+                if on_log:
+                    on_log(f"open failed: {exc} — geometric blend")
+                if deghost:
+                    tmp_ghost = tempfile.TemporaryDirectory()
+                    t_path, ghost["T"] = _deghost_path(
+                        t_path, tmp_ghost.name, "T", on_log)
+                    r_path, ghost["R"] = _deghost_path(
+                        r_path, tmp_ghost.name, "R", on_log)
+                found = find_overlap(t_path, r_path, try_flip=True, on_log=on_log)
+                if found["rmse"] <= 0.42:
+                    overlap = found["overlap"]
+                    flip_r = found["flip_r"]
+                    tw, _ = _size(t_path)
+                    dy = int(round(found["dy"] * (tw / WORK)))
+                info = stitch_files(
+                    t_path, r_path, dest,
+                    overlap=overlap, flip_r=flip_r, mode="blend", dy=dy,
+                    on_log=on_log, balance=balance,
+                )
+                info["engine"] = "blend"
+                info["open_error"] = str(exc)
             info["stamp"] = stamp
-            info["mode"] = "open"
+            info["mode"] = "blend" if info.get("open_error") else "open"
             info["phase"] = "done"
             info["error"] = ""
             info["deghost"] = {k: v for k, v in ghost.items() if v}
-            info["message"] = (
-                f"open  {info.get('engine', '')}  "
-                f"flip={'on' if info.get('flip_r') else 'off'}  "
-                f"{info['width']}×{info['height']}"
-            )
+            if info.get("engine") == "blend":
+                info["message"] = (
+                    f"blend  (open missed)  ol={info.get('overlap_frac', overlap):.0%}  "
+                    f"dy={info.get('dy', dy):+d}  "
+                    f"flip={'on' if info.get('flip_r') else 'off'}  "
+                    f"{info['width']}×{info['height']}"
+                )
+            else:
+                info["message"] = (
+                    f"open  {info.get('engine', '')}  "
+                    f"flip={'on' if info.get('flip_r') else 'off'}  "
+                    f"{info['width']}×{info['height']}"
+                )
             _write_sidecar(root, stamp, info)
             return info
         if mode == "match":
