@@ -208,7 +208,7 @@
 <section>
   <p class="sub">Tap T or R on a body. Tap again to clear. Swap if they landed backwards.</p>
   <table id="cams"><thead><tr>
-    <th>role</th><th>serial</th><th>port</th><th>model</th><th>assign</th>
+    <th>role</th><th>serial</th><th>port</th><th>link</th><th>model</th><th>assign</th>
   </tr></thead><tbody></tbody></table>
   <div class="row">
     <button id="detect">Detect</button>
@@ -382,6 +382,7 @@ const paintCams = () => {
     const tr = document.createElement("tr");
     if (ghost) tr.className = "ghost";
     [who === "" ? "—" : who, serial || "?", row.port || (ghost ? "offline" : "—"),
+      row.usb_speed || "—",
       (row.model || "—").replace(/^Nikon DSC /, "")].forEach(val => {
       const td = document.createElement("td");
       td.textContent = val;
@@ -408,7 +409,7 @@ const paintCams = () => {
   });
   if (!(lastRows || []).length && !lastPair.T && !lastPair.R) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="5">no cameras on USB</td>';
+    tr.innerHTML = '<td colspan="6">no cameras on USB</td>';
     tb.appendChild(tr);
   }
 };

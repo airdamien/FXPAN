@@ -363,6 +363,14 @@ class UsbBus(unittest.TestCase):
         b.mkdir()
         (b / "idVendor").write_text("1d6b\n")
         self.assertEqual(dual.nikon_usb_ports(root), ["usb:020,007"])
+        (a / "speed").write_text("480\n")
+        info = dual.nikon_usb_info(root)
+        self.assertEqual(info["usb:020,007"]["speed"], "USB2 480 Mb/s")
+        row = {"port": "usb:020,007", "model": "D800"}
+        dual.attach_usb_speed([row], root)
+        self.assertEqual(row["usb_speed"], "USB2 480 Mb/s")
+        self.assertEqual(dual.format_usb_speed("5000"), "USB3 5 Gb/s")
+        self.assertEqual(dual.format_usb_speed("10000"), "USB3.1 10 Gb/s")
         c = root / "2-1:1.0"
         c.mkdir()
         (c / "idVendor").write_text("04b0\n")
@@ -716,6 +724,11 @@ class Pano(unittest.TestCase):
         self.assertEqual(stamps[0], "20260913_150000")
         self.assertEqual(stamps[1], "20260101_120000")
 
+    def test_size_identify_with_limits(self):
+        path = self.root / "T_20260101_120000.jpg"
+        self._jpeg(path.name, "red")
+        self.assertEqual(pano._size(path), (40, 20))
+
     def test_stitch_width(self):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")
@@ -737,6 +750,16 @@ class Pano(unittest.TestCase):
         )
         self.assertEqual(info["width"], 70)
         self.assertEqual(info["height"], 20)
+        dest = self.root / "P_20260101_120000.jpg"
+
+        def chan(x, ch):
+            return float(subprocess.check_output(
+                ["magick", str(dest), "-format", f"%[fx:p{{{x},10}}.{ch}]", "info:"],
+            ))
+
+        # flopped-off: R left (blue), T right (red)
+        self.assertGreater(chan(5, "b"), 0.7)
+        self.assertGreater(chan(65, "r"), 0.7)
 
     def test_open_import(self):
         pano._venv_site()
@@ -755,11 +778,11 @@ class Pano(unittest.TestCase):
             check=True, capture_output=True,
         )
         subprocess.run(
-            ["magick", str(full), "-crop", "80x40+0+0", "+repage", str(t)],
+            ["magick", str(full), "-crop", "80x40+56+0", "+repage", str(t)],
             check=True, capture_output=True,
         )
         subprocess.run(
-            ["magick", str(full), "-crop", "80x40+56+0", "+repage", str(r)],
+            ["magick", str(full), "-crop", "80x40+0+0", "+repage", str(r)],
             check=True, capture_output=True,
         )
         found = pano.find_overlap(t, r, try_flip=False)
@@ -852,18 +875,19 @@ class Pano(unittest.TestCase):
         r = self.root / "r_bal.jpg"
         # Unique halves disagree (T bright, R dark) but the 20% overlap is
         # T gray vs R brighter — full-frame scale would go the wrong way.
+        # R is left (unique then overlap), T is right (overlap then unique).
         subprocess.run(
             [
-                "magick", "(", "-size", "80x40", "xc:#999999", ")",
-                "(", "-size", "20x40", "xc:#4d4d4d", ")",
+                "magick", "(", "-size", "20x40", "xc:#4d4d4d", ")",
+                "(", "-size", "80x40", "xc:#999999", ")",
                 "+append", str(t),
             ],
             check=True, capture_output=True,
         )
         subprocess.run(
             [
-                "magick", "(", "-size", "20x40", "xc:#808080", ")",
-                "(", "-size", "80x40", "xc:#333333", ")",
+                "magick", "(", "-size", "80x40", "xc:#333333", ")",
+                "(", "-size", "20x40", "xc:#808080", ")",
                 "+append", str(r),
             ],
             check=True, capture_output=True,

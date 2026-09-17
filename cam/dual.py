@@ -416,12 +416,80 @@ def detect_bodies(timeout=120):
         rows[0]["serial"] = _read_serial(rows[0])
     _apply_roles(rows)
     seat_open_roles(rows, persist=True)
+    attach_usb_speed(rows)
     _last_detect = rows
     return rows
 
 
 NIKON_USB_VID = "04b0"
 USB_SYS = Path("/sys/bus/usb/devices")
+
+
+def format_usb_speed(raw):
+    """Human USB link from sysfs `speed` (Mb/s)."""
+    try:
+        mbps = float(str(raw).strip())
+    except (TypeError, ValueError):
+        return ""
+    if mbps <= 0:
+        return ""
+    if mbps >= 1000:
+        gb = mbps / 1000.0
+        gb_s = str(int(gb)) if abs(gb - int(gb)) < 0.05 else f"{gb:g}"
+        if mbps >= 20000:
+            tag = "USB3.2"
+        elif mbps >= 10000:
+            tag = "USB3.1"
+        else:
+            tag = "USB3"
+        return f"{tag} {gb_s} Gb/s"
+    if mbps >= 480:
+        return "USB2 480 Mb/s"
+    if mbps >= 12:
+        return "USB1.1 12 Mb/s"
+    return f"USB {mbps:g} Mb/s"
+
+
+def nikon_usb_info(root=None):
+    """Nikon PTP devices: gphoto port → {speed, speed_mbps}. None if no sysfs."""
+    base = Path(root) if root is not None else USB_SYS
+    if not base.is_dir():
+        return None
+    out = {}
+    for node in base.iterdir():
+        try:
+            vid = (node / "idVendor").read_text().strip().lower()
+            if vid != NIKON_USB_VID:
+                continue
+            bus = int((node / "busnum").read_text().strip())
+            dev = int((node / "devnum").read_text().strip())
+            speed_raw = ""
+            sp = node / "speed"
+            if sp.is_file():
+                speed_raw = sp.read_text().strip()
+        except (OSError, ValueError):
+            continue
+        port = f"usb:{bus:03d},{dev:03d}"
+        mbps = None
+        try:
+            mbps = float(speed_raw) if speed_raw else None
+        except ValueError:
+            mbps = None
+        out[port] = {"speed": format_usb_speed(speed_raw), "speed_mbps": mbps}
+    return out
+
+
+def attach_usb_speed(rows, root=None):
+    info = nikon_usb_info(root)
+    if not info:
+        return rows
+    for row in rows or []:
+        meta = info.get(row.get("port") or "")
+        if not meta:
+            continue
+        row["usb_speed"] = meta["speed"]
+        row["usb_mbps"] = meta["speed_mbps"]
+    return rows
 
 
 def parse_lsusb(text):
@@ -445,19 +513,9 @@ def nikon_usb_ports(root=None):
     Returns None when this host cannot list USB without touching PTP.
     """
     base = Path(root) if root is not None else USB_SYS
-    if base.is_dir():
-        ports = []
-        for node in base.iterdir():
-            try:
-                vid = (node / "idVendor").read_text().strip().lower()
-                if vid != NIKON_USB_VID:
-                    continue
-                bus = int((node / "busnum").read_text().strip())
-                dev = int((node / "devnum").read_text().strip())
-            except (OSError, ValueError):
-                continue
-            ports.append(f"usb:{bus:03d},{dev:03d}")
-        return sorted(set(ports))
+    info = nikon_usb_info(base if root is not None else None)
+    if info is not None:
+        return sorted(info)
     try:
         out = subprocess.check_output(["lsusb"], timeout=2, text=True)
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
@@ -484,6 +542,7 @@ def detect_bodies_cached(timeout=120):
             rows.append(item)
         _apply_roles(rows)
         seat_open_roles(rows, persist=True)
+        attach_usb_speed(rows)
         return rows
     return detect_bodies(timeout=timeout)
 
