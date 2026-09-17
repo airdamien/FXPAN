@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -338,6 +339,7 @@ def list_pairs(root=None):
         if m:
             panos[m.group(1)] = path.name
     stamps = set(sides) | set(panos)
+    locked = protected_set(root)
     rows = []
     for stamp in stamps:
         have = sides.get(stamp) or {}
@@ -347,13 +349,101 @@ def list_pairs(root=None):
                 "t": have.get("T"),
                 "r": have.get("R"),
                 "pano": panos.get(stamp),
+                "pano_mtime": _mtime(root / panos[stamp]) if panos.get(stamp) else 0,
                 "ready": bool(have.get("T") and have.get("R")),
+                "protected": stamp in locked,
                 "exif": pair_exif(root, stamp, have),
                 "stitch": _stitch_of(root, stamp),
             }
         )
     rows.sort(key=lambda row: row["stamp"], reverse=True)
     return rows
+
+
+def disk_stats(root=None):
+    """Free space on the captures volume and a rough remaining-set count."""
+    root = Path(root or CAPTURES)
+    root.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(root)
+    sizes = []
+    if root.is_dir():
+        by_stamp = {}
+        for path in root.iterdir():
+            if not path.is_file() or path.suffix.lower() not in (".jpg", ".jpeg"):
+                continue
+            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
+            if not m:
+                continue
+            stamp = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
+            by_stamp.setdefault(stamp, 0)
+            try:
+                by_stamp[stamp] += path.stat().st_size
+            except OSError:
+                pass
+        sizes = [n for n in by_stamp.values() if n > 0]
+    avg = int(sorted(sizes)[len(sizes) // 2]) if sizes else 0
+    if not avg:
+        avg = 14_000_000
+    shots = int(usage.free // avg) if avg else 0
+    return {
+        "total": usage.total,
+        "used": usage.used,
+        "free": usage.free,
+        "avg_set": avg,
+        "sets": len(sizes),
+        "shots": shots,
+    }
+
+
+def _protect_path(root):
+    return Path(root or CAPTURES) / "protected.json"
+
+
+def protected_set(root=None):
+    path = _protect_path(root)
+    if not path.is_file():
+        return set()
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if isinstance(data, dict):
+        data = data.get("stamps") or []
+    if not isinstance(data, list):
+        return set()
+    return {str(s) for s in data if s and "/" not in str(s) and ".." not in str(s)}
+
+
+def set_protected(stamp, on, root=None):
+    if not stamp or "/" in stamp or ".." in stamp:
+        raise dual.CamError("bad stamp")
+    root = Path(root or CAPTURES)
+    stamps = protected_set(root)
+    if on:
+        stamps.add(stamp)
+    else:
+        stamps.discard(stamp)
+    path = _protect_path(root)
+    if stamps:
+        path.write_text(json.dumps(sorted(stamps), indent=2) + "\n")
+    elif path.is_file():
+        path.unlink()
+    return {"stamp": stamp, "protected": stamp in stamps}
+
+
+def _prune_protected(root, stamp):
+    left = False
+    if Path(root).is_dir():
+        for path in Path(root).iterdir():
+            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
+            if not m:
+                continue
+            got = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
+            if got == stamp:
+                left = True
+                break
+    if not left:
+        set_protected(stamp, False, root)
 
 
 def resolve(name, root=None):
@@ -375,6 +465,13 @@ def content_type(path):
     raise dual.CamError("not an image")
 
 
+def _mtime(path):
+    try:
+        return int(Path(path).stat().st_mtime)
+    except OSError:
+        return 0
+
+
 def thumb(name, width, root=None):
     root = Path(root or CAPTURES)
     src = resolve(name, root)
@@ -384,7 +481,13 @@ def thumb(name, width, root=None):
     dest = dest_dir / f"{width}_{src.name}"
     if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
         return dest
-    _magick([str(src), "-thumbnail", f"{width}x{width}", "-quality", "70", str(dest)])
+    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+    try:
+        _magick([str(src), "-thumbnail", f"{width}x{width}", "-quality", "70", str(tmp)])
+        tmp.replace(dest)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
     return dest
 
 
@@ -552,8 +655,96 @@ def _mean(path):
     return float(_magick(["identify", "-format", "%[fx:mean]", str(path)]))
 
 
+def _overlap_scale(t_path, r_path, overlap=OVERLAP):
+    """T-east / R-west strip mean. Paths must already be oriented (R flopped if needed).
+
+    Full-frame means are the wrong signal on a hybrid pano: T and R see different
+    halves of the scene, so a dark unique half on T and a bright unique half on R
+    drive the scale the wrong way. The designed overlap is the same object.
+    """
+    overlap = float(overlap)
+    w, h = _size(t_path)
+    ol = max(1, min(w - 1, int(round(w * overlap))))
+    x = w - ol
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _magick([
+            str(t_path), "-colorspace", "sRGB",
+            "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "tol.png"),
+        ])
+        _magick([
+            str(r_path), "-colorspace", "sRGB",
+            "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "rol.png"),
+        ])
+        t_m, r_m = _mean(tmp / "tol.png"), _mean(tmp / "rol.png")
+    if r_m <= 0.02 or t_m <= 0.02:
+        return None
+    return t_m / r_m
+
+
+def _balance_r(t_path, r_path, dest, overlap=OVERLAP, on_log=None):
+    """Scale R so the overlap strip matches T. Returns the path to use for R."""
+    scale = _overlap_scale(t_path, r_path, overlap)
+    if scale is None:
+        return Path(r_path)
+    if abs(scale - 1) <= 0.03:
+        return Path(r_path)
+    if not (0.40 <= scale <= 2.50):
+        if on_log:
+            on_log(f"balance skip R ×{scale:.2f} (overlap too different)")
+        return Path(r_path)
+    dest = Path(dest)
+    if on_log:
+        on_log(f"balance R ×{scale:.2f} (overlap)")
+    _magick([str(r_path), "-evaluate", "multiply", f"{scale:.4f}", str(dest)])
+    return dest
+
+
+def _match_seam_img(img):
+    """Scale the right side so soldermask near the seam matches the left."""
+    import numpy as np
+    import cv2
+
+    if img is None or getattr(img, "size", 0) == 0:
+        return img, ""
+    h, w = img.shape[:2]
+    if w < 400 or h < 80:
+        return img, ""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    y0, y1 = int(h * 0.22), int(h * 0.78)
+    left = gray[y0:y1, int(w * 0.40):int(w * 0.47)].astype(np.float32).ravel()
+    right = gray[y0:y1, int(w * 0.53):int(w * 0.60)].astype(np.float32).ravel()
+    if left.size < 80 or right.size < 80:
+        return img, ""
+
+    def ink(flat):
+        cut = np.percentile(flat, 45)
+        dark = flat[flat <= cut]
+        return float(np.median(dark if dark.size else flat))
+
+    lo, ro = ink(left), ink(right)
+    if lo < 6 or ro < 6:
+        return img, ""
+    scale = lo / ro
+    if not (0.55 <= scale <= 1.70) or abs(scale - 1) < 0.02:
+        return img, ""
+    seam = int(w * 0.50)
+    ramp = max(40, w // 80)
+    xs = np.arange(w, dtype=np.float32)
+    t = np.clip((xs - (seam - ramp)) / (2.0 * ramp), 0.0, 1.0)
+    gain = 1.0 + (scale - 1.0) * t
+    out = img.astype(np.float32)
+    if out.ndim == 3:
+        out *= gain[None, :, None]
+    else:
+        out *= gain[None, :]
+    np.clip(out, 0, 255, out)
+    return out.astype(np.uint8), f"balance seam ×{scale:.2f}"
+
+
 def stitch_files(
     t_path, r_path, dest, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, on_log=None,
+    balance=True,
 ):
     def log(msg):
         if on_log:
@@ -588,17 +779,10 @@ def stitch_files(
         _magick(args + [str(r_use)])
         t_use = tmp / "t.jpg"
         _magick([str(t_path), "-colorspace", "sRGB", str(t_use)])
+        if balance:
+            r_use = _balance_r(t_use, r_use, tmp / "r_bal.jpg", overlap, on_log=log)
         _magick([str(t_use), "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "tol.png")])
         _magick([str(r_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "rol.png")])
-        t_m, r_m = _mean(tmp / "tol.png"), _mean(tmp / "rol.png")
-        if r_m > 0.02 and t_m > 0.02:
-            scale = t_m / r_m
-            if 0.85 <= scale <= 1.18 and abs(scale - 1) > 0.03:
-                log(f"expose R ×{scale:.2f}")
-                _magick([str(r_use), "-evaluate", "multiply", f"{scale:.4f}", str(r_use)])
-                _magick([str(r_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "rol.png")])
-            elif abs(scale - 1) > 0.03:
-                log(f"expose skip R ×{scale:.2f} (overlap too different)")
         if mode == "cut":
             keep = w - ol + ol // 2
             take = w - (ol - ol // 2)
@@ -616,17 +800,17 @@ def stitch_files(
             )
             _magick(
                 [
-                    "-background",
-                    "black",
+                    "-size",
+                    f"{out_w}x{out_h}",
+                    "xc:black",
                     str(tmp / "tcut.png"),
-                    "-repage",
+                    "-geometry",
                     f"+0+{ty}",
+                    "-composite",
                     str(tmp / "rcut.png"),
-                    "-repage",
+                    "-geometry",
                     f"+{keep}+{ry}",
-                    "-layers",
-                    "merge",
-                    "+repage",
+                    "-composite",
                     "-quality",
                     "92",
                     str(dest),
@@ -722,6 +906,8 @@ def delete_stamp(stamp, root=None, sides=None):
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
     root = Path(root or CAPTURES)
+    if stamp in protected_set(root):
+        raise dual.CamError("protected  unlock first")
     want = {s.upper() for s in sides} if sides else {"T", "R", "P"}
     if not want.issubset({"T", "R", "P"}):
         raise dual.CamError("side is T, R, or P")
@@ -744,8 +930,11 @@ def delete_stamp(stamp, root=None, sides=None):
     left = False
     if root.is_dir():
         for path in root.iterdir():
-            m = PAIR_RE.match(path.name)
-            if m and m.group(2) == stamp:
+            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
+            if not m:
+                continue
+            got = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
+            if got == stamp:
                 left = True
                 break
     if not left:
@@ -753,18 +942,24 @@ def delete_stamp(stamp, root=None, sides=None):
         if extra.is_file():
             extra.unlink()
             count += 1
+        _prune_protected(root, stamp)
     return {"stamp": stamp, "removed": names, "count": count}
 
 
 def delete_before_today(root=None, today=None):
     today = today or date.today().strftime("%Y%m%d")
     removed = []
+    skipped = []
     for row in list_pairs(root):
         day = stamp_day(row["stamp"])
-        if day and day < today:
-            delete_stamp(row["stamp"], root)
-            removed.append(row["stamp"])
-    return {"today": today, "removed": removed, "count": len(removed)}
+        if not day or day >= today:
+            continue
+        if row.get("protected"):
+            skipped.append(row["stamp"])
+            continue
+        delete_stamp(row["stamp"], root)
+        removed.append(row["stamp"])
+    return {"today": today, "removed": removed, "skipped": skipped, "count": len(removed)}
 
 
 def keep_last(n=5, root=None):
@@ -779,13 +974,29 @@ def keep_last(n=5, root=None):
         key=lambda row: (1 if stamp_day(row["stamp"]) else 0, row["stamp"]),
         reverse=True,
     )
-    keep = rows[:n]
-    drop = rows[n:]
+    unlocked = [row for row in rows if not row.get("protected")]
+    keep = unlocked[:n]
+    drop = unlocked[n:]
     removed = []
     for row in drop:
         delete_stamp(row["stamp"], root)
         removed.append(row["stamp"])
-    return {"kept": [row["stamp"] for row in keep], "removed": removed, "count": len(removed)}
+    kept = [row["stamp"] for row in keep] + [
+        row["stamp"] for row in rows if row.get("protected")
+    ]
+    return {"kept": kept, "removed": removed, "count": len(removed)}
+
+
+def delete_unprotected(root=None):
+    removed = []
+    skipped = []
+    for row in list_pairs(root):
+        if row.get("protected"):
+            skipped.append(row["stamp"])
+            continue
+        delete_stamp(row["stamp"], root)
+        removed.append(row["stamp"])
+    return {"removed": removed, "skipped": skipped, "count": len(removed)}
 
 
 def subtract_ghost(src, dest, dx, dy, gain):
@@ -806,8 +1017,12 @@ def subtract_ghost(src, dest, dx, dy, gain):
     ])
 
 
-def estimate_plate_ghost(path):
-    """S2 ghost ≈ gain × shifted copy. None if the copy is too weak to trust."""
+def estimate_plate_ghost(path, tag="R"):
+    """S2 ghost ≈ gain × shifted copy. None if the copy is too weak to trust.
+
+    R sees the uncoated-S2 bounce more strongly. T still gets a weaker internal
+    reflection; search a lower gain floor for that path.
+    """
     _venv_site()
     try:
         import cv2
@@ -828,9 +1043,14 @@ def estimate_plate_ghost(path):
     inner = hp[pad:-pad, pad:-pad]
     best = None
     dy_hi = 4 if scale > 1 else 6
-    # S2 walk-off is tens of pixels, not a neighboring footprint or pad pitch.
-    dx_hi = 14 if scale > 1 else 50
-    dx_lo = 3 if scale > 1 else 8
+    if str(tag).upper() == "T":
+        gain_lo, gain_hi = 0.012, 0.10
+        dx_hi = 18 if scale > 1 else 64
+        dx_lo = 2 if scale > 1 else 6
+    else:
+        gain_lo, gain_hi = 0.03, 0.10
+        dx_hi = 14 if scale > 1 else 50
+        dx_lo = 3 if scale > 1 else 8
     for dy in range(-dy_hi, dy_hi + 1):
         for dx in list(range(-dx_hi, -dx_lo)) + list(range(dx_lo, dx_hi + 1)):
             rolled = np.roll(np.roll(small, dy, 0), dx, 1)
@@ -839,7 +1059,7 @@ def estimate_plate_ghost(path):
             gain = float(np.dot(base.ravel(), shb.ravel())) / (
                 float(np.dot(shb.ravel(), shb.ravel())) + 1e-6
             )
-            if not (0.03 <= gain <= 0.10):
+            if not (gain_lo <= gain <= gain_hi):
                 continue
             if best is None or gain > best[0]:
                 best = (gain, dx, dy)
@@ -861,7 +1081,7 @@ def estimate_plate_ghost(path):
 
 
 def _deghost_path(path, tmp, tag, on_log=None):
-    info = estimate_plate_ghost(path)
+    info = estimate_plate_ghost(path, tag=tag)
     if not info:
         return path, None
     dest = Path(tmp) / f"{tag}.jpg"
@@ -874,7 +1094,8 @@ def _deghost_path(path, tmp, tag, on_log=None):
     return dest, info
 
 
-def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
+def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
+                balance=True, overlap=OVERLAP):
     """Feature-match stitch via OpenStitching (OpenCV). https://github.com/OpenStitching/stitching"""
     def log(msg):
         if on_log:
@@ -908,15 +1129,24 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
                 log("OpenStitching  R flopped")
             else:
                 log("OpenStitching  R as-shot")
+            # Affine default is compensator=no. Gain uses the warped overlap.
+            comp = "channel" if balance else "no"
+            if balance:
+                log("balance OpenStitching channel (warped overlap)")
             for name, cls in (("affine", AffineStitcher), ("pano", Stitcher)):
                 log(f"OpenStitching  {name} sift")
                 try:
                     stitcher = cls(
                         detector="sift", nfeatures=2000, confidence_threshold=0.2,
+                        compensator=comp, nr_feeds=3 if balance else 1,
                     )
                     img = stitcher.stitch([str(t_path), str(r_use)])
                     if img is None or getattr(img, "size", 0) == 0:
                         raise StitchingError("empty panorama")
+                    if balance:
+                        img, note = _match_seam_img(img)
+                        if note:
+                            log(note)
                     if not cv2.imwrite(
                         str(dest), img, [int(cv2.IMWRITE_JPEG_QUALITY), 92]
                     ):
@@ -947,7 +1177,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
-    deghost=False,
+    deghost=False, balance=True,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -969,6 +1199,7 @@ def stitch_stamp(
             info = stitch_open(
                 t_path, r_path, dest,
                 flip_r=flip_r, try_both=not flip_r, on_log=on_log,
+                balance=balance, overlap=overlap,
             )
             info["stamp"] = stamp
             info["mode"] = "open"
@@ -1006,6 +1237,7 @@ def stitch_stamp(
         info = stitch_files(
             t_path, r_path, dest,
             overlap=overlap, flip_r=flip_r, mode=mode, dy=dy, on_log=on_log,
+            balance=balance,
         )
         info["stamp"] = stamp
         info["mode"] = requested
@@ -1085,6 +1317,7 @@ def _run_item(item):
             stamp, overlap=item["overlap"], flip_r=item["flip_r"],
             mode=item["mode"], root=item.get("root"), on_log=on_log,
             deghost=item.get("deghost", False),
+            balance=item.get("balance", True),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -1117,7 +1350,7 @@ def _kick_queue():
 
 
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
-                 deghost=False):
+                 deghost=False, balance=True):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
@@ -1126,7 +1359,7 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
         raise dual.CamError("mode is match, blend, cut, or open")
     item = {
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
-        "root": root, "deghost": bool(deghost),
+        "root": root, "deghost": bool(deghost), "balance": bool(balance),
     }
     with _queue_lock:
         live = job_get(stamp)

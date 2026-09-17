@@ -103,6 +103,7 @@ start_chrome() {
         --password-store=basic \
         --check-for-update-interval=31536000 \
         --autoplay-policy=no-user-gesture-required \
+        --disable-features=OverlayScrollbar \
         --renderer-process-limit=4 \
         "$URL" 9>&- &
     j=0

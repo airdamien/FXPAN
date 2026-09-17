@@ -34,6 +34,7 @@ class Link:
         self._extras = []
         self._gone_since = {}
         self._hud_at = 0.0
+        self._idle = False
 
     def start(self):
         if self._th and self._th.is_alive():
@@ -106,6 +107,7 @@ class Link:
             "missing": missing,
             "message": msg,
             "status": hud,
+            "idle": self._idle,
         }
 
     def have(self):
@@ -147,6 +149,8 @@ class Link:
     def set_live(self, on):
         was = self.want_live
         self.want_live = bool(on)
+        if on:
+            self._idle = False
         self._fail = 0
         self._fail_n = {}
         self._kick.set()
@@ -155,6 +159,13 @@ class Link:
         self.live.stop()
         if was:
             self._refresh_hud()
+
+    def set_idle(self, on):
+        self._idle = bool(on)
+        if self._idle:
+            self.want_live = False
+            self.live.stop()
+        self._kick.set()
 
     @contextmanager
     def usb(self):
@@ -173,7 +184,7 @@ class Link:
     def _loop(self):
         self._boot()
         while not self._stop.is_set():
-            self._kick.wait(1.2)
+            self._kick.wait(8.0 if self._idle else 1.2)
             self._kick.clear()
             if self._stop.is_set():
                 break
@@ -197,6 +208,13 @@ class Link:
                 self._assign = _from_prefs()
             if self._have and self._assign:
                 self._push(self._have)
+            if self._have:
+                try:
+                    info = dual.sync_clocks(self._have)
+                    if info.get("message"):
+                        self._msg = info["message"]
+                except dual.CamError:
+                    pass
             if self.want_live:
                 self._start_live()
             else:
@@ -218,7 +236,7 @@ class Link:
             else:
                 self._drop_gone(ports)
         self._say_bus()
-        if time.time() - self._hud_at > 20:
+        if time.time() - self._hud_at > (120 if self._idle else 20):
             self._refresh_hud()
 
     def _wanted(self):
