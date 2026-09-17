@@ -96,6 +96,7 @@ def _write_sidecar(root, stamp, info):
         for k in (
             "mode", "overlap", "overlap_frac", "dy", "flip_r", "rmse",
             "width", "height", "file", "message", "phase", "error",
+            "deghost",
         )
         if k in info
     }
@@ -377,7 +378,7 @@ def content_type(path):
 def thumb(name, width, root=None):
     root = Path(root or CAPTURES)
     src = resolve(name, root)
-    width = max(80, min(1280, int(width)))
+    width = max(80, min(2560, int(width)))
     dest_dir = root / ".thumbs"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{width}_{src.name}"
@@ -787,6 +788,92 @@ def keep_last(n=5, root=None):
     return {"kept": [row["stamp"] for row in keep], "removed": removed, "count": len(removed)}
 
 
+def subtract_ghost(src, dest, dx, dy, gain):
+    """Subtract a shifted copy: dest ≈ src − gain · roll(src, dx, dy)."""
+    dx, dy = int(dx), int(dy)
+    gain = float(gain)
+    src, dest = Path(src), Path(dest)
+    if (dx == 0 and dy == 0) or gain <= 0:
+        if src.resolve() != dest.resolve():
+            dest.write_bytes(src.read_bytes())
+        return
+    _magick([
+        str(src),
+        "(", str(src), "-roll", f"{dx:+d}{dy:+d}",
+        "-evaluate", "multiply", f"{gain:.4f}", ")",
+        "-compose", "Minus_Src", "-composite",
+        str(dest),
+    ])
+
+
+def estimate_plate_ghost(path):
+    """S2 ghost ≈ gain × shifted copy. None if the copy is too weak to trust."""
+    _venv_site()
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
+    gray = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        return None
+    h, w = gray.shape
+    scale = 4 if min(h, w) >= 400 else 1
+    small = cv2.resize(
+        gray.astype(np.float32), (w // scale, h // scale),
+        interpolation=cv2.INTER_AREA,
+    )
+    hp = small - cv2.GaussianBlur(small, (0, 0), 5)
+    pad = 16 if min(hp.shape) > 48 else 4
+    inner = hp[pad:-pad, pad:-pad]
+    best = None
+    dy_hi = 4 if scale > 1 else 6
+    # S2 walk-off is tens of pixels, not a neighboring footprint or pad pitch.
+    dx_hi = 14 if scale > 1 else 50
+    dx_lo = 3 if scale > 1 else 8
+    for dy in range(-dy_hi, dy_hi + 1):
+        for dx in list(range(-dx_hi, -dx_lo)) + list(range(dx_lo, dx_hi + 1)):
+            rolled = np.roll(np.roll(small, dy, 0), dx, 1)
+            base = small[pad:-pad, pad:-pad]
+            shb = rolled[pad:-pad, pad:-pad]
+            gain = float(np.dot(base.ravel(), shb.ravel())) / (
+                float(np.dot(shb.ravel(), shb.ravel())) + 1e-6
+            )
+            if not (0.03 <= gain <= 0.10):
+                continue
+            if best is None or gain > best[0]:
+                best = (gain, dx, dy)
+    if not best:
+        return None
+    gain, dx_s, dy_s = best
+    sh2 = np.roll(np.roll(hp, 2 * dy_s, 0), 2 * dx_s, 1)[pad:-pad, pad:-pad]
+    den2 = float(np.dot(sh2.ravel(), sh2.ravel())) + 1e-6
+    gain2 = float(np.dot(inner.ravel(), sh2.ravel())) / den2
+    sh1 = np.roll(np.roll(hp, dy_s, 0), dx_s, 1)[pad:-pad, pad:-pad]
+    den1 = float(np.dot(sh1.ravel(), sh1.ravel())) + 1e-6
+    g_hp = float(np.dot(inner.ravel(), sh1.ravel())) / den1
+    if g_hp > 0 and gain2 > 0.45 * g_hp:
+        return None
+    return {
+        "dx": int(dx_s * scale), "dy": int(dy_s * scale),
+        "gain": round(float(gain), 4),
+    }
+
+
+def _deghost_path(path, tmp, tag, on_log=None):
+    info = estimate_plate_ghost(path)
+    if not info:
+        return path, None
+    dest = Path(tmp) / f"{tag}.jpg"
+    subtract_ghost(path, dest, info["dx"], info["dy"], info["gain"])
+    if on_log:
+        on_log(
+            f"deghost {tag}  dx={info['dx']:+d} dy={info['dy']:+d} "
+            f"gain={info['gain']:.3f}"
+        )
+    return dest, info
+
+
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
     """Feature-match stitch via OpenStitching (OpenCV). https://github.com/OpenStitching/stitching"""
     def log(msg):
@@ -860,6 +947,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None):
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
+    deghost=False,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -869,61 +957,72 @@ def stitch_stamp(
         raise dual.CamError("mode is match, blend, cut, or open")
     requested = mode
     found = None
-    if mode == "open":
-        if on_log:
-            on_log("OpenStitching SIFT  https://github.com/OpenStitching/stitching")
-        info = stitch_open(
+    ghost = {}
+    tmp_ghost = tempfile.TemporaryDirectory() if deghost else None
+    try:
+        if tmp_ghost:
+            t_path, ghost["T"] = _deghost_path(t_path, tmp_ghost.name, "T", on_log)
+            r_path, ghost["R"] = _deghost_path(r_path, tmp_ghost.name, "R", on_log)
+        if mode == "open":
+            if on_log:
+                on_log("OpenStitching SIFT  https://github.com/OpenStitching/stitching")
+            info = stitch_open(
+                t_path, r_path, dest,
+                flip_r=flip_r, try_both=not flip_r, on_log=on_log,
+            )
+            info["stamp"] = stamp
+            info["mode"] = "open"
+            info["phase"] = "done"
+            info["error"] = ""
+            info["deghost"] = {k: v for k, v in ghost.items() if v}
+            info["message"] = (
+                f"open  {info.get('engine', '')}  "
+                f"flip={'on' if info.get('flip_r') else 'off'}  "
+                f"{info['width']}×{info['height']}"
+            )
+            _write_sidecar(root, stamp, info)
+            return info
+        if mode == "match":
+            if on_log:
+                on_log("match overlap + vertical + flop")
+            found = find_overlap(t_path, r_path, try_flip=True, on_log=on_log)
+            if found["rmse"] > 0.42:
+                if on_log:
+                    on_log(
+                        f"match weak ({found['rmse']:.2f}) — keep ol={overlap:.0%} "
+                        f"flip={'on' if flip_r else 'off'}"
+                    )
+            else:
+                overlap = found["overlap"]
+                flip_r = found["flip_r"]
+                tw, _ = _size(t_path)
+                dy = int(round(found["dy"] * (tw / WORK)))
+                if on_log:
+                    on_log(
+                        f"best ol={overlap:.0%} dy={dy:+d} "
+                        f"flip={'on' if flip_r else 'off'}  {found['rmse']:.1f}"
+                    )
+            mode = "blend"
+        info = stitch_files(
             t_path, r_path, dest,
-            flip_r=flip_r, try_both=not flip_r, on_log=on_log,
+            overlap=overlap, flip_r=flip_r, mode=mode, dy=dy, on_log=on_log,
         )
         info["stamp"] = stamp
-        info["mode"] = "open"
+        info["mode"] = requested
         info["phase"] = "done"
         info["error"] = ""
+        info["deghost"] = {k: v for k, v in ghost.items() if v}
+        if found:
+            info["rmse"] = round(found["rmse"], 2)
         info["message"] = (
-            f"open  {info.get('engine', '')}  "
-            f"flip={'on' if info.get('flip_r') else 'off'}  "
-            f"{info['width']}×{info['height']}"
+            f"{info['mode']}  ol={info['overlap_frac']:.0%}  dy={info['dy']:+d}  "
+            f"flip={'on' if info['flip_r'] else 'off'}  {info['width']}×{info['height']}"
         )
         _write_sidecar(root, stamp, info)
         return info
-    if mode == "match":
-        if on_log:
-            on_log("match overlap + vertical + flop")
-        found = find_overlap(t_path, r_path, try_flip=True, on_log=on_log)
-        if found["rmse"] > 0.42:
-            if on_log:
-                on_log(
-                    f"match weak ({found['rmse']:.2f}) — keep ol={overlap:.0%} "
-                    f"flip={'on' if flip_r else 'off'}"
-                )
-        else:
-            overlap = found["overlap"]
-            flip_r = found["flip_r"]
-            tw, _ = _size(t_path)
-            dy = int(round(found["dy"] * (tw / WORK)))
-            if on_log:
-                on_log(
-                    f"best ol={overlap:.0%} dy={dy:+d} "
-                    f"flip={'on' if flip_r else 'off'}  {found['rmse']:.1f}"
-                )
-        mode = "blend"
-    info = stitch_files(
-        t_path, r_path, dest,
-        overlap=overlap, flip_r=flip_r, mode=mode, dy=dy, on_log=on_log,
-    )
-    info["stamp"] = stamp
-    info["mode"] = requested
-    info["phase"] = "done"
-    info["error"] = ""
-    if found:
-        info["rmse"] = round(found["rmse"], 2)
-    info["message"] = (
-        f"{info['mode']}  ol={info['overlap_frac']:.0%}  dy={info['dy']:+d}  "
-        f"flip={'on' if info['flip_r'] else 'off'}  {info['width']}×{info['height']}"
-    )
-    _write_sidecar(root, stamp, info)
-    return info
+    finally:
+        if tmp_ghost:
+            tmp_ghost.cleanup()
 
 
 def queue_status():
@@ -985,6 +1084,7 @@ def _run_item(item):
         info = stitch_stamp(
             stamp, overlap=item["overlap"], flip_r=item["flip_r"],
             mode=item["mode"], root=item.get("root"), on_log=on_log,
+            deghost=item.get("deghost", False),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -1016,7 +1116,8 @@ def _kick_queue():
     threading.Thread(target=_run_item, args=(item,), name=f"pano-{item['stamp']}", daemon=True).start()
 
 
-def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None):
+def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
+                 deghost=False):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
@@ -1024,7 +1125,8 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None):
     if mode not in MODES:
         raise dual.CamError("mode is match, blend, cut, or open")
     item = {
-        "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode, "root": root,
+        "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
+        "root": root, "deghost": bool(deghost),
     }
     with _queue_lock:
         live = job_get(stamp)

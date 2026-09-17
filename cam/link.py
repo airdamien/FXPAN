@@ -28,6 +28,12 @@ class Link:
         self._fail = 0
         self._topo = None
         self._spawn_wait = {}
+        self._hud = {}
+        self._fail_n = {}
+        self._probe_at = 0.0
+        self._extras = []
+        self._gone_since = {}
+        self._hud_at = 0.0
 
     def start(self):
         if self._th and self._th.is_alive():
@@ -45,6 +51,23 @@ class Link:
     def remember(self, assignments):
         self._assign = list(assignments or [])
 
+    def set_hud(self, blocks):
+        pair = dual.load_pair()
+        serial_role = {serial: role for role, serial in pair.items()}
+        hud = {}
+        for block in blocks or []:
+            role = block.get("role")
+            if role not in ROLES:
+                sn = (block.get("serial") or block.get("serialnumber") or "").strip()
+                role = serial_role.get(sn, "")
+            if role not in ROLES:
+                continue
+            row = dict(block)
+            row["role"] = role
+            hud[role] = row
+        with self._lock:
+            self._hud.update(hud)
+
     def snapshot(self):
         pair = dual.load_pair()
         live = self.live.snapshot()
@@ -53,6 +76,8 @@ class Link:
             have = dict(self._have)
             msg = self._msg
             busy = self._busy
+            hud = {role: dict(row) for role, row in self._hud.items()}
+            extras = [dict(row) for row in self._extras]
         for role in ROLES:
             row = have.get(role) or {}
             info = (live.get("roles") or {}).get(role) or {}
@@ -77,8 +102,10 @@ class Link:
             "busy": busy > 0,
             "running": bool(live.get("running")),
             "roles": roles,
+            "extras": extras,
             "missing": missing,
             "message": msg,
+            "status": hud,
         }
 
     def have(self):
@@ -87,11 +114,16 @@ class Link:
         return got
 
     def absorb(self, rows):
+        rows = list(rows or [])
+        dual.seat_open_roles(rows, persist=True)
         have = {}
-        for row in rows or []:
+        extras = []
+        for row in rows:
             role = (row or {}).get("role")
             if role in ROLES and row.get("port"):
                 have[role] = dict(row)
+            elif (row or {}).get("port"):
+                extras.append(dict(row))
         if not have:
             try:
                 have = dict(dual.require_online(list(rows or [])))
@@ -99,18 +131,30 @@ class Link:
                 have = {}
         with self._lock:
             self._have = have
+            self._extras = extras
+        self._fail_n = {}
         self._say_bus()
         return have
+
+    def rebind(self):
+        """Re-read USB and map T/R from cameras.json serials."""
+        rows = dual.detect_bodies()
+        return self.absorb(rows)
 
     def refresh(self):
         return self._scan()
 
     def set_live(self, on):
+        was = self.want_live
         self.want_live = bool(on)
         self._fail = 0
+        self._fail_n = {}
         self._kick.set()
-        if not on:
-            self.live.stop()
+        if on:
+            return
+        self.live.stop()
+        if was:
+            self._refresh_hud()
 
     @contextmanager
     def usb(self):
@@ -123,6 +167,7 @@ class Link:
         finally:
             with self._lock:
                 self._busy = max(0, self._busy - 1)
+            self._fail_n = {}
             self._kick.set()
 
     def _loop(self):
@@ -155,6 +200,7 @@ class Link:
             if self.want_live:
                 self._start_live()
             else:
+                self._refresh_hud()
                 self._say_bus()
         except dual.CamError as exc:
             self._msg = str(exc)
@@ -172,6 +218,8 @@ class Link:
             else:
                 self._drop_gone(ports)
         self._say_bus()
+        if time.time() - self._hud_at > 20:
+            self._refresh_hud()
 
     def _wanted(self):
         pair = dual.load_pair()
@@ -180,11 +228,15 @@ class Link:
 
     def _scan(self):
         rows = dual.detect_bodies_cached(timeout=8)
+        dual.seat_open_roles(rows, persist=True)
         have = {}
+        extras = []
         for row in rows:
             role = row.get("role")
             if role in ROLES and row.get("port"):
                 have[role] = row
+            elif row.get("port"):
+                extras.append(dict(row))
         if not have:
             try:
                 have = dual.require_online(rows)
@@ -194,6 +246,7 @@ class Link:
             before = {role: (self._have.get(role) or {}).get("serial")
                       for role in ROLES}
             self._have = have
+            self._extras = extras
         after = {role: (have.get(role) or {}).get("serial") for role in ROLES}
         for role in ROLES:
             if before[role] and not after[role]:
@@ -216,6 +269,134 @@ class Link:
                 bits.append(f"{role} out")
         self._msg = "  ".join(bits) if bits else "no cameras"
 
+    def _claim_ports(self, ports):
+        """Identify extra Nikon ports by serial. Do not stop a healthy live stream."""
+        added = {}
+        for port in ports:
+            try:
+                row = dual.probe_port(port, timeout=6)
+            except dual.CamError:
+                continue
+            role = row.get("role")
+            if role not in ROLES or not row.get("serial"):
+                continue
+            added[role] = row
+        if not added:
+            extras = []
+            for port in ports:
+                try:
+                    row = dual.probe_port(port, timeout=6)
+                except dual.CamError:
+                    continue
+                if row.get("port") and row.get("role") not in ROLES:
+                    extras.append(row)
+            if extras:
+                with self._lock:
+                    self._extras = extras
+            return {}
+        with self._lock:
+            have = dict(self._have)
+            have.update(added)
+            self._have = have
+        for role in added:
+            self._fail_n.pop(role, None)
+        added_ports = {row.get("port") for row in added.values()}
+        with self._lock:
+            self._extras = [
+                row for row in self._extras if row.get("port") not in added_ports
+            ]
+        self.live.ensure(self.have(), only=list(added))
+        self._say_live()
+        return added
+
+    def _claim_new(self):
+        self.live.stop()
+        time.sleep(0.35)
+        self._scan()
+        if self._have:
+            self._start_live()
+        else:
+            self._msg = "waiting for USB"
+
+    def _tend_live(self):
+        ports = dual.nikon_usb_ports()
+        if ports is not None:
+            have = self._drop_gone(ports)
+            extra = dual.orphan_ports(ports, have)
+            self._topo = tuple(ports)
+            if extra:
+                now = time.time()
+                if now >= self._probe_at:
+                    self._probe_at = now + 5.0
+                    self._claim_ports(extra)
+                have = self.have()
+            if not have:
+                self._claim_new()
+                return
+        have = self.have()
+        if not have:
+            if self.live.snapshot().get("running"):
+                self._say_live()
+                return
+            self._scan()
+            if self._have:
+                self._start_live()
+            else:
+                self._msg = "waiting for USB"
+            return
+        snap = self.live.snapshot()
+        for role, info in (snap.get("roles") or {}).items():
+            if info.get("frames"):
+                self._fail_n[role] = 0
+        dead = self.live.dead_roles(list(have))
+        if dead:
+            now = time.time()
+            retry = []
+            held = []
+            for role in dead:
+                n = self._fail_n.get(role, 0)
+                if n >= 8:
+                    held.append(role)
+                    continue
+                if now < self._spawn_wait.get(role, 0):
+                    continue
+                retry.append(role)
+            if held and not retry:
+                self._msg = "live " + " ".join(
+                    f"{role} gave up" for role in held
+                ) + "  — Detect to retry"
+                return
+            if retry:
+                for role in retry:
+                    n = self._fail_n.get(role, 0)
+                    self._fail_n[role] = n + 1
+                    self._spawn_wait[role] = now + retry_wait(n)
+                self.live.stop_roles(retry)
+                time.sleep(0.45)
+                self.live.ensure(have, only=retry)
+                self._msg = "live retry " + " ".join(retry)
+                return
+        self._say_live()
+
+
+    def _refresh_hud(self, have=None):
+        """Read ISO/battery/etc while PTP is free. Live view owns the bus."""
+        if self.live.snapshot().get("running"):
+            return
+        have = have or self.have()
+        rows = [row for row in have.values() if (row or {}).get("port")]
+        if not rows:
+            return
+        from concurrent.futures import ThreadPoolExecutor
+        try:
+            with ThreadPoolExecutor(max_workers=len(rows)) as pool:
+                blocks = list(pool.map(dual._status_one, rows))
+        except dual.CamError:
+            return
+        if blocks:
+            self.set_hud(blocks)
+            self._hud_at = time.time()
+
     def _push(self, have):
         if not self._assign or not have:
             return
@@ -232,6 +413,7 @@ class Link:
         if not have:
             self._msg = "live: no cameras"
             return
+        self._refresh_hud(have)
         self.live.ensure(have)
         self._say_live()
 
@@ -251,65 +433,37 @@ class Link:
 
     def _drop_gone(self, ports):
         have = self.have()
-        keep = {
-            role: row for role, row in have.items()
-            if row.get("port") in ports
-        }
-        gone = [role for role in have if role not in keep]
-        if not gone:
-            return have
-        self.live.stop_roles(gone)
+        now = time.time()
+        keep = {}
+        drop = []
+        for role, row in have.items():
+            if row.get("port") in ports:
+                self._gone_since.pop(role, None)
+                keep[role] = row
+                continue
+            started = self._gone_since.setdefault(role, now)
+            if now - started < 2.5:
+                keep[role] = row
+            else:
+                drop.append(role)
+        if drop:
+            self.live.stop_roles(drop)
+            for role in drop:
+                self._gone_since.pop(role, None)
+                self._msg = f"{role} USB out"
         with self._lock:
             self._have = keep
-        for role in gone:
-            self._msg = f"{role} USB out"
         return keep
 
-    def _claim_new(self):
-        self.live.stop()
-        time.sleep(0.35)
-        self._scan()
-        if self._have:
-            self._start_live()
-        else:
-            self._msg = "waiting for USB"
 
-    def _tend_live(self):
-        ports = dual.nikon_usb_ports()
-        if ports is not None:
-            key = tuple(ports)
-            have = self._drop_gone(ports)
-            extra = len(ports) > len(have)
-            self._topo = key
-            if extra or not have:
-                self._claim_new()
-                return
-        have = self.have()
-        if not have:
-            if self.live.snapshot().get("running"):
-                self._say_live()
-                return
-            self._scan()
-            if self._have:
-                self._start_live()
-            else:
-                self._msg = "waiting for USB"
-            return
-        dead = self.live.dead_roles(list(have))
-        if dead:
-            now = time.time()
-            retry = [role for role in dead if now >= self._spawn_wait.get(role, 0)]
-            if retry:
-                for role in retry:
-                    self._spawn_wait[role] = now + 2.0
-                self.live.ensure(have)
-                self._msg = "live retry " + " ".join(retry)
-                return
-        self._say_live()
+def retry_wait(fails):
+    return min(30.0, 3.0 * (2 ** min(max(int(fails), 0), 4)))
 
 
 def _from_prefs():
     prefs = settings.load()
+    if prefs.get("follow_cam"):
+        return []
     out = []
     iso = str(prefs.get("iso") or "").strip()
     if iso.lower() == "auto":

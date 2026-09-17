@@ -119,6 +119,61 @@ class Parse(unittest.TestCase):
             dual.config_args([("iso", "400"), ("shutterspeed", "1/125")])[-4:],
             ["--set-config", "iso=400", "--set-config", "shutterspeed=1/125"],
         )
+        packed = dual.pack_assignments([
+            ("isoauto", "Off"), ("autoiso", "Off"), ("iso", "ISO 400"),
+            ("shutterspeed", "1/125"), ("whitebalance", "Auto"),
+        ])
+        self.assertEqual(
+            packed,
+            [
+                ("isoauto", "Off"), ("iso", "400"),
+                ("shutterspeed", "1/125"), ("whitebalance", "Auto"),
+            ],
+        )
+
+    def test_set_one_single_command(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append((port, list(args)))
+            return ""
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        dual._set_one("usb:1", [
+            ("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400"),
+            ("shutterspeed", "1/125"),
+        ])
+        self.assertEqual(len(calls), 1)
+        joined = " ".join(calls[0][1])
+        self.assertIn("isoauto=Off", joined)
+        self.assertIn("iso=400", joined)
+        self.assertIn("shutterspeed=1/125", joined)
+        self.assertNotIn("autoiso", joined)
+
+    def test_capture_one_command(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            return ""
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        dual._gp_capture(
+            "usb:1",
+            ["--capture-image"],
+            [("isoauto", "Off"), ("iso", "400"), ("shutterspeed", "1/125")],
+            10,
+        )
+        self.assertEqual(len(calls), 1)
+        joined = " ".join(calls[0])
+        self.assertIn("viewfinder=0", joined)
+        self.assertIn("iso=400", joined)
+        self.assertIn("shutterspeed=1/125", joined)
+        self.assertIn("--capture-image", joined)
 
     def test_claim_err(self):
         self.assertTrue(dual._claim_fail("Could not claim the USB device"))
@@ -232,6 +287,25 @@ class LiveStart(unittest.TestCase):
         lv._seen["T"] = time.time()
         self.assertEqual(lv.dead_roles(["T"]), [])
 
+    def test_stop_drops_last_jpeg(self):
+        class Dead:
+            def poll(self):
+                return 0
+            def send_signal(self, _sig):
+                pass
+            def wait(self, timeout=None):
+                return 0
+            def kill(self):
+                pass
+
+        lv = live.Live()
+        lv._procs["R"] = Dead()
+        lv._frames["R"] = b"\xff\xd8R\xff\xd9"
+        lv._n["R"] = 9
+        lv.stop_roles(["R"])
+        self.assertIsNone(lv.jpeg("R"))
+        self.assertEqual(lv.running(), {})
+
 
 class UsbBus(unittest.TestCase):
     def test_parse_lsusb(self):
@@ -286,6 +360,126 @@ class LinkKeep(unittest.TestCase):
         with ln.usb():
             self.assertGreater(ln._busy, 0)
         self.assertEqual(ln._busy, 0)
+
+    def test_seat_open_role_is_r(self):
+        path = Path(tempfile.mkdtemp()) / "pair.json"
+        path.write_text(json.dumps({"T": "111"}))
+        old = dual.PAIR_PATH
+        dual.PAIR_PATH = path
+        self.addCleanup(lambda: setattr(dual, "PAIR_PATH", old))
+        rows = [
+            {"role": "T", "serial": "111", "port": "usb:020,007"},
+            {"role": "", "serial": "222", "port": "usb:020,012"},
+        ]
+        dual.seat_open_roles(rows, persist=True)
+        self.assertEqual(rows[1]["role"], "R")
+        self.assertEqual(dual.load_pair(), {"T": "111", "R": "222"})
+
+    def test_absorb_keeps_unpaired_extra(self):
+        pair = Path(tempfile.mkdtemp()) / "pair.json"
+        pair.write_text(json.dumps({"T": "111", "R": "222"}))
+        old = dual.PAIR_PATH
+        dual.PAIR_PATH = pair
+        self.addCleanup(lambda: setattr(dual, "PAIR_PATH", old))
+        ln = link.Link(live.Live())
+        ln.absorb([
+            {"role": "T", "serial": "111", "port": "usb:020,007", "model": "D7000"},
+            {"role": "", "serial": "999", "port": "usb:020,012", "model": "D7000"},
+        ])
+        snap = ln.snapshot()
+        self.assertTrue(snap["roles"]["T"]["online"])
+        self.assertEqual(len(snap["extras"]), 1)
+        self.assertEqual(snap["extras"][0]["serial"], "999")
+
+    def test_drop_gone_waits(self):
+        ln = link.Link(live.Live())
+        ln.absorb([
+            {"role": "T", "serial": "111", "port": "usb:020,007", "model": "D7000"},
+        ])
+        keep = ln._drop_gone(["usb:020,099"])
+        self.assertIn("T", keep)
+        ln._gone_since["T"] = time.time() - 5
+        keep = ln._drop_gone(["usb:020,099"])
+        self.assertNotIn("T", keep)
+
+    def test_orphan_ports_skips_owned(self):
+        have = {"T": {"port": "usb:020,007"}}
+        self.assertEqual(
+            dual.orphan_ports(["usb:020,007", "usb:020,012"], have),
+            ["usb:020,012"],
+        )
+
+    def test_retry_wait_backs_off(self):
+        self.assertEqual(link.retry_wait(0), 3.0)
+        self.assertEqual(link.retry_wait(1), 6.0)
+        self.assertEqual(link.retry_wait(4), 30.0)
+
+    def test_extra_port_does_not_stop_healthy_live(self):
+        pair = Path(tempfile.mkdtemp()) / "pair.json"
+        pair.write_text(json.dumps({"T": "111", "R": "222"}))
+        old_pair = dual.PAIR_PATH
+        dual.PAIR_PATH = pair
+        self.addCleanup(lambda: setattr(dual, "PAIR_PATH", old_pair))
+
+        class FakeLive:
+            def __init__(self):
+                self.stopped = 0
+                self.ensured = []
+
+            def stop(self):
+                self.stopped += 1
+
+            def stop_roles(self, roles):
+                pass
+
+            def snapshot(self):
+                return {
+                    "running": True,
+                    "roles": {"T": {"alive": True, "frames": 12, "port": "usb:020,007"}},
+                }
+
+            def dead_roles(self, wanted):
+                return []
+
+            def ensure(self, have, only=None):
+                self.ensured.append((dict(have), list(only or [])))
+
+        fake = FakeLive()
+        ln = link.Link(fake)
+        ln.absorb([
+            {"role": "T", "serial": "111", "port": "usb:020,007", "model": "D7000"},
+        ])
+        old_ports = dual.nikon_usb_ports
+        old_probe = dual.probe_port
+        dual.nikon_usb_ports = lambda root=None: ["usb:020,007", "usb:020,012"]
+        dual.probe_port = lambda port, timeout=6: {
+            "model": "D7000", "port": port, "serial": "222", "role": "R",
+        }
+        self.addCleanup(lambda: setattr(dual, "nikon_usb_ports", old_ports))
+        self.addCleanup(lambda: setattr(dual, "probe_port", old_probe))
+        ln._tend_live()
+        self.assertEqual(fake.stopped, 0)
+        self.assertEqual(ln.have()["R"]["port"], "usb:020,012")
+        self.assertEqual(fake.ensured[-1][1], ["R"])
+
+    def test_ensure_only_skips_healthy(self):
+        class Alive:
+            def poll(self):
+                return None
+
+        lv = live.Live()
+        lv._procs["T"] = Alive()
+        lv._ports["T"] = "usb:020,007"
+        spawned = []
+        lv._spawn = lambda role, port: spawned.append((role, port))
+        lv.ensure(
+            {
+                "T": {"port": "usb:020,007"},
+                "R": {"port": "usb:020,012"},
+            },
+            only=["R"],
+        )
+        self.assertEqual(spawned, [("R", "usb:020,012")])
 
 
 class Gpio(unittest.TestCase):
@@ -533,6 +727,63 @@ class Pano(unittest.TestCase):
         self.assertLess(found["overlap"], 0.40)
         self.assertLess(abs(found["dy"]), 4)
 
+    def test_subtract_ghost_kills_shifted_copy(self):
+        scene = self.root / "scene.jpg"
+        ghosted = self.root / "ghost.jpg"
+        clean = self.root / "clean.jpg"
+        subprocess.run(
+            [
+                "magick", "-size", "120x40", "xc:black",
+                "-fill", "white", "-draw", "rectangle 70,8 95,32",
+                str(scene),
+            ],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            [
+                "magick", str(scene),
+                "(", str(scene), "-roll", "-25+0", "-evaluate", "multiply", "0.2", ")",
+                "-compose", "plus", "-composite", str(ghosted),
+            ],
+            check=True, capture_output=True,
+        )
+        pano.subtract_ghost(ghosted, clean, -25, 0, 0.2)
+
+        def px(path, x, y):
+            return float(subprocess.check_output(
+                ["magick", str(path), "-format", f"%[fx:p{{{x},{y}}}]", "info:"],
+            ))
+
+        before = px(ghosted, 48, 20)
+        after = px(clean, 48, 20)
+        primary = px(clean, 80, 20)
+        self.assertGreater(before, 0.08)
+        self.assertLess(after, before * 0.45)
+        self.assertGreater(primary, 0.7)
+
+    def test_estimate_plate_ghost(self):
+        pano._venv_site()
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        ghosted = self.root / "ghost.png"
+        subprocess.run(
+            [
+                "magick", "-size", "240x120", "xc:black",
+                "-fill", "white", "-draw", "rectangle 150,40 175,85",
+                "(", "+clone", "-roll", "-28+0", "-evaluate", "multiply", "0.08", ")",
+                "-compose", "plus", "-composite", str(ghosted),
+            ],
+            check=True, capture_output=True,
+        )
+        found = pano.estimate_plate_ghost(ghosted)
+        self.assertIsNotNone(found)
+        self.assertAlmostEqual(found["dx"], -28, delta=6)
+        self.assertLess(abs(found["dy"]), 4)
+        self.assertGreater(found["gain"], 0.03)
+        self.assertLess(found["gain"], 0.11)
+
     def test_resolve_rejects_traversal(self):
         with self.assertRaises(dual.CamError):
             pano.resolve("../secret.jpg", self.root)
@@ -703,7 +954,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T", "preview_s": 2,
+                "sync": True, "master": "T", "preview_s": 10,
+                "deghost": False, "follow_cam": False,
             },
         )
 
@@ -712,7 +964,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=False),
             {
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
-                "sync": True, "master": "T", "preview_s": 2,
+                "sync": True, "master": "T", "preview_s": 10,
+                "deghost": False, "follow_cam": False,
             },
         )
 
@@ -725,7 +978,8 @@ class Settings(unittest.TestCase):
             settings.load(pi=True),
             {
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
-                "sync": True, "master": "T", "preview_s": 2,
+                "sync": True, "master": "T", "preview_s": 10,
+                "deghost": False, "follow_cam": False,
             },
         )
         settings.save({"download": True}, pi=True)
@@ -742,6 +996,15 @@ class Settings(unittest.TestCase):
         self.assertFalse(settings.load(pi=True)["sync"])
         settings.save({"master": "X"}, pi=True)
         self.assertEqual(settings.load(pi=True)["master"], "R")
+
+    def test_deghost_and_follow_cam(self):
+        settings.save({"deghost": True, "follow_cam": True}, pi=True)
+        got = settings.load(pi=True)
+        self.assertTrue(got["deghost"])
+        self.assertTrue(got["follow_cam"])
+        settings.save({"deghost": False}, pi=True)
+        self.assertFalse(settings.load(pi=True)["deghost"])
+        self.assertTrue(settings.load(pi=True)["follow_cam"])
 
     def test_brightness_persists(self):
         settings.save({"brightness": 40}, pi=True)

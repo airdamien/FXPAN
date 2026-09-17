@@ -174,7 +174,7 @@ def _apply_exposure(have, assignments, fast=False):
         return notes
     from concurrent.futures import ThreadPoolExecutor
 
-    timeout = 6 if fast else 120
+    timeout = 45
     with ThreadPoolExecutor(max_workers=len(have)) as pool:
         futs = [
             pool.submit(dual._set_one, row["port"], assignments, timeout)
@@ -409,6 +409,9 @@ class Handler(BaseHTTPRequestHandler):
                 with LINK.usb():
                     rows = dual.detect_bodies()
                     LINK.absorb(rows)
+                    cameras, blocks = _status_now(rows) if rows else ([], [])
+                    if blocks:
+                        LINK.set_hud(blocks)
                 if not rows:
                     msg = "no cameras. Setup → USB → MTP/PTP, wake, plug USB."
                 elif any(not row.get("serial") for row in rows):
@@ -416,8 +419,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     msg = f"{len(rows)} body(ies)"
                 return _json(self, 200, {
-                    "cameras": rows, "pair": dual.load_pair(),
-                    "link": LINK.snapshot(), "message": msg,
+                    "cameras": cameras or rows, "pair": dual.load_pair(),
+                    "status": blocks, "link": LINK.snapshot(), "message": msg,
                 })
             if path == "/api/status":
                 with LINK.usb():
@@ -426,6 +429,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not rows:
                         raise dual.CamError("no cameras")
                     cameras, blocks = _status_now(rows)
+                    if blocks:
+                        LINK.set_hud(blocks)
                 lines = []
                 for b in blocks:
                     lines.append(
@@ -483,12 +488,16 @@ class Handler(BaseHTTPRequestHandler):
                         + ("on" if prefs["gpio"] else "off")
                         + "  flop="
                         + ("on" if prefs["flip_r"] else "off")
+                        + "  deghost="
+                        + ("on" if prefs.get("deghost") else "off")
+                        + "  live-ae="
+                        + ("cam" if prefs.get("follow_cam") else "app")
                         + f"  ol={prefs['overlap']:.0%}"
                         + "  master="
                         + prefs.get("master", "T")
                         + "  sync="
                         + ("on" if prefs.get("sync") else "off")
-                        + f"  preview={prefs.get('preview_s', 2)}s"
+                        + f"  preview={prefs.get('preview_s', settings.PREVIEW_S)}s"
                     )},
                 )
             if path == "/api/gpio":
@@ -522,7 +531,19 @@ class Handler(BaseHTTPRequestHandler):
                     r = str(data.get("r") or "").strip() if has_r else None
                     saved = dual.save_pair(t, r, replace=False)
                 bits = "  ".join(f"{k}={v}" for k, v in saved.items()) or "(cleared)"
-                return _json(self, 200, {"message": f"paired {bits}", "pair": saved})
+                with LINK.usb():
+                    rows = dual.detect_bodies()
+                    LINK.absorb(rows)
+                    cameras, blocks = _status_now(rows) if rows else ([], [])
+                    if blocks:
+                        LINK.set_hud(blocks)
+                return _json(self, 200, {
+                    "message": f"paired {bits}",
+                    "pair": saved,
+                    "cameras": cameras,
+                    "status": blocks,
+                    "link": LINK.snapshot(),
+                })
             if path == "/api/live/start":
                 LINK.set_live(True)
                 deadline = time.time() + 8.0
@@ -547,30 +568,35 @@ class Handler(BaseHTTPRequestHandler):
                 )
             if path == "/api/live/stop":
                 _stop_live()
-                return _json(self, 200, {"message": "live view stopped",
-                                         "link": LINK.snapshot()})
+                return _json(self, 200, {
+                    "message": "live view stopped",
+                    "link": LINK.snapshot(),
+                })
             if path == "/api/set":
                 prefs = settings.load()
+                follow = bool(prefs.get("follow_cam")) and not data.get("force")
                 exp = _merge_exposure(data, prefs)
-                assignments = _assignments(exp or data)
-                if not assignments:
+                assignments = [] if follow else _assignments(exp or data)
+                if not follow and not assignments:
                     raise dual.CamError("nothing to set")
-                if exp:
+                if exp and not follow:
                     settings.save(exp)
-                LINK.remember(assignments)
-                light = bool(data.get("light"))
+                if assignments:
+                    LINK.remember(assignments)
                 with LINK.usb():
                     have = dict(LINK.have())
                     if not have:
                         have = dual.require_online(dual.detect_bodies())
                         LINK.absorb(have.values())
-                    notes = _apply_exposure(have, assignments, fast=light)
-                    if light:
-                        cameras, blocks = [], []
-                    else:
-                        cameras, blocks = _status_now(list(have.values()))
+                    notes = _apply_exposure(have, assignments)
+                    cameras, blocks = _status_now(list(have.values()))
+                    if blocks:
+                        LINK.set_hud(blocks)
                 roles = " and ".join(sorted(have))
-                msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
+                if follow:
+                    msg = f"live AE  camera decides  {roles}"
+                else:
+                    msg = "set " + " ".join(f"{k}={v}" for k, v in assignments) + f" on {roles}"
                 if notes:
                     msg += "  (" + "; ".join(notes)
                     if any(n.startswith("expprogram=") for n in notes):
@@ -594,22 +620,24 @@ class Handler(BaseHTTPRequestHandler):
 
                 with LINK.usb():
                     prefs = settings.load()
+                    follow = bool(prefs.get("follow_cam"))
                     exp = _merge_exposure(data, prefs)
-                    if exp:
+                    if exp and not follow:
                         settings.save(exp)
                         prefs = settings.load()
-                    assignments = _assignments(exp)
+                    assignments = [] if follow else _assignments(exp)
                     if assignments:
                         LINK.remember(assignments)
                     preview_s = prefs.get("preview_s", settings.PREVIEW_S)
                     target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
 
-                    def shot_json(message, files=None):
+                    def shot_json(message, files=None, stamp=""):
                         return _json(
                             self, 200,
                             {
                                 "message": message,
                                 "files": files or [],
+                                "stamp": stamp,
                                 "preview_s": preview_s,
                             },
                         )
@@ -638,7 +666,7 @@ class Handler(BaseHTTPRequestHandler):
                         if have and assignments:
                             _apply_exposure(have, assignments)
                             copied = " ".join(
-                                f"{k}={v}" for k, v in dual.shot_config(assignments)
+                                f"{k}={v}" for k, v in dual.pack_assignments(assignments)
                             )
                         elif have:
                             copied = _maybe_sync(have, prefs)
@@ -666,17 +694,17 @@ class Handler(BaseHTTPRequestHandler):
                             f"  → {bits}"
                             + (f"  {copied}" if copied else ""),
                             _shot_files(saved=saved),
+                            stamp,
                         )
                     have = dual.require_online(dual.detect_bodies())
                     LINK.absorb(have.values())
                     copied = ""
-                    if assignments:
-                        _apply_exposure(have, assignments)
-                        copied = " ".join(
-                            f"{k}={v}" for k, v in dual.shot_config(assignments)
-                        )
-                    else:
+                    if follow:
                         copied = _maybe_sync(have, prefs)
+                    elif assignments:
+                        copied = " ".join(
+                            f"{k}={v}" for k, v in dual.pack_assignments(assignments)
+                        )
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     dest = pano.CAPTURES
                     with ThreadPoolExecutor(max_workers=len(have)) as pool:
@@ -713,6 +741,7 @@ class Handler(BaseHTTPRequestHandler):
                         f"shot {stamp}  {msg}  → {where}"
                         + (f"  {copied}" if copied else ""),
                         files,
+                        stamp,
                     )
             if path == "/api/captures/delete":
                 stamp = (data.get("stamp") or "").strip()
@@ -764,9 +793,15 @@ class Handler(BaseHTTPRequestHandler):
                     flip_r = prefs.get("flip_r", False)
                 if isinstance(flip_r, str):
                     flip_r = flip_r.lower() not in ("0", "false", "no", "")
+                deghost = data.get("deghost")
+                if deghost is None:
+                    deghost = prefs.get("deghost", False)
+                if isinstance(deghost, str):
+                    deghost = deghost.lower() not in ("0", "false", "no", "")
                 mode = (data.get("mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
+                    deghost=bool(deghost),
                 )
                 stat = pano.queue_status()
                 return _json(

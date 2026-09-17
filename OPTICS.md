@@ -43,7 +43,7 @@ Other reasons the V stayed:
 - One 45° plate reflects to **+X** and transmits to **+Y**. It cannot feed two opposite (±X) cameras without a second fold.
 - Each body loses a stop. The V does not.
 - Transmit goes through 1 mm float at 45° (~0.3 mm extra OPL). The two arms are no longer the same length.
-- #43-359 is **uncoated on S2** — ghosts. Dielectric 50/50 at 45° is also not 50/50 for both polarizations.
+- #43-359 is **uncoated on S2** — ghosts. The matching AR-backed 50×50 is TECHSPEC [**#45-854**](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/) (~$263, S2 Ravg ≤1% 400–700 nm) but it is **3 mm** thick, so it does not fit the 1 mm tray. Dielectric 50/50 at 45° is also not 50/50 for both polarizations.
 
 The amplitude-split fork is [`openscad/bsplit/`](openscad/bsplit/WATCH_ME.scad): lens −Y, reflect +X, transmit +Y. The T tube is shortened by `bs_t_comp()`. Open that file, not `WATCH_ME.scad`. Export with `./export_stls.sh --bsplit`.
 

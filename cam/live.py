@@ -16,8 +16,9 @@ import dual
 
 SOI = b"\xff\xd8"
 EOI = b"\xff\xd9"
-FIRST_S = 12.0
-STALE_S = 4.0
+FIRST_S = 18.0
+STALE_S = 6.0
+SPAWN_GAP_S = 0.7
 
 
 def split_jpegs(buf):
@@ -83,18 +84,24 @@ class Live:
         self.stop()
         return self.ensure(have)
 
-    def ensure(self, have):
+    def ensure(self, have, only=None):
         """Spawn missing/dead roles. Leave healthy capture-movie processes up."""
         have = {
             role: dict(row)
             for role, row in dict(have or {}).items()
             if (row or {}).get("port")
         }
+        wanted = set(have)
+        if only is not None:
+            wanted &= set(only)
         with self._lock:
             extra = [role for role in self._procs if role not in have]
         if extra:
             self.stop_roles(extra)
+        spawned = 0
         for role, row in have.items():
+            if role not in wanted:
+                continue
             port = row["port"]
             with self._lock:
                 proc = self._procs.get(role)
@@ -106,7 +113,12 @@ class Live:
             if same:
                 continue
             self.stop_roles([role])
+            if spawned:
+                time.sleep(SPAWN_GAP_S)
             self._spawn(role, port)
+            spawned += 1
+        if not spawned:
+            return have
         deadline = time.time() + 1.6
         while time.time() < deadline:
             snap = self.snapshot()
@@ -151,6 +163,11 @@ class Live:
                 if proc is not None:
                     procs.append(proc)
                 self._ports.pop(role, None)
+                self._frames.pop(role, None)
+                self._n.pop(role, None)
+                self._err.pop(role, None)
+                self._born.pop(role, None)
+                self._seen.pop(role, None)
         for proc in procs:
             if proc.poll() is None:
                 proc.send_signal(signal.SIGINT)
@@ -166,6 +183,7 @@ class Live:
                 [dual.GPHOTO2, "--port", port, "--capture-movie", "--stdout"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                bufsize=0,
             )
         except FileNotFoundError as exc:
             raise dual.CamError(f"gphoto2 not found: {dual.GPHOTO2}") from exc
