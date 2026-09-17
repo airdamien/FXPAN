@@ -365,6 +365,43 @@ def _apply_roles(rows):
     return rows
 
 
+def seat_open_roles(rows, persist=False):
+    """If exactly one unpaired body and one empty T/R slot, that body is the slot."""
+    rows = list(rows or [])
+    pair = load_pair()
+    taken = {row.get("role") for row in rows if row.get("role") in ("T", "R")}
+    extras = [
+        row for row in rows
+        if row.get("serial") and row.get("role") not in ("T", "R")
+    ]
+    open_roles = [role for role in ("T", "R") if not pair.get(role) and role not in taken]
+    if len(extras) != 1 or len(open_roles) != 1:
+        return rows
+    role = open_roles[0]
+    extras[0]["role"] = role
+    if persist:
+        if role == "T":
+            save_pair(extras[0]["serial"], None)
+        else:
+            save_pair(None, extras[0]["serial"])
+    return rows
+
+
+def probe_port(port, timeout=8):
+    """Serial + role for one USB port. Does not --auto-detect (won't kick live)."""
+    row = {"model": "", "port": port, "serial": "", "role": ""}
+    row["serial"] = _read_serial(row)
+    _apply_roles([row])
+    seat_open_roles([row], persist=True)
+    return row
+
+
+def orphan_ports(ports, have):
+    """Nikon ports on the bus that no T/R row currently owns."""
+    used = { (row or {}).get("port") for row in (have or {}).values() }
+    return [p for p in (ports or []) if p and p not in used]
+
+
 def detect_bodies(timeout=120):
     global _last_detect
     ptp_disable()
@@ -378,6 +415,7 @@ def detect_bodies(timeout=120):
     elif rows:
         rows[0]["serial"] = _read_serial(rows[0])
     _apply_roles(rows)
+    seat_open_roles(rows, persist=True)
     _last_detect = rows
     return rows
 
@@ -433,13 +471,19 @@ def detect_bodies_cached(timeout=120):
     free_usb()
     fresh = parse_detect(gp(["--auto-detect"], timeout=timeout))
     prev = {row["port"]: row for row in _last_detect if row.get("serial")}
-    if fresh and len(fresh) == len(prev) and all(row["port"] in prev for row in fresh):
+    if (
+        fresh
+        and len(fresh) == len(prev)
+        and all(row["port"] in prev for row in fresh)
+        and all(prev[row["port"]].get("serial") for row in fresh)
+    ):
         rows = []
         for row in fresh:
             item = dict(row)
             item["serial"] = prev[row["port"]]["serial"]
             rows.append(item)
         _apply_roles(rows)
+        seat_open_roles(rows, persist=True)
         return rows
     return detect_bodies(timeout=timeout)
 
@@ -501,7 +545,13 @@ def _get_config(port, key):
 
 
 def _status_one(row):
-    vals = {"role": row["role"] or "-", "port": row["port"], "model": row["model"]}
+    serial = (row.get("serial") or "").strip()
+    vals = {
+        "role": row.get("role") or "-",
+        "port": row["port"],
+        "model": row["model"],
+        "serial": serial,
+    }
     args = []
     for key in KEYS:
         args += ["--get-config", key]
@@ -530,6 +580,11 @@ def _status_one(row):
     prog = decode_program(vals)
     if prog:
         vals["expprogram"] = prog
+    cam_sn = (vals.get("serialnumber") or "").strip()
+    if cam_sn:
+        vals["serial"] = cam_sn
+    elif serial:
+        vals["serialnumber"] = serial
     return vals
 
 
@@ -594,6 +649,28 @@ def config_args(assignments):
     return args
 
 
+def pack_assignments(assignments):
+    """One PTP session: drop duplicate autoiso, pin ISO spelling."""
+    packed = []
+    seen = set()
+    has_isoauto = any(k == "isoauto" for k, _ in (assignments or []))
+    for key, value in assignments or []:
+        if key == "autoiso" and has_isoauto:
+            continue
+        if key == "iso":
+            tries = iso_tries(value)
+            value = next((t for t in tries if t.isdigit()), tries[0])
+        elif key in ("isoauto", "autoiso"):
+            value = onoff_tries(value)[0]
+        elif key == "f-number":
+            value = fstop_tries(value)[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        packed.append((key, value))
+    return packed
+
+
 def shot_config(assignments):
     """ISO + shutter ride with capture. isoauto is prefixed separately."""
     keep = {"iso", "shutterspeed"}
@@ -601,21 +678,15 @@ def shot_config(assignments):
 
 
 def _set_one(port, assignments, timeout=120):
-    """isoauto Off + iso must not share a command with flaky autoiso."""
-    assignments = list(assignments or [])
-    if not assignments:
+    """Push every widget in one gphoto2 command. Split only if that fails."""
+    packed = pack_assignments(assignments)
+    if not packed:
         return []
-    primary = [(k, v) for k, v in assignments if k not in ("autoiso", "f-number")]
-    rest = [(k, v) for k, v in assignments if k in ("autoiso", "f-number")]
-    last = None
-    if primary:
-        for variant in iso_variants(primary):
-            try:
-                gp(config_args(variant), port=port, timeout=timeout)
-                return _set_widgets(port, rest, timeout=timeout)
-            except CamError as exc:
-                last = exc
-    return _set_widgets(port, assignments, last=last, timeout=timeout)
+    try:
+        gp(config_args(packed), port=port, timeout=timeout)
+        return []
+    except CamError as exc:
+        return _set_widgets(port, packed, last=exc, timeout=timeout)
 
 
 def _set_widgets(port, assignments, last=None, timeout=120):
@@ -748,23 +819,21 @@ def _capture_args(card, filename=None):
 
 
 def _gp_capture(port, capture, assignments, timeout):
-    """Exit live view, lock ISO auto off, then ISO/shutter + capture."""
-    shot = shot_config(assignments)
+    """One gphoto2 process: close LV, set exposure, capture."""
+    packed = pack_assignments(assignments)
+    tries = []
+    if packed:
+        tries.append(["--set-config", "viewfinder=0"] + config_args(packed) + list(capture))
+        tries.append(config_args(packed) + list(capture))
+    tries.append(["--set-config", "viewfinder=0"] + list(capture))
+    tries.append(list(capture))
     last = None
-    prefixes = (
-        ["--set-config", "viewfinder=0", "--set-config", "isoauto=Off"],
-        ["--set-config", "viewfinder=0", "--set-config", "isoauto=0"],
-        ["--set-config", "isoauto=Off"],
-        ["--set-config", "viewfinder=0"],
-        [],
-    )
-    for prefix in prefixes:
-        for variant in iso_variants(shot) if shot else [[]]:
-            try:
-                gp(list(prefix) + config_args(variant) + capture, port=port, timeout=timeout)
-                return
-            except CamError as exc:
-                last = exc
+    for args in tries:
+        try:
+            gp(args, port=port, timeout=timeout)
+            return
+        except CamError as exc:
+            last = exc
     if last:
         raise last
 

@@ -8,10 +8,10 @@ from pathlib import Path
 import gpio
 
 PATH = Path(__file__).resolve().parent / "settings.json"
-BOOLS = ("download", "gpio", "flip_r", "sync")
+BOOLS = ("download", "gpio", "flip_r", "sync", "deghost", "follow_cam")
 EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
 OVERLAP = 0.20
-PREVIEW_S = 2
+PREVIEW_S = 10
 
 
 def _master(val):
@@ -98,6 +98,7 @@ def defaults(pi=None):
     return {
         "download": on, "gpio": on, "flip_r": False, "overlap": OVERLAP,
         "sync": True, "master": "T", "preview_s": PREVIEW_S,
+        "deghost": False, "follow_cam": False,
     }
 
 

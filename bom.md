@@ -67,7 +67,7 @@ Or set `PART` and F6:
 
 ## 50/50 plate fork (optional)
 
-Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) (#43-359, 1 mm, S2 uncoated) **instead of** two first-surface mirrors. Both bodies get the same image at half the light — not a stitch.
+Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) (#43-359, 1 mm, S2 uncoated) **instead of** two first-surface mirrors. Both bodies get the same image at half the light — not a stitch. AR-backed 50×50 is [#45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/) (3 mm, ~$263).
 
 ## Hybrid pano — D7000
 
@@ -90,7 +90,8 @@ The 90 mm box plus the D7000 46.5 mm register is already **~136 mm** before any 
 
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
-| 1 | **Edmund 50×50×1 mm 50R/50T** #43-359 | The only optic in the box. Do not cut it. | [Edmund #43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) |
+| 1 | **Edmund 50×50×1 mm 50R/50T** #43-359 | Fits the printed tray. **S2 uncoated** — the S2 ghosts in the stitch. Do not cut it. | [Edmund #43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) |
+| 1 | **Edmund 50×50×3 mm 50R/50T VIS** #45-854 (optional) | Same 50/50 on S1, **S2 AR** Ravg ≤1% 400–700 nm (black-dot S1). **~$263**. 3 mm, not 1 mm — will not drop into the current tray; needs a thicker slot and ~3× `bs_t_comp`. Edmund does not sell a 50×50×1 mm with S2 AR. | [Edmund #45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/) |
 | 1 | **EL-Nikkor 135 mm f/5.6** | Taking lens at **~0.61 m**. 4×5 circle covers the 42.5 mm stitch. **L39×26 TPI**. Used often **$80–150**. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+135mm+f%2F5.6) · [Amazon](https://www.amazon.com/s?k=el-nikkor+135mm) |
 | 1 | **EL-Nikkor 180 mm f/5.6** (or Componon-S / Rodagon 180) | Landscape **infinity** on this path. Rack the 12–19 mm helicoid out **~6.5 mm** (173.5 → 180). 5×7 circle. Barrel is **62 mm**, not L39. Used often **$200–500**, scarcer than the 135. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+180mm+f%2F5.6) · [Componon-S 180](https://www.ebay.com/sch/i.html?_nkw=componon-s+180) · [Rodagon 180](https://www.ebay.com/sch/i.html?_nkw=rodagon+180) |
 | 1 | **M62×1 helicoid** 17–31 mm | Fine focus for the **180**. Male into `stem_el180`, female for the lens. Until it ships, print `el180_adapter` (same 17 mm collapsed length). | Search **M62 focusing helicoid 17-31**. M65×1 is easier to find ([Pixco M65 17–31](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01N1GOL39)); that needs M65↔M62 rings. |

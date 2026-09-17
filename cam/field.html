@@ -226,10 +226,49 @@
   .wifi-net span { display: block; color: var(--dim); font-size: 12px; }
   #cams, #pairs, #files {
     flex: 1; min-height: 0; overflow: auto; display: grid; gap: 8px; align-content: start;
-    touch-action: none; user-select: none; -webkit-user-select: none;
+    user-select: none; -webkit-user-select: none;
   }
+  #cams { touch-action: none; }
+  #pairs, #files { touch-action: pan-y; }
+  #pairs figure, #files .thumbs img { cursor: zoom-in; }
   #tab-set { touch-action: none; }
-  #files img, #pairs img { -webkit-user-drag: none; pointer-events: none; }
+  #tab-set { display: flex; flex-direction: column; }
+  .set-foot {
+    margin-top: auto; display: flex; justify-content: flex-end;
+    padding: 10px 0 4px; position: sticky; bottom: 0;
+    background: linear-gradient(transparent, var(--bg) 28%);
+  }
+  .set-foot #set { min-width: 120px; }
+  #files img, #pairs img { -webkit-user-drag: none; }
+  #picModal {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(6,8,10,0.88);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #picModal[hidden] { display: none !important; }
+  .pic-box {
+    width: min(1100px, 100%); max-height: 100%;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .pic-big {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    background: #0b0d10; border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden;
+  }
+  .pic-big img { max-width: 100%; max-height: min(78vh, 1100px); object-fit: contain; cursor: zoom-in; }
+  .pic-thumbs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .pic-thumbs button {
+    padding: 0; border: 3px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: #0b0d10; flex: 1 1 200px; max-width: 340px; min-width: 160px;
+  }
+  .pic-thumbs button.on { border-color: var(--ok); }
+  .pic-thumbs img { display: block; width: 100%; height: 160px; object-fit: cover; }
+  .pic-acts {
+    display: flex; gap: 8px; align-items: center; justify-content: flex-end;
+  }
+  .pic-acts .who { margin-right: auto; color: var(--dim); font-size: 13px; }
+  #picKeep { background: var(--ok); border-color: var(--ok); color: #101214; }
   .cam {
     border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px;
     display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
@@ -410,8 +449,8 @@
 <header>
   <div class="brand">D12600</div>
   <div class="hud" id="hud">
-    <div class="hud-cam t off" id="hudT">
-      <b>T</b>
+    <div class="hud-cam r off" id="hudR">
+      <b>R</b>
       <div class="hud-mid">
         <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
         <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
@@ -423,8 +462,8 @@
         </div>
       </div>
     </div>
-    <div class="hud-cam r off" id="hudR">
-      <b>R</b>
+    <div class="hud-cam t off" id="hudT">
+      <b>T</b>
       <div class="hud-mid">
         <div class="hud-line"><span class="hud-mode">—</span><span class="hud-iso">ISO —</span><span class="hud-shut">—</span></div>
         <div class="hud-line hud-sub"><span class="hud-wb">—</span><span class="hud-qual">—</span><span class="hud-af">—</span></div>
@@ -445,17 +484,17 @@
 <div class="stage">
 <div id="tab-view" class="pane">
 <div class="previews" id="previews">
-  <figure class="t">
-    <img id="lvT" alt="T">
-    <div class="tag">T</div>
-    <div class="jp">+Y</div>
-    <div class="meta"><span>BACK</span><span id="stT">—</span></div>
-  </figure>
   <figure class="r">
     <img id="lvR" alt="R">
     <div class="tag">R</div>
     <div class="jp">+X</div>
     <div class="meta"><span>SIDE</span><span id="stR">—</span></div>
+  </figure>
+  <figure class="t">
+    <img id="lvT" alt="T">
+    <div class="tag">T</div>
+    <div class="jp">+Y</div>
+    <div class="meta"><span>BACK</span><span id="stT">—</span></div>
   </figure>
   <figure class="p" id="panoPrevFig" hidden>
     <canvas id="lvP"></canvas>
@@ -529,7 +568,6 @@
       <select id="quality"></select>
     </label>
   </div>
-  <div class="row"><button id="set">APPLY</button></div>
 </div>
 <div class="sect">
   <div class="lbl">Master</div>
@@ -544,13 +582,15 @@
   <label class="dlchk"><input type="checkbox" id="dl">Download files</label>
   <label class="dlchk"><input type="checkbox" id="gpioOn">GPIO shutter</label>
   <label class="dlchk"><input type="checkbox" id="flipR">Flop R</label>
+  <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost before stitch</label>
+  <label class="dlchk"><input type="checkbox" id="followCam">Live AE (camera decides)</label>
   <div class="drag">
     <div class="k">Overlap <b id="olVal">20%</b></div>
     <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
   </div>
   <div class="drag">
-    <div class="k">Preview <b id="prevVal">2s</b></div>
-    <input type="range" id="prevDrag" min="0" max="10" value="2" step="1">
+    <div class="k">Review auto-close <b id="prevVal">10s</b></div>
+    <input type="range" id="prevDrag" min="0" max="15" value="10" step="1">
   </div>
 </div>
 <div class="sect" id="brightSect" hidden>
@@ -586,6 +626,7 @@
     <button id="kioskExit" hidden>Desktop</button>
   </div>
 </div>
+<div class="set-foot"><button id="set">APPLY</button></div>
 </div>
 <pre id="log">wake a body · USB MTP/PTP</pre>
 </div>
@@ -637,6 +678,19 @@
 </aside>
 </div>
 </div>
+<div id="picModal" hidden>
+  <div class="pic-box">
+    <div class="pic-big"><img id="picBig" alt=""></div>
+    <div class="pic-thumbs" id="picThumbs"></div>
+    <div class="pic-acts">
+      <span class="who" id="picWho"></span>
+      <span id="picCount"></span>
+      <button type="button" id="picKeep">KEEP</button>
+      <button type="button" class="danger" id="picDel">DELETE</button>
+      <button type="button" id="picClose">CLOSE</button>
+    </div>
+  </div>
+</div>
 <script>
 const ISO = ["Auto","100","125","160","200","250","320","400","500","640","800","1000","1250",
   "1600","2000","2500","3200","4000","5000","6400","12800","25600"];
@@ -653,7 +707,8 @@ const QUAL = [["JPEG Fine","JPEG Fine"],["JPEG Normal","JPEG Norm"],
 const PROG = [["M","M"],["A","A"],["S","S"],["P","P"],["Auto","Auto"]];
 const state = { iso:"400", shutter:"1/125", fstop:"5.6", wb:"Auto", quality:"JPEG Fine", program:"M",
   t:"", r:"", live:false, liveOk:false, panoPrev:false, timer:0, stamp:"", rows:[],
-  previewS: 2,
+  previewS: 10,
+  followCam: false,
   stats: { T: { on: false }, R: { on: false } } };
 const log = (m, err) => { const el = document.getElementById("log");
   el.textContent = m; el.className = err ? "err" : ""; };
@@ -698,6 +753,7 @@ const paintExposure = () => {
 const setAuto = (key) => {
   state[key] = "Auto";
   paintExposure();
+  scheduleApply();
 };
 const bindDrag = (id, list, key, applyFast) => {
   const el = document.getElementById(id);
@@ -781,7 +837,8 @@ const paintHud = () => {
     el.querySelector(".hud-shut").textContent = fnum ? shut + "  " + fnum : shut;
     el.querySelector(".hud-wb").textContent = ev ? wb + "  " + ev : wb;
     el.querySelector(".hud-qual").textContent = qual;
-    el.querySelector(".hud-af").textContent = [af, meter].filter(Boolean).join(" · ") || "—";
+    el.querySelector(".hud-af").textContent =
+      [af, meter, s.serial ? "#" + shortSerial(s.serial) : ""].filter(Boolean).join(" · ") || "—";
     el.querySelector(".hud-bat i").style.width = (pct == null ? 0 : pct) + "%";
     el.querySelector(".hud-pct").textContent = !s.on ? "OUT" : (busy ? "USB" : (bat || "USB"));
     el.querySelector(".hud-shots").textContent = shots && !busy && s.on ? shots : "";
@@ -793,10 +850,16 @@ const paintHud = () => {
 };
 const ingestHud = (rows, blocks) => {
   if (rows) {
-    state.stats = { T: { on: false }, R: { on: false } };
+    const seen = new Set();
     rows.forEach(row => {
       const role = roleOf(row);
-      if (role) state.stats[role] = Object.assign({}, row, { role, on: true });
+      if (!role) return;
+      seen.add(role);
+      const prev = state.stats[role] || {};
+      state.stats[role] = Object.assign({}, prev, row, { role, on: true });
+    });
+    ["T","R"].forEach((role) => {
+      if (!seen.has(role) && state.stats[role]) state.stats[role].on = false;
     });
   }
   (blocks || []).forEach(b => {
@@ -925,10 +988,12 @@ const assignRole = async (role, serial) => {
       headers:{"content-type":"application/json"},
       body: JSON.stringify(body) });
     applyPair(j.pair);
-    ingestHud(state.rows);
+    if (j.cameras) fill(j.cameras, j.pair);
+    else ingestHud(state.rows);
+    if (j.status) ingestHud(j.cameras || state.rows, j.status);
     paintCams();
     log(j.message);
-    refreshStatus();
+    if (j.link) paintLink(j.link);
   } finally { pairing = false; paintCams(); }
 };
 const refreshStatus = () => {
@@ -987,11 +1052,10 @@ const paintFlop = () => {
   if (fig) fig.classList.toggle("flop", flopOn());
 };
 const exposureBody = (all) => {
-  const body = { iso: state.iso, shutter: state.shutter, light: !all };
+  const body = { iso: state.iso, shutter: state.shutter };
   if (!isAuto(state.fstop) && modeOwnsF(state.program))
     body.fstop = state.fstop;
   if (all) {
-    body.light = false;
     body.program = state.program;
     body.wb = state.wb;
     body.quality = state.quality;
@@ -1014,34 +1078,39 @@ const composePano = () => {
   const h = Math.min(t.naturalHeight, r.naturalHeight);
   const tw = Math.round(t.naturalWidth * h / t.naturalHeight);
   const rw = Math.round(r.naturalWidth * h / r.naturalHeight);
-  const olPx = Math.max(8, Math.round(tw * ol));
-  const seam = Math.max(1, tw - olPx);
-  const width = seam + rw;
+  const olPx = Math.max(8, Math.round(rw * ol));
+  const seam = Math.max(1, rw - olPx);
+  const width = seam + tw;
   if (canvas.width !== width || canvas.height !== h) {
     canvas.width = width;
     canvas.height = h;
   }
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, width, h);
-  ctx.drawImage(t, 0, 0, t.naturalWidth, t.naturalHeight, 0, 0, tw, h);
+  const left = document.createElement("canvas");
+  left.width = rw;
+  left.height = h;
+  const lx = left.getContext("2d");
+  lx.save();
+  if (flip) {
+    lx.translate(rw, 0);
+    lx.scale(-1, 1);
+  }
+  lx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, 0, 0, rw, h);
+  lx.restore();
+  ctx.drawImage(left, 0, 0);
   const tmp = document.createElement("canvas");
-  tmp.width = rw;
+  tmp.width = tw;
   tmp.height = h;
   const tx = tmp.getContext("2d");
-  tx.save();
-  if (flip) {
-    tx.translate(rw, 0);
-    tx.scale(-1, 1);
-  }
-  tx.drawImage(r, 0, 0, r.naturalWidth, r.naturalHeight, 0, 0, rw, h);
-  tx.restore();
+  tx.drawImage(t, 0, 0, t.naturalWidth, t.naturalHeight, 0, 0, tw, h);
   const fade = tx.createLinearGradient(0, 0, olPx, 0);
   fade.addColorStop(0, "rgba(0,0,0,0)");
   fade.addColorStop(0.55, "rgba(0,0,0,1)");
   fade.addColorStop(1, "rgba(0,0,0,1)");
   tx.globalCompositeOperation = "destination-in";
   tx.fillStyle = fade;
-  tx.fillRect(0, 0, rw, h);
+  tx.fillRect(0, 0, tw, h);
   ctx.drawImage(tmp, seam, 0);
   const jp = document.querySelector("#panoPrevFig .jp");
   if (jp) jp.textContent = Math.round(ol * 100) + "%" + (flip ? " flop" : "");
@@ -1071,72 +1140,67 @@ const paintPanoPrev = () => {
   }
   if (on) composePano();
 };
+const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const setLiveSrc = (on) => {
   state.live = on;
   if (!on) state.liveOk = false;
   paintLiveBtn();
   if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
   paintPanoPrev();
-  const bust = Date.now();
+  ["T","R"].forEach(role => {
+    const img = document.getElementById("lv"+role);
+    if (!img) return;
+    img.onload = null;
+    img.onerror = null;
+    if (!on) img.src = BLANK;
+  });
   if (!on) {
-    ["T","R"].forEach(role => {
-      const img = document.getElementById("lv"+role);
-      img.onload = null;
-      img.src = "";
-    });
     if (state.panoPrev) loadLastStills().then(() => composePano()).catch(() => {});
     return;
   }
-  ["T","R"].forEach(role => {
-    const img = document.getElementById("lv"+role);
-    img.onload = () => {
-      if (!state.liveOk) {
-        state.liveOk = true;
-        paintLiveBtn();
-        paintPanoPrev();
-      }
-      if (state.panoPrev) composePano();
-    };
-    img.onerror = () => {
-      if (!state.live) return;
-      setTimeout(() => {
-        if (!state.live) return;
-        img.src = "/api/live/"+role+".mjpg?t="+Date.now();
-      }, 500);
-    };
-    img.src = "/api/live/"+role+".mjpg?t="+bust;
-  });
-  setTimeout(() => {
-    if (!state.live || state.liveOk) return;
-    api("/api/live").then((j) => {
-      if (!state.live) return;
-      if (j && j.running) {
-        state.liveOk = true;
-        paintLiveBtn();
-        paintPanoPrev();
-      }
-    }).catch(() => {});
-  }, 700);
-  const tick = () => {
+  const pull = () => {
     if (!state.live) return;
-    if (state.panoPrev) composePano();
-    state.timer = setTimeout(tick, 120);
+    ["T","R"].forEach(role => {
+      const img = document.getElementById("lv"+role);
+      if (!img) return;
+      const probe = new Image();
+      probe.onload = () => {
+        if (!state.live) return;
+        img.src = probe.src;
+        if (!state.liveOk) {
+          state.liveOk = true;
+          paintLiveBtn();
+          paintPanoPrev();
+        }
+        if (state.panoPrev) composePano();
+      };
+      probe.src = "/api/live/"+role+".jpg?n="+Date.now()+"&r="+role;
+    });
+    state.timer = setTimeout(pull, 120);
   };
-  tick();
+  pull();
+};
+const bustLive = () => {};
+const resumeLive = async () => {
+  const j = await api("/api/live/start", { method:"POST" });
+  if (j && (j.roles || j.status)) paintLink(j);
+  setLiveSrc(true);
+  return j;
 };
 const usb = async (fn) => {
   const was = state.live;
   setLiveSrc(false);
   try { return await fn(); }
   finally { if (was) {
-    try { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
+    try { await resumeLive(); }
     catch (e) { log(e.message, true); }
   } }
 };
 bind("detect", async () => {
   const was = state.live; setLiveSrc(false);
   const j = await api("/api/detect"); fill(j.cameras, j.pair); log(j.message);
-  if (was) { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
+  if (j.link) paintLink(j.link);
+  if (was) { await resumeLive(); }
 });
 document.getElementById("swap").onclick = async () => {
   const b = document.getElementById("swap");
@@ -1176,15 +1240,12 @@ const applyHud = (all) => {
   paintHud();
 };
 let applyTimer = 0;
-const bustLive = () => {
-  if (!state.live) return;
-  const bust = Date.now();
-  ["T","R"].forEach(role => {
-    const img = document.getElementById("lv"+role);
-    if (img) img.src = "/api/live/"+role+".mjpg?t="+bust;
-  });
-};
 const applyExposure = async (all) => {
+  if (state.followCam) {
+    applyHud(!!all);
+    log("live AE  camera decides");
+    return;
+  }
   const j = await api("/api/set", { method:"POST",
     headers:{"content-type":"application/json"},
     body: JSON.stringify(exposureBody(!!all)) });
@@ -1231,6 +1292,118 @@ const showLastShot = async () => {
   loadFiles(j.pairs, j.message).catch(() => {});
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let picTimer = 0;
+let picLeft = 0;
+const picState = { stamp: "", files: [], review: false, idx: 0 };
+const fileRole = (name) => {
+  const m = String(name || "").match(/^([TRP])_/i);
+  return m ? m[1].toUpperCase() : "IMG";
+};
+const closePic = () => {
+  clearInterval(picTimer);
+  picTimer = 0;
+  document.getElementById("picModal").hidden = true;
+};
+const holdPicTimer = () => {
+  if (!picTimer) return;
+  clearInterval(picTimer);
+  picTimer = 0;
+  const count = document.getElementById("picCount");
+  if (count) count.textContent = "";
+  document.getElementById("picClose").hidden = false;
+};
+const showPicAt = (i, fromUser) => {
+  const files = picState.files;
+  if (!files.length) return;
+  picState.idx = (i + files.length) % files.length;
+  const row = files[picState.idx];
+  document.getElementById("picBig").src = "/api/file/"+encodeURIComponent(row.name)+"?t="+Date.now();
+  document.getElementById("picWho").textContent =
+    (row.label || fileRole(row.name)) + "  " + (picState.stamp || row.name);
+  [...document.getElementById("picThumbs").children].forEach((b, n) => {
+    b.classList.toggle("on", n === picState.idx);
+  });
+  if (fromUser) holdPicTimer();
+};
+const openPic = ({ stamp, files, review, autoS, start }) => {
+  picState.stamp = stamp || "";
+  picState.files = (files || []).filter(f => f && f.name);
+  picState.review = !!review;
+  if (!picState.files.length) return Promise.resolve("empty");
+  const modal = document.getElementById("picModal");
+  const thumbs = document.getElementById("picThumbs");
+  thumbs.innerHTML = "";
+  picState.files.forEach((row, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = "<img alt=''>";
+    b.querySelector("img").src = "/api/file/"+encodeURIComponent(row.name)+"?w=720";
+    b.onclick = (ev) => { ev.stopPropagation(); showPicAt(i, true); };
+    thumbs.appendChild(b);
+  });
+  document.getElementById("picKeep").hidden = !review;
+  document.getElementById("picDel").hidden = !picState.stamp;
+  document.getElementById("picClose").hidden = !!review;
+  showPicAt(Math.max(0, Number(start) || 0), false);
+  modal.hidden = false;
+  clearInterval(picTimer);
+  picTimer = 0;
+  const count = document.getElementById("picCount");
+  const n = Math.max(0, Number(autoS) || 0);
+  if (!review) { count.textContent = ""; return Promise.resolve("view"); }
+  if (n <= 0) { count.textContent = ""; return Promise.resolve("keep"); }
+  picLeft = n;
+  count.textContent = picLeft + "s";
+  return new Promise((resolve) => {
+    picTimer = setInterval(() => {
+      picLeft -= 1;
+      if (picLeft <= 0) {
+        closePic();
+        resolve("keep");
+        return;
+      }
+      count.textContent = picLeft + "s";
+    }, 1000);
+    modal._resolve = resolve;
+  });
+};
+const showReview = (stamp, names, autoS) => {
+  const files = (names || []).map(name => ({ name, label: fileRole(name) }));
+  return openPic({ stamp, files, review: true, autoS });
+};
+document.getElementById("picKeep").onclick = () => {
+  const done = document.getElementById("picModal")._resolve;
+  closePic();
+  if (done) done("keep");
+};
+document.getElementById("picClose").onclick = () => {
+  const done = document.getElementById("picModal")._resolve;
+  closePic();
+  if (done) done("keep");
+};
+document.getElementById("picDel").onclick = async () => {
+  if (!picState.stamp) return;
+  if (!confirm("Delete " + picState.stamp + "?")) return;
+  try {
+    const j = await api("/api/captures/delete", { method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ stamp: picState.stamp }) });
+    log(j.message);
+    const done = document.getElementById("picModal")._resolve;
+    closePic();
+    if (done) done("delete");
+    loadPairs(true).catch(() => {});
+    loadFiles(j.pairs, j.message).catch(() => {});
+  } catch (e) { log(e.message, true); }
+};
+document.getElementById("picModal").onclick = (ev) => {
+  if (ev.target.id === "picModal" && !picState.review) closePic();
+};
+document.querySelector(".pic-box").addEventListener("pointerdown", (ev) => {
+  if (ev.target.closest(".pic-acts")) return;
+  if (ev.target.closest(".pic-big") || ev.target.closest(".pic-thumbs"))
+    holdPicTimer();
+});
 const fire = async () => {
   const b = document.getElementById("shoot");
   if (b.disabled) return;
@@ -1251,25 +1424,24 @@ const fire = async () => {
     log(e.message, true);
     b.disabled = false;
     if (was) {
-      try { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
+      try { await resumeLive(); }
       catch (err) { log(err.message, true); }
     }
     return;
   }
   b.disabled = false;
-  applyHud(false);
+  if (!state.followCam) applyHud(false);
   const files = j.files || [];
+  const stamp = j.stamp || "";
   const secs = Number(j.preview_s);
   const n = Number.isFinite(secs) ? secs : state.previewS;
-  if (files.length && n > 0) {
-    await showLastShot();
-    await sleep(n * 1000);
-  } else if (files.length && !was) {
-    await showLastShot();
+  if (files.length) {
+    await showReview(stamp, files, n);
+    loadPairs(true).catch(() => {});
+    loadFiles().catch(() => {});
   }
-  document.getElementById("previews").classList.remove("shot");
   if (was) {
-    try { await api("/api/live/start", { method:"POST" }); setLiveSrc(true); }
+    try { await resumeLive(); }
     catch (e) { log(e.message, true); }
   }
 };
@@ -1277,13 +1449,16 @@ document.getElementById("shoot").onclick = () => fire();
 bind("live", async () => {
   if (state.liveOk) {
     setLiveSrc(false);
-    const j = await api("/api/live/stop", { method:"POST" }); log(j.message);
+    const j = await api("/api/live/stop", { method:"POST" });
+    log(j.message);
+    if (j.link) paintLink(j.link);
     return;
   }
   if (state.live) return;
   try {
     const j = await api("/api/live/start", { method:"POST" });
     log(j.message, !j.ok);
+    if (j.status || j.roles) paintLink(j);
     if (!j.ok) return;
     setLiveSrc(true);
   } catch (e) {
@@ -1363,16 +1538,18 @@ const loadPairs = async (silent) => {
     }
     const at = box.querySelectorAll(".pair")[i];
     if (at !== el) box.insertBefore(el, at || null);
-    const setImg = (sel, name, w) => {
+    const setImg = (sel, name, w, label) => {
       const img = el.querySelector(sel);
+      img.dataset.name = name || "";
+      img.dataset.label = label || "";
       if (!name) { img.removeAttribute("src"); return; }
       const next = "/api/file/"+encodeURIComponent(name)+"?w="+w;
       if (!img.src.includes(encodeURIComponent(name))) img.src = next + "&t="+Date.now();
       else if ((p.stitch || {}).phase === "done") img.src = next + "&t="+Date.now();
     };
-    setImg(".pt", p.t, 240);
-    setImg(".pr", p.r, 240);
-    setImg(".pp", p.pano, 240);
+    setImg(".pt", p.t, 240, "T");
+    setImg(".pr", p.r, 240, "R");
+    setImg(".pp", p.pano, 240, "P");
     el.dataset.ready = p.ready ? "1" : "0";
     el.querySelector(".go").disabled = !!(p.stitch && p.stitch.running);
     const ex = el.querySelector(".pair-exif");
@@ -1454,7 +1631,7 @@ const paintPrev = () => {
 };
 bind("panoRefresh", () => loadPairs());
 const fileThumb = (name, label) => name
-  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
+  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=480">`
   : `<span class="who">${label} —</span>`;
 const exifBits = (e) => {
   if (!e) return "";
@@ -1483,10 +1660,16 @@ const loadFiles = async (pairs, message) => {
   (rows || []).forEach(p => {
     const el = document.createElement("div");
     el.className = "file";
+    el.dataset.stamp = p.stamp;
     el.innerHTML = `<div class="thumbs">${fileThumb(p.t,"T")}${fileThumb(p.r,"R")}${fileThumb(p.pano,"P")}</div>
       <span class="who">${p.stamp}${p.ready ? "" : " · incomplete"}</span>
       ${exifBlock(p.exif)}
       <div class="acts"></div>`;
+    el.querySelectorAll(".thumbs img").forEach((img) => {
+      const m = (img.getAttribute("src") || "").match(/\/api\/file\/([^?]+)/);
+      img.dataset.name = m ? decodeURIComponent(m[1]) : "";
+      img.dataset.label = img.getAttribute("alt") || "";
+    });
     const acts = el.querySelector(".acts");
     const files = [["T", p.t], ["R", p.r], ["pano", p.pano]];
     files.forEach(([label, name]) => {
@@ -1537,6 +1720,25 @@ const filesPost = (path, body, warn) => async () => {
 bind("filesRefresh", () => loadFiles());
 bind("filesToday", filesPost("/api/captures/before-today", {}, "Delete every capture from before today?"));
 bind("filesKeep5", filesPost("/api/captures/keep-last", { n: 5 }, "Keep only the 5 newest captures?"));
+const zoomFromCard = (card, img) => {
+  if (!card || !img || !img.dataset.name) return;
+  const files = [...card.querySelectorAll("img[data-name]")].filter(im => im.dataset.name)
+    .map(im => ({ name: im.dataset.name, label: im.dataset.label || "" }));
+  const start = files.findIndex(f => f.name === img.dataset.name);
+  openPic({ stamp: card.dataset.stamp || "", files, start: Math.max(0, start) });
+};
+document.getElementById("pairs").addEventListener("click", (ev) => {
+  if (ev.target.closest("button")) return;
+  const fig = ev.target.closest("figure");
+  const card = ev.target.closest(".pair");
+  const img = fig && fig.querySelector("img");
+  zoomFromCard(card, img);
+});
+document.getElementById("files").addEventListener("click", (ev) => {
+  if (ev.target.closest("button, a")) return;
+  const img = ev.target.closest("img");
+  zoomFromCard(ev.target.closest(".file"), img);
+});
 const inKiosk = new URLSearchParams(location.search).has("kiosk");
 const oskTouch = () =>
   inKiosk || window.matchMedia("(pointer: coarse)").matches;
@@ -1715,12 +1917,12 @@ let startTab = startParams.get("tab") || (inKiosk ? "" : (location.hash || "").r
 if (startTab === "view" || startTab === "start" || startTab === "live") startTab = "";
 showTab(MENUS.includes(startTab) ? startTab : "");
 paintPanoPrev();
-bindDrag("isoDrag", ISO, "iso", false);
-bindDrag("isoFast", ISO, "iso", false);
-bindDrag("shutDrag", SHUT, "shutter", false);
-bindDrag("shutFast", SHUT, "shutter", false);
-bindDrag("fDrag", FSTOP, "fstop", false);
-bindDrag("fFast", FSTOP, "fstop", false);
+bindDrag("isoDrag", ISO, "iso", true);
+bindDrag("isoFast", ISO, "iso", true);
+bindDrag("shutDrag", SHUT, "shutter", true);
+bindDrag("shutFast", SHUT, "shutter", true);
+bindDrag("fDrag", FSTOP, "fstop", true);
+bindDrag("fFast", FSTOP, "fstop", true);
 ["isoAuto","isoFastAuto"].forEach(id => {
   document.getElementById(id).onclick = () => setAuto("iso");
 });
@@ -1749,7 +1951,14 @@ const showExp = (on) => {
 window.addEventListener("resize", () => {
   if (!expModal.hidden) sizeVerts();
 });
-expBtn.onclick = () => showExp(expModal.hidden);
+expBtn.onclick = () => {
+  const closing = !expModal.hidden;
+  showExp(expModal.hidden);
+  if (closing) {
+    clearTimeout(applyTimer);
+    applyExposure(false).catch(e => log(e.message, true));
+  }
+};
 document.getElementById("expDone").onclick = () => {
   showExp(false);
   clearTimeout(applyTimer);
@@ -1871,6 +2080,13 @@ const paintSettings = (s) => {
   if (dl && "download" in s) dl.checked = !!s.download;
   if (g && "gpio" in s) g.checked = !!s.gpio;
   if (flip && "flip_r" in s) flip.checked = !!s.flip_r;
+  const dg = document.getElementById("deghostOn");
+  if (dg && "deghost" in s) dg.checked = !!s.deghost;
+  const fc = document.getElementById("followCam");
+  if (fc && "follow_cam" in s) {
+    fc.checked = !!s.follow_cam;
+    state.followCam = !!s.follow_cam;
+  }
   paintFlop();
   const sync = document.getElementById("syncOn");
   if (sync && "sync" in s) sync.checked = !!s.sync;
@@ -1886,7 +2102,7 @@ const paintSettings = (s) => {
   }
   const prev = document.getElementById("prevDrag");
   if (prev && "preview_s" in s) {
-    const n = Math.min(10, Math.max(0, parseInt(s.preview_s, 10) || 0));
+    const n = Math.min(15, Math.max(0, parseInt(s.preview_s, 10) || 0));
     prev.value = String(n);
     state.previewS = n;
     paintPrev();
@@ -1899,6 +2115,8 @@ const saveSettings = async () => {
       download: document.getElementById("dl").checked,
       gpio: document.getElementById("gpioOn").checked,
       flip_r: document.getElementById("flipR").checked,
+      deghost: document.getElementById("deghostOn").checked,
+      follow_cam: document.getElementById("followCam").checked,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
       preview_s: parseInt(document.getElementById("prevDrag").value, 10),
       sync: document.getElementById("syncOn").checked,
@@ -1922,6 +2140,8 @@ document.getElementById("flipR").onchange = () => {
   composePano();
   saveSettings().catch(e => log(e.message, true));
 };
+document.getElementById("deghostOn").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("followCam").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("olDrag").oninput = () => { paintOl(); composePano(); };
 document.getElementById("olDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("prevDrag").oninput = () => paintPrev();
@@ -1984,25 +2204,47 @@ const paintLink = (j) => {
     const fig = document.querySelector(".previews figure." + role.toLowerCase());
     if (fig) fig.classList.toggle("out", !r.online);
     const prev = state.stats[role] || {};
+    const hud = (j.status || {})[role] || {};
+    const keep = {};
+    Object.keys(hud).forEach((k) => {
+      if (hud[k] !== "" && hud[k] != null) keep[k] = hud[k];
+    });
     const on = !!r.online;
-    state.stats[role] = Object.assign({}, prev, {
-      on, serial: r.serial || prev.serial, port: r.port || "",
-      model: r.model || prev.model,
+    state.stats[role] = Object.assign({}, prev, keep, {
+      on,
+      serial: r.serial || keep.serial || prev.serial,
+      port: r.port || keep.port || prev.port || "",
+      model: r.model || keep.model || prev.model,
+      role,
     });
     if (!on) state.stats[role].on = false;
     if (r.serial || r.port) {
       const old = (state.rows || []).find(x => x.role === role) || {};
       rows.push({
-        role, serial: r.serial || old.serial, port: r.port,
+        role, serial: r.serial || old.serial, port: r.port || "",
         model: r.model || old.model, batterylevel: old.batterylevel,
       });
     }
+  });
+  (j.extras || []).forEach((row) => {
+    if (!row || !row.port) return;
+    if (rows.some(x => x.port === row.port || (row.serial && x.serial === row.serial)))
+      return;
+    rows.push({
+      role: row.role || "", serial: row.serial || "",
+      port: row.port, model: row.model || "",
+    });
   });
   if (rows.length) {
     state.rows = rows;
     paintCams();
   }
   paintHud();
+  if (state.followCam) {
+    ["T","R"].forEach((role) => {
+      if (state.stats[role] && state.stats[role].on) snapFromStatus(state.stats[role]);
+    });
+  }
   if (j.message && j.message !== state.linkMsg) {
     state.linkMsg = j.message;
     if (/out|gone|dead|waiting|missing|stall/i.test(j.message))
@@ -2031,9 +2273,17 @@ api("/api/meta").then(j => {
   paintKiosk(j.kiosk);
   paintWifi(j.wifi);
   if (j.pair) applyPair(j.pair);
-  if (j.settings && j.settings.fstop) {
-    state.fstop = String(j.settings.fstop).replace(/^f\/?/i, "");
+  if (j.settings) {
+    ["iso","shutter","fstop","wb","quality","program"].forEach((key) => {
+      if (!j.settings[key]) return;
+      let val = String(j.settings[key]);
+      if (key === "fstop") val = val.replace(/^f\/?/i, "");
+      state[key] = val;
+    });
     paintExposure();
+    fillSelect("program", PROG, "program");
+    fillSelect("wb", WB, "wb");
+    fillSelect("quality", QUAL, "quality");
   }
   if (j.link) paintLink(j.link);
   startLinkPoll();
