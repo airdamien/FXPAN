@@ -278,7 +278,8 @@
     background: #0b0d10; flex: 1 1 200px; max-width: 340px; min-width: 160px;
   }
   .pic-thumbs button.on { border-color: var(--ok); }
-  .pic-thumbs img { display: block; width: 100%; height: 160px; object-fit: cover; }
+  .pic-thumbs img { display: block; width: 100%; height: auto; object-fit: contain; background: #000; }
+  .pic-thumbs button.pano { flex: 2 1 280px; max-width: 520px; }
   .pic-acts {
     display: flex; gap: 8px; align-items: center; justify-content: flex-end;
   }
@@ -330,8 +331,10 @@
     border: 1px solid var(--line); border-radius: 8px; background: #0b0d10;
   }
   .pair-frames {
-    display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; align-items: start;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 3px; align-items: stretch;
   }
+  .pair-frames .pair-pano { grid-column: 1 / -1; }
+  .pair-frames figure { margin: 0; min-width: 0; }
   .pair-frames figure.flop img, .file .thumbs img.flop { transform: scaleX(-1); }
   .space {
     display: grid; gap: 6px; padding: 4px 0 10px;
@@ -350,8 +353,8 @@
     letter-spacing: 0;
   }
   .pair-frames figcaption { color: var(--dim); font-size: 10px; letter-spacing: 0.12em; }
-  .pair img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
-  .pair-pano img { aspect-ratio: 16/6; object-fit: contain; }
+  .pair img { width: 100%; aspect-ratio: 3/2; object-fit: contain; background: #000; }
+  .pair-pano img { aspect-ratio: 8/3; object-fit: contain; }
   .pano-stat {
     flex: 1; min-width: 0; color: var(--dim);
     font: 12px/1.3 ui-monospace, Menlo, monospace;
@@ -378,8 +381,9 @@
     display: grid; gap: 8px; padding: 10px;
     border: 1px solid var(--line); border-radius: 8px; background: #0b0d10;
   }
-  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; position: relative; }
-  .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; position: relative; }
+  .file img { width: 100%; aspect-ratio: 3/2; object-fit: contain; background: #000; }
+  .file img.pano { aspect-ratio: 16/6; }
   .lock {
     position: absolute; top: 6px; left: 6px; z-index: 2;
     width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 8px;
@@ -1484,7 +1488,12 @@ const openPic = ({ stamp, files, review, autoS, start, protected: locked }) => {
     const b = document.createElement("button");
     b.type = "button";
     b.innerHTML = "<img alt=''>";
-    b.querySelector("img").src = "/api/file/"+encodeURIComponent(row.name)+"?w=720";
+    const im = b.querySelector("img");
+    im.alt = row.label || fileRole(row.name) || "";
+    if (/^P_/i.test(row.name) || im.alt === "P" || /pano/i.test(im.alt))
+      b.classList.add("pano");
+    im.src = "/api/file/"+encodeURIComponent(row.name)+"?w="
+      + (b.classList.contains("pano") ? 960 : 720);
     b.onclick = (ev) => { ev.stopPropagation(); showPicAt(i, true); };
     thumbs.appendChild(b);
   });
@@ -1709,9 +1718,9 @@ const loadPairs = async (silent) => {
       img.dataset.key = key;
       img.src = "/api/file/"+encodeURIComponent(name)+"?w="+w+"&t="+(mtime || 0);
     };
-    setImg(".pt", p.t, 240, "T");
-    setImg(".pr", p.r, 240, "R");
-    setImg(".pp", p.pano, 240, "P", p.pano_mtime);
+    setImg(".pt", p.t, 640, "T");
+    setImg(".pr", p.r, 640, "R");
+    setImg(".pp", p.pano, 1280, "P", p.pano_mtime);
     const frames = el.querySelector(".pair-frames");
     if (frames) {
       orderTr(frames, frames.querySelector("figure:has(.pt)"), frames.querySelector("figure:has(.pr)"));
@@ -1802,8 +1811,12 @@ const paintIdle = () => {
   document.getElementById("idleVal").textContent = n ? n + "m" : "off";
 };
 bind("panoRefresh", () => loadPairs());
+const fileRole = (name) => {
+  const m = String(name || "").match(/^([TRP])_/i);
+  return m ? m[1].toUpperCase() : "";
+};
 const fileThumb = (name, label) => name
-  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=480">`
+  ? `<img alt="${label}" class="${label === "P" ? "pano" : ""}" src="/api/file/${encodeURIComponent(name)}?w=${label === "P" ? 960 : 480}">`
   : `<span class="who">${label} —</span>`;
 const exifBits = (e) => {
   if (!e) return "";

@@ -729,6 +729,11 @@ class Pano(unittest.TestCase):
         self._jpeg(path.name, "red")
         self.assertEqual(pano._size(path), (40, 20))
 
+    def test_thumb_keeps_pano_aspect(self):
+        wide = self._jpeg("P_20260101_120000.jpg", "green", w=160, h=40)
+        dest = pano.thumb(wide.name, 80, self.root)
+        self.assertEqual(pano._size(dest), (80, 20))
+
     def test_stitch_width(self):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")
