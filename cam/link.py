@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from contextlib import contextmanager
@@ -16,7 +15,7 @@ ROLES = ("T", "R")
 class Link:
     def __init__(self, live):
         self.live = live
-        self.want_live = os.environ.get("DUALS_KIOSK") == "1"
+        self.want_live = False
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._kick = threading.Event()

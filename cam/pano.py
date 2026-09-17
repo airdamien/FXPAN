@@ -511,7 +511,9 @@ def thumb(name, width, root=None):
         return dest
     tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
     try:
-        _magick([str(src), "-thumbnail", f"{width}x{width}", "-quality", "70", str(tmp)])
+        # Width cap only. A square box plus CSS object-fit:cover was
+        # cropping hybrid panos (~2.7:1) to 3:2.
+        _magick([str(src), "-thumbnail", f"{width}x", "-quality", "70", str(tmp)])
         tmp.replace(dest)
     finally:
         if tmp.exists():

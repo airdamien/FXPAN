@@ -62,19 +62,21 @@
   #log.err { color: #ff3b3b; }
   .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; margin: 0 0 1rem; }
   .file { border: 1px solid #5a3200; padding: 0.7rem; margin-top: 0.6rem; }
-  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; }
-  .file img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
+  .file .thumbs { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 0.4rem; }
+  .file img { width: 100%; aspect-ratio: 3/2; object-fit: contain; background: #000; }
+  .file img.pano { aspect-ratio: 16/6; }
   .file .who { color: #8a7a55; font-size: 0.8rem; display: block; margin: 0.4rem 0; }
   .file .exif, .pair-exif { color: #8a7a55; font: 13px/1.35 ui-monospace, Menlo, monospace; }
   .file .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   #pairs { display: grid; gap: 0.8rem; margin-top: 0.8rem; }
   .pair { display: grid; gap: 0.45rem; width: 100%; text-align: left; padding: 0.6rem;
           border: 1px solid #5a3200; }
-  .pair-frames { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 0.5rem; }
-  .pair-frames figure { margin: 0; }
+  .pair-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; }
+  .pair-frames .pair-pano { grid-column: 1 / -1; }
+  .pair-frames figure { margin: 0; min-width: 0; }
   .pair-frames figcaption { color: #8a7a55; font-size: 0.75rem; letter-spacing: 0.12em; }
-  .pair img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #000; }
-  .pair-pano img { aspect-ratio: 16/6; object-fit: contain; }
+  .pair img { width: 100%; aspect-ratio: 3/2; object-fit: contain; background: #000; }
+  .pair-pano img { aspect-ratio: 8/3; object-fit: contain; }
   .pair-stat { color: #6cff4d; font: 13px/1.35 ui-monospace, Menlo, monospace;
                white-space: pre-wrap; min-height: 2.8em; }
   .pair-stat.err { color: #ff3b3b; }
@@ -543,9 +545,9 @@ const loadPairs = async (silent) => {
       if (!img.src.includes(encodeURIComponent(name)) || (p.stitch || {}).phase === "done")
         img.src = next + "&t="+Date.now();
     };
-    setImg(".pt", p.t, 320);
-    setImg(".pr", p.r, 320);
-    setImg(".pp", p.pano, 960);
+    setImg(".pt", p.t, 640);
+    setImg(".pr", p.r, 640);
+    setImg(".pp", p.pano, 1280);
     el.querySelector(".go").disabled = !p.ready || !!(p.stitch && p.stitch.running);
     const ex = el.querySelector(".pair-exif");
     if (ex) ex.innerHTML = exifBlock(p.exif);
@@ -582,7 +584,7 @@ document.getElementById("olDrag").oninput = () => {
 };
 bind("panoRefresh", () => loadPairs());
 const fileThumb = (name, label) => name
-  ? `<img alt="${label}" src="/api/file/${encodeURIComponent(name)}?w=240">`
+  ? `<img alt="${label}" class="${label === "P" ? "pano" : ""}" src="/api/file/${encodeURIComponent(name)}?w=${label === "P" ? 720 : 240}">`
   : `<span class="who">${label} —</span>`;
 const exifBits = (e) => {
   if (!e) return "";
