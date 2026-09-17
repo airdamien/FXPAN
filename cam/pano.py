@@ -1142,9 +1142,74 @@ def _overlap_feature_masks(w, h, overlap, tmp):
     return tp, rp, band
 
 
+def _sift_overlap_shift(left_path, right_path, left_mask, right_mask):
+    """Translation (dx, dy) mapping right-image pts onto left-image pts.
+
+    Hybrid: left is flopped R, right is T. Overlap is left-east / right-west.
+    dx ≈ width − overlap_px. stitch_files dy is −dy (R up when features sit
+    lower in R than in T).
+    """
+    import cv2
+    import numpy as np
+
+    left = cv2.imread(str(left_path), cv2.IMREAD_GRAYSCALE)
+    right = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
+    ml = cv2.imread(str(left_mask), cv2.IMREAD_GRAYSCALE)
+    mr = cv2.imread(str(right_mask), cv2.IMREAD_GRAYSCALE)
+    if left is None or right is None or ml is None or mr is None:
+        return None
+    orig_w = left.shape[1]
+    h, w = left.shape
+    work = 1600
+    scale = 1.0
+    if w > work:
+        scale = work / float(w)
+        nw, nh = int(round(w * scale)), int(round(h * scale))
+        left = cv2.resize(left, (nw, nh), interpolation=cv2.INTER_AREA)
+        right = cv2.resize(right, (nw, nh), interpolation=cv2.INTER_AREA)
+        ml = cv2.resize(ml, (nw, nh), interpolation=cv2.INTER_NEAREST)
+        mr = cv2.resize(mr, (nw, nh), interpolation=cv2.INTER_NEAREST)
+    sift = cv2.SIFT_create(nfeatures=4000)
+    k1, d1 = sift.detectAndCompute(left, ml)
+    k2, d2 = sift.detectAndCompute(right, mr)
+    if d1 is None or d2 is None or len(k1) < 8 or len(k2) < 8:
+        return None
+    raw = cv2.BFMatcher(cv2.NORM_L2).knnMatch(d1, d2, k=2)
+    dxs, dys = [], []
+    for pair in raw:
+        if len(pair) < 2:
+            continue
+        m, n = pair
+        if m.distance >= 0.75 * n.distance:
+            continue
+        x1, y1 = k1[m.queryIdx].pt
+        x2, y2 = k2[m.trainIdx].pt
+        dxs.append(x1 - x2)
+        dys.append(y1 - y2)
+    if len(dxs) < 12:
+        return None
+    dxs = np.asarray(dxs, np.float64)
+    dys = np.asarray(dys, np.float64)
+    dx0, dy0 = float(np.median(dxs)), float(np.median(dys))
+    ok = (np.abs(dxs - dx0) < 8) & (np.abs(dys - dy0) < 8)
+    if int(ok.sum()) < 8:
+        return None
+    dx = float(np.median(dxs[ok])) / scale
+    dy = float(np.median(dys[ok])) / scale
+    ol = orig_w - dx
+    frac = ol / orig_w
+    if frac < 0.05 or frac > 0.50:
+        return None
+    return {
+        "overlap": frac,
+        "dy": int(round(-dy)),
+        "n": int(ok.sum()),
+    }
+
+
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
                 balance=True, overlap=OVERLAP):
-    """Feature-match stitch via OpenStitching (OpenCV). https://github.com/OpenStitching/stitching"""
+    """SIFT in the hybrid overlap, then a translation blend (no affine shear)."""
     def log(msg):
         if on_log:
             on_log(msg)
@@ -1152,12 +1217,10 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
     log("OpenStitching  loading…")
     _venv_site()
     try:
-        import cv2
-        from stitching import AffineStitcher
-        from stitching.stitching_error import StitchingError
+        import cv2  # noqa: F401
     except ImportError as exc:
         raise dual.CamError(
-            "OpenStitching missing.  cd cam && python3 -m venv .venv && "
+            "OpenCV missing.  cd cam && python3 -m venv .venv && "
             ".venv/bin/pip install -r requirements.txt"
         ) from exc
 
@@ -1176,59 +1239,40 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
             r_use = Path(r_path)
             if flop:
                 r_use = tmp / "r.jpg"
-                _magick([str(r_path), "-flop", str(r_use)])
+                args = [str(r_path), "-flop"]
+                rw, rh = _size(r_path)
+                if (rw, rh) != (tw, th):
+                    args += ["-resize", f"{tw}x{th}!"]
+                _magick(args + [str(r_use)])
                 log("OpenStitching  R flopped")
             else:
                 log("OpenStitching  R as-shot")
-            comp = "channel" if balance else "no"
-            if balance:
-                log("balance OpenStitching channel (warped overlap)")
-            log("OpenStitching  affine sift")
+                rw, rh = _size(r_use)
+                if (rw, rh) != (tw, th):
+                    sized = tmp / "r.jpg"
+                    _magick([str(r_use), "-resize", f"{tw}x{th}!", str(sized)])
+                    r_use = sized
+            log("OpenStitching  SIFT translation")
             try:
-                stitcher = AffineStitcher(
-                    detector="sift",
-                    nfeatures=6000,
-                    confidence_threshold=0.05,
-                    match_conf=0.3,
-                    compensator=comp,
-                    nr_feeds=3 if balance else 1,
-                    crop=False,
-                    medium_megapix=0.8,
+                found = _sift_overlap_shift(r_use, t_path, rmask, tmask)
+                if not found:
+                    raise dual.CamError("not enough overlap SIFT matches")
+                log(
+                    f"OpenStitching  ol={found['overlap']:.0%} dy={found['dy']:+d} "
+                    f"n={found['n']}  flip={'on' if flop else 'off'}"
                 )
-                img = stitcher.stitch(
-                    [str(r_use), str(t_path)],
-                    feature_masks=[str(rmask), str(tmask)],
+                info = stitch_files(
+                    t_path, r_path, dest,
+                    overlap=found["overlap"], flip_r=flop, mode="blend",
+                    dy=found["dy"], on_log=on_log, balance=balance,
                 )
-                if img is None or getattr(img, "size", 0) == 0:
-                    raise StitchingError("empty panorama")
-                if balance:
-                    img, note = _match_seam_img(img)
-                    if note:
-                        log(note)
-                if not cv2.imwrite(
-                    str(dest), img, [int(cv2.IMWRITE_JPEG_QUALITY), 92]
-                ):
-                    raise dual.CamError("OpenStitching write failed")
-                w, h = _size(dest)
-                if w < int(tw * 1.15):
-                    raise StitchingError(
-                        f"affine too narrow {w}×{h} (need a wide T+R pano)"
-                    )
-                log(f"OpenStitching  affine  {w}×{h}  flip={'on' if flop else 'off'}")
-                return {
-                    "file": dest.name,
-                    "width": w,
-                    "height": h,
-                    "overlap": 0,
-                    "overlap_frac": 0,
-                    "dy": 0,
-                    "flip_r": flop,
-                    "mode": "open",
-                    "engine": "affine",
-                }
+                info["flip_r"] = flop
+                info["mode"] = "open"
+                info["engine"] = "sift"
+                return info
             except Exception as exc:
                 last = exc
-                log(f"affine failed: {exc}")
+                log(f"sift failed: {exc}")
     raise dual.CamError(str(last) if last else "OpenStitching failed")
 
 
@@ -1298,6 +1342,8 @@ def stitch_stamp(
             else:
                 info["message"] = (
                     f"open  {info.get('engine', '')}  "
+                    f"ol={info.get('overlap_frac', 0):.0%}  "
+                    f"dy={info.get('dy', 0):+d}  "
                     f"flip={'on' if info.get('flip_r') else 'off'}  "
                     f"{info['width']}×{info['height']}"
                 )

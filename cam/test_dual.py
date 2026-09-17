@@ -764,10 +764,10 @@ class Pano(unittest.TestCase):
     def test_open_import(self):
         pano._venv_site()
         try:
-            from stitching import AffineStitcher, Stitcher
+            import cv2  # noqa: F401
         except ImportError:
-            self.skipTest("stitching-headless not installed")
-        self.assertTrue(callable(Stitcher) and callable(AffineStitcher))
+            self.skipTest("cv2 not installed")
+        self.assertTrue(callable(pano._sift_overlap_shift))
 
     def test_find_overlap_marker(self):
         full = self.root / "full.jpg"
@@ -789,6 +789,27 @@ class Pano(unittest.TestCase):
         self.assertFalse(found["flip_r"])
         self.assertGreater(found["overlap"], 0.20)
         self.assertLess(found["overlap"], 0.40)
+        self.assertLess(abs(found["dy"]), 4)
+
+    def test_sift_overlap_is_translation(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        rng = np.random.default_rng(0)
+        full = rng.integers(0, 256, (240, 900), dtype=np.uint8)
+        t = self.root / "t.png"
+        r = self.root / "r.png"
+        tmp = self.root / "masks"
+        tmp.mkdir()
+        cv2.imwrite(str(r), full[:, :500])
+        cv2.imwrite(str(t), full[:, 400:])
+        tmask, rmask, _ = pano._overlap_feature_masks(500, 240, 0.20, tmp)
+        found = pano._sift_overlap_shift(r, t, rmask, tmask)
+        self.assertIsNotNone(found)
+        self.assertAlmostEqual(found["overlap"], 0.20, delta=0.04)
         self.assertLess(abs(found["dy"]), 4)
 
     def test_subtract_ghost_kills_shifted_copy(self):
