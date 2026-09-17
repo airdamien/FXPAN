@@ -765,7 +765,7 @@ module stem_chosen() {
 function stem_label() =
     STEM == 1 ? "F 50" : STEM == 2 ? "EL 180" : "EL 135";
 
-function el180_adapter_h() = EL180_HELI_MALE + EL180_HELI_MIN;
+function el180_adapter_h() = EL180_ADAPTER_MALE + EL180_HELI_MIN;
 
 module part_elnikkor_adapter() {
     h1 = EL_M42_LEN;
@@ -796,23 +796,31 @@ module part_elnikkor_adapter() {
 }
 
 module part_el180_adapter() {
-    hm = EL180_HELI_MALE;
+    hm = EL180_ADAPTER_MALE;
     hb = EL180_HELI_MIN;
     hf = EL180_M62_LEN;
+    overlap = 3;
+    shank_d = EL180_M62_MAJOR - 1.6;
+    hex_h = hb + overlap;
     color("SlateGray")
     difference() {
         union() {
             ScrewThread(EL180_M62_MAJOR, hm, pitch = EL180_M62_PITCH,
                         tolerance = EL180_M62_TOL);
-            translate([0, 0, hm])
+            cylinder(h = hm + overlap, d = shank_d);
+            translate([0, 0, hm - overlap])
                 rotate([0, 0, 30])
                     ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
-                              tolerance = EL180_M62_TOL)
-                        cylinder(h = hb, d = EL180_ADAPTER_OD, $fn = 6);
+                              tolerance = EL180_M62_TOL,
+                              position = [0, 0, hex_h - hf])
+                        cylinder(h = hex_h, d = EL180_ADAPTER_OD, $fn = 6);
         }
+        // Barrel pocket from the nut face so the unthreaded tube does not
+        // sit on a 52 mm ledge before the flange thread catches.
+        translate([0, 0, hm])
+            cylinder(h = hb + 0.2, d = EL180_BARREL);
         translate([0, 0, -0.2])
             cylinder(h = hm + hb + 0.4, d = EL180_BORE);
-        // Side flat, mid-height — not on the female rim.
         translate([0, -EL180_ADAPTER_OD / 2 * cos(30) - 0.05,
                    hm + hb * 0.55])
             rotate([90, 0, 0])
@@ -1165,7 +1173,7 @@ module assembly() {
         if (el180_kit())
             at_stem()
                 translate([0, 0, patch_t() + stem_tube_len()
-                                 + EL180_NUT_H - EL180_HELI_MALE
+                                 + EL180_NUT_H - EL180_ADAPTER_MALE
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_el180_adapter();
 
