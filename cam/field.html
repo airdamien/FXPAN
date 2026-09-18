@@ -545,7 +545,7 @@
   <figure class="p" id="panoPrevFig" hidden>
     <canvas id="lvP"></canvas>
     <div class="tag">P</div>
-    <div class="jp">36%</div>
+    <div class="jp">20%</div>
     <div class="meta"><span>STITCH</span><span id="stP">cut</span></div>
   </figure>
 </div>
@@ -658,8 +658,8 @@
   <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost T and R before stitch</label>
   <label class="dlchk"><input type="checkbox" id="balanceOn" checked>Match T/R brightness</label>
   <div class="drag">
-    <div class="k">Overlap <b id="olVal">36%</b></div>
-    <input type="range" id="olDrag" min="5" max="50" value="36" step="1">
+    <div class="k">Overlap <b id="olVal">20%</b></div>
+    <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
   </div>
 </div>
 </div>
@@ -2341,7 +2341,7 @@ const paintSettings = (s) => {
   if (mt) mt.classList.toggle("on", master === "T");
   if (mr) mr.classList.toggle("on", master === "R");
   if (ol && "overlap" in s) {
-    const pct = Math.round((Number(s.overlap) || 0.36) * 100);
+    const pct = Math.round((Number(s.overlap) || 0.20) * 100);
     ol.value = String(Math.min(50, Math.max(5, pct)));
     paintOl();
   }

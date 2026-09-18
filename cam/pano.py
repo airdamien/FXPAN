@@ -1,9 +1,19 @@
 """List downloaded T/R JPEG pairs and stitch a hybrid pano.
 
 After R flop, R is image −X (left) and T is image +X (right) — same order
-as LIVE PREVIEW. Designed overlap is 0.36 on FXPAN (openscad/hybrid_shift
-FX_MODE, 0.20 on DX). Match searches overlap, vertical shift, and whether
-R needs a flop.
+as LIVE PREVIEW. Match searches overlap, vertical shift, and whether R needs
+a flop, so the default below is only a starting guess and a prior.
+
+Designed overlap by body:
+
+  0.20  FXPAN 65 (openscad/fxpan) — the default. 14.40 mm shift, 64.80 mm
+        stitch, 2.711:1. This is the body the name refers to.
+  0.20  DX shift kit (openscad/hybrid_shift)
+  0.36  FX shift kit (openscad/hybrid_shift FX_MODE) — pass overlap=0.36
+
+The R leg takes one reflection and T takes none, so exactly one frame is
+mirrored. find_overlap() detects which, so parity is not a build constraint.
+
 Uses ImageMagick (`magick`) already on this Mac.
 """
 
@@ -31,7 +41,7 @@ CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 
 def _cpu_count():
     return max(1, os.cpu_count() or 2)
-OVERLAP = 0.36
+OVERLAP = 0.20
 PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
 SAFE = re.compile(r"^[\w.-]+$")

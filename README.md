@@ -77,6 +77,8 @@ Same shift geometry as DX, but FX overlap is **36%** so the unique edges sit at 
 
 **Reuse from `hybrid_shift/`:** `stem`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path. The FX tray follows the 11.5 mm bores (port windows + clamp/nut reliefs); do not reuse the DX tray.
 
+**Stitching this kit needs the Overlap slider at 36%.** The app now defaults to **20%** because that is what FXPAN 65 and the DX shift kit want. Match finds the real overlap either way, but the slider seeds the search and Cut/Blend use it directly.
+
 Tune **D800_TRIPOD_ABOVE** / **D800_TRIPOD_IN** in the customizer after measuring your bodies (defaults are estimates).
 
 **Fuzzy skin (Bambu Studio)** — same numbers on every dark PETG light-path wall. Fuzzy only jitters **walls**, not top/bottom. ([Bambu wiki](https://wiki.bambulab.com/en/software/bambu-studio/parameter/fuzzy-skin))
@@ -93,6 +95,16 @@ Prepare → **Fuzzy Skin painting** (spray next to support painting). Slice and 
 **Cartridge** (`hybrid_tray.stl`, floor on the bed). Do not fuzz the outside (0.4 mm slip into the box). Paint the inner cup walls, the plate-frame cheeks, and the window rim. Skip the outer cup, the glass slot faces, the floor (already hatched), and the lid-fork posts. A cube **modifier** filling the cavity with Fuzzy Skin = `All walls` also works; keep it inside the cup so it does not touch the outer skin.
 
 **Tube / box liners** (`arm_*_inner.stl`, `stem_inner.stl`, `chassis_inner.stl`, cookie on the bed). Paint the **bore** (baffle teeth and the glare-plate rim). Skip the cookie OD, the clamp pads, and anything that mates to PCTG. Do not paint `*_outer` or the gold F-bayonet — those stay smooth. The glare plate sits in the F throat on the chassis side of the register; it does not enter the mirror box.
+
+### FXPAN 65 (`stls/fxpan/`) — D800, clean sheet
+
+A separate body, not a variant. Two D800s behind one EL-Nikkor 180/5.6 and a **75 × 75 × 1 mm** 50/50 plate, stitching **64.80 × 23.9 mm · 2.711:1 · 13248 × 4912 · 65.1 MP** — XPan is 65 × 24 and 2.708:1. **True infinity**, and corner-to-corner clean from **f/8.4** down to f/22.
+
+The shift kits above retreat to 36% overlap because a 50 mm plate at 45° only presents 35.36 mm across the fold and the frame needs 44.7 mm there at f/5.6. FXPAN buys the 75 mm plate (53.03 mm, +18.7%) and opens the bore to 46 mm with a 44 mm mouth so a 20% overlap and a 14.4 mm shift actually pass. Nothing is interchangeable with the shift kits — every part is stamped `fxp_`.
+
+Open [`openscad/fxpan/WATCH_ME.scad`](openscad/fxpan/WATCH_ME.scad) and read the console; it echoes the whole path budget with margins and marks anything that clips. Export with `./export_fxpan.sh` (34 STLs). Ray-trace check: `python kraken/fxpan_paths.py` — it exits non-zero if the geometry stops matching the numbers, and writes [`docs/kraken/fxpan_margins.png`](docs/kraken/fxpan_margins.png). Print list, assembly and alignment: [`openscad/fxpan/README.md`](openscad/fxpan/README.md). Derivations and the numbers you must not move: [`openscad/fxpan/PLAN.md`](openscad/fxpan/PLAN.md). Buy list: [`openscad/fxpan/bom.md`](openscad/fxpan/bom.md).
+
+Three caveats up front. It is a **20.4° horizontal** field — XPan's aspect, not XPan's angle of view. The working aperture is **f/8 to f/22**: at f/5.6 the frame corners drop to 0.84 while the long axis stays clean, because the 44 mm Nikon F throat is a hard ceiling and a 14.4 mm shift spends nearly all the margin it ever had. And the **metal 52 mm F reverse rings are not optional** — the printed bayonet mesh is 38 mm clear against the 38.47 mm the corners need at *any* f-number, so it never passes the whole frame.
 
 ### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
 
