@@ -13,7 +13,7 @@ BOOLS = (
     "follow_cam",
 )
 EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
-OVERLAP = 0.20
+OVERLAP = 0.36
 PREVIEW_S = 10
 IDLE_MIN = 10
 

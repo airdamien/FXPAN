@@ -1,8 +1,9 @@
 """List downloaded T/R JPEG pairs and stitch a hybrid pano.
 
 After R flop, R is image −X (left) and T is image +X (right) — same order
-as LIVE PREVIEW. Designed overlap is 0.20 (openscad/hybrid/params.scad).
-Match searches overlap, vertical shift, and whether R needs a flop.
+as LIVE PREVIEW. Designed overlap is 0.36 on FXPAN (openscad/hybrid_shift
+FX_MODE, 0.20 on DX). Match searches overlap, vertical shift, and whether
+R needs a flop.
 Uses ImageMagick (`magick`) already on this Mac.
 """
 
@@ -30,7 +31,7 @@ CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 
 def _cpu_count():
     return max(1, os.cpu_count() or 2)
-OVERLAP = 0.20
+OVERLAP = 0.36
 PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
 SAFE = re.compile(r"^[\w.-]+$")
@@ -625,8 +626,8 @@ def _score_ol(t, r, ol, dy):
 
 
 def _search_shift(t, r, on_log=None):
-    best = (1e9, 0.20, 0)
-    for pct in range(10, 37, 3):
+    best = (1e9, OVERLAP, 0)
+    for pct in range(10, 43, 3):
         ol = max(4, int(round(t.w * pct / 100)))
         max_dy = min(8, t.h // 24)
         for dy in range(-max_dy, max_dy + 1, 2):
@@ -638,7 +639,7 @@ def _search_shift(t, r, on_log=None):
     pct0 = int(round(best[1] * 100))
     dy0 = best[2]
     max_dy = min(8, t.h // 24)
-    for pct in range(max(10, pct0 - 3), min(38, pct0 + 4)):
+    for pct in range(max(10, pct0 - 3), min(44, pct0 + 4)):
         ol = max(4, int(round(t.w * pct / 100)))
         for dy in range(max(-max_dy, dy0 - 3), min(max_dy, dy0 + 3) + 1):
             s = _score_ol(t, r, ol, dy)
@@ -730,6 +731,61 @@ def _balance_r(t_path, r_path, dest, overlap=OVERLAP, on_log=None):
     return dest
 
 
+def _strip_mean(path, w, h, x0, x1):
+    x0 = max(0, min(w - 1, int(x0)))
+    x1 = max(x0 + 1, min(w, int(x1)))
+    with tempfile.TemporaryDirectory() as tmp:
+        crop = Path(tmp) / "s.png"
+        _magick([
+            str(path), "-crop", f"{x1 - x0}x{h}+{x0}+0", "+repage", str(crop),
+        ])
+        return _mean(crop)
+
+
+def _lift_unique(path, dest, east, overlap=OVERLAP, on_log=None):
+    """Brighten the unique half so a stopped-down taking lens matches the overlap.
+
+    Hybrid T unique is east, flopped R unique is west. The overlap is on-axis
+    enough to stay lit at f/5.6; the far edge goes black by f/8.
+    """
+    path = Path(path)
+    w, h = _size(path)
+    ol = max(1, min(w - 1, int(round(w * float(overlap)))))
+    edge = max(4, int(round(w * 0.08)))
+    if east:
+        mid = _strip_mean(path, w, h, 0, ol)
+        rim = _strip_mean(path, w, h, w - edge, w)
+        x0, x1 = ol, w - 1
+    else:
+        mid = _strip_mean(path, w, h, w - ol, w)
+        rim = _strip_mean(path, w, h, 0, edge)
+        x0, x1 = 0, w - ol
+    if rim <= 0.02 or mid <= 0.02:
+        return path
+    gain = mid / rim
+    if gain < 1.12:
+        return path
+    if gain > 2.50:
+        gain = 2.50
+    dest = Path(dest)
+    extra = f"{gain - 1:.4f}"
+    _magick([
+        str(path),
+        "(", "+clone",
+        "(", "-size", f"{w}x{h}", "xc:black",
+        "-sparse-color", "barycentric",
+        f"{x0},0 black {x1},0 white", ")",
+        "-compose", "multiply", "-composite",
+        "-evaluate", "multiply", extra, ")",
+        "-compose", "plus", "-composite",
+        str(dest),
+    ])
+    if on_log:
+        side = "T-east" if east else "R-west"
+        on_log(f"vignette {side} ×{gain:.2f} (unique vs overlap)")
+    return dest
+
+
 def _match_seam_img(img):
     """Scale the right side so soldermask near the seam matches the left."""
     import numpy as np
@@ -815,6 +871,8 @@ def stitch_files(
             ft.result()
         if balance:
             r_use = _balance_r(t_use, r_use, tmp / "r_bal.jpg", overlap, on_log=log)
+        t_use = _lift_unique(t_use, tmp / "t_lift.jpg", east=True, overlap=overlap, on_log=log)
+        r_use = _lift_unique(r_use, tmp / "r_lift.jpg", east=False, overlap=overlap, on_log=log)
         _magick([str(r_use), "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "rol.png")])
         _magick([str(t_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "tol.png")])
         if mode == "cut":

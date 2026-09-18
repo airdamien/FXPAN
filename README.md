@@ -24,7 +24,7 @@ Ready to slice. Every fork is a complete kit under [`stls/`](stls/). `arm_*.stl`
 |-----|--------|-------|------|---------|--------|-------|
 | [`stls/hybrid/`](stls/hybrid/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · 14° · ~8.9k · **toed** | `--hybrid` |
 | [`stls/hybrid_shift/`](stls/hybrid_shift/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | 42.5 mm · **shifted**, no Scheimpflug | `--hybrid-shift` |
-| [`stls/hybrid_shift_fx/`](stls/hybrid_shift_fx/) | D800 FX | 52 mm F | 173.5 mm | ~0.61 m | 64.8 mm · **shifted** · ~10.4k | `--hybrid-shift-fx` |
+| [`stls/hybrid_shift_fx/`](stls/hybrid_shift_fx/) | D800 FX | 52 mm F | 173.5 mm | ~0.61 m | 59.0 mm · **shifted** · ~12.1k | `--hybrid-shift-fx` |
 | [`stls/hybrid_shadowgraph/`](stls/hybrid_shadowgraph/) | D7000 DX | 52 mm F | 173.5 mm | ~0.61 m | same frame · T sharp / R shadowgraph | `--shadowgraph` |
 | [`stls/EFhybrid/`](stls/EFhybrid/) | 5D Mark III FF | 58 mm EF | 171 mm | ~0.64 m | 64.8 mm · 21.5° · ~10.4k | `--efhybrid` |
 | [`stls/Ehybrid/`](stls/Ehybrid/) | Sony α7 FF | 52 mm E | 145 mm | **~2 m** | 64.4 mm · 25° · ~10.8k | `--ehybrid` |
@@ -71,11 +71,11 @@ The chassis floor can stay PCTG — the cartridge is the dark cup. `*_inner.stl`
 
 ### Shift FX kit (`stls/hybrid_shift_fx/`) — D800
 
-Same shift geometry as DX, but bores / lid notches / brace slots sit at **FX `sensor_shift()` (~14.4 mm)** for a **~64.8 mm** stitch. Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad), set **Camera → FX_MODE = 1** in the customizer to preview D800 ghosts, or export with `./export_hybrid_shift_fx.sh`.
+Same shift geometry as DX, but FX overlap is **36%** so the unique edges sit at **~11.5 mm** shift (not 14.4 mm) for a **~59.0 mm / 59 MP** stitch — T-east still lights when the 180 leaves f/5.6. Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad), set **Camera → FX_MODE = 1** in the customizer to preview D800 ghosts, or export with `./export_hybrid_shift_fx.sh`. FX parts are stamped **FX CHASSIS / FX ARM R / FX ARM T / FX LID / FX BRACE / FX TRAY** (DX keeps `hs_`).
 
-**Print from `hybrid_shift_fx/`:** `chassis` (+ `_inner` / `_outer`), `arm_r` / `arm_t` (+ `_inner` / `_outer` / `_f` variants), `lid` (+ `_inner` / `_outer`), `brace`, `hybrid_tray`.
+**Print from `hybrid_shift_fx/`:** `chassis` (+ `_inner` / `_outer`), `arm_r` / `arm_t` (+ `_inner` / `_outer` / `_f` variants), `lid` (+ `_inner` / `_outer`), `brace`, `hybrid_tray`. Wall type as separate colors: `chassis_logo_word` (FXPan), `chassis_logo_mp` (59MP), `chassis_logo_rule` (hairline), `chassis_logo_spec` (12070×4912 · 2.46:1). Chassis pocket is all four; drop each STL in a different filament.
 
-**Reuse from `hybrid_shift/`:** `stem`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path. The FX tray follows the 14.4 mm bores (port windows + clamp/nut reliefs); do not reuse the DX tray.
+**Reuse from `hybrid_shift/`:** `stem`, `shims`, `elnikkor_adapter`, `el180_adapter`, monitor parts, focus tools. Same 52×0.75 F reverse rings and path. The FX tray follows the 11.5 mm bores (port windows + clamp/nut reliefs); do not reuse the DX tray.
 
 Tune **D800_TRIPOD_ABOVE** / **D800_TRIPOD_IN** in the customizer after measuring your bodies (defaults are estimates).
 
@@ -193,7 +193,7 @@ Same DX window, D7000 vs D7200. Stars are native photosites on **0.5 m** of obje
 
 ### D800 FX — EL-Nikkor 180, 50 m (`hybrid_shift` FX_MODE)
 
-Same path (**+7.2 mm** helicoid, **180.7 mm**). Shift **14.4 mm**, stitch **64.8 mm**. One FX is **~10.0×6.6 m / 11.4°**; stitch is **~16.7 m / 18.9° / ~13248×4912** (1.67×). T-only / overlap / R-only = 108 / 27 / 108.
+Same path (**+7.2 mm** helicoid, **180.7 mm**). Shift **11.5 mm**, stitch **59.0 mm**. One FX is **~10.0×6.6 m / 11.4°**; stitch is **~15.2 m / 17.2° / ~12070×4912** (1.64×). Overlap 36%.
 
 ![D800 180 fold](docs/kraken/el180_d800_paths.png)
 

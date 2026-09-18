@@ -927,6 +927,26 @@ class Pano(unittest.TestCase):
         self.assertEqual(used, dest)
         self.assertAlmostEqual(pano._overlap_scale(t, dest, overlap=0.20), 1.0, delta=0.05)
 
+    def test_lift_unique_brightens_t_east(self):
+        t = self.root / "t_vig.jpg"
+        subprocess.run(
+            [
+                "magick", "-size", "100x40", "xc:",
+                "-sparse-color", "barycentric", "0,0 #808080 99,0 #222222",
+                str(t),
+            ],
+            check=True, capture_output=True,
+        )
+        dest = self.root / "t_lift.jpg"
+        used = pano._lift_unique(t, dest, east=True, overlap=0.20)
+        self.assertEqual(used, dest)
+        w, h = 100, 40
+        before = pano._strip_mean(t, w, h, 92, 100)
+        after = pano._strip_mean(dest, w, h, 92, 100)
+        mid = pano._strip_mean(dest, w, h, 0, 20)
+        self.assertGreater(after, before * 1.15)
+        self.assertAlmostEqual(after, mid, delta=0.12)
+
     def test_disk_stats_counts_sets(self):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")
@@ -1210,7 +1230,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(
             settings.load(pi=True),
             {
-                "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
+                "download": True, "gpio": True, "flip_r": False, "overlap": 0.36,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
@@ -1220,7 +1240,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(
             settings.load(pi=False),
             {
-                "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
+                "download": False, "gpio": False, "flip_r": False, "overlap": 0.36,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
