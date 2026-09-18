@@ -38,11 +38,11 @@ ym·(P−d)/P + (P/2N)·(d/P)          P = EL_FOCAL = 180, N = f-number
 
 That is largest at the sensor and smallest at the lens, so **the plate wants
 to be as far forward as it will go, and stopping down only ever helps.** With
-the plate at `d = 111 mm` and `ym = 32.4` (half the 64.80 stitch):
+the plate at `d = 112.5 mm` and `ym = 32.4` (half the 64.80 stitch):
 
 | f-stop | need in plane | 75 mm plate (53.03) | 50 mm plate (35.36) |
 | --- | --- | --- | --- |
-| 5.6 | 44.66 mm | +18.7% | clips |
+| 5.6 | 44.39 mm | +19.5% | clips |
 | 8 | 38.72 mm | +37.0% | clips |
 | 11 | 34.93 mm | +51.8% | +1.2% |
 | 16 | 31.78 mm | +66.9% | +11.3% |
@@ -113,7 +113,7 @@ attempts died here:
 - **A cube chassis does not fit.** A cube tall enough for a 75 mm plate on its
   diagonal is 111 mm, which makes `PATH ≥ 207 mm`. Infinity is then
   unreachable at any helicoid setting. This is why `BOX_Z` and `BOX_XY` are
-  separate: `BOX_Z` (108) carries the plate, `BOX_XY` (95) comes out of the
+  separate: `BOX_Z` (108) carries the plate, `BOX_XY` (92) comes out of the
   path budget and only has to clear the shifted port windows.
 - **A 20 mm M62 nut does not fit.** `hybrid_shift` puts a 20 mm female nut on
   its stem. 20 mm of nut plus 17 mm of collapsed helicoid is 37 mm on the lens
@@ -121,7 +121,7 @@ attempts died here:
   on the cookie and nothing else**; the bought helicoid's male bottoms
   straight onto it.
 
-Result: `BOX_XY = 95` gives **PATH 179.5 … 193.5 mm**, so 180 mm lands at
+Result: `BOX_XY = 92` gives **PATH 179.5 … 193.5 mm**, so 180 mm lands at
 17.5 mm of the helicoid's 17–31 mm travel.
 
 | helicoid | PATH | subject |
@@ -135,6 +135,67 @@ Result: `BOX_XY = 95` gives **PATH 179.5 … 193.5 mm**, so 180 mm lands at
 length, so a chassis 1 mm too large can never reach infinity, while one 1 mm
 too small is fixed with a 1.0 mm shim.
 
+### 4. The camera has to be able to physically go on
+
+A D800 is not flat at its flange. Its front panel stands `D800_PROUD` ≈ 13 mm
+past the bayonet's register face, and the body goes on by pushing that panel
+toward the chassis and twisting to lock. So the F register has to stand off
+the chassis face by at least that much, and the body is 146 × 123 mm against
+a 100 mm chassis face, so there is **nowhere to relieve locally** — the whole
+face has to be behind the line.
+
+Everything between the chassis face and the register is arm tube and reverse
+ring, and the chassis half-width cancels out of both sides:
+
+```
+standoff = ARM_TUBE + F_REV_STACK − (shell outboard of the cookie)
+```
+
+`BOX_XY` does not appear. That is worth stating plainly, because the instinct
+is to shrink the chassis and it does nothing: shrinking `BOX_XY` frees path
+budget, which is only useful because it lets `ARM_TUBE` grow by the same
+amount. The first cut of this body had `ARM_TUBE = 5`, a 4 mm retaining wall
+outboard of each cookie, and therefore **9 mm of standoff** — a D800 would
+have hit the chassis 4 mm before the bayonet seated. For comparison,
+`hybrid_shift`'s long variant, which has actually been built, has 19 mm.
+
+Two changes, neither of which touches an optical number:
+
+- **The outboard retaining wall is gone** (`chassis_shell_t()` is now just
+  `patch_t()`). On the camera faces that wall was precisely what the front
+  panel landed on. The cookie is stopped inboard by the chamber wall it sits
+  against, on three sides by its rebate, and outboard by four countersunk
+  M3s — a better joint than the wall was, and worth 4 mm.
+- **`ARM_TUBE` is solved from the camera rather than picked**, and `BOX_XY`
+  takes what the path budget has left. 5 mm becomes 8 mm, 95 becomes 92, and
+  `PATH` is unchanged at 179.5 mm because the two trade 1:1.
+
+That gives **16 mm of standoff against 13 mm of camera**, 3 mm to twist it on.
+The lever is nearly spent: the floor on `BOX_XY` is 91.4 mm, where the shifted
+port bore starts to break into the adjacent chamber wall, so `ARM_TUBE` cannot
+go much past 9 without the helicoid running out of travel. If your bodies
+measure more than 16 mm proud, `WATCH_ME.scad` will tell you infinity has gone
+out of range rather than quietly building something that cannot focus.
+
+### 5. A 0.75 mm pitch female thread has to be truncated
+
+The reverse-ring mouths on the earlier bodies never took a ring: too loose to
+start, would not run down. That is a profile fault, not a clearance fault.
+
+`lib/threads.scad` cuts a sharp full-height V unless `tooth_height` says
+otherwise. At P = 0.75 that is 0.650 mm of radial depth, against the 0.406 mm
+a real M52 × 0.75 female has. The printed crests stand a quarter of a
+millimetre proud, into the ring's thread *roots*. The ring then rides on those
+crests rather than its flanks — line contact on a knife edge — so it rocks,
+starts crooked and never bites. It feels like a bore that is too big, which
+is why it was read that way for so long.
+
+`F_REV_TOOTH = 0.52` truncates the crest back to the real minor and
+`F_REV_CLEAR` puts the clearance on the major where it belongs, plus a 0.9 mm
+lead-in at the mouth. `F_REV_CLEAR` is the only number a builder should have
+to touch, and `PART = ringgauge` exists so they can find it in ten minutes
+instead of in a three-hour arm print.
+
 ## Locked numbers
 
 Treat these as fixed inputs. `WATCH_ME.scad` echoes every one of them on
@@ -146,12 +207,13 @@ open, with a margin report — check the echo before you trust this table.
 | `overlap_frac()` | 0.20 |
 | `sensor_shift()` | 14.40 mm |
 | `stitch_w()` | 64.80 mm, 2.711:1, 13248 × 4912, 65.1 MP |
-| `BOX_XY` × `BOX_Z` | 95 × 108 mm chamber (outer 111 × 111 × 124) |
+| `BOX_XY` × `BOX_Z` | 92 × 108 mm chamber (outer 100 × 100 × 116) |
 | `BS_SIZE` / `BS_THICK` / `BS_N` | 75 / 1.0 / 1.52, 45°, S1 toward the lens |
 | `bs_t_comp()` | 0.303 mm — shortens the T arm only |
 | `TUBE_ID` / `TUBE_OD` / `WALL` | 46 / 58 / 6 mm |
 | `F_BORE` / `F_THROAT` | **44.0** mm, flush with the ring (others use 40.3) |
-| `ARM_TUBE` | 5.0 mm past the cookie |
+| `ARM_TUBE` | 8.0 mm past the cookie — solved from `D800_PROUD`, not picked |
+| `D800_PROUD` / standoff | 13.0 mm of camera against 16.0 mm of air |
 | `EL180_M62_LEN` | 8 mm — the entire stem |
 | `PATH` | 179.5 … 193.5 mm, infinity at helicoid 17.5 |
 
@@ -212,6 +274,12 @@ So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
 - **Cradle dimensions are unmeasured.** `D800_TRIPOD_ABOVE` and
   `D800_TRIPOD_IN` default to 10.0 and 44 mm. Measure your own bodies and set
   them in the customizer before printing `base` or the cradles.
+- **`D800_PROUD` is unmeasured too**, and it is the one that bites hardest:
+  get it wrong and the camera will not go on at all. 13.0 mm is the reported
+  figure, not a measured one, and the standoff is 16 mm. Measure before you
+  print a chassis.
+- **The M52 mouth is printer-dependent.** `F_REV_CLEAR = 0.15` is a starting
+  point, not a result. Print `ringgauge` and set it from a real ring.
 
 ## Files
 
@@ -288,12 +356,15 @@ under the chassis (its 1/4-20), one per camera, and one for the tripod. Each
 camera bolts through its own 1/4-20 into an `fxp_cradle`, so **the bayonet
 locates and never carries load.**
 
-The cradle is one flange, not two. A pair of walls straddling the body would
-have to span most of the D800's 146 mm width to get any leverage, and anything
-narrow enough to sit on a 46 mm pad has almost none. Every real camera plate
-solves this the same way: a single flange bearing on one edge with the 1/4-20
-pulling the body onto it. The flange sits on the far side from the plate, so
-tightening drives the body **toward** the register.
+The cradle is a bare plinth. It briefly had an anti-twist flange up the back
+of the body, and that was wrong on both counts. The bayonet already fixes yaw
+far better than a flange 46 mm wide could — anything narrow enough to sit on
+the pad has almost no leverage, and anything with leverage would have to span
+most of the D800's 146 mm width. More importantly, mounting the camera means
+bringing it in along the axis and twisting to lock, so anything standing up
+off the plinth is in the way of the one motion the whole build depends on.
+The 1/4-20 slot runs along the axis so the screw follows the bayonet in
+rather than fighting it: start it loose, seat the mount, then tighten.
 
 Tripod socket goes under the combined centre of mass — `base_tripod_xy()`
 weights the chassis-plus-lens at the origin against 1 kg at each camera pad.
@@ -301,12 +372,12 @@ weights the chassis-plus-lens at the origin against 1 kg at each camera pad.
 ## Export
 
 ```
-./export_fxpan.sh              # all 34 STLs -> stls/fxpan/
+./export_fxpan.sh              # all 35 STLs -> stls/fxpan/
 ./export_fxpan.sh chassis lid  # just these
 ```
 
 That wraps `./export_stls.sh --fxpan`. Every part is stamped with the render
-minute. All 34 export manifold with no warnings; if yours do not, say so
+minute. All 35 export manifold with no warnings; if yours do not, say so
 rather than shipping it.
 
 ## Verification

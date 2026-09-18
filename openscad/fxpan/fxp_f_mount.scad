@@ -41,11 +41,21 @@ F_PIN_X_OUT   = 29.4;
 
 // Female M52×0.75 in the tube wall (Fotodiox reverse ring).
 // difference() this — NOT ScrewHole, which bloats the OD.
-module f_rev_thread_cut(h = undef) {
+//
+// tooth_height is the point of this. Left at its default it equals the pitch
+// and ScrewThread cuts a sharp full-height V, 0.650 mm deep radially at
+// P = 0.75, where a real M52×0.75 female is 0.406 mm. The extra quarter
+// millimetre of crest reaches into the ring's thread roots, so the ring
+// rides on those crests instead of on its flanks and will not start square.
+// F_REV_TOOTH truncates it back, and the clearance moves onto the major
+// where it belongs. See params.scad, and print PART=ringgauge first.
+module f_rev_thread_cut(h = undef, clear = undef) {
     _h = is_undef(h) ? F_REV_LEN + 0.3 : h;
-    ScrewThread(F_REV_MAJOR, _h,
+    _c = is_undef(clear) ? F_REV_CLEAR : clear;
+    ScrewThread(F_REV_MAJOR + _c, _h,
                 pitch = F_REV_PITCH,
-                tolerance = F_REV_TOL,
+                tolerance = 0,
+                tooth_height = F_REV_TOOTH,
                 tooth_angle = 30);
 }
 
