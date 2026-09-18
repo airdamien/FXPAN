@@ -1230,7 +1230,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(
             settings.load(pi=True),
             {
-                "download": True, "gpio": True, "flip_r": False, "overlap": 0.36,
+                "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },
@@ -1240,7 +1240,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(
             settings.load(pi=False),
             {
-                "download": False, "gpio": False, "flip_r": False, "overlap": 0.36,
+                "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
             },

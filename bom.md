@@ -45,6 +45,7 @@ Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE
 | (none) | `stls/v/` | 52×0.75 F reverse / printed F |
 | `--bsplit` | `stls/bsplit/` | 52×0.75 F reverse / printed F |
 | `--hybrid` | `stls/hybrid/` | 52×0.75 F reverse / printed F |
+| `--fxpan` / `./export_fxpan.sh` | `stls/fxpan/` | 52×0.75 F reverse / printed F. **Its own buy list:** [`openscad/fxpan/bom.md`](openscad/fxpan/bom.md) — 75 mm plate, not the 50 mm one below |
 | `--shadowgraph` / `./export_shadowgraph.sh` | `stls/hybrid_shadowgraph/` | 52×0.75 F reverse / printed F; shadowgraph R tube |
 | `--efhybrid` / `./export_efhybrid.sh` | `stls/EFhybrid/` | **58×0.75** EF reverse / printed EF |
 | `--ehybrid` / `./export_ehybrid.sh` | `stls/Ehybrid/` | **52×0.75** E reverse / printed E |

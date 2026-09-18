@@ -4,6 +4,7 @@
 #   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
 #   ./export_stls.sh --hybrid-shift [part ...] shifted-DX pano L → stls/hybrid_shift/
 #   ./export_stls.sh --hybrid-shift-fx [part ...] shifted-FX D800 → stls/hybrid_shift_fx/
+#   ./export_stls.sh --fxpan [part ...]      FXPAN 65 (75 mm plate) → stls/fxpan/
 #   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
@@ -27,6 +28,7 @@ scad=$root/openscad/WATCH_ME.scad
 out=$root/stls/v
 default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter focus_sled focus_anchor)
 fx_extra=()
+tail_note="print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); *_inner = PETG lining, *_outer = PCTG shell; display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
 
 if [[ "${1:-}" == "--bsplit" ]]; then
     shift
@@ -49,6 +51,12 @@ elif [[ "${1:-}" == "--hybrid-shift-fx" ]]; then
     out=$root/stls/hybrid_shift_fx
     fx_extra=(-D "FX_MODE=1")
     default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer brace hybrid_tray)
+elif [[ "${1:-}" == "--fxpan" ]]; then
+    shift
+    scad=$root/openscad/fxpan/WATCH_ME.scad
+    out=$root/stls/fxpan
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer fxp_tray base cradle_r cradle_t baffle shims el180_adapter)
+    tail_note="FXPAN 65: chassis floor-down; arms flange-on-bed (camera mouth up); lid outer face down; tray floor-down; base and cradles flat (inserts and screw heads from the bed); baffles flat. *_inner = PETG lining, *_outer = PCTG shell; chassis_logo_* drop into the chassis pocket as separate filaments."
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
     scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
@@ -219,5 +227,5 @@ for req in "${parts[@]}"; do
     "${cmd[@]}"
 done
 
-echo "done. print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); *_inner = PETG lining, *_outer = PCTG shell; display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
+echo "done. $tail_note"
 echo "$out"
