@@ -15,8 +15,9 @@
 // Brace: triangle under the box + both body 1/4-20s. Tripod insert in the brace.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
 // FX_MODE=1 (Customizer or ./export_hybrid_shift_fx.sh): D800 FX bores at
-// sensor_shift ~14.4 mm, stitch ~64.8 mm. Ghost uses openscad/d800_body.stl
-// (Thingiverse #4815092). Reuse stem/tools from DX kit; print FX tray.
+// sensor_shift ~11.5 mm, stitch ~59.0 mm (36% overlap). Ghost uses
+// openscad/d800_body.stl (Thingiverse #4815092). Reuse stem/tools from DX
+// kit; print FX tray. FX parts stamp FX + the part name (not hs_).
 // =============================================================================
 
 /* [Part] */
@@ -24,7 +25,7 @@ PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135, stem_f
 
 /* [Camera] */
 FX_MODE = 0; // [0:DX D7000, 1:FX D800]
-// FX_MODE=1: bores shift to 14.4 mm, ghost = ../d800_body.stl, print STLs
+// FX_MODE=1: bores shift to 11.5 mm, ghost = ../d800_body.stl, print STLs
 // from ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ (not hybrid_shift/).
 D800_TRIPOD_ABOVE = 10.0; // mm, 1/4-20 above chassis bottom (measure yours)
 D800_TRIPOD_IN    = 44;   // mm, lens axis → tripod along base (measure yours)
@@ -68,6 +69,8 @@ BODY_T_Z = -5; // [-20:0.5:20]
 
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG]
+// FX wall type, one STL per color. Chassis pocket is always all four.
+LOGO_LAYER = "all"; // [all:All, word:FXPan, mp:59MP, rule:Hairline, spec:Pixels]
 
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
@@ -265,10 +268,14 @@ module port_retain_cut(mark = "") {
     }
 }
 function hs_tag(name) = str("hs_", name);
+// FX-only reprints (chassis, arms, lid, brace, tray). Stem/adapters stay hs_.
+function kit_tag(dx, fx) = fx_mode() ? fx : str("hs_", dx);
 function hs_arm_tag(mark) =
-    str("hs_arm_", mark == "T" ? "t" : "r",
-        f50_kit() ? "s" : "",
-        printed_f() ? "f" : "");
+    fx_mode()
+        ? str("FX ARM ", mark)
+        : str("hs_arm_", mark == "T" ? "t" : "r",
+              f50_kit() ? "s" : "",
+              printed_f() ? "f" : "");
 
 module mm_split() {
     if (SHELL == "inner")
@@ -289,6 +296,10 @@ module port_letter_2d(kind) {
         translate([3.2, 0])
             text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
                  halign = "center", valign = "center");
+        if (fx_mode())
+            translate([3.2, -5.6])
+                text("FX", size = 3.4, font = "Liberation Sans:style=Bold",
+                     halign = "center", valign = "center");
     }
     if (kind == "R")
         rotate(90)
@@ -487,31 +498,43 @@ module box_lining_mask() {
             }
 }
 
-// Name on the blank −X wall. DX D12600 (7000×1.8); FX is FXPan + 65MP.
-// Futura ships with macOS; re-export on Linux needs the same family installed.
-module d12600_2d() {
+// Name on the blank −X wall. DX D12600 (7000×1.8); FX is FXPan + 59MP
+// over the 12070×4912 / 2.46:1 stitch. Futura ships with macOS; re-export
+// on Linux needs the same family installed.
+// layer: all | word | mp | rule | spec — separate STLs for filament colors.
+module d12600_2d(layer = "all") {
     if (fx_mode()) {
-        font = "Futura:style=Bold";
-        translate([0, 3.4])
-            text("FXPan", size = 14, font = font, spacing = 1.18,
-                 halign = "center", valign = "center");
-        translate([0, -10.4])
-            text("65MP", size = 6.4, font = font, spacing = 1.08,
-                 halign = "center", valign = "center");
-    } else {
+        word = "Futura:style=Bold";
+        specf = "Futura:style=Condensed Medium";
+        if (layer == "all" || layer == "word")
+            translate([0, 6.2])
+                text("FXPan", size = 14, font = word, spacing = 1.18,
+                     halign = "center", valign = "center");
+        if (layer == "all" || layer == "mp")
+            translate([0, -7.6])
+                text("59MP", size = 6.2, font = word, spacing = 1.12,
+                     halign = "center", valign = "center");
+        if (layer == "all" || layer == "rule")
+            translate([0, -12.45])
+                square([46, 0.45], center = true);
+        if (layer == "all" || layer == "spec")
+            translate([0, -16.15])
+                text("12070×4912  ·  2.46:1", size = 3.45, font = specf,
+                     spacing = 1.20, halign = "center", valign = "center");
+    } else if (layer == "all" || layer == "word") {
         text("D12600", size = 12, font = "Liberation Sans:style=Bold",
              halign = "center", valign = "center");
     }
 }
 
-module d12600_inlay() {
+module d12600_inlay(layer = "all") {
     out = chassis_out();
     translate([-out / 2 - 0.05, 0, 2])
         rotate([90, 0, -90])
             mirror([0, 0, 1])
                 linear_extrude(MARK_DEPTH + 0.15)
                     offset(0.02)
-                        d12600_2d();
+                        d12600_2d(layer);
 }
 
 module tube_baffle_tooth() {
@@ -611,6 +634,9 @@ module chassis_blank() {
 }
 
 module part_junction() {
+    // Full / inner / outer always pocket every line so the color STLs seat.
+    // SHELL=logo exports one LOGO_LAYER as a drop-in.
+    layer = (SHELL == "logo") ? LOGO_LAYER : "all";
     color("SlateGray")
     if (SHELL == "logo")
         intersection() {
@@ -619,7 +645,7 @@ module part_junction() {
                 box_bore();
                 box_fastener_cuts();
             }
-            d12600_inlay();
+            d12600_inlay(layer);
         }
     else
     mm_split() {
@@ -627,14 +653,14 @@ module part_junction() {
             chassis_blank();
             box_bore();
             box_fastener_cuts();
-            box_floor_stamp(hs_tag("chassis"), JUNCTION_BOX, WALL);
+            box_floor_stamp(kit_tag("chassis", "FX CHASSIS"), JUNCTION_BOX, WALL);
             if (SHELL == "full")
-                d12600_inlay();
+                d12600_inlay("all");
         }
         union() {
             box_lining_mask();
             if (SHELL == "outer")
-                d12600_inlay();
+                d12600_inlay("all");
         }
     }
 }
@@ -869,7 +895,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
             flange_marks(mark, p);
         if (mark != "")
             flange_stamp(hs_arm_tag(mark), mark, p, patch_t(),
-                         STAMP_DEPTH, 2.8);
+                         STAMP_DEPTH, fx_mode() ? 3.4 : 2.8);
         tube_flash_waste(mark, out_len);
     }
         translate([-p, -p, 0])
@@ -925,7 +951,8 @@ module part_lid() {
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
             display_lid_cuts(LID_T, LID_LIP);
-            plate_stamp(hs_tag("lid"), s, LID_T);
+            plate_stamp(kit_tag("lid", "FX LID"), s, LID_T,
+                         STAMP_DEPTH, fx_mode() ? 5.0 : STAMP_SIZE);
             difference() {
                 lid_inner_ribs();
                 display_lid_pad_keepout();
@@ -1134,7 +1161,7 @@ module part_brace() {
                 brace_hex_cuts_2d();
         translate([brace_stamp_xy().x, brace_stamp_xy().y, BRACE_T - STAMP_DEPTH])
             rotate(135)
-                part_stamp_cut(hs_tag("brace"));
+                part_stamp_cut(kit_tag("brace", "FX BRACE"));
     }
 }
 
@@ -1188,7 +1215,8 @@ module assembly() {
 
     hybrid_pair(show_glass = $preview,
                 explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0,
-                sh = sensor_shift());
+                sh = sensor_shift(),
+                tag = kit_tag("tray", "FX TRAY"));
 
     if (SHOW_LID)
         part_lid();
@@ -1229,11 +1257,11 @@ module assembly() {
              " ARMS=", ARMS, " (", ARMS ? "54 mm F 50" : "72 mm 135/180", ")",
              " SHELL=", SHELL));
     echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
-             " mm  sensor_shift=", sensor_shift(), " mm  field_toe=",
-             field_toe(), " deg"));
+             " mm  overlap=", overlap_frac(), "  sensor_shift=", sensor_shift(),
+             " mm  field_toe=", field_toe(), " deg"));
     if (fx_mode())
-        echo("FX print STLs: ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ "
-             + "(chassis, arms, lid, brace, tray; reuse stem from hybrid_shift)");
+        echo(str("FX print STLs: ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ ",
+                 "(chassis, arms, lid, brace, tray; reuse stem from hybrid_shift)"));
 }
 
 module export_part() {
@@ -1262,7 +1290,8 @@ module export_part() {
     else if (PART == "display_mount")
         display_mount_print();
     else if (PART == "hybrid_tray")
-        hybrid_cartridge(show_glass = false, sh = sensor_shift());
+        hybrid_cartridge(show_glass = false, sh = sensor_shift(),
+                          tag = kit_tag("tray", "FX TRAY"));
     else if (PART == "brace")
         part_brace();
     else

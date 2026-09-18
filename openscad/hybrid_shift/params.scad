@@ -1,6 +1,6 @@
 // Nikon Dual — hybrid_shift pano L (shifted DX or FX + one 50/50 plate)
-// FX_MODE=0: D7000 DX, sensor_shift ~9.4 mm, stitch ~42.5 mm.
-// FX_MODE=1: D800 FX, sensor_shift ~14.4 mm, stitch ~64.8 mm.
+// FX_MODE=0: D7000 DX, overlap 0.20, sensor_shift ~9.4 mm, stitch ~42.5 mm.
+// FX_MODE=1: D800 FX, overlap 0.36, sensor_shift ~11.5 mm, stitch ~59.0 mm.
 // Tubes stay square; each bore is translated by sensor_shift() so each
 // sensor window sits on a half-field without Scheimpflug tilt.
 // One uncut 50×50 plate at the origin: R → +X, T → +Y.
@@ -30,14 +30,15 @@ PATH_TOTAL       = PATH_FOLD + FLANGE_F;
 
 SENSOR_W      = fx_mode() ? 36.0 : 23.6;
 SENSOR_H      = fx_mode() ? 23.9 : 15.6;
-OVERLAP_FRAC  = 0.20;
+// DX keeps 20%. FX pulls both uniques in so T-east still lights past f/5.6.
+function overlap_frac()       = fx_mode() ? 0.36 : 0.20;
 function path_after_knife()   = D_PLATE_TO_MOUNT + FLANGE_F;
-function overlap_at_sensor()  = SENSOR_W * OVERLAP_FRAC;
+function overlap_at_sensor()  = SENSOR_W * overlap_frac();
 function overlap_cross()      = overlap_at_sensor() * path_after_knife() / PATH_TOTAL;
-function sensor_shift()       = SENSOR_W / 2 * (1 - OVERLAP_FRAC);
+function sensor_shift()       = SENSOR_W / 2 * (1 - overlap_frac());
 // Untilted tubes. Old hybrid toe was atan(sensor_shift / path_after_knife).
 function field_toe()          = 0;
-function stitch_w()           = SENSOR_W * (2 - OVERLAP_FRAC);
+function stitch_w()           = SENSOR_W * (2 - overlap_frac());
 
 BS_SIZE    = 50;
 BS_THICK   = 1.0;
@@ -161,7 +162,7 @@ BRACE_HEX_CELL     = 11;
 // Inner PETG / CF-PETG lining vs outer PCTG shell.
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;     // chamber floor is inner PETG (was 0.4 PCTG cap)
-MARK_DEPTH   = 1.2;   // FXPan + 65MP (or DX D12600) on the blank −X wall
+MARK_DEPTH   = 1.2;   // FXPan + 59MP (or DX D12600) on the blank −X wall
 // Tube ID baffles (PETG liner). 45° tooth, camera face flat — cookie on the bed.
 BAFFLE_H     = 1.6;
 BAFFLE_PITCH = 4.0;

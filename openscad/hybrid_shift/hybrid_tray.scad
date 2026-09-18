@@ -197,7 +197,7 @@ module bs_frame() {
 }
 
 // Open-top cup: V-groove inner faces, then recut the three port windows.
-module chamber_walls(sh) {
+module chamber_walls(sh, tag = "hs_tray") {
     z0 = floor_z();
     h  = wall_top() - z0;
     t  = SKIRT_T;
@@ -213,17 +213,17 @@ module chamber_walls(sh) {
                     translate([half() - t, 0,
                                z0 + FLOOR_T + (h - FLOOR_T) / 2])
                         trap_ribs(inner() - 2 * t - 0.2, h - FLOOR_T - 0.2);
-            tray_stamp();
+            tray_stamp(tag);
         }
         chamber_ports(sh);
     }
 }
 
 // Readable from the stem, looking at the −Y face.
-module tray_stamp() {
+module tray_stamp(tag = "hs_tray") {
     translate([0, -half() + STAMP_DEPTH, floor_z() + 5])
         rotate([90, 0, 180])
-            part_stamp_cut("hs_tray");
+            part_stamp_cut(tag, STAMP_DEPTH, tag == "hs_tray" ? STAMP_SIZE : 5.0);
 }
 
 module inactive_beams() {
@@ -249,13 +249,13 @@ module cartridge_posts() {
     }
 }
 
-module hybrid_cartridge(show_glass = true, sh) {
+module hybrid_cartridge(show_glass = true, sh, tag = "hs_tray") {
     color("SteelBlue")
     intersection() {
         difference() {
             union() {
                 place_plate(glass = false);
-                chamber_walls(sh);
+                chamber_walls(sh, tag);
                 inactive_beams();
                 cartridge_posts();
             }
@@ -298,7 +298,7 @@ module lid_retain_keepout(h = 10) {
     }
 }
 
-module hybrid_pair(show_glass = true, explode_z = 0, sh) {
+module hybrid_pair(show_glass = true, explode_z = 0, sh, tag = "hs_tray") {
     translate([0, 0, explode_z])
-        hybrid_cartridge(show_glass = show_glass, sh = sh);
+        hybrid_cartridge(show_glass = show_glass, sh = sh, tag = tag);
 }
