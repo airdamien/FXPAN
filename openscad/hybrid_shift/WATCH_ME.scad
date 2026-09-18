@@ -841,12 +841,12 @@ module part_el180_adapter() {
                               position = [0, 0, hex_h - hf])
                         cylinder(h = hex_h, d = EL180_ADAPTER_OD, $fn = 6);
         }
-        // Wide from the end of the female through the hex so the 60 mm
-        // barrel does not hit a 52 mm shelf and stop the thread.
+        // Through-bore matches the M62 minor so the male is not a 52 mm stop.
+        // Hex behind the female stays EL180_BARREL for the 60 mm lens barrel.
         translate([0, 0, hm - overlap])
             cylinder(h = hex_h - hf + 0.4, d = EL180_BARREL);
         translate([0, 0, -0.2])
-            cylinder(h = hm + 0.2, d = EL180_BORE);
+            cylinder(h = hm + hex_h + 0.4, d = EL180_BORE);
         translate([0, -EL180_ADAPTER_OD / 2 * cos(30) - 0.05,
                    hm + hb * 0.55])
             rotate([90, 0, 0])
