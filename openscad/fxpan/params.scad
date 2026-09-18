@@ -5,14 +5,14 @@
 // Lens −Y. Plate at the origin: R → +X, T → +Y. No tube toe.
 // https://www.edmundoptics.com/p/75-x-75mm-50-50rt-vis-plate-beamsplitter/37202/
 //
-// Three things drive every number here, and they pull against each other.
+// Four things drive every number here, and they pull against each other.
 // kraken/fxpan_paths.py ray traces all of it and fails loudly if any of these
 // stops holding.
 //
 // 1. A plate tilted 45° presents only size/√2 across its plane of incidence,
 //    and cam/pano.py needs landscape sensors with a horizontal seam, so the
 //    wide stitch axis is forced onto exactly that foreshortened dimension.
-//    The 65 mm frame needs 44.7 mm there at f/5.6. A 50 mm plate gives 35.36
+//    The 65 mm frame needs 44.4 mm there at f/5.6. A 50 mm plate gives 35.36
 //    and clips the stitch axis until f/11; a 75 mm plate gives 53.03, an 18%
 //    margin that grows as you stop down. So: 75 mm plate.
 //
@@ -32,6 +32,14 @@
 //    its diagonal is 111 mm, which puts the shortest possible path at 207 mm
 //    and makes infinity unreachable. BOX_Z carries the plate; BOX_XY is set
 //    by the path budget and only has to clear the shifted port windows.
+//
+// 4. A D800 is not flat at its flange. Its front panel stands D800_PROUD
+//    past the register, and it goes on by pushing that panel at the chassis
+//    and twisting to lock. So the register has to stand off the chassis face
+//    by at least that much or the body simply cannot be fitted — and the
+//    body is wider than the chassis, so there is nowhere to relieve locally.
+//    The standoff is ARM_TUBE + F_REV_STACK and nothing else, which is why
+//    ARM_TUBE is solved from the camera and BOX_XY gets what is left.
 //
 // BS_SIZE = 50 still builds — BOX_Z follows it — but it clips the stitch axis
 // itself until f/11, which is worse than the corner shading above because it
@@ -83,7 +91,23 @@ F_REV_MAJOR    = 52.0;    // M52×0.75, Fotodiox 52 mm F reverse ring
 F_REV_PITCH    = 0.75;
 F_REV_LEN      = 8;
 F_REV_STACK    = 8;       // ring thickness: tube end → F register
-F_REV_TOL      = 0.12;
+// The thread profile, not the clearance, is why the older arms never took a
+// ring. lib/threads.scad cuts a sharp full-height V: at P = 0.75 that is
+// 0.650 mm of radial depth, against the 0.406 mm an ISO M52×0.75 female
+// actually has. The printed crests stand a quarter of a millimetre proud
+// into the ring's thread roots, so the ring bottoms on them before its
+// flanks touch anything, rocks on that line contact and cross-threads — it
+// feels exactly like a bore that is too big. Truncate the crest back to the
+// real minor and put the clearance on the major instead.
+//
+// F_REV_CLEAR is the one number to tune. Print PART=ringgauge first: it is
+// four 7 mm rings at ±0.15 mm around this value, ten minutes on the bed,
+// and it tells you what your printer wants before you commit to an arm.
+F_REV_CLEAR    = 0.15;    // diametral clearance on the 52.0 major
+F_REV_TOOTH    = 0.52;    // axial tooth base → 0.450 mm radial, ISO-ish
+F_REV_LEAD     = 0.9;     // 45° lead-in so the first turn starts square
+F_REV_GAUGE    = [-0.15, 0, 0.15, 0.30];   // ringgauge steps about F_REV_CLEAR
+function f_rev_minor() = F_REV_MAJOR + F_REV_CLEAR - F_REV_TOOTH / tan(30);
 // Flush with the metal reverse ring's throat, so the printed part is never the
 // limit and the bought ring is. 43.5 cost a third of a stop for nothing. The
 // other bodies use 40.3, which clips a 14.4 mm shift badly.
@@ -97,8 +121,23 @@ F_THROAT       = 44.0;    // metal M52 -> F reverse ring = a real F throat
 F_FMOUNT_STACK = 1.75;
 F_PEG_H        = 5.5;
 FX_FMOUNT_EXTRA = 5.0;
-ARM_TUBE        = 5.0;    // tube past the cookie; the M52 female needs ~8 mm
-                          // of material and the cookie only gives 4
+// --- how far the body has to stand off the chassis -------------------------
+// The D800's front panel reaches D800_PROUD past its own F flange, and the
+// body has to go on by sliding that panel toward the chassis and twisting.
+// So the F register must sit at least that far outside the chassis face or
+// the camera physically will not mount.
+//
+// Everything between the chassis face and the register is arm tube and
+// reverse ring, and the chassis half-width cancels:
+//     standoff = ARM_TUBE + F_REV_STACK − (shell outboard of the cookie)
+// The shell outboard of the cookie is now zero — see chassis_shell_t() — so
+// the arm tube is what buys the standoff, and it is solved from the body
+// rather than picked. BOX_XY then takes whatever the path budget has left.
+// D800_PROUD is the customizer knob in WATCH_ME.scad; measure yours.
+function d800_proud() = is_undef(D800_PROUD) ? 13.0 : D800_PROUD;
+MOUNT_CLEAR = 3.0;    // slop for the twist, the grip rubber and print error
+// Also has to be deep enough to hold the whole M52 female.
+ARM_TUBE = max(F_REV_LEN, d800_proud() + MOUNT_CLEAR - F_REV_STACK);
 
 // --- EL-Nikkor 180/5.6N on an M62×1 helicoid -------------------------------
 // The stem carries a short M62 female boss and nothing else. hybrid_shift's
@@ -158,6 +197,11 @@ function path_min()         = path_total(EL180_HELI_MIN);
 function path_max()         = path_total(EL180_HELI_MAX);
 // Helicoid extension that puts the lens at infinity.
 function heli_at_infinity()  = EL180_HELI_MIN + (EL_FOCAL - path_min());
+// Air between the chassis face and the F register, which is what the body's
+// protruding front has to fit into. chassis_shell_t() lives in WATCH_ME.scad
+// with the rest of the shell, so state the same thing from the parameters.
+function mount_standoff() = ARM_TUBE + F_REV_STACK;
+function mount_standoff_ok() = mount_standoff() >= d800_proud();
 // Printed stand-in for the bought helicoid: a fixed spacer at infinity.
 function el180_spacer_add() = EL_FOCAL - path_min() + EL180_HELI_MIN
                               - EL180_HELI_MALE;
@@ -205,7 +249,6 @@ function need_bore_u(fstop, b) =
 PORT_FRAME      = 5;
 PORT_SLOT_LIP   = 8;
 PORT_SLOT_CLEAR = 0.4;
-PORT_RETAIN     = 4;
 PORT_BOSS_R     = 14;
 PORT_SCREW_R    = 38.5;
 PORT_CLAMP_R    = 38;
@@ -220,8 +263,12 @@ function cam_axis(mark, sh = undef) =
 function port_up(mark) =
     mark == "R" ? [-1, 0] :
     mark == "T" ? [0, -1] : [0, 1];
-function clamp_xy(mark, side, sh = undef) =
-    let (ax = cam_axis(mark, sh), u = port_up(mark), v = [-u.y, u.x])
+// Four per cookie, two above the bore and two below. With the outboard
+// retaining wall gone (it was what the camera's front panel hit) these are
+// the only thing holding a cookie out of its rebate, so they are no longer
+// a pair on the lid side alone.
+function clamp_xy(mark, side, up = 1, sh = undef) =
+    let (ax = cam_axis(mark, sh), u = port_up(mark) * up, v = [-u.y, u.x])
         [ax.x + u.x * PORT_CLAMP_R + v.x * side * PORT_CLAMP_SEP,
          ax.y + u.y * PORT_CLAMP_R + v.y * side * PORT_CLAMP_SEP];
 PORT_SCREW_D = 3.2;
@@ -229,6 +276,12 @@ PORT_HEAD_D  = 6.4;
 PORT_HEAD_H  = 3.4;
 PORT_NUT_AF  = 5.7;
 PORT_NUT_T   = 2.6;
+// M3 DIN 7991 flat head. The cookie face is now the outside of the body, so
+// the heads sink flush into it instead of into a counterbore in a wall that
+// no longer exists — a 3.4 mm cap head would leave 0.6 mm of a 4 mm cookie,
+// and stand in the camera's way besides.
+PORT_CSK_D   = 6.4;
+PORT_CSK_H   = 1.9;
 
 LID_T        = 6;
 LID_LIP      = LID_LIP_SEAT;
@@ -259,9 +312,9 @@ BASE_RT_ALONG   = 56;
 BASE_RT_INSET   = 34;
 BASE_HEX_D      = 8.6;
 BASE_HEX_CELL   = 11;
-CRADLE_WALL     = 5;
-CRADLE_H        = 26;     // up the body side from the plinth
-CRADLE_PAD_T    = 2.4;    // TPU / cork facing pocket
+// The cradle is a bare plinth: no uprights. The bayonet takes yaw and the
+// 1/4-20 takes the weight, which is all a camera plate ever does, and an
+// upright is one more thing in the way of getting the body onto the mount.
 
 // --- shell, light trap, marks ---------------------------------------------
 INNER_LINING = 1.6;

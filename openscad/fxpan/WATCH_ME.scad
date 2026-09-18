@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -41,7 +41,9 @@ SHOW_AXES = 1; // [0:hide, 1:show]
 /* [Camera] */
 D800_TRIPOD_ABOVE = 10.0; // mm, 1/4-20 above chassis bottom (measure yours)
 D800_TRIPOD_IN    = 44;   // mm, lens axis → tripod along the base
-CRADLE_SPAN       = 64;   // mm, yaw keys either side of the body centreline
+// How far the front of the body reaches past its own F flange. This sets
+// the arm tube length and therefore the chassis size — see params.scad.
+D800_PROUD        = 13.0; // [8:0.5:24]
 
 /* [Body Alignment] */
 // Ghost offsets in each arm's local frame, for eyeballing clearances.
@@ -127,10 +129,15 @@ module round_rect(w, h, r) {
             square([w, h], center = true);
 }
 
-function chassis_shell_t() = patch_t() + PORT_RETAIN;
+// The shell stops at the cookie face. There used to be a 4 mm retaining wall
+// outboard of it, and on the two camera faces that wall is precisely what a
+// D800's front panel lands on — the body is wider than the chassis, so there
+// is no relieving it locally. The cookie is stopped inboard by the chamber
+// wall it sits against, on three sides by its rebate, and outboard by four
+// countersunk M3s, which is a better joint than the wall was.
+function chassis_shell_t() = patch_t();
 function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
 function chassis_out_z()   = BOX_Z + 2 * chassis_shell_t();
-function port_u_fill_t()   = PORT_RETAIN - 0.25;
 
 module port_flange(patch = PORT_PATCH) {
     translate([0, 0, patch_t() / 2])
@@ -178,34 +185,32 @@ module tube_flash_waste(mark, out_len) {
         }
 }
 
-// Two M3s on the lid side of the tube, tracking cam_axis, so the cookie can
-// be screwed down after it has dropped into the slot.
+// Four M3s, two each side of the bore, tracking cam_axis, so the cookie can
+// be screwed down after it has dropped into its rebate.
 module port_clamp_screws(mark = "") {
-    for (side = [-1, 1]) {
-        p = clamp_xy(mark, side);
+    for (up = [-1, 1], side = [-1, 1]) {
+        p = clamp_xy(mark, side, up);
         translate([p.x, p.y, 0])
             children();
     }
 }
 
-// Fills the chassis U so the cookie is flush with the wall. Stops short of
-// LID_CAP so the lid plug still seats.
-module port_u_fill(mark = "") {
-    ax = cam_axis(mark);
-    u  = port_up(mark);
-    t  = port_u_fill_t();
-    d  = TUBE_OD + 0.2;
-    along = PORT_PATCH / 2 - LID_CAP - 0.6;
-    translate([0, 0, patch_t() + t / 2])
-        intersection() {
-            cube([PORT_PATCH - 0.6, PORT_PATCH - 0.6, t], center = true);
-            hull() {
-                translate([ax.x, ax.y, 0])
-                    cylinder(h = t, d = d, center = true);
-                translate([ax.x + u.x * along, ax.y + u.y * along, 0])
-                    cylinder(h = t, d = d, center = true);
-            }
-        }
+// Flat-head M3, flush with the cookie face. Cut in the cookie, not the box.
+module port_csk_cut() {
+    translate([0, 0, -1])
+        cylinder(h = patch_t() + 2, d = PORT_SCREW_D);
+    translate([0, 0, patch_t() - PORT_CSK_H])
+        cylinder(h = PORT_CSK_H, d1 = PORT_SCREW_D, d2 = PORT_CSK_D);
+    translate([0, 0, patch_t() - 0.01])
+        cylinder(h = 0.8, d = PORT_CSK_D);
+}
+
+// Tapped into the chamber wall behind the cookie, nut trapped on the inside.
+module port_clamp_anchor_cut() {
+    translate([0, 0, -WALL - 0.2])
+        cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+    translate([0, 0, -WALL - 0.05])
+        hex_nut_cut();
 }
 
 // Cookie pocket, open at the lid, stopped on the floor lip.
@@ -219,24 +224,6 @@ module port_slide_slot(mark = "") {
         cube([abs(u.x) > 0.5 ? slot_h : w,
               abs(u.y) > 0.5 ? slot_h : w,
               d], center = true);
-}
-
-// Outer wall keeps the cookie in; the tube slides down the U.
-module port_retain_cut(mark = "") {
-    ax = cam_axis(mark);
-    u  = port_up(mark);
-    d  = TUBE_OD + 1.0;
-    h  = PORT_RETAIN + 2.4;
-    difference() {
-        translate([ax.x, ax.y, patch_t() + PORT_RETAIN / 2])
-            hull() {
-                cylinder(h = h, d = d, center = true);
-                translate([u.x * (PORT_PATCH / 2 + 24),
-                           u.y * (PORT_PATCH / 2 + 24), 0])
-                    cylinder(h = h, d = d, center = true);
-            }
-        tube_flat_waste(mark, patch_t() - 1, h + 4);
-    }
 }
 
 // 3 mm ring into the chassis top shelf, notched where the port faces are open.
@@ -372,7 +359,7 @@ module flange_marks(kind, patch = PORT_PATCH) {
     u  = port_up(kind);
     translate([ax.x + u.x * PORT_CLAMP_R,
                ax.y + u.y * PORT_CLAMP_R,
-               patch_t() + port_u_fill_t() - t])
+               patch_t() - t])
         linear_extrude(t + 0.15)
             port_letter_2d(kind);
 }
@@ -391,34 +378,16 @@ module box_fastener_cuts() {
     lid_body_fastener_cuts();
     at_stem_face() {
         port_slide_slot("");
-        port_retain_cut("");
-        port_clamp_screws("") {
-            translate([0, 0, -WALL - 0.2])
-                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
-            translate([0, 0, -WALL - 0.05])
-                hex_nut_cut();
-        }
+        port_clamp_screws("") port_clamp_anchor_cut();
     }
     at_reflect_face() {
         port_slide_slot("R");
-        port_retain_cut("R");
-        port_clamp_screws("R") {
-            translate([0, 0, -WALL - 0.2])
-                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
-            translate([0, 0, -WALL - 0.05])
-                hex_nut_cut();
-        }
+        port_clamp_screws("R") port_clamp_anchor_cut();
         chassis_port_mark("R");
     }
     at_transmit_face() {
         port_slide_slot("T");
-        port_retain_cut("T");
-        port_clamp_screws("T") {
-            translate([0, 0, -WALL - 0.2])
-                cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
-            translate([0, 0, -WALL - 0.05])
-                hex_nut_cut();
-        }
+        port_clamp_screws("T") port_clamp_anchor_cut();
         chassis_port_mark("T");
     }
 }
@@ -832,7 +801,6 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
     difference() {
         union() {
             port_flange(patch);
-            port_u_fill(mark);
             if (out_len > 0.05)
                 along_cam(rx, ry, mark)
                     cylinder(h = out_len, d = TUBE_OD);
@@ -842,12 +810,7 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
         tube_flat_waste(mark, -2, patch_t() + out_len + 8, TUBE_FLAT_CLEAR);
         tube_flash_waste(mark, out_len);
-        port_clamp_screws(mark) {
-            translate([0, 0, -1])
-                cylinder(h = patch_t() + port_u_fill_t() + 2, d = PORT_SCREW_D);
-            translate([0, 0, patch_t() + port_u_fill_t() - PORT_HEAD_H])
-                cylinder(h = PORT_HEAD_H + 0.4, d = PORT_HEAD_D);
-        }
+        port_clamp_screws(mark) port_csk_cut();
     }
 }
 
@@ -868,6 +831,11 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
             along_cam(rx, ry, mark) {
                 translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
                     f_rev_thread_cut();
+                // Lead-in, so the ring can find the first turn square.
+                translate([0, 0, out_len - F_REV_LEAD])
+                    cylinder(h = F_REV_LEAD + 0.1,
+                             d1 = f_rev_minor(),
+                             d2 = f_rev_minor() + 2 * F_REV_LEAD);
                 if (out_len >= F_REV_LEN)
                     rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
                 f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
@@ -928,7 +896,6 @@ module part_stem() {
         difference() {
             union() {
                 port_flange(PORT_PATCH);
-                port_u_fill("");
                 translate([0, 0, z0]) {
                     hull() {
                         cylinder(h = 0.2, d = TUBE_OD);
@@ -942,13 +909,7 @@ module part_stem() {
                 cylinder(h = patch_t() + 2.2, d1 = TUBE_ID, d2 = STEM_BORE);
             translate([0, 0, z0 - 0.1])
                 cylinder(h = EL180_M62_LEN + 4, d = STEM_BORE);
-            port_clamp_screws("") {
-                translate([0, 0, -1])
-                    cylinder(h = patch_t() + port_u_fill_t() + 2,
-                             d = PORT_SCREW_D);
-                translate([0, 0, patch_t() + port_u_fill_t() - PORT_HEAD_H])
-                    cylinder(h = PORT_HEAD_H + 0.4, d = PORT_HEAD_D);
-            }
+            port_clamp_screws("") port_csk_cut();
             flange_stamp(fxp_tag("stem"), "", PORT_PATCH, patch_t());
         }
         union() {
@@ -1215,16 +1176,16 @@ module part_base() {
     }
 }
 
-// Plinth that lifts the body's tripod socket onto the optical axis and keys
-// it against yaw. Footprint and bolt pattern match base_cam_pad_2d().
+// Plinth that lifts the body's tripod socket onto the optical axis. Nothing
+// else: footprint and bolt pattern match base_cam_pad_2d() and the top is
+// bare.
 //
-// One flange, not two. A pair of walls straddling the body would have to
-// span most of the D800's 146 mm width to get any leverage, and anything
-// narrow enough to sit on a 46 mm pad has almost none. Every real camera
-// plate solves this the same way: a single flange bearing on one edge of the
-// body with the 1/4-20 pulling the body onto it. The flange goes on the far
-// side from the plate so tightening the screw drives the body toward the
-// register instead of away from it.
+// It carried an anti-twist flange up the back of the body and that is gone.
+// The bayonet already fixes yaw far better than a 46 mm-wide flange could,
+// and mounting the camera means bringing it in along the axis and twisting,
+// so anything standing up off the plinth is in the way of the one motion
+// the build depends on. A camera plate's job is to take the weight; this
+// one takes the weight.
 function cradle_lift() = d800_tripod_above();
 function cradle_len()  = BASE_SLOT_L + BASE_PAD_D;   // along the axis
 function cradle_wid()  = BASE_PAD_D;                 // across it
@@ -1238,26 +1199,13 @@ module cradle_foot_2d() {
 
 module part_cradle(mark = "R") {
     lift = cradle_lift();
-    // Local +X points away from the chassis, i.e. out the back of the body.
-    xf   = cradle_len() / 2 - CRADLE_WALL / 2;
     color("DimGray")
     difference() {
-        union() {
-            translate([0, 0, lift / 2])
-                linear_extrude(lift, center = true)
-                    cradle_foot_2d();
-            // Anti-twist flange at the far end, plus a fillet into the plinth.
-            translate([xf, 0, lift + CRADLE_H / 2])
-                cube([CRADLE_WALL, cradle_wid(), CRADLE_H], center = true);
-            hull() {
-                translate([xf, 0, lift + 0.5])
-                    cube([CRADLE_WALL, cradle_wid(), 1], center = true);
-                translate([xf - 5, 0, lift + 0.5])
-                    cube([1, cradle_wid(), 1], center = true);
-            }
-        }
+        translate([0, 0, lift / 2])
+            linear_extrude(lift, center = true)
+                cradle_foot_2d();
         // 1/4-20 slot along the axis: sets how far the body sits from the
-        // register, and pulls it against the flange.
+        // register, so the bayonet can seat without the screw fighting it.
         translate([0, 0, -0.2])
             linear_extrude(lift + 0.4)
                 hull() {
@@ -1273,10 +1221,6 @@ module part_cradle(mark = "R") {
             translate([sx, sy, lift - PORT_HEAD_H])
                 cylinder(h = PORT_HEAD_H + 0.4, d = PORT_HEAD_D);
         }
-        // TPU / cork facing pocket on the body-facing side of the flange.
-        translate([xf - CRADLE_WALL / 2 + CRADLE_PAD_T / 2,
-                   0, lift + CRADLE_H / 2 + 2])
-            cube([CRADLE_PAD_T, cradle_wid() - 12, CRADLE_H - 8], center = true);
         translate([-BASE_SLOT_L / 2 - 11, 0, lift - STAMP_DEPTH])
             rotate(90)
                 part_stamp_cut(fxp_tag(mark == "T" ? "cradle_t" : "cradle_r"),
@@ -1336,6 +1280,40 @@ module part_baffle() {
 }
 
 // -----------------------------------------------------------------------------
+// M52 ring gauge — print this before you print an arm
+// -----------------------------------------------------------------------------
+// One ring per F_REV_GAUGE step, same wall and same orientation as the arm
+// mouth so it prints the way the real thread will. Each is stamped with its
+// clearance in hundredths of a millimetre. Thread the Fotodiox ring into all
+// four, keep the tightest one that still runs down by hand without rocking,
+// and put its number into F_REV_CLEAR.
+GAUGE_H = 7;
+
+module part_ringgauge() {
+    n = len(F_REV_GAUGE);
+    color("DimGray")
+    for (i = [0 : n - 1]) {
+        c = F_REV_CLEAR + F_REV_GAUGE[i];
+        translate([i * (TUBE_OD + 6), 0, 0])
+            difference() {
+                cylinder(h = GAUGE_H, d = TUBE_OD);
+                translate([0, 0, -0.1])
+                    cylinder(h = GAUGE_H + 0.2, d = f_rev_minor() - 1.2);
+                f_rev_thread_cut(GAUGE_H + 0.4, c);
+                translate([0, 0, GAUGE_H - F_REV_LEAD])
+                    cylinder(h = F_REV_LEAD + 0.1,
+                             d1 = F_REV_MAJOR + c - F_REV_TOOTH / tan(30),
+                             d2 = F_REV_MAJOR + c - F_REV_TOOTH / tan(30)
+                                  + 2 * F_REV_LEAD);
+                translate([0, -(TUBE_OD + f_rev_minor()) / 4,
+                           GAUGE_H - STAMP_DEPTH])
+                    part_stamp_stack_cut(str("fxp_m52_", round(c * 100)),
+                                         size = 2.0);
+            }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // ghosts and guides
 // -----------------------------------------------------------------------------
 function body_shift_x(mark) = mark == "T" ? BODY_T_X : BODY_R_X;
@@ -1355,13 +1333,16 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0, mark = "") {
                         camera_body(roll, which = 2);
 }
 
+// Drawn from the front panel back, not from the register back: the whole
+// point of this ghost is that a D800 reaches D800_PROUD past its own flange,
+// so if it is going to foul the chassis face this is where you see it.
 module ghost_body_at(mark = "") {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
             along_cam(0, 0, mark)
-                translate([0, 0, d_plate_to_mount() - BOX_XY / 2
-                                 + 15 + BODY_D / 2 + ex])
-                    cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
+                translate([0, 0, mount_standoff() - d800_proud()
+                                 + BODY_D / 2 + ex])
+                    cube([BODY_W, BODY_H, BODY_D], center = true);
 }
 
 module taking_lens_at() {
@@ -1463,6 +1444,16 @@ module diagnostics() {
                : "  *** OUT OF RANGE — resize BOX_XY ***",
              ";  printed spacer adds ", round(el180_spacer_add() * 10) / 10,
              " mm (fixed, infinity only)"));
+    echo(str("body fit: F register stands ", mount_standoff(),
+             " mm off the chassis face (arm tube ", ARM_TUBE,
+             " + ring ", F_REV_STACK, ", no retaining wall)",
+             "  vs a D800 front panel ", d800_proud(), " mm proud of its flange",
+             mount_standoff() >= d800_proud() + MOUNT_CLEAR
+               ? str("  → ", round((mount_standoff() - d800_proud()) * 10) / 10,
+                     " mm to twist it on")
+             : mount_standoff() >= d800_proud()
+               ? "  → fits, but tight; raise MOUNT_CLEAR"
+               : "  *** THE BODY CANNOT GO ON — raise ARM_TUBE ***"));
     echo(str("stitch: overlap ", overlap_frac(), "  sensor_shift ",
              sensor_shift(), " mm  stitch_w ", stitch_w(), " mm  ",
              stitch_px(), "×", SENSOR_PX_H, " px  ",
@@ -1533,6 +1524,8 @@ module export_part() {
         part_cradle("T");
     else if (PART == "baffle")
         part_baffle();
+    else if (PART == "ringgauge")
+        part_ringgauge();
     else if (PART == "shims")
         shim_set();
     else if (PART == "el180_adapter")

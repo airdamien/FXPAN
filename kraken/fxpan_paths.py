@@ -66,10 +66,13 @@ BS_SIZE = 75.0
 BS_THICK = 1.0
 BS_N = 1.52
 
-BOX_XY = 95.0
+BOX_XY = 92.0
 PORT_PATCH_T = 4.0
-ARM_TUBE = 5.0
+D800_PROUD = 13.0     # D800 front panel, past its own F flange
+MOUNT_CLEAR = 3.0
+F_REV_LEN = 8.0
 F_REV_STACK = 8.0
+ARM_TUBE = max(F_REV_LEN, D800_PROUD + MOUNT_CLEAR - F_REV_STACK)
 TUBE_ID = 46.0
 F_BORE = 44.0
 F_REV_THROAT = 44.0   # metal M52 -> F reverse ring, the real F throat
@@ -82,9 +85,14 @@ SHIFT = SENSOR_W / 2.0 * (1.0 - OVERLAP_FRAC)      # 14.40
 STITCH_W = SENSOR_W * (2.0 - OVERLAP_FRAC)         # 64.80
 STITCH_PX = round(SENSOR_PX_W * (2.0 - OVERLAP_FRAC))
 
-D_PLATE_TO_MOUNT = BOX_XY / 2 + PORT_PATCH_T + ARM_TUBE + F_REV_STACK   # 64.5
-D_PLATE_TO_SENSOR = D_PLATE_TO_MOUNT + FLANGE_F                         # 111.0
-D_BOXWALL_TO_SENSOR = D_PLATE_TO_SENSOR - BOX_XY / 2                    # 63.5
+D_PLATE_TO_MOUNT = BOX_XY / 2 + PORT_PATCH_T + ARM_TUBE + F_REV_STACK   # 66.0
+D_PLATE_TO_SENSOR = D_PLATE_TO_MOUNT + FLANGE_F                         # 112.5
+D_BOXWALL_TO_SENSOR = D_PLATE_TO_SENSOR - BOX_XY / 2                    # 66.5
+D_LENS_TO_PLATE = EL_FOCAL - D_PLATE_TO_SENSOR                          # 67.5
+# Air between the chassis face and the F register. The shell now stops at the
+# cookie face, so this is the arm tube plus the reverse ring and nothing else,
+# and it is what a D800's protruding front panel has to fit into.
+MOUNT_STANDOFF = ARM_TUBE + F_REV_STACK                                 # 16.0
 
 WAVE = 0.55
 S_OBJ = 50_000.0
@@ -562,8 +570,8 @@ def main():
 
     print("FXPAN 65 — KrakenOS check against openscad/fxpan/params.scad")
     print(f"  plate {BS_SIZE:g} x {BS_SIZE:g} x {BS_THICK:g} mm, 45 deg, n={BS_N}")
-    print(f"  lens flange to plate 69.0, plate to sensor {D_PLATE_TO_SENSOR:.1f}, "
-          f"path {EL_FOCAL:.1f} mm")
+    print(f"  lens flange to plate {D_LENS_TO_PLATE:.1f}, plate to sensor "
+          f"{D_PLATE_TO_SENSOR:.1f}, path {EL_FOCAL:.1f} mm")
     print(f"  plate foreshortens the stitch axis by {STRETCH_U:.4f} "
           f"and the vertical by {STRETCH_V:.4f}")
     print("  (unfolded KrakenOS trace reproduces f*tan(theta) to 0.02 mm)")
@@ -588,7 +596,29 @@ def main():
     print(f"  field {2 * np.degrees(np.arctan(STITCH_W / 2 / EL_FOCAL)):.1f} x "
           f"{2 * np.degrees(np.arctan(SENSOR_H / 2 / EL_FOCAL)):.1f} deg")
 
-    # 3. traced clipping, f/5.6 to f/16
+    # 3. can the camera physically go on
+    print("\nbody fit")
+    print(f"  arm tube {ARM_TUBE:.1f} + reverse ring {F_REV_STACK:.1f} = "
+          f"{MOUNT_STANDOFF:.1f} mm from the chassis face to the F register")
+    print(f"  a D800 front panel stands {D800_PROUD:.1f} mm past its own "
+          f"flange, and the body is wider than the")
+    print("  chassis, so there is nowhere to relieve locally -- the standoff "
+          "is the whole answer")
+    if MOUNT_STANDOFF < D800_PROUD:
+        fails.append(
+            f"the body cannot be mounted: {MOUNT_STANDOFF:.1f} mm of standoff "
+            f"against a {D800_PROUD:.1f} mm front panel"
+        )
+    elif MOUNT_STANDOFF < D800_PROUD + MOUNT_CLEAR:
+        fails.append(
+            f"only {MOUNT_STANDOFF - D800_PROUD:.1f} mm to twist the body on, "
+            f"want {MOUNT_CLEAR:.1f}"
+        )
+    else:
+        print(f"  {MOUNT_STANDOFF - D800_PROUD:.1f} mm clear to bayonet it "
+              "on.  OK")
+
+    # 4. traced clipping, f/5.6 to f/16
     ring_clean = clean_from(FLANGE_F, F_REV_THROAT)
     print("\ntraced illumination through the metal reverse ring "
           f"({F_REV_THROAT:g} mm throat)")
@@ -666,8 +696,9 @@ def main():
             return f"{need:5.2f}/{have:<5.1f}{'!' if need > have else ' '}"
         print(f"  {fstop:>5g}  {cell(p, BS_SIZE / np.sqrt(2))}  "
               f"{cell(w, TUBE_ID)}  {cell(g, F_REV_THROAT)}")
-    print("  '!' marks a station the frame corners do not clear. The plate has "
-          "18.7% of margin at")
+    plate_margin = BS_SIZE / np.sqrt(2) / need_clear(5.6, D_PLATE_TO_SENSOR) - 1
+    print("  '!' marks a station the frame corners do not clear. The plate "
+          f"has {plate_margin:.1%} of margin at")
     print("  f/5.6 and only grows; the flange is the one that binds.")
     print(f"  the stitch-axis-only formula would put the flange at "
           f"{need_bore_1d(5.6, FLANGE_F):.2f} mm instead of "
