@@ -28,7 +28,8 @@ F_STL_OD     = 52;
 // real 44 mm throat and is clean from f/8.4, which is why ARM_MOUNT = 0 is
 // the default. See bom.md.
 F_STL_THROAT = 38.0;
-F_COLLAR_OD  = 62;
+// F_COLLAR_OD is in params.scad: the lock lugs are sized off it, and
+// fxp_tray.scad reaches the port geometry without seeing this file.
 F_COLLAR_Z0  = -1.6;
 F_COLLAR_H   = 2.0;
 // Body lock pin (measured ~1.95 mm). The groove bridges the open floor under

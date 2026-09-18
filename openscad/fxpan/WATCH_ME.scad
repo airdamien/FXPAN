@@ -3,16 +3,18 @@
 // =============================================================================
 // Two D800 behind one EL-Nikkor 180/5.6N and a 75×75×1 50/50 plate.
 // 64.80 × 23.9 mm stitch, 2.711:1 (XPan is 2.708:1), 13248 × 4912 = 65.1 MP.
-// The chamber is deliberately NOT a cube. BOX_Z carries the 75 mm plate on
-// its diagonal; BOX_XY is whatever the path budget leaves, because every mm
-// of chassis costs two mm of the 180 mm flange-to-sensor distance. A cube
-// tall enough for the plate would put the shortest path at 207 mm and put
-// infinity out of reach entirely — read the derivation in params.scad.
+// The chamber is deliberately NOT a cube. BOX_Z carries BS_H, the plate's
+// along-the-fold dimension; BOX_XY is whatever the path budget leaves,
+// because every mm of chassis costs two mm of the 180 mm flange-to-sensor
+// distance. A cube tall enough to stand a 75 mm plate on its diagonal would
+// put the shortest path at 207 mm and put infinity out of reach entirely —
+// read the derivation in params.scad.
 //
 // Lens −Y. Plate at the origin, 45°, S1 (the 50/50 coating) toward the lens.
 // Reflect leg → +X (camera R), transmit leg → +Y (camera T). Both bores are
 // translated by sensor_shift() in opposite senses; no tube toe, no Scheimpflug.
-// Three ports are C-channels open at the lid; the lid plugs the slot tops.
+// Three ports are blind rebates closed all round, so the chassis keeps an
+// unbroken top rim and the lid sits flush on it.
 //
 // This body does not share parts with hybrid_shift. Every STL is stamped
 // fxp_* and the bore is wider (TUBE_ID 46 / F_BORE 44.0 vs 52 / 40.3) so the
@@ -39,7 +41,7 @@ SHOW_BASE = 1; // [0:hide, 1:show]
 SHOW_AXES = 1; // [0:hide, 1:show]
 
 /* [Camera] */
-D800_TRIPOD_ABOVE = 10.0; // mm, 1/4-20 above chassis bottom (measure yours)
+D800_AXIS_BASE    = 52.0; // mm, lens axis above the body's own baseplate
 D800_TRIPOD_IN    = 44;   // mm, lens axis → tripod along the base
 // How far the front of the body reaches past its own F flange. This sets
 // the arm tube length and therefore the chassis size — see params.scad.
@@ -121,7 +123,7 @@ module mm_split() {
 }
 
 // -----------------------------------------------------------------------------
-// port frame — cookie drops down a C-channel, retained on three sides
+// port frame — cookie drops into a blind rebate, held by four countersunk M3s
 // -----------------------------------------------------------------------------
 module round_rect(w, h, r) {
     offset(r)
@@ -133,29 +135,57 @@ module round_rect(w, h, r) {
 // outboard of it, and on the two camera faces that wall is precisely what a
 // D800's front panel lands on — the body is wider than the chassis, so there
 // is no relieving it locally. The cookie is stopped inboard by the chamber
-// wall it sits against, on three sides by its rebate, and outboard by four
-// countersunk M3s, which is a better joint than the wall was.
+// wall it sits against, all the way round by its rebate, and outboard by
+// four countersunk M3s, which is a better joint than the wall was.
 function chassis_shell_t() = patch_t();
 function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
-function chassis_out_z()   = BOX_Z + 2 * chassis_shell_t();
+// The chamber is only as tall as the plate; the skirt under it is what puts
+// the optical axis where the cameras have to stand.
+function chassis_out_z()   = BOX_Z + chassis_plinth();
 
-// Cookie outline. Same corner as the chassis less the rim, so the rim stays
-// even the whole way round instead of pinching to 1.3 mm on the diagonals.
-module port_plate_2d(grow = 0, patch = PORT_PATCH) {
-    round_rect(patch + 2 * grow, patch + 2 * grow,
-               max(0.4, port_plate_r() + grow));
+// Cookie outline: a rectangle on camera-up, centred on the bore rather than
+// on the face, sized by port_patch_u() and port_patch_v() off the features it
+// actually has to carry.
+module port_plate_2d(mark = "", grow = 0) {
+    ax = cam_axis(mark);
+    translate([ax.x, ax.y])
+        rotate([0, 0, port_up_az(mark)])
+            round_rect(port_patch_u() + 2 * grow,
+                       port_patch_v(mark) + 2 * grow,
+                       max(0.4, PORT_PLATE_R + grow));
+}
+
+// A cookie is a panel of the body, so it stops where the body's skin does.
+// Past the flat part of a face the chassis curves away under it, and without
+// this the plate carries straight on into the air over the corner. Clipping
+// to the same profile the chassis is extruded from contours the outer face
+// down onto it; the bed face is untouched, which is what the part is printed
+// on. PORT_BOSS_R is chosen so the whole of this lands inside PORT_EDGE_CHAM.
+module port_chassis_clip(mark = "") {
+    u   = port_up(mark);
+    out = chassis_out();
+    // Camera-up is vertical on every face, so the chassis's rounding — which
+    // is all in plan — is always across the plate, never along it.
+    rot = abs(u.x) > 0.5 ? [0, 90, 0] : [-90, 0, 0];
+    translate([0, 0, -BOX_XY / 2])
+        rotate(rot)
+            linear_extrude(height = 4 * out, center = true)
+                round_rect(out, out, PORT_BOSS_R);
 }
 
 // Chamfered on the outer face only. Printed arm-up the outer face is the last
 // thing off the bed, so the chamfer only ever narrows the part and the bed
 // face stays the full flat plate.
-module port_flange(patch = PORT_PATCH) {
+module port_flange(mark = "") {
     c = min(PORT_EDGE_CHAM, patch_t() - 1.5);
-    hull() {
-        linear_extrude(patch_t() - c)
-            port_plate_2d(0, patch);
-        linear_extrude(patch_t())
-            port_plate_2d(-c, patch);
+    intersection() {
+        hull() {
+            linear_extrude(patch_t() - c)
+                port_plate_2d(mark, 0);
+            linear_extrude(patch_t())
+                port_plate_2d(mark, -c);
+        }
+        port_chassis_clip(mark);
     }
 }
 
@@ -212,31 +242,29 @@ module port_clamp_anchor_cut() {
         hex_nut_cut();
 }
 
-// Cookie pocket, swept open toward the lid so the cookie can drop in. Sweeping
-// the cookie's own outline keeps the two corners at the far end matched to it,
-// and the three closed sides of the rebate stay a uniform PORT_SLOT_CLEAR/2
-// off the plate. The old version swept a plain square whose far lip landed
-// 0.2 mm inside the cookie, so the plate stopped short of its own floor.
+// Cookie pocket. Closed on all four sides — this is the lid overhang.
+//
+// The pocket used to sweep open toward the lid, because a cookie used to slide
+// in behind a retaining wall. That wall is gone, the plate's outer face is the
+// outside of the body, and it goes in from outside; but the channel stayed,
+// running the full 4.35 mm deep straight out through the top of the chassis.
+// So the chassis's top rim was cut away over 90 of its 100 mm on both camera
+// faces and the lid sat over the hole, proud of nothing, on two sides.
+//
+// Closing it also captures the cookie on four sides instead of three. The
+// ceiling is a 4.35 mm ledge off the wall behind it, tied at both ends and
+// facing into a pocket a plate then fills — droop there costs nothing.
 module port_slide_slot(mark = "") {
-    u = port_up(mark);
     d = patch_t() + 0.35;
-    slot_h = PORT_PATCH + PORT_FRAME + 28;
     translate([0, 0, d / 2 - 0.2])
         linear_extrude(d, center = true)
-            hull() {
-                port_plate_2d(PORT_SLOT_CLEAR / 2);
-                translate([u.x * slot_h, u.y * slot_h])
-                    port_plate_2d(PORT_SLOT_CLEAR / 2);
-            }
+            port_plate_2d(mark, PORT_SLOT_CLEAR / 2);
 }
 
-// 3 mm ring into the chassis top shelf, notched where the port faces are open.
+// 3 mm ring into the chassis top shelf. It used to be notched out over each
+// port face to let a cookie slide past; nothing passes here now.
 module lid_align_lip() {
     s = BOX_XY;
-    sh = sensor_shift();
-    half = s / 2;
-    span = PORT_PATCH + PORT_FRAME + 6;
-    bite = WALL + LID_GAP + 2.5;
     difference() {
         cube([s - WALL - 2 * LID_GAP,
               s - WALL - 2 * LID_GAP,
@@ -244,12 +272,6 @@ module lid_align_lip() {
         cube([s - 2 * WALL - 0.6,
               s - 2 * WALL - 0.6,
               LID_LIP + 0.4], center = true);
-        translate([0, -half + bite / 2, 0])
-            cube([span, bite, LID_LIP + 0.6], center = true);
-        translate([half - bite / 2, -sh, 0])
-            cube([bite, span, LID_LIP + 0.6], center = true);
-        translate([sh, half - bite / 2, 0])
-            cube([span, bite, LID_LIP + 0.6], center = true);
     }
 }
 
@@ -301,7 +323,7 @@ module box_bore() {
     translate([0, 0, h / 2 - LID_LIP / 2])
         cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
 
-    translate([0, 0, -h / 2 - PORT_SLOT_LIP - 0.05]) {
+    translate([0, 0, -h / 2 - chassis_plinth() - 0.05]) {
         cylinder(h = tripod_hole_h() + 0.1, d = TRIPOD_INSERT_D);
         cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
     }
@@ -357,26 +379,26 @@ module port_letter_2d(kind) {
         rotate(180) stamp("T");
 }
 
-// Arm tag, on the plate edge at up_az − 90. That is the one clear edge of a
-// camera cookie: the shift pushes the tube to up_az + 90, the four clamp
-// screws sit on the pair of edges square to camera-up, and flange_marks owns
-// camera-up. flange_stamp's three cases were written for the other bodies'
-// centred cookies and put this one straight through a countersink.
-module fxp_arm_stamp(mark, patch = PORT_PATCH) {
-    e = patch / 2 - PORT_EDGE_CHAM - 2.8;
-    a = port_up_az(mark) - 90;
-    translate([e * cos(a), e * sin(a), patch_t() - STAMP_DEPTH])
-        rotate([0, 0, a - 90])
+// Part tag, along the plate edge opposite the lid. That is the one edge with
+// nothing on it: the tube fills the middle out to TUBE_OD/2, the clamp screws
+// sit on the two edges across camera-up, flange_marks owns camera-up itself,
+// and the lock lugs come down either side of this edge without reaching it.
+module fxp_port_stamp(name, mark = "") {
+    e = port_patch_u() / 2 - PORT_EDGE_CHAM - 2.8;
+    a = port_up_az(mark) + 180;
+    ax = cam_axis(mark);
+    translate([ax.x + e * cos(a), ax.y + e * sin(a), patch_t() - STAMP_DEPTH])
+        rotate([0, 0, a + 90])
             linear_extrude(STAMP_DEPTH + 0.15)
-                part_stamp_2d(fxp_arm_tag(mark), 3.4);
+                part_stamp_2d(name, 3.4);
 }
 
-module flange_marks(kind, patch = PORT_PATCH) {
+module flange_marks(kind) {
     t = 0.8;
     ax = cam_axis(kind);
     u  = port_up(kind);
-    translate([ax.x + u.x * PORT_CLAMP_R,
-               ax.y + u.y * PORT_CLAMP_R,
+    translate([ax.x + u.x * port_clamp_r(),
+               ax.y + u.y * port_clamp_r(),
                patch_t() - t])
         linear_extrude(t + 0.15)
             port_letter_2d(kind);
@@ -386,8 +408,8 @@ module chassis_port_mark(kind) {
     t = 0.8;
     ax = cam_axis(kind);
     u  = port_up(kind);
-    translate([ax.x + u.x * PORT_CLAMP_R,
-               ax.y + u.y * PORT_CLAMP_R, -t])
+    translate([ax.x + u.x * port_clamp_r(),
+               ax.y + u.y * port_clamp_r(), -t])
         linear_extrude(t + 0.15)
             port_letter_2d(kind);
 }
@@ -669,7 +691,7 @@ module fxpan_inlay(layer = "all", grow = 0, proud = 0.05,
 }
 
 module chassis_blank() {
-    dz  = PORT_SLOT_LIP;
+    dz  = chassis_plinth();
     h   = BOX_Z + dz;
     out = chassis_out();
     translate([0, 0, -BOX_Z / 2 - dz])
@@ -814,11 +836,11 @@ module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", m62 = 0) {
         }
 }
 
-module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
+module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
     ax = cam_axis(mark);
     difference() {
         union() {
-            port_flange(patch);
+            port_flange(mark);
             if (out_len > 0.05)
                 along_cam(rx, ry, mark)
                     cylinder(h = out_len, d = TUBE_OD);
@@ -832,13 +854,13 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
 }
 
 module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
-    p = PORT_PATCH;
+    p = max(port_patch_u(), port_patch_v(mark)) + 2 * sensor_shift();
     color("SlateGray")
     mm_split() {
     intersection() {
     difference() {
         union() {
-            port_tube_solid(out_len, rx, ry, p, mark);
+            port_tube_solid(out_len, rx, ry, mark);
             along_cam(rx, ry, mark) {
                 tube_baffles(out_len, mark);
                 f_glare_mask(out_len, mark);
@@ -859,8 +881,8 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                     rev_lock_cuts(out_len, port_up_az(mark));
                 f_pin_line_cut(out_len, port_up_az(mark));
             }
-        flange_marks(mark, p);
-        fxp_arm_stamp(mark, p);
+        flange_marks(mark);
+        fxp_port_stamp(fxp_arm_tag(mark), mark);
         tube_flash_waste(mark, out_len);
     }
         translate([-p, -p, 0])
@@ -898,7 +920,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
 module m62_nut(h = EL180_M62_LEN) {
     ScrewHole(EL180_M62_MAJOR, h, pitch = EL180_M62_PITCH,
               tolerance = EL180_M62_TOL)
-        cylinder(h = h, d = EL180_STEM_OD);
+        cylinder(h = h, d = el180_stem_od());
 }
 
 // The whole stem is the cookie plus an EL180_M62_LEN female boss. There is
@@ -914,12 +936,12 @@ module part_stem() {
     mm_split() {
         difference() {
             union() {
-                port_flange(PORT_PATCH);
+                port_flange("");
                 translate([0, 0, z0]) {
                     hull() {
                         cylinder(h = 0.2, d = TUBE_OD);
                         translate([0, 0, 3])
-                            cylinder(h = 0.2, d = EL180_STEM_OD);
+                            cylinder(h = 0.2, d = el180_stem_od());
                     }
                     m62_nut();
                 }
@@ -929,8 +951,7 @@ module part_stem() {
             translate([0, 0, z0 - 0.1])
                 cylinder(h = EL180_M62_LEN + 4, d = STEM_BORE);
             port_clamp_screws("") port_csk_cut();
-            flange_stamp(fxp_tag("stem"), "", PORT_PATCH - 2 * PORT_EDGE_CHAM,
-                         patch_t());
+            fxp_port_stamp(fxp_tag("stem"), "");
         }
         union() {
             tube_lining_mask(0, m62 = EL180_M62_LEN);
@@ -1032,7 +1053,7 @@ module part_lid() {
 // -----------------------------------------------------------------------------
 // base and cradles — the bayonet locates, the base carries
 // -----------------------------------------------------------------------------
-function base_z()      = -BOX_Z / 2 - PORT_SLOT_LIP - BASE_T;
+function base_z()      = -BOX_Z / 2 - chassis_plinth() - BASE_T;
 function base_cam_d()  = d_plate_to_mount() + d800_tripod_in();
 function base_r_xy()   = [base_cam_d(), -sensor_shift()];
 function base_t_xy()   = [sensor_shift(), base_cam_d()];
@@ -1206,7 +1227,7 @@ module part_base() {
 // so anything standing up off the plinth is in the way of the one motion
 // the build depends on. A camera plate's job is to take the weight; this
 // one takes the weight.
-function cradle_lift() = d800_tripod_above();
+function cradle_lift() = CRADLE_T;
 function cradle_len()  = BASE_SLOT_L + BASE_PAD_D;   // along the axis
 function cradle_wid()  = BASE_PAD_D;                 // across it
 
@@ -1447,8 +1468,9 @@ module diagnostics() {
     d = path_after_plate();
     need = need_clear(FSTOP, d);
     have = bs_in_plane();
-    echo(str("FXPAN 65  |  ", BS_SIZE, "×", BS_SIZE, "×", BS_THICK,
-             " 50/50 at 45°, S1 toward the lens  |  ARM_MOUNT=", ARM_MOUNT,
+    echo(str("FXPAN 65  |  ", BS_H, "×", BS_W, "×", BS_THICK,
+             " 50/50 at 45°, S1 toward the lens, ", BS_W,
+             " across the fold  |  ARM_MOUNT=", ARM_MOUNT,
              " (", printed_f() ? "printed F" : "reverse ring", ")",
              "  SHELL=", SHELL));
     echo(str("path: plate→flange ", d_plate_to_flange(EL180_HELI_MIN), "..",
@@ -1479,12 +1501,15 @@ module diagnostics() {
              stitch_px(), "×", SENSOR_PX_H, " px  ",
              round(stitch_aspect() * 1000) / 1000, ":1  (XPan 2.708:1)  ",
              round(stitch_px() * SENSOR_PX_H / 1e5) / 10, " MP"));
-    echo(str("plate clear aperture at f/", FSTOP, ": need ",
+    need_v = need_clear_v(FSTOP, d);
+    echo(str("plate at f/", FSTOP, ": across the fold need ",
              round(need * 10) / 10, " mm, have ", round(have * 100) / 100,
-             " mm in plane (", BS_SIZE, "/√2)  →  margin ",
-             round((have / need - 1) * 1000) / 10, "%",
-             need > have ? "   *** CLIPS — stop down or fit a bigger plate ***"
-                         : ""));
+             " (", BS_W, "/√2)  →  ", round((have / need - 1) * 1000) / 10, "%",
+             need > have ? " *** CLIPS ***" : "",
+             "  |  along it need ", round(need_v * 10) / 10,
+             " mm, have ", BS_H, "  →  ",
+             round((BS_H / need_v - 1) * 1000) / 10, "%",
+             need_v > BS_H ? " *** CLIPS ***" : ""));
     // Worked at the frame corner, not along the stitch axis — see need_bore().
     b_wall = path_after_plate() - BOX_XY / 2;
     echo(str("arm bore at f/", FSTOP, " (frame corner): need ",
@@ -1523,6 +1548,37 @@ module diagnostics() {
     echo(str("transmit leg crosses ", BS_THICK,
              " mm of n=", BS_N, " glass at 45°: tube shortened by ",
              round(bs_t_comp() * 1000) / 1000, " mm"));
+    head_r = norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2;
+    echo(str("cookie ", round(port_patch_u() * 10) / 10, "×",
+             round(port_patch_v("R") * 10) / 10, " arm, ",
+             round(port_patch_u() * 10) / 10, "×",
+             round(port_patch_v("") * 10) / 10,
+             " stem, centred on the bore, rebate closed all round",
+             "  |  clamp M3 at r ", round(port_clamp_r() * 10) / 10,
+             " ± ", PORT_CLAMP_SEP,
+             "  |  M62 boss ", el180_stem_od(), " inside heads at ",
+             round(head_r * 100) / 100,
+             el180_stem_od() / 2 >= head_r
+               ? "  *** the boss is over the screws again ***" : "",
+             "  |  ", round((1 - (port_patch_u() * (port_patch_v("R") * 2
+                            + port_patch_v(""))) / (3 * 8100)) * 1000) / 10,
+             "% less plate than three 90 squares"));
+    echo(str("cookie vs chassis skin: outboard edge at ",
+             round((sensor_shift() + port_patch_v("R") / 2) * 10) / 10,
+             " of a face flat to ", chassis_out() / 2 - PORT_BOSS_R,
+             " (PORT_BOSS_R ", PORT_BOSS_R, ")  →  stands ",
+             round(port_edge_proud() * 100) / 100, " mm proud",
+             port_edge_proud() > PORT_EDGE_CHAM
+               ? "  *** past the chamfer — drop PORT_BOSS_R ***"
+               : ", inside the chamfer, so port_chassis_clip takes it off"));
+    echo(str("under the chassis: lens axis ", d800_axis_base(),
+             " above a D800's baseplate, chamber floor at ", BOX_Z / 2,
+             "  →  plinth ", chassis_plinth(), " + cradle ", CRADLE_T,
+             " + base ", BASE_T,
+             chassis_plinth() > PORT_SLOT_LIP
+               ? str(" (the plinth is making up ",
+                     round((chassis_plinth() - PORT_SLOT_LIP) * 10) / 10,
+                     " mm the short chamber does not have)") : ""));
     echo(str("chassis ", BOX_XY, "×", BOX_XY, "×", BOX_Z,
              " chamber (outer ", chassis_out(), "×", chassis_out(), "×",
              chassis_out_z(), ")  |  arm tube R ",

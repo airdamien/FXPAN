@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Trace FXPAN 65 in KrakenOS and check it against openscad/fxpan/params.scad.
 
-Two D800 sensors behind one EL-Nikkor 180/5.6 and a 75 x 75 x 1 mm 50/50
-plate at 45 deg. Each sensor takes one half of the field; the two frames
-stitch to 64.80 x 23.9 mm. This script answers three questions:
+Two D800 sensors behind one EL-Nikkor 180/5.6 and a 50 x 75 x 1 mm 50/50
+plate at 45 deg, the 75 across the fold. Each sensor takes one half of
+the field; the two frames stitch to 64.80 x 23.9 mm. This script answers
+three questions:
 
   1. Does anything clip between f/5.6 and f/16?
   2. Does the stitch really span 64.80 mm at 20% overlap?
@@ -62,7 +63,11 @@ SENSOR_PX_W = 7360
 SENSOR_PX_H = 4912
 OVERLAP_FRAC = 0.20
 
-BS_SIZE = 75.0
+# Edmund #37201, 50 x 75 x 1.0. The 75 lies across the plane of incidence,
+# where sqrt(2) eats it and the stitch has to cross; the 50 stands up along
+# the fold with nothing on it but the sensor height.
+BS_W = 75.0
+BS_H = 50.0
 BS_THICK = 1.0
 BS_N = 1.52
 
@@ -249,8 +254,8 @@ EPS = 1e-6
 
 def plate_passes(at):
     x, y = at(D_PLATE_TO_SENSOR)
-    return (abs(x) * STRETCH_U <= BS_SIZE / 2 + EPS
-            and abs(y) * STRETCH_V <= BS_SIZE / 2 + EPS)
+    return (abs(x) * STRETCH_U <= BS_W / 2 + EPS
+            and abs(y) * STRETCH_V <= BS_H / 2 + EPS)
 
 
 def bore_passes(at, axis, throat):
@@ -404,6 +409,11 @@ def need_clear(fstop, d):
     return 2 * bundle_r(STITCH_W / 2, fstop, d)
 
 
+def need_clear_v(fstop, d):
+    """Along the fold. Nothing but the sensor height crosses this way."""
+    return 2 * bundle_r(SENSOR_H / 2, fstop, d)
+
+
 def need_bore(fstop, b):
     return 2 * (SENSOR_W / 2 * (EL_FOCAL - b) / EL_FOCAL
                 + (b / EL_FOCAL) * ((EL_FOCAL / fstop) / 2 + SHIFT))
@@ -469,10 +479,14 @@ def plot_margins(dest):
     ax = axes[0]
     ax.plot(stops, [need_clear(n, D_PLATE_TO_SENSOR) for n in stops],
             color="black", lw=1.6, label="needed across the fold")
-    ax.axhline(BS_SIZE / np.sqrt(2), color="seagreen", lw=1.8,
-               label=f"{BS_SIZE:g} mm plate = {BS_SIZE / np.sqrt(2):.2f} mm")
+    ax.plot(stops, [need_clear_v(n, D_PLATE_TO_SENSOR) for n in stops],
+            color="0.55", lw=1.4, ls="-.", label="needed along the fold")
+    ax.axhline(BS_W / np.sqrt(2), color="seagreen", lw=1.8,
+               label=f"BS_W {BS_W:g} across = {BS_W / np.sqrt(2):.2f} mm")
+    ax.axhline(BS_H, color="steelblue", lw=1.4, ls=":",
+               label=f"BS_H {BS_H:g} along (no foreshortening)")
     ax.axhline(50 / np.sqrt(2), color="indianred", lw=1.8, ls="--",
-               label=f"50 mm plate = {50 / np.sqrt(2):.2f} mm")
+               label=f"a 50 across would be {50 / np.sqrt(2):.2f} mm")
     ax.set_xlabel("f-number")
     ax.set_ylabel("clear aperture in the plate's plane (mm)")
     ax.set_title("Plate", fontsize=10)
@@ -523,10 +537,11 @@ def plot_layout(dest):
     ax.annotate("EL-Nikkor 180\non an M62 helicoid", (0, -half - 47),
                 ha="center", va="top", fontsize=8, color="0.3")
 
-    span = (BS_SIZE / 2) / np.sqrt(2)
+    span = (BS_W / 2) / np.sqrt(2)
     ax.plot([-span, span], [span, -span], color="goldenrod", lw=5.0,
             solid_capstyle="butt",
-            label=f"{BS_SIZE:g} mm plate, S1 to the lens ({2 * span:.1f} mm across)")
+            label=f"{BS_H:g} x {BS_W:g} plate, S1 to the lens "
+                  f"({2 * span:.1f} mm across in plan)")
     # What the bundle actually asks of the plate, drawn just off it so both
     # apertures stay visible against the gold.
     for fstop, off, style in ((5.6, 3.0, "-"), (16.0, 6.0, ":")):
@@ -569,7 +584,8 @@ def main():
     fails = []
 
     print("FXPAN 65 — KrakenOS check against openscad/fxpan/params.scad")
-    print(f"  plate {BS_SIZE:g} x {BS_SIZE:g} x {BS_THICK:g} mm, 45 deg, n={BS_N}")
+    print(f"  plate {BS_H:g} x {BS_W:g} x {BS_THICK:g} mm, 45 deg, n={BS_N} "
+          f"({BS_W:g} across the fold)")
     print(f"  lens flange to plate {D_LENS_TO_PLATE:.1f}, plate to sensor "
           f"{D_PLATE_TO_SENSOR:.1f}, path {EL_FOCAL:.1f} mm")
     print(f"  plate foreshortens the stitch axis by {STRETCH_U:.4f} "
@@ -687,19 +703,26 @@ def main():
 
     # 5. the numbers params.scad asserts, checked against the trace
     print("\nstation margins (geometry, matching params.scad)")
-    print(f"  {'f':>5}  {'plate':>13}  {'box wall':>13}  {'flange':>13}")
+    print(f"  {'f':>5}  {'plate across':>13}  {'plate along':>13}  "
+          f"{'box wall':>13}  {'flange':>13}")
     for fstop in FSTOPS:
         p = need_clear(fstop, D_PLATE_TO_SENSOR)
+        pv = need_clear_v(fstop, D_PLATE_TO_SENSOR)
         w = need_bore_2d(fstop, D_BOXWALL_TO_SENSOR)
         g = need_bore_2d(fstop, FLANGE_F)
         def cell(need, have):
             return f"{need:5.2f}/{have:<5.1f}{'!' if need > have else ' '}"
-        print(f"  {fstop:>5g}  {cell(p, BS_SIZE / np.sqrt(2))}  "
+        print(f"  {fstop:>5g}  {cell(p, BS_W / np.sqrt(2))}  {cell(pv, BS_H)}  "
               f"{cell(w, TUBE_ID)}  {cell(g, F_REV_THROAT)}")
-    plate_margin = BS_SIZE / np.sqrt(2) / need_clear(5.6, D_PLATE_TO_SENSOR) - 1
+    plate_margin = BS_W / np.sqrt(2) / need_clear(5.6, D_PLATE_TO_SENSOR) - 1
+    plate_margin_v = BS_H / need_clear_v(5.6, D_PLATE_TO_SENSOR) - 1
     print("  '!' marks a station the frame corners do not clear. The plate "
-          f"has {plate_margin:.1%} of margin at")
-    print("  f/5.6 and only grows; the flange is the one that binds.")
+          f"has {plate_margin:.1%} of margin across")
+    print(f"  the fold at f/5.6 and {plate_margin_v:.0%} along it -- which is "
+          "the whole case for 50 x 75 over")
+    print("  75 x 75: the second number was never the one in question, and it "
+          "was costing 25 mm")
+    print("  of BOX_Z to hold. The flange is what binds.")
     print(f"  the stitch-axis-only formula would put the flange at "
           f"{need_bore_1d(5.6, FLANGE_F):.2f} mm instead of "
           f"{need_bore_2d(5.6, FLANGE_F):.2f} mm at f/5.6 --")

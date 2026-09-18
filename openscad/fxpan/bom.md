@@ -1,6 +1,6 @@
 # Bill of materials — FXPAN 65
 
-Two D800 bodies behind one EL-Nikkor 180/5.6N and a **75 × 75 × 1 mm** 50/50
+Two D800 bodies behind one EL-Nikkor 180/5.6N and a **50 × 75 × 1 mm** 50/50
 plate at 45°. Stitch is 64.80 × 23.9 mm, 2.711:1, 65.1 MP. Path is
 **179.5 … 193.5 mm** with infinity at 17.5 mm of helicoid travel.
 
@@ -13,10 +13,14 @@ stands 16 mm off the chassis face so a D800's front panel, which reaches
 about 13 mm past its own flange, has room to come in and twist on. If yours
 measures more than 16, set `D800_PROUD` before you print anything.
 
-- **75 mm plate, not 50 mm.** At 45° a plate only presents `size/√2` across
-  the fold, and the frame needs 44.4 mm there at f/5.6. 75 mm gives 53.03; the
-  50 mm plate you already own gives 35.36 and clips until f/11 — and it clips
-  the long axis of the panorama, not just the corners.
+- **75 mm across the fold, 50 along it — and not a square.** At 45° a plate
+  presents only `size/√2` in its plane of incidence, and that is the direction
+  the 64.80 mm stitch has to cross: it needs 44.4 mm there at f/5.6, 75 mm
+  gives 53.03, and the 50 mm square you already own gives 35.36 and clips
+  until f/11 — clipping the long axis of the panorama, not just the corners.
+  Along the fold nothing is foreshortened and nothing is being carried but the
+  23.9 mm sensor height, so 50 mm is already +72% and a square plate is 25 mm
+  of chassis height bought for a margin nobody will ever spend.
 - **Metal reverse rings, not the printed bayonet.** The ring keeps the real
   44 mm F throat, which is what sets the f/8.4 limit. The printed F mesh is
   38 mm clear and **never** passes the whole frame, at any aperture.
@@ -27,28 +31,44 @@ Why: [PLAN.md](PLAN.md). How: [README.md](README.md).
 
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
-| 1 | **Edmund #37202** — 75 × 75 × 1.0 mm 50R/50T VIS plate beamsplitter | Takes the plate off the list of things that limit this body: 53.03 mm in-plane against the 44.39 mm the frame needs, **+19.5% at f/5.6** and more as you stop down. S1 is 50/50 ±5% at 550 nm, ±10% over 400–700. S2 is broadband AR, Ravg ≤1%. 1.0 mm thick, which is the other thing that has to be right. Do not cut it. **S1 faces the lens.** | [Edmund #37202](https://www.edmundoptics.com/p/75-x-75mm-50-50rt-vis-plate-beamsplitter/37202/) |
+| 1 | **Edmund #37201** (stock #35-947) — 50 × 75 × 1.0 mm 50R/50T VIS plate beamsplitter | Takes the plate off the list of things that limit this body: **75 goes across the fold**, presenting 53.03 mm against the 44.39 mm the frame needs, **+19.5% at f/5.6** and more as you stop down. The 50 runs along the fold, where nothing is foreshortened and 29.05 mm is all that is asked, so it is +72% and it is the dimension that sets chassis height — which is why this is the right rectangle rather than the 75 × 75. S1 is 50/50 ±5% at 550 nm, ±10% over 400–700. S2 is broadband AR, Ravg ≤1%. 1.0 mm thick, which is the other thing that has to be right. Do not cut it. Edmund marks the coated face with a **black dot**: that dot faces the lens, and the 75 goes horizontal. | [Edmund #37201](https://www.edmundoptics.com/p/50-x-75mm-50-50rt-vis-plate-beamsplitter/37201/) |
 | 1 | **EL-Nikkor 180 mm f/5.6N** (or Componon-S 180, Rodagon 180) | Taking lens. 5×7 image circle, so the 64.80 mm stitch is nowhere near the edge of coverage. `EL_FOCAL = 180` is what the whole path budget is solved against. Barrel is **M62**, not L39 — it threads into the helicoid directly. Used $200–500. | [eBay EL-Nikkor 180](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+180mm+f%2F5.6) · [Componon-S 180](https://www.ebay.com/sch/i.html?_nkw=componon-s+180) · [Rodagon 180](https://www.ebay.com/sch/i.html?_nkw=rodagon+180) |
 | 1 | **M62×1 helicoid, 17–31 mm** | Focus. Male bottoms into the stem's 8 mm female boss; female takes the lens. Infinity lands at 17.5 mm, near collapsed, and the full 14 mm of travel reaches 2.6 m. **Do not substitute a longer one** — the 17 mm collapsed length is inside the path budget and anything taller pushes infinity out of reach. | Search **M62 focusing helicoid 17-31**. M65×1 is easier to find ([Pixco M65 17–31](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01N1GOL39)) but then you need M65↔M62 step rings, which add stack — measure before you commit. |
 | 2 | **Fotodiox Nikon F reverse ring, 52 mm** | The camera mouths. Threads into the arms' M52×0.75 female, presents an F bayonet with the **real 44 mm throat**. That throat is what sets the body's f/8.4 limit, and 44 mm is as wide as an F mount gets — so this is both the recommended mouth and the ceiling. `ARM_MOUNT = 0` is the default for it. **Buy them before you print the arms** — you need one in hand to read the ring gauge. | [Fotodiox 52 mm F reverse](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) |
 
-### If you only have the 50 mm plate
+### Which way round it goes, and what else fits
 
-`BS_SIZE = 50` still builds and `BOX_Z` shrinks from 108 to 83 automatically.
-It is a real fallback, just an honest **f/11 one**:
+The plate is not square, so it can be fitted wrong. **75 mm horizontal,
+across the fold.** The tray slot is keyed for it, but the slot will not stop
+you turning the glass over in your hand first.
 
-| f-stop | need | 50 mm plate gives 35.36 |
+| | across the fold | along the fold |
+| --- | --- | --- |
+| what it carries | the 64.80 mm stitch, foreshortened by √2 | the 23.9 mm sensor height, not foreshortened |
+| needs at f/5.6 | 44.39 mm | 29.05 mm |
+| `BS_W` = 75 → 53.03 | **+19.5%** | — |
+| `BS_H` = 50 | — | **+72.1%** |
+| sets | nothing else | `BOX_Z`, and therefore the chassis |
+
+Substitutions, in order of preference:
+
+| plate | stock # | thickness | verdict |
+| --- | --- | --- | --- |
+| **#37201, 50 × 75** | 35-947 | **1.00** | the build. $303, in stock. |
+| [#37202](https://www.edmundoptics.com/p/75-x-75mm-50-50rt-vis-plate-beamsplitter/37202/), 75 × 75 | 35-948 | 1.00 | optically identical and the original pick — it went to *Contact Us*, which is why the body is drawn around the rectangle. Set `BS_H = 75` and `BOX_Z` grows back to 108 by itself. $338 for 25 mm more chassis and no more picture. |
+| [**#17536**](https://www.edmundoptics.com/p/50-x-75mm-50r50t-vis-plate-beamsplitter/17536/), 50 × 75 | 62-882 | **3.00** | **the trap.** Same size, same family, same page title, same $303, and 20+ in stock while the right one may not be. Three stops of astigmatism (below) and it will not go in the slot. **Check the thickness, not the size.** |
+| [#43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/), 50 × 50 | — | 1.00 | S2 uncoated, and only 50 across the fold — see the f/11 table below. |
+| [#45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/), 50 × 50 | — | 3.00 | both faults at once. No. |
+
+If all you have is a 50 mm square, `BS_W = 50` still builds and costs nothing
+in chassis height. It is a real fallback, just an honest **f/11 one**:
+
+| f-stop | need across the fold | 50 mm gives 35.36 |
 | --- | --- | --- |
 | 5.6 | 44.39 mm | clips |
 | 8 | 38.36 mm | clips |
 | 11 | 34.53 mm | +2.4% |
 | 16 | 31.33 mm | +12.9% |
-
-Edmund's 50 mm options, for reference: [#43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/)
-is 1 mm but **S2 uncoated**, and [#45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/)
-has S2 AR but is 3 mm, which is worse (see below). At 75 mm Edmund only sells
-it AR-coated and 1 mm, so on the recommended build the two decisions that
-matter are already made for you.
 
 ### Why 1 mm and why AR
 
@@ -76,7 +96,7 @@ double, close enough to sit inside the subject.
 | broadband AR | 1.0% |
 
 Only the T camera gets it, which is worse than it sounds: the stitch would
-have a ghost on one side of the seam and none on the other. #37202 is AR
+have a ghost on one side of the seam and none on the other. #37201 is AR
 coated, so this costs nothing on the recommended build.
 
 ## Cameras and sync
@@ -145,7 +165,7 @@ the apertures stop matching `params.scad`.
   corners sit at 0.84 while the panorama's long axis stays clean, so it reads
   as corner shading. A 180 mm enlarger lens is happiest at f/8–f/11 anyway.
 
-- **S1 faces the lens.** Edmund marks it. Backwards puts the glass path on the
+- **S1 faces the lens** — the face with the black dot. Backwards puts the glass path on the
   reflect leg while the T arm's 0.303 mm compensation is still shortening the
   transmit leg — both legs then disagree by 0.6 mm and no shim stack fixes it
   cleanly.

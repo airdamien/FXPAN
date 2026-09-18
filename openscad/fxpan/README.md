@@ -1,7 +1,7 @@
 # FXPAN 65
 
 A clean-sheet FX panoramic body: two D800 bodies behind one EL-Nikkor 180/5.6N
-and a 75 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one
+and a 50 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one
 half of the field and the two frames stitch to
 
 **64.80 × 23.9 mm · 2.711:1 · 13248 × 4912 · 65.1 MP**
@@ -63,12 +63,16 @@ at infinite f-number, **it never passes the whole frame at any aperture** —
 f/22 still leaves the corners at 0.34. `ARM_MOUNT = 0` is the default for that
 reason; the printed variant is a fitting aid for checking clocking and lug fit.
 
-**Buy the 75 mm plate.** A plate at 45° only presents `size/√2` across the
-fold, and the frame needs 44.4 mm there at f/5.6. 75 mm gives 53.03 mm — 19.5%
-of margin, growing as you stop down. The 50 mm plate gives 35.36 and clips
-until f/11, and it clips *the long axis of the panorama*, which is much worse
-than losing corners. `BS_SIZE = 50` still builds and the chassis shrinks to
-suit, but it is an f/11 body.
+**Buy the 50 × 75 plate, and put the 75 across the fold.** A plate at 45°
+presents only `size/√2` in its plane of incidence, and that is the direction
+the 64.80 mm stitch has to cross: the frame needs 44.4 mm there at f/5.6 and
+75 mm gives 53.03, 19.5% of margin that grows as you stop down. Along the
+fold there is no foreshortening and nothing to carry but the 23.9 mm sensor
+height, so 50 mm is already +72% — and that is the direction that sets chassis
+height, which is why the plate is not square. Fitted the other way round the
+stitch crosses 35.36 mm, clips until f/11, and clips *the long axis of the
+panorama* rather than its corners. The tray slot is keyed, but nothing stops
+you rotating a plate 90° in your hand before it goes in.
 
 ## Print list
 
@@ -119,13 +123,18 @@ you can: the two camera legs have to agree to a fraction of a millimetre, and
 a filament change between them is an easy way to lose that.
 
 **The cookies are meant to go down flat and stay there.** A cookie's face is
-the outside of the camera, so it is drawn as the chassis contour less the rim
-— the same 14 mm corner taken in 5 mm, giving 9 — and chamfered 1.2 mm round
-its outer edge to read as a shadow line against the chassis rather than as a
-square patch stuck to it. All of that is on the top: the bed face is the full
-flat plate, the chamfer only ever narrows the part going up, and the arm's
-mouth lugs flare down onto the plate instead of overhanging it. No supports,
-no brim under the tube.
+the outside of the camera, not a patch behind a wall, so it is drawn to
+disappear into the chassis: R6 corners, a 1.2 mm chamfer round the outer edge
+to read as a shadow line, and the outer face clipped to the chassis's own R9
+plan profile where it curves away underneath. All of that is on the *top*.
+The bed face is the full flat plate, every one of those features only narrows
+the part going up, and the arm's mouth lugs flare down onto the plate instead
+of overhanging it. No supports, no brim under the tube.
+
+They are also no bigger than they have to be. Each one is a rectangle centred
+on its bore — **77.8 × 62 for an arm, 77.8 × 74 for the stem** — sized off the
+clamp screws one way and the tube or a lock lug the other, which is 36.6% less
+plate and print time than the 90 mm squares they replace.
 
 ## Assembly
 
@@ -143,23 +152,27 @@ no brim under the tube.
    the f/11 default, five at f/16, and none at f/5.6, where the bundle already
    fills the bore and `baffle.stl` comes out empty. **If you change `FSTOP`,
    reprint them** — a set cut for f/16 vignettes at f/11.
-4. **Plate into the tray.** S1 — the 50/50 coated face, the one Edmund marks —
-   goes **toward the lens**. Getting this backwards puts the glass path on the
+4. **Plate into the tray.** Two things to get right and both are easy to get
+   wrong. S1 — the 50/50 coated face, the one Edmund marks with a **black
+   dot** — goes **toward the lens**; backwards puts the glass path on the
    reflect leg instead of the transmit leg and the T arm's 0.303 mm
-   compensation then works against you. The slot is keyed; the plate drops in
+   compensation then works against you. And the plate is **75 mm across,
+   50 mm up**: that way round the stitch crosses 53 mm of glass, the other way
+   it crosses 35 and clips. The slot is keyed for both; the plate drops in
    from the top and sits on the shelf.
 5. **Tray into the chassis**, floor down, then the two retention posts stand
    up through the lid's forks.
-6. **Cookies down the C-channels.** Each of the three port cookies slides down
-   its rebate from the lid side, stopping against the chamber wall behind it
-   and captured on three sides. **Four M3 × 12 countersunk** per cookie into
-   the nut pockets — two above the bore and two below. There is no wall
-   outboard of the cookie, and the heads sit flush with its face, because that
-   face is the outside of the camera and the D800 has to come right up to it.
-   The screws are what hold a cookie in, so do all four. The two arm cookies
-   read **▲ R FXP** and **▲ T FXP**; the chassis wall carries the same mark
-   beside each slot, so put each cookie where its letter matches. The stem
-   cookie is the odd one out and is stamped `fxp_stem`.
+6. **Cookies into their rebates.** Each of the three port cookies drops
+   straight into a blind pocket in its face, closed all the way round, and
+   stops against the chamber wall behind it. **Four M3 × 12 countersunk** per
+   cookie into the nut pockets — two above the bore and two below. There is no
+   wall outboard of the cookie, and the heads sit flush with its face, because
+   that face is the outside of the camera and the D800 has to come right up to
+   it. The screws are the only thing holding a cookie in, so do all four. The
+   two arm cookies read **▲ R FXP** and **▲ T FXP** along their lower edge;
+   the chassis wall carries the same mark beside each pocket, so put each
+   cookie where its letter matches. The stem cookie is the odd one out and is
+   stamped `fxp_stem`.
 7. **Reverse rings.** Drop an **M3 nut** into each of the two lugs on the arm
    mouth first — they go in from the mouth end, down a slot, and the ring's
    flange closes over them once it is on, so there is no doing this later.
@@ -168,7 +181,9 @@ no brim under the tube.
    it, then run the two **M3 × 6 grub screws** down onto the barrel. The grubs,
    not the thread, are what actually hold clock and roll — and once a body is
    on you cannot reach them, so finish this before step 10.
-8. **Lid** with four M3 × 20 into the corner nuts. Check the forks have
+8. **Lid** with four M3 × 20 into the corner nuts. It sits on an unbroken rim
+   and its edges should be flush with the chassis on all four sides — the
+   cookie pockets are blind and do not break the top. Check the forks have
    captured the tray posts before you tighten.
 9. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Bolt each
    cradle to its camera pad with four M3 × 16, heads sunk into the plinth top
@@ -184,10 +199,13 @@ no brim under the tube.
 11. **Lens.** M62 helicoid into the stem's 8 mm female boss, EL-Nikkor 180 into
     the helicoid. Collapsed is infinity.
 
-Before step 10, measure your own bodies and set `D800_TRIPOD_ABOVE` (1/4-20
-above the chassis bottom, default 10.0 mm) and `D800_TRIPOD_IN` (lens axis to
-tripod socket along the base, default 44 mm) in the customizer, then reprint
-`base` and the cradles. The defaults are carried over, not measured.
+Before step 10, measure your own bodies and set `D800_AXIS_BASE` (lens axis
+above the camera's baseplate, default 52.0 mm) and `D800_TRIPOD_IN` (lens axis
+to tripod socket along the base, default 44 mm) in the customizer, then
+reprint `base` and the cradles. The defaults are reported figures, not
+measured ones. `D800_AXIS_BASE` is the one that matters: the chassis skirt is
+solved from it, so if it is wrong both cameras sit off the optical axis by the
+same amount and neither leg will focus where the other does.
 
 ## Alignment
 
@@ -274,10 +292,14 @@ measuring the panel: whatever the lug is, it is never proud of the metal ring
 that already has to live in that gap. So the strength comes from flaring each
 lug down onto the cookie rather than from standing it further out — which
 also means they print with no overhang at all, arm-up, straight off the plate.
-They sit at **190° and 260° from camera-up**, which is the far side of the
+They sit at **135° and 225° from camera-up**, square about the far side of the
 tube: camera-up itself is raked back for the pentaprism nose and had 1.4 mm
 of wall under the old first screw, and the azimuth 90° from it is where the
-cookie runs out of plate.
+cookie runs out of plate. Sitting the pair symmetrically about the opposite
+edge is also what keeps them from driving the plate wider, now that the plate
+is sized off whatever sticks out furthest. There is 0.93 mm of wall left
+between each nut pocket and the thread, and it is not a loaded face — driving
+the screw reacts the nut outward, into the 1.2 mm cap.
 
 ## Focus range
 
@@ -304,16 +326,18 @@ and the corner of a 36 × 23.9 mm window sits 21.6 mm from its centre against
 the 18 mm the long axis alone suggests. Reading it off the long axis makes the
 body look clean at f/5.6 when it isn't.
 
-| f-stop | plate (53.03 available) | flange bore (44.0 available) | traced corner |
-| --- | --- | --- | --- |
-| 5.6 | 44.4 mm · +19.5% | 46.8 mm · **clips** | 0.836 |
-| 8 | 38.4 mm · +38.2% | 44.3 mm · **clips** | 0.951 |
-| 11 | 34.5 mm · +53.6% | 42.7 mm · clears | 1.000 |
-| 16 | 31.3 mm · +69.3% | 41.4 mm · clears | 1.000 |
+| f-stop | plate across the fold (53.03) | plate along it (50) | flange bore (44.0) | traced corner |
+| --- | --- | --- | --- | --- |
+| 5.6 | 44.4 mm · +19.5% | 29.1 mm · +72% | 46.8 mm · **clips** | 0.836 |
+| 8 | 38.4 mm · +38.2% | 23.0 mm · +117% | 44.3 mm · **clips** | 0.951 |
+| 11 | 34.5 mm · +53.6% | 19.2 mm · +161% | 42.7 mm · clears | 1.000 |
+| 16 | 31.3 mm · +69.3% | 16.0 mm · +213% | 41.4 mm · clears | 1.000 |
 
 So the plate is never the constraint on the recommended build — the mouth is,
 and 44 mm is as wide as an F mount gets. The long axis of the panorama is
-clean at every aperture including f/5.6; only the corners shade.
+clean at every aperture including f/5.6; only the corners shade. The
+along-the-fold column is why the plate is 50 there and not 75: that margin was
+never going to be spent, and buying it cost 25 mm of chassis height.
 
 Set `FSTOP` in the customizer to see any aperture. The red outline in the
 preview is the plate footprint the bundle actually needs, and the console
