@@ -17,10 +17,11 @@ Nikon F throat. Verify it yourself with `kraken/fxpan_paths.py`, which ray
 traces the thing and exits non-zero if the geometry stops agreeing with
 `params.scad`.
 
-## The three constraints that set everything
+## The constraints that set everything
 
 Every number in `params.scad` falls out of these pulling against each other.
-If you change one, re-derive the others.
+The first four are optical and mechanical and are load-bearing; 5 and 6 are
+things the build got wrong and how. If you change one, re-derive the others.
 
 ### 1. The plate has to pass the whole frame
 
@@ -196,6 +197,60 @@ lead-in at the mouth. `F_REV_CLEAR` is the only number a builder should have
 to touch, and `PART = ringgauge` exists so they can find it in ten minutes
 instead of in a three-hour arm print.
 
+The lock was working against the thread too. An M3 nut wants 2.8 mm of radial
+depth; the wall over the M52 female is `(TUBE_OD − F_REV_MAJOR)/2` = 3.0 mm.
+A pocket sunk into that wall has to come out the far side, and the original one
+did — a 5.7 mm window straight through the thread, twice, over 7 of the 8 mm of
+engagement. Two gaps for the ring to jump on every turn.
+
+So the nut goes **outboard** of the thread, in a lug, and only the 3.2 mm screw
+crosses it. `rev_lock_r_out()` is `F_COLLAR_OD / 2` — the reverse ring's own
+OD — because that is the only clearance statement that can be made about the
+camera's front panel without measuring it: whatever the lug is, it is never
+proud of the metal ring that already has to live in that gap. Strength comes
+from `REV_LOCK_FLARE` widening each lug down onto the cookie instead of from
+standing it further out, which also makes it overhang-free printed arm-up.
+
+`REV_LOCK_HOME = 225` with `REV_LOCK_SPREAD = 70` puts the pair at 190° and
+260° from camera-up. Two azimuths are already spoken for, and on both faces
+they sit the same way round: `TUBE_FLASH_KEEP` rakes the OD back at camera-up
+for the pentaprism nose, and the cookie runs out of plate at the shift
+azimuth, which is +90° from camera-up on R and on T alike. The old pair sat at
+camera-up itself and 120° off it, so the first screw of the two had 1.4 mm of
+raked wall to work with.
+
+`rev_lock_ok()` also replaced a test for a whole `F_REV_LEN` of tube. What the
+lock needs is room for the nut slot to floor above the cookie face, and the T
+arm is `bs_t_comp()` shorter than the R arm for the glass path — 7.697 against
+8 — so it lost both screws to a 0.3 mm rounding and had nothing holding its
+ring's clock at all.
+
+### 6. A port cookie is the outside of the camera
+
+Once the retaining wall went, a cookie's face stopped being a patch behind a
+wall and became a panel of the body. Three things followed from that:
+
+- **`tube_flash_waste` was eating the plate.** Its taper was specified as a
+  length back from the mouth, `TUBE_FLASH_L = 11 mm`, which on an 8 mm tube
+  ran straight past the cookie face and bit a 16 mm notch out of the corner —
+  an L-shaped plate with a 4 mm trench in the outside of the camera for no
+  reason. It now rakes to the full OD at the cookie face and stops dead there.
+- **`tube_flat_waste` was vestigial.** It chord-cut the tube OD where the
+  shift pushed it past the cookie, but at `TUBE_OD` 58 and a 14.4 mm shift the
+  tube reaches 43.4 mm against the plate's 45, so all it did was shave 0.4 mm
+  off one edge and leave the plate 90 × 89.6. Gone.
+- **The outline follows the chassis.** `port_plate_r()` is `PORT_BOSS_R`
+  less `port_rim()` — subtracting the rim from the corner is exactly what an
+  inward offset does to a radius — so the rim stays 5 mm the whole way round
+  instead of pinching to 1.3 mm on the diagonals, where it was both ugly and
+  weak. `PORT_EDGE_CHAM` then takes 1.2 mm off the outer edge so the joint
+  reads as a shadow line. `port_slide_slot` sweeps the same outline, so the
+  rebate's closed corners match it.
+
+All of it is on the top face. The cookies print flange-down with the arm up,
+so the bed face is the full flat plate and every one of these features only
+ever narrows the part on the way up.
+
 ## Locked numbers
 
 Treat these as fixed inputs. `WATCH_ME.scad` echoes every one of them on
@@ -280,6 +335,12 @@ So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
   print a chassis.
 - **The M52 mouth is printer-dependent.** `F_REV_CLEAR = 0.15` is a starting
   point, not a result. Print `ringgauge` and set it from a real ring.
+- **The lock lugs assume the ring clears the body.** `rev_lock_r_out()` is
+  pinned to `F_COLLAR_OD / 2` on the argument that nothing proud of the metal
+  reverse ring can be in the camera's way, since the ring is already in that
+  gap. It is a sound argument but it is still an argument — if a body will not
+  seat and the lugs are what it is touching, drop `F_COLLAR_OD`, which pulls
+  `rev_lock_r_in()` in with it, and watch `rev_lock_thread_wall()` in the echo.
 
 ## Files
 
@@ -327,7 +388,7 @@ Every part carries `fxp_` + its name + the export timestamp, via `fxp_tag()`.
 | `fxp_lid` | `plate_stamp` | outer face |
 | `fxp_tray` | `part_stamp_cut` | −Y chamber wall, readable from the stem |
 | `fxp_stem` | `flange_stamp` | cookie, camera side |
-| `fxp_arm_r` / `fxp_arm_t` (+`f`) | `flange_stamp` | cookie, camera side |
+| `fxp_arm_r` / `fxp_arm_t` (+`f`) | `fxp_arm_stamp` | cookie, camera side, edge at up_az − 90 |
 | `fxp_el180` | `part_stamp_stack_cut` | hex flat |
 | `fxp_base`, `fxp_cradle_r/t` | `part_stamp_cut` | top face |
 | `fxp_bf1`…`fxp_bf5` | `part_stamp_stack_cut` | each surviving baffle ring |
