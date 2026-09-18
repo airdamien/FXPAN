@@ -104,7 +104,7 @@ EL180_M62_PITCH = is_undef(EL180_M62_PITCH) ? 1.0 : EL180_M62_PITCH;
 EL180_M62_LEN   = 10;      // female at the hex rim — 180 thread is only next to the flange
 EL180_M62_TOL   = 0.45;
 EL180_ADAPTER_OD  = 76;
-EL180_BORE        = 52;    // optical through the male / stem only
+EL180_BORE        = EL180_M62_MAJOR - 1.6;  // ≥ M62 minor; no 52 mm shelf through the male
 EL180_BARREL      = 61.2;  // 60 mm measured + clearance; hex behind the female, no 52 mm shelf
 // Pixco-style M62×1 helicoid, collapsed 17 mm / open 31 mm.
 EL180_HELI_MIN    = 17;
