@@ -78,24 +78,74 @@ module f_pin_line_cut(out_len, up_az) {
             cube([r1 - r0, 0.9, t + 0.1], center = true);
 }
 
-// Two M3 set screws 120° apart pinch the ring barrel (roll + clock).
-module rev_lock_cuts(out_len, az = 180) {
-    for (a = [0, 120])
-        rev_lock_cut_one(out_len, az + a);
+// Two M3 grub screws pinch the ring barrel (roll + clock). Both azimuths are
+// taken off camera-up and straddle the far side of the tube, because camera-up
+// is where the OD is raked back for the pentaprism. See REV_LOCK_* in
+// params.scad for why the nut sits outboard of the thread rather than in it.
+function rev_lock_az(up_az, s) = up_az + REV_LOCK_HOME + s * REV_LOCK_SPREAD / 2;
+
+// What the lock actually needs is room for the nut slot to floor above the
+// cookie face, not a whole F_REV_LEN of tube. The old test was the latter, and
+// the T arm is bs_t_comp() shorter than the R arm for the glass path -- 7.697
+// against 8 -- so it lost both set screws to a 0.3 mm rounding and there was
+// nothing holding that ring's clock at all.
+function rev_lock_ok(out_len) =
+    out_len - F_REV_LEN / 2 - REV_LOCK_NUT_AF / 2 - 0.3 >= 0.3;
+
+module rev_lock_cuts(out_len, up_az = 180) {
+    for (s = [-1, 1])
+        rev_lock_cut_one(out_len, rev_lock_az(up_az, s));
+}
+
+// Lugs for those nuts. Full tube height, so each one grows straight off the
+// cookie with the arm printed mouth-up and carries no overhang at all, and
+// level with the mouth so the ring still seats flat on the end annulus. The
+// outer face stays on the rev_lock_r_out() cylinder and the width flares by
+// REV_LOCK_FLARE on the way down to the plate — a taper that widens toward
+// the bed, which is free.
+module rev_lock_bosses(out_len, up_az = 180) {
+    for (s = [-1, 1])
+        rev_lock_boss_one(out_len, rev_lock_az(up_az, s));
+}
+
+module rev_lock_boss_one(out_len, az) {
+    r = rev_lock_r_out();
+    module lug(w) {
+        translate([r / 2, 0])
+            offset(2.0)
+                offset(-2.0)
+                    square([r + 1, w], center = true);
+    }
+    rotate([0, 0, az])
+        intersection() {
+            difference() {
+                cylinder(h = out_len, r = r);
+                translate([0, 0, -0.1])
+                    cylinder(h = out_len + 0.2, d = TUBE_ID);
+            }
+            hull() {
+                linear_extrude(0.02)
+                    lug(REV_LOCK_W + 2 * REV_LOCK_FLARE);
+                translate([0, 0, out_len - 0.02])
+                    linear_extrude(0.02)
+                        lug(REV_LOCK_W);
+            }
+        }
 }
 
 module rev_lock_cut_one(out_len, az) {
-    z0 = out_len - F_REV_LEN / 2;
-    r_mid = (TUBE_ID + TUBE_OD) / 4;
-    nw = 5.5 + 0.2;
-    nt = 2.4 + 0.2;
-    floor_z = z0 - 5.5 / 2 - 0.2;
+    z0 = out_len - F_REV_LEN / 2;          // screw axis, mid-engagement
+    ri = rev_lock_r_in();
+    nw = REV_LOCK_NUT_AF;
+    nt = REV_LOCK_NUT_T;
+    // Nut drops in from the mouth, so the slot has to be open up there.
+    floor_z = z0 - nw / 2 - 0.3;
     rotate([0, 0, az]) {
         translate([0, 0, z0])
             rotate([0, 90, 0])
-                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
-        translate([r_mid, 0, (out_len + floor_z) / 2])
-            cube([nt, nw, out_len - floor_z + 0.2], center = true);
+                cylinder(h = rev_lock_r_out() + 1.5, d = PORT_SCREW_D);
+        translate([ri + nt / 2, 0, (out_len + 0.2 + floor_z) / 2])
+            cube([nt, nw, out_len + 0.2 - floor_z], center = true);
     }
 }
 

@@ -118,6 +118,15 @@ Print the arms and the stem in the same material and from the same spool if
 you can: the two camera legs have to agree to a fraction of a millimetre, and
 a filament change between them is an easy way to lose that.
 
+**The cookies are meant to go down flat and stay there.** A cookie's face is
+the outside of the camera, so it is drawn as the chassis contour less the rim
+— the same 14 mm corner taken in 5 mm, giving 9 — and chamfered 1.2 mm round
+its outer edge to read as a shadow line against the chassis rather than as a
+square patch stuck to it. All of that is on the top: the bed face is the full
+flat plate, the chamfer only ever narrows the part going up, and the arm's
+mouth lugs flare down onto the plate instead of overhanging it. No supports,
+no brim under the tube.
+
 ## Assembly
 
 1. **Inserts.** Press the 1/4-20 threaded insert into the `base` tripod pad
@@ -151,11 +160,14 @@ a filament change between them is an easy way to lose that.
    read **▲ R FXP** and **▲ T FXP**; the chassis wall carries the same mark
    beside each slot, so put each cookie where its letter matches. The stem
    cookie is the odd one out and is stamped `fxp_stem`.
-7. **Reverse rings.** Thread one M52→F ring into each arm mouth — this is the
-   fit `ringgauge` was for. Each mouth has an engraved radial line at the body
-   lock-pin azimuth; clock the ring to it, then lock with the two M3 set
-   screws 120° apart. The set screws, not the thread, are what actually hold
-   clock and roll.
+7. **Reverse rings.** Drop an **M3 nut** into each of the two lugs on the arm
+   mouth first — they go in from the mouth end, down a slot, and the ring's
+   flange closes over them once it is on, so there is no doing this later.
+   Then thread the ring in; this is the fit `ringgauge` was for. Each mouth
+   has an engraved radial line at the body lock-pin azimuth; clock the ring to
+   it, then run the two **M3 × 6 grub screws** down onto the barrel. The grubs,
+   not the thread, are what actually hold clock and roll — and once a body is
+   on you cannot reach them, so finish this before step 10.
 8. **Lid** with four M3 × 20 into the corner nuts. Check the forks have
    captured the tray posts before you tighten.
 9. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Bolt each
@@ -196,8 +208,9 @@ that much, check that S1 really is facing the lens.
 
 **Roll.** Shoot a level horizon on both. Both bodies sit upright and landscape,
 and the seam is horizontal, so any relative roll shows up as a wedge in the
-overlap that no stitcher will hide. Loosen the reverse ring set screws,
-rotate, re-lock.
+overlap that no stitcher will hide. Loosen the reverse ring grubs, rotate,
+re-lock — with the body off, since the grubs sit inside the space its front
+panel occupies.
 
 **Field.** Shoot a scene with detail across the whole frame and run it through
 `cam/pano.py`, whose default overlap is **0.20** for this body. `find_overlap()`
@@ -244,9 +257,27 @@ same material, same layer height. Thread a real Fotodiox ring into each.
 
 A 0.75 mm pitch is fine work for FDM. If the crests come out ragged, drop to
 0.15 mm layers and slow the outer perimeter for the arms; the mouth is only
-8 mm of the print. And it does not have to be perfect — the two M3 set
-screws are what actually hold the ring's clock and roll. The thread only has
-to pull it down square.
+8 mm of the print. And it does not have to be perfect — the two M3 grubs are
+what actually hold the ring's clock and roll. The thread only has to pull it
+down square.
+
+Which the old lock was not helping with either. An M3 nut wants 2.8 mm of
+radial depth and the wall over the M52 female is 3.0 mm, so the nut pocket
+came out the far side: a 5.7 mm window straight through the thread, twice,
+over 7 of the 8 mm of engagement. Two gaps for the ring to jump on every
+turn. The nuts now sit **outboard** of the thread in a pair of lugs, and only
+the 3.2 mm screw crosses it.
+
+The lugs stop at the reverse ring's own outside diameter. That is the only
+thing that can be said about clearing the camera's front panel without
+measuring the panel: whatever the lug is, it is never proud of the metal ring
+that already has to live in that gap. So the strength comes from flaring each
+lug down onto the cookie rather than from standing it further out — which
+also means they print with no overhang at all, arm-up, straight off the plate.
+They sit at **190° and 260° from camera-up**, which is the far side of the
+tube: camera-up itself is raked back for the pentaprism nose and had 1.4 mm
+of wall under the old first screw, and the azimuth 90° from it is where the
+cookie runs out of plate.
 
 ## Focus range
 

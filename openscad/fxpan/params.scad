@@ -108,6 +108,7 @@ F_REV_TOOTH    = 0.52;    // axial tooth base → 0.450 mm radial, ISO-ish
 F_REV_LEAD     = 0.9;     // 45° lead-in so the first turn starts square
 F_REV_GAUGE    = [-0.15, 0, 0.15, 0.30];   // ringgauge steps about F_REV_CLEAR
 function f_rev_minor() = F_REV_MAJOR + F_REV_CLEAR - F_REV_TOOTH / tan(30);
+// Set-screw lock on the ring barrel: see REV_LOCK_* under ports.
 // Flush with the metal reverse ring's throat, so the printed part is never the
 // limit and the bought ring is. 43.5 cost a third of a stop for nothing. The
 // other bodies use 40.3, which clips a 14.4 mm shift badly.
@@ -250,6 +251,18 @@ PORT_FRAME      = 5;
 PORT_SLOT_LIP   = 8;
 PORT_SLOT_CLEAR = 0.4;
 PORT_BOSS_R     = 14;
+// The cookie face IS the outside of the body, so it wants to read as part of
+// the chassis and not as a square patch stuck on it. Rim left round a cookie,
+// and the cookie radius that keeps that rim even: subtracting the rim from the
+// chassis corner is exactly what an inward offset does to a radius. A square
+// 90 corner sits 1.3 mm inside a 14 mm chassis corner on the diagonal against
+// 5 mm on the flats, which is both the ugly part and the weak part.
+function port_rim()     = (BOX_XY + 2 * PORT_PATCH_T - PORT_PATCH) / 2;
+function port_plate_r() = max(2, PORT_BOSS_R - port_rim());
+// 45° off the outer edge. The cookie prints arm-up, so the outer face is the
+// last thing off the bed and a chamfer there only ever narrows — the bed face
+// stays the full flat plate.
+PORT_EDGE_CHAM  = 1.2;
 PORT_SCREW_R    = 38.5;
 PORT_CLAMP_R    = 38;
 PORT_CLAMP_SEP  = 15;
@@ -263,6 +276,10 @@ function cam_axis(mark, sh = undef) =
 function port_up(mark) =
     mark == "R" ? [-1, 0] :
     mark == "T" ? [0, -1] : [0, 1];
+// Same thing as an azimuth about the tube, for the mouth features that clock
+// off camera-up: the lock-pin line and the set-screw pads.
+function port_up_az(mark) =
+    let (u = port_up(mark)) atan2(u.y, u.x);
 // Four per cookie, two above the bore and two below. With the outboard
 // retaining wall gone (it was what the camera's front panel hit) these are
 // the only thing holding a cookie out of its rebate, so they are no longer
@@ -282,6 +299,49 @@ PORT_NUT_T   = 2.6;
 // and stand in the camera's way besides.
 PORT_CSK_D   = 6.4;
 PORT_CSK_H   = 1.9;
+
+// --- reverse-ring lock -----------------------------------------------------
+// Two M3 grub screws pinch the ring barrel and hold its clock.
+//
+// There is no meat in the tube wall for this. An M3 nut wants 2.8 mm of radial
+// depth and the wall left over the M52 female is (TUBE_OD − F_REV_MAJOR)/2 =
+// 3.0 mm, so a pocket sunk into it has to come out the other side, and the old
+// one did: it opened a 5.7 mm window straight through the thread, twice, over
+// 7 of the 8 mm of engagement. Two gaps for the ring to jump on every turn,
+// which cannot have helped the threading either.
+//
+// So the nut goes outboard of the thread, in a lug that stands proud of the
+// OD, and only the 3.2 mm screw crosses the thread. The lug stops at the
+// reverse ring's own OD: whatever it is, it is then never proud of the metal
+// ring that already has to live in the gap between the chassis and the
+// camera's front panel, which is the only clearance statement that can be made
+// about that panel without measuring it. Meat comes from flaring the lug down
+// onto the cookie instead of from standing it further out.
+REV_LOCK_WALL   = 1.2;                  // over the nut, outboard
+REV_LOCK_NUT_T  = PORT_NUT_T + 0.2;
+REV_LOCK_NUT_AF = PORT_NUT_AF + 0.25;
+REV_LOCK_W      = 13.0;                 // lug width at the mouth, tangential
+REV_LOCK_FLARE  = 3.0;                  // extra half-width down at the cookie
+function rev_lock_r_out() = F_COLLAR_OD / 2;
+function rev_lock_r_in()  = rev_lock_r_out() - REV_LOCK_WALL - REV_LOCK_NUT_T;
+// Wall left between the nut pocket and the thread. It is not the loaded face
+// — driving the screw in reacts the nut outboard, against REV_LOCK_WALL — but
+// diagnostics() reports it, because it is what goes first if F_REV_CLEAR or
+// F_COLLAR_OD ever move.
+function rev_lock_thread_wall() =
+    rev_lock_r_in() - (F_REV_MAJOR + F_REV_CLEAR) / 2;
+
+// Where the pair sits, measured off camera-up.
+//
+// Two things are already spoken for, and on both faces they sit the same way
+// round: the prism rakes the OD back at camera-up (TUBE_FLASH_KEEP), and the
+// cookie runs out of plate at the shift azimuth, which is +90° from camera-up
+// on the R face and on the T face alike. That leaves the far side, and
+// REV_LOCK_HOME bisects the half of it furthest from both. The screws used to
+// sit at camera-up itself and 120° off it, so the first of the two had 1.4 mm
+// of raked wall to work with.
+REV_LOCK_HOME   = 225;
+REV_LOCK_SPREAD = 70;
 
 LID_T        = 6;
 LID_LIP      = LID_LIP_SEAT;

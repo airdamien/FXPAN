@@ -139,49 +139,48 @@ function chassis_shell_t() = patch_t();
 function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
 function chassis_out_z()   = BOX_Z + 2 * chassis_shell_t();
 
+// Cookie outline. Same corner as the chassis less the rim, so the rim stays
+// even the whole way round instead of pinching to 1.3 mm on the diagonals.
+module port_plate_2d(grow = 0, patch = PORT_PATCH) {
+    round_rect(patch + 2 * grow, patch + 2 * grow,
+               max(0.4, port_plate_r() + grow));
+}
+
+// Chamfered on the outer face only. Printed arm-up the outer face is the last
+// thing off the bed, so the chamfer only ever narrows the part and the bed
+// face stays the full flat plate.
 module port_flange(patch = PORT_PATCH) {
-    translate([0, 0, patch_t() / 2])
-        cube([patch, patch, patch_t()], center = true);
+    c = min(PORT_EDGE_CHAM, patch_t() - 1.5);
+    hull() {
+        linear_extrude(patch_t() - c)
+            port_plate_2d(0, patch);
+        linear_extrude(patch_t())
+            port_plate_2d(-c, patch);
+    }
 }
 
-// Outboard cookie edge in the shift direction. The shifted tubes reach past
-// the cookie, so chord-cut that OD and let the chassis wrap the flat.
-function tube_flat_n(mark) =
-    mark == "R" ? [0, -1] :
-    mark == "T" ? [1, 0] : [0, 0];
-TUBE_FLAT_CLEAR = 0.4;
-// Camera-up chord at the F mouth so the pentaprism nose clears the OD.
+// Camera-up chord at the F mouth so the pentaprism nose clears the OD. It
+// rakes back to the full OD at the cookie's outer face and stops dead there:
+// below that line the cookie IS the outside of the body. The taper used to be
+// specified as a length from the mouth, TUBE_FLASH_L = 11 mm, which on an
+// 8 mm tube ran straight past the cookie face and bit a 16 mm notch out of
+// the plate — the L.
 TUBE_FLASH_KEEP = 27.0;
-TUBE_FLASH_L    = 11;
-
-module tube_flat_waste(mark, z0, h, inset = 0) {
-    n = tube_flat_n(mark);
-    if (mark == "R" || mark == "T")
-        translate([n.x * (PORT_PATCH / 2 - inset + 12),
-                   n.y * (PORT_PATCH / 2 - inset + 12),
-                   z0 + h / 2])
-            cube([abs(n.x) > 0.5 ? 24 : 160,
-                  abs(n.y) > 0.5 ? 24 : 160,
-                  h], center = true);
-}
 
 module tube_flash_waste(mark, out_len) {
-    n = port_up(mark);
+    n  = port_up(mark);
     ax = cam_axis(mark);
     z1 = patch_t() + out_len;
-    wn = 80;
-    wt = 80;
+    w  = 80;
     if (mark == "R" || mark == "T")
         hull() {
-            translate([ax.x + n.x * (TUBE_FLASH_KEEP + wn / 2),
-                       ax.y + n.y * (TUBE_FLASH_KEEP + wn / 2), z1 + 8])
-                cube([abs(n.x) > 0.5 ? wn : wt,
-                      abs(n.y) > 0.5 ? wn : wt, 16], center = true);
-            translate([ax.x + n.x * (TUBE_OD / 2 + wn / 2),
-                       ax.y + n.y * (TUBE_OD / 2 + wn / 2),
-                       z1 - TUBE_FLASH_L])
-                cube([abs(n.x) > 0.5 ? wn : wt,
-                      abs(n.y) > 0.5 ? wn : wt, 2], center = true);
+            translate([ax.x + n.x * (TUBE_FLASH_KEEP + w / 2),
+                       ax.y + n.y * (TUBE_FLASH_KEEP + w / 2), z1 + 8])
+                cube([w, w, 16], center = true);
+            translate([ax.x + n.x * (TUBE_OD / 2 + w / 2),
+                       ax.y + n.y * (TUBE_OD / 2 + w / 2),
+                       patch_t() + 0.5])
+                cube([w, w, 1], center = true);
         }
 }
 
@@ -213,17 +212,22 @@ module port_clamp_anchor_cut() {
         hex_nut_cut();
 }
 
-// Cookie pocket, open at the lid, stopped on the floor lip.
+// Cookie pocket, swept open toward the lid so the cookie can drop in. Sweeping
+// the cookie's own outline keeps the two corners at the far end matched to it,
+// and the three closed sides of the rebate stay a uniform PORT_SLOT_CLEAR/2
+// off the plate. The old version swept a plain square whose far lip landed
+// 0.2 mm inside the cookie, so the plate stopped short of its own floor.
 module port_slide_slot(mark = "") {
     u = port_up(mark);
-    w = PORT_PATCH + PORT_SLOT_CLEAR;
     d = patch_t() + 0.35;
     slot_h = PORT_PATCH + PORT_FRAME + 28;
-    along  = -(PORT_PATCH / 2 - PORT_SLOT_CLEAR / 2) + slot_h / 2;
-    translate([u.x * along, u.y * along, d / 2 - 0.2])
-        cube([abs(u.x) > 0.5 ? slot_h : w,
-              abs(u.y) > 0.5 ? slot_h : w,
-              d], center = true);
+    translate([0, 0, d / 2 - 0.2])
+        linear_extrude(d, center = true)
+            hull() {
+                port_plate_2d(PORT_SLOT_CLEAR / 2);
+                translate([u.x * slot_h, u.y * slot_h])
+                    port_plate_2d(PORT_SLOT_CLEAR / 2);
+            }
 }
 
 // 3 mm ring into the chassis top shelf, notched where the port faces are open.
@@ -351,6 +355,20 @@ module port_letter_2d(kind) {
         rotate(90)  stamp("R");
     else
         rotate(180) stamp("T");
+}
+
+// Arm tag, on the plate edge at up_az − 90. That is the one clear edge of a
+// camera cookie: the shift pushes the tube to up_az + 90, the four clamp
+// screws sit on the pair of edges square to camera-up, and flange_marks owns
+// camera-up. flange_stamp's three cases were written for the other bodies'
+// centred cookies and put this one straight through a countersink.
+module fxp_arm_stamp(mark, patch = PORT_PATCH) {
+    e = patch / 2 - PORT_EDGE_CHAM - 2.8;
+    a = port_up_az(mark) - 90;
+    translate([e * cos(a), e * sin(a), patch_t() - STAMP_DEPTH])
+        rotate([0, 0, a - 90])
+            linear_extrude(STAMP_DEPTH + 0.15)
+                part_stamp_2d(fxp_arm_tag(mark), 3.4);
 }
 
 module flange_marks(kind, patch = PORT_PATCH) {
@@ -808,7 +826,6 @@ module port_tube_solid(out_len, rx = 0, ry = 0, patch = PORT_PATCH, mark = "") {
         along_cam(rx, ry, mark)
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
-        tube_flat_waste(mark, -2, patch_t() + out_len + 8, TUBE_FLAT_CLEAR);
         tube_flash_waste(mark, out_len);
         port_clamp_screws(mark) port_csk_cut();
     }
@@ -825,6 +842,8 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
             along_cam(rx, ry, mark) {
                 tube_baffles(out_len, mark);
                 f_glare_mask(out_len, mark);
+                if (!printed_f() && rev_lock_ok(out_len))
+                    rev_lock_bosses(out_len, port_up_az(mark));
             }
         }
         if (!printed_f())
@@ -836,12 +855,12 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                     cylinder(h = F_REV_LEAD + 0.1,
                              d1 = f_rev_minor(),
                              d2 = f_rev_minor() + 2 * F_REV_LEAD);
-                if (out_len >= F_REV_LEN)
-                    rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
-                f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
+                if (rev_lock_ok(out_len))
+                    rev_lock_cuts(out_len, port_up_az(mark));
+                f_pin_line_cut(out_len, port_up_az(mark));
             }
         flange_marks(mark, p);
-        flange_stamp(fxp_arm_tag(mark), mark, p, patch_t(), STAMP_DEPTH, 3.4);
+        fxp_arm_stamp(mark, p);
         tube_flash_waste(mark, out_len);
     }
         translate([-p, -p, 0])
@@ -910,7 +929,8 @@ module part_stem() {
             translate([0, 0, z0 - 0.1])
                 cylinder(h = EL180_M62_LEN + 4, d = STEM_BORE);
             port_clamp_screws("") port_csk_cut();
-            flange_stamp(fxp_tag("stem"), "", PORT_PATCH, patch_t());
+            flange_stamp(fxp_tag("stem"), "", PORT_PATCH - 2 * PORT_EDGE_CHAM,
+                         patch_t());
         }
         union() {
             tube_lining_mask(0, m62 = EL180_M62_LEN);
@@ -1489,6 +1509,17 @@ module diagnostics() {
              " of ", BAFFLE_RINGS,
              baffle_ring_count() == 0
                ? "  (the bundle fills the bore — nothing to print)" : ""));
+    echo(str("ring lock: 2 M3 grubs at ", REV_LOCK_HOME - REV_LOCK_SPREAD / 2,
+             "° and ", REV_LOCK_HOME + REV_LOCK_SPREAD / 2,
+             "° off camera-up, nuts outboard of the thread at r ",
+             rev_lock_r_in(), "..", rev_lock_r_in() + REV_LOCK_NUT_T,
+             " in a lug to r ", rev_lock_r_out(), " (ring OD/2)",
+             "  |  wall left over the thread ",
+             round(rev_lock_thread_wall() * 100) / 100, " mm",
+             rev_lock_thread_wall() < 0.8
+               ? "  *** thin — drop REV_LOCK_WALL or F_REV_CLEAR ***" : "",
+             rev_lock_ok(transmit_tube_len())
+               ? "" : "  *** T arm too short for the nut slot ***"));
     echo(str("transmit leg crosses ", BS_THICK,
              " mm of n=", BS_N, " glass at 45°: tube shortened by ",
              round(bs_t_comp() * 1000) / 1000, " mm"));
