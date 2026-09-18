@@ -162,7 +162,7 @@ BRACE_HEX_CELL     = 11;
 // Inner PETG / CF-PETG lining vs outer PCTG shell.
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;     // chamber floor is inner PETG (was 0.4 PCTG cap)
-MARK_DEPTH   = 1.2;   // FXPan + 59MP (or DX D12600) on the blank −X wall
+MARK_DEPTH   = 1.2;   // Nikon FX badge + Pan + 59MP (or DX D12600) on −X
 // Tube ID baffles (PETG liner). 45° tooth, camera face flat — cookie on the bed.
 BAFFLE_H     = 1.6;
 BAFFLE_PITCH = 4.0;
