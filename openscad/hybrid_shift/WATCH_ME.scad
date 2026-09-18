@@ -499,18 +499,26 @@ module box_lining_mask() {
 }
 
 // Name on the blank −X wall. DX D12600 (7000×1.8); FX is the D3-era
-// Nikon FX badge (gold ring + geometric FX) + Futura "Pan" + 59MP over
-// the 12070×4912 / 2.46:1 stitch. Futura ships with macOS; re-export
+// Nikon FX badge (gold ring + geometric FX) standing in for the X of
+// the XPan wordmark, then PAN + its underline, then 59MP over the
+// 12070×4912 / 2.46:1 stitch. Badge and PAN are drawn geometry; 59MP
+// and the spec line are Futura, which ships with macOS — re-exporting
 // on Linux needs the same family installed.
 // layer: all | fx | word | mp | rule | spec — separate STLs for colors.
-function fx_badge_s()  = 20.0;
-function fx_pan_size() = 10.4;
-function fx_pan_gap()  = 2.35;
-function fx_word_y()   = 9.05;
-function fx_pan_font() = "Futura:style=Bold";
-// Futura Bold "Pan" advance / size, measured in OpenSCAD 2026.06.
-function fx_pan_w()    = 2.9337 * fx_pan_size();
-function fxpan_w()     = fx_badge_s() + fx_pan_gap() + fx_pan_w();
+function fx_badge_s()   = 20.0;
+// XPan sets PAN at 0.61 of the X; the badge stands in for the X here.
+function fx_pan_cap()   = 12.4;
+// Monoline weight. XPan draws 0.076 cap, which lands under 1 mm and will
+// not survive as an inlay, so this carries the badge ring weight instead.
+function fx_pan_t()     = 1.15;
+function fx_pan_gap()   = 2.4;  // badge → P
+function fx_rule_gap()  = 1.0;  // badge → underline
+function fx_word_y()    = 9.05; // badge centre on the wall
+function fx_pan_w()     = XP_N_STEM_R * fx_pan_cap() + fx_pan_t() / 2;
+function fxpan_w()      = fx_badge_s() + fx_pan_gap() + fx_pan_w();
+// Drop the rule onto the badge foot, then hang the cap line off it.
+function fx_pan_cap_y() = fx_word_y() - fx_badge_s() / 2 + fx_pan_t() / 2
+                          + XP_RULE_W * fx_pan_cap();
 
 module fx_round_sq(w, r) {
     offset(r)
@@ -609,10 +617,91 @@ module fxpan_badge() {
         nikon_fx_gold(fx_badge_s());
 }
 
+// XPAN wordmark, traced off the Hasselblad badge the same way as the FX
+// pin. Fractions of the cap height: u runs right from the left edge, w
+// runs down from the cap line. Monoline skeleton, so the weight is a
+// free parameter (fx_pan_t) rather than part of the trace.
+XP_P_STEM     = 0.033; // P stem, centreline
+XP_P_BOWL_R   = 0.880; // P bowl, right centreline
+XP_P_BOWL_B   = 0.478; // P bowl, bottom centreline
+XP_P_BOWL_RAD = 0.087; // squarish bowl corner, on the centreline
+XP_A_FOOT_L   = 0.815;
+XP_A_APEX     = 1.283;
+XP_A_FOOT_R   = 1.761;
+XP_A_BAR      = 0.674; // A crossbar, sits low
+XP_N_STEM_L   = 1.913;
+XP_N_STEM_R   = 2.826;
+XP_RULE_W     = 1.196; // underline centreline, below the cap line
+
+// Monoline stroke with butt ends; the cap band squares them off.
+module xp_bar(p, q, t) {
+    d = q - p;
+    translate(p)
+        rotate(atan2(d.y, d.x))
+            translate([0, -t / 2])
+                square([norm(d), t]);
+}
+
+function xp_unit(p, q) = (q - p) / norm(q - p);
+
+// Bowl path runs off to the left so its left corners fall outside the
+// cap band — that squares the bars where they meet the stem.
+module xp_bowl_path(hc, t) {
+    r = XP_P_BOWL_RAD * hc;
+    offset(r)
+        offset(-r)
+            polygon([[-hc,               -XP_P_BOWL_B * hc],
+                     [XP_P_BOWL_R * hc,  -XP_P_BOWL_B * hc],
+                     [XP_P_BOWL_R * hc,  -t / 2],
+                     [-hc,               -t / 2]]);
+}
+
+module xp_diag(hc, t, u0, w0, u1, w1) {
+    over = 2 * t;
+    a = [u0 * hc, -w0 * hc];
+    b = [u1 * hc, -w1 * hc];
+    d = xp_unit(a, b);
+    xp_bar(a - d * over, b + d * over, t);
+}
+
+// PAN: cap line at y = 0, baseline at y = -hc, left edge at x = 0.
+module xpan_pan_2d(hc, t) {
+    over = 2 * t;
+    xl = XP_A_APEX + (XP_A_FOOT_L - XP_A_APEX) * XP_A_BAR;
+    xr = XP_A_APEX + (XP_A_FOOT_R - XP_A_APEX) * XP_A_BAR;
+    intersection() {
+        union() {
+            xp_bar([XP_P_STEM * hc, over],
+                   [XP_P_STEM * hc, -hc - over], t);
+            difference() {
+                offset(t / 2)  xp_bowl_path(hc, t);
+                offset(-t / 2) xp_bowl_path(hc, t);
+            }
+            xp_diag(hc, t, XP_A_APEX, 0, XP_A_FOOT_L, 1);
+            xp_diag(hc, t, XP_A_APEX, 0, XP_A_FOOT_R, 1);
+            xp_bar([xl * hc - t / 2, -XP_A_BAR * hc],
+                   [xr * hc + t / 2, -XP_A_BAR * hc], t);
+            xp_bar([XP_N_STEM_L * hc, over],
+                   [XP_N_STEM_L * hc, -hc - over], t);
+            xp_bar([XP_N_STEM_R * hc, over],
+                   [XP_N_STEM_R * hc, -hc - over], t);
+            xp_diag(hc, t, XP_N_STEM_L, 0, XP_N_STEM_R, 1);
+        }
+        translate([0, -hc])
+            square([XP_N_STEM_R * hc + t / 2, hc]);
+    }
+}
+
 module fxpan_pan() {
-    translate([-fxpan_w() / 2 + fx_badge_s() + fx_pan_gap(), fx_word_y()])
-        text("Pan", size = fx_pan_size(), font = fx_pan_font(),
-             spacing = 1.04, halign = "left", valign = "center");
+    hc = fx_pan_cap();
+    t  = fx_pan_t();
+    x0 = -fxpan_w() / 2 + fx_badge_s() + fx_pan_gap();
+    translate([x0, fx_pan_cap_y()])
+        xpan_pan_2d(hc, t);
+    // The rule runs out from under the badge and stops flush with the N.
+    rx = -fxpan_w() / 2 + fx_badge_s() + fx_rule_gap();
+    translate([rx, fx_pan_cap_y() - XP_RULE_W * hc - t / 2])
+        square([x0 + fx_pan_w() - rx, t]);
 }
 
 module d12600_2d(layer = "all") {
@@ -640,13 +729,18 @@ module d12600_2d(layer = "all") {
     }
 }
 
-module d12600_inlay(layer = "all") {
+// grow  — swell the footprint and deepen the floor (plug interference)
+// proud — start this far outside the wall face
+// deep  — depth below the wall face, so the pocket keeps its own depth
+//         whatever the plugs do
+module d12600_inlay(layer = "all", grow = 0, proud = 0.05,
+                    deep = MARK_DEPTH + 0.10) {
     out = chassis_out();
-    translate([-out / 2 - 0.05, 0, 2])
+    translate([-out / 2 - proud, 0, 2])
         rotate([90, 0, -90])
             mirror([0, 0, 1])
-                linear_extrude(MARK_DEPTH + 0.15)
-                    offset(0.02)
+                linear_extrude(proud + deep + grow)
+                    offset(0.02 + grow)
                         d12600_2d(layer);
 }
 
@@ -752,13 +846,20 @@ module part_junction() {
     layer = (SHELL == "logo") ? LOGO_LAYER : "all";
     color("SlateGray")
     if (SHELL == "logo")
-        intersection() {
-            difference() {
-                chassis_blank();
-                box_bore();
-                box_fastener_cuts();
+        union() {
+            // Body, clipped to the chassis in case a glyph ever reaches a
+            // bore or a fastener. LOGO_FIT keeps it off the pocket faces.
+            intersection() {
+                difference() {
+                    chassis_blank();
+                    box_bore();
+                    box_fastener_cuts();
+                }
+                d12600_inlay(layer, LOGO_FIT, 0);
             }
-            d12600_inlay(layer);
+            // Lip standing outside the wall, so the plug face is not
+            // coplanar with it either. Nothing out here to clip against.
+            d12600_inlay(layer, LOGO_FIT, LOGO_PROUD, 0.4);
         }
     else
     mm_split() {

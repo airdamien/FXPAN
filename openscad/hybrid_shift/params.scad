@@ -163,6 +163,12 @@ BRACE_HEX_CELL     = 11;
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;     // chamber floor is inner PETG (was 0.4 PCTG cap)
 MARK_DEPTH   = 1.2;   // Nikon FX badge + Pan + 59MP (or DX D12600) on −X
+// Colour plugs vs the pocket they drop into. Matching them exactly leaves
+// the slicer two coincident faces per surface and it renders/slices the
+// pair as garbage, so the plugs bite into the pocket and stand off the
+// wall — no face is shared with the chassis.
+LOGO_FIT     = 0.08;  // plug grows into the pocket walls and floor
+LOGO_PROUD   = 0.06;  // plug stands off the wall face
 // Tube ID baffles (PETG liner). 45° tooth, camera face flat — cookie on the bed.
 BAFFLE_H     = 1.6;
 BAFFLE_PITCH = 4.0;
