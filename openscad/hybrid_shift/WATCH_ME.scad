@@ -69,8 +69,8 @@ BODY_T_Z = -5; // [-20:0.5:20]
 
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG]
-// FX wall type, one STL per color. Chassis pocket is always all four.
-LOGO_LAYER = "all"; // [all:All, word:FXPan, mp:59MP, rule:Hairline, spec:Pixels]
+// FX wall type, one STL per color. Chassis pocket is always every layer.
+LOGO_LAYER = "all"; // [all:All, fx:Nikon FX badge, word:Pan, mp:59MP, rule:Hairline, spec:Pixels]
 
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
@@ -498,27 +498,140 @@ module box_lining_mask() {
             }
 }
 
-// Name on the blank −X wall. DX D12600 (7000×1.8); FX is FXPan + 59MP
-// over the 12070×4912 / 2.46:1 stitch. Futura ships with macOS; re-export
+// Name on the blank −X wall. DX D12600 (7000×1.8); FX is the D3-era
+// Nikon FX badge (gold ring + geometric FX) + Futura "Pan" + 59MP over
+// the 12070×4912 / 2.46:1 stitch. Futura ships with macOS; re-export
 // on Linux needs the same family installed.
-// layer: all | word | mp | rule | spec — separate STLs for filament colors.
+// layer: all | fx | word | mp | rule | spec — separate STLs for colors.
+function fx_badge_s()  = 20.0;
+function fx_pan_size() = 10.4;
+function fx_pan_gap()  = 2.35;
+function fx_word_y()   = 9.05;
+function fx_pan_font() = "Futura:style=Bold";
+// Futura Bold "Pan" advance / size, measured in OpenSCAD 2026.06.
+function fx_pan_w()    = 2.9337 * fx_pan_size();
+function fxpan_w()     = fx_badge_s() + fx_pan_gap() + fx_pan_w();
+
+module fx_round_sq(w, r) {
+    offset(r)
+        offset(-r)
+            square([w, w], center = true);
+}
+
+// D3 body-badge geometry, traced off the pin photo by rectifying the
+// badge to a unit square. Every constant is a fraction of the side s;
+// v runs 0 at the top edge to 1 at the bottom, u left to right.
+// Letters are wide and squat: 71% of the side across, 49% tall.
+FXB_RING_T  = 0.057;  // ring stroke
+FXB_RING_R  = 0.098;  // outer corner radius
+FXB_CAP     = 0.250;  // cap line
+FXB_BASE    = 0.736;  // baseline
+FXB_STROKE  = 0.097;  // letter stroke
+FXB_F_LEFT  = 0.150;  // F stem, left edge
+FXB_BAR1_T  = 0.251;  // F top bar
+FXB_BAR1_B  = 0.346;
+FXB_BAR2_T  = 0.439;  // F middle bar
+FXB_BAR2_B  = 0.534;
+FXB_X_SLOPE = 0.655;  // du per unit v — both X strokes, ~56.8° off level
+FXB_X_LEFT  = 0.4445; // backslash, left edge at the cap line
+FXB_X_RIGHT = 0.8535; // forward slash, right edge at the cap line
+FXB_X_W     = 0.104;  // horizontal width of one X stroke
+FXB_F_CUT   = 0.3725; // both F bars die on this one line, parallel to
+                      // the backslash — that is the F↔X channel
+FXB_SLOT_T  = 0.457;  // level break straight through the X crossing
+FXB_SLOT_B  = 0.518;
+
+function fxb_at(s, u, v)  = [(u - 0.5) * s, (0.5 - v) * s];
+function fxb_cut(v)       = FXB_F_CUT   + FXB_X_SLOPE * (v - FXB_CAP);
+function fxb_back(v)      = FXB_X_LEFT  + FXB_X_SLOPE * (v - FXB_CAP);
+function fxb_fwd(v)       = FXB_X_RIGHT - FXB_X_SLOPE * (v - FXB_CAP);
+
+// One F bar: square on the stem, mitred where the channel starts.
+module fxb_bar(s, vt, vb) {
+    polygon([
+        fxb_at(s, FXB_F_LEFT,  vt),
+        fxb_at(s, fxb_cut(vt), vt),
+        fxb_at(s, fxb_cut(vb), vb),
+        fxb_at(s, FXB_F_LEFT,  vb)
+    ]);
+}
+
+module fxb_f(s) {
+    polygon([
+        fxb_at(s, FXB_F_LEFT,              FXB_CAP),
+        fxb_at(s, FXB_F_LEFT + FXB_STROKE, FXB_CAP),
+        fxb_at(s, FXB_F_LEFT + FXB_STROKE, FXB_BASE),
+        fxb_at(s, FXB_F_LEFT,              FXB_BASE)
+    ]);
+    fxb_bar(s, FXB_BAR1_T, FXB_BAR1_B);
+    fxb_bar(s, FXB_BAR2_T, FXB_BAR2_B);
+}
+
+// Two shear-cut parallelograms, flat top and bottom, crossing sliced out.
+module fxb_x(s) {
+    difference() {
+        union() {
+            polygon([
+                fxb_at(s, fxb_back(FXB_CAP),                FXB_CAP),
+                fxb_at(s, fxb_back(FXB_CAP)  + FXB_X_W,     FXB_CAP),
+                fxb_at(s, fxb_back(FXB_BASE) + FXB_X_W,     FXB_BASE),
+                fxb_at(s, fxb_back(FXB_BASE),               FXB_BASE)
+            ]);
+            polygon([
+                fxb_at(s, fxb_fwd(FXB_CAP)   - FXB_X_W,     FXB_CAP),
+                fxb_at(s, fxb_fwd(FXB_CAP),                 FXB_CAP),
+                fxb_at(s, fxb_fwd(FXB_BASE),                FXB_BASE),
+                fxb_at(s, fxb_fwd(FXB_BASE)  - FXB_X_W,     FXB_BASE)
+            ]);
+        }
+        polygon([
+            fxb_at(s, 0.30, FXB_SLOT_T),
+            fxb_at(s, 1.00, FXB_SLOT_T),
+            fxb_at(s, 1.00, FXB_SLOT_B),
+            fxb_at(s, 0.30, FXB_SLOT_B)
+        ]);
+    }
+}
+
+// Gold of the D3 FX body badge: ring + letters. Black field is chassis.
+module nikon_fx_gold(s) {
+    difference() {
+        fx_round_sq(s, FXB_RING_R * s);
+        fx_round_sq(s * (1 - 2 * FXB_RING_T),
+                    (FXB_RING_R - FXB_RING_T) * s);
+    }
+    fxb_f(s);
+    fxb_x(s);
+}
+
+module fxpan_badge() {
+    translate([-fxpan_w() / 2 + fx_badge_s() / 2, fx_word_y()])
+        nikon_fx_gold(fx_badge_s());
+}
+
+module fxpan_pan() {
+    translate([-fxpan_w() / 2 + fx_badge_s() + fx_pan_gap(), fx_word_y()])
+        text("Pan", size = fx_pan_size(), font = fx_pan_font(),
+             spacing = 1.04, halign = "left", valign = "center");
+}
+
 module d12600_2d(layer = "all") {
     if (fx_mode()) {
         word = "Futura:style=Bold";
         specf = "Futura:style=Condensed Medium";
+        if (layer == "all" || layer == "fx")
+            fxpan_badge();
         if (layer == "all" || layer == "word")
-            translate([0, 6.2])
-                text("FXPan", size = 14, font = word, spacing = 1.18,
-                     halign = "center", valign = "center");
+            fxpan_pan();
         if (layer == "all" || layer == "mp")
-            translate([0, -7.6])
+            translate([0, -8.15])
                 text("59MP", size = 6.2, font = word, spacing = 1.12,
                      halign = "center", valign = "center");
         if (layer == "all" || layer == "rule")
-            translate([0, -12.45])
-                square([46, 0.45], center = true);
+            translate([0, -12.95])
+                square([max(46, fxpan_w()), 0.45], center = true);
         if (layer == "all" || layer == "spec")
-            translate([0, -16.15])
+            translate([0, -16.65])
                 text("12070×4912  ·  2.46:1", size = 3.45, font = specf,
                      spacing = 1.20, halign = "center", valign = "center");
     } else if (layer == "all" || layer == "word") {
@@ -634,7 +747,7 @@ module chassis_blank() {
 }
 
 module part_junction() {
-    // Full / inner / outer always pocket every line so the color STLs seat.
+    // Full / inner / outer always pocket every layer so the color STLs seat.
     // SHELL=logo exports one LOGO_LAYER as a drop-in.
     layer = (SHELL == "logo") ? LOGO_LAYER : "all";
     color("SlateGray")
