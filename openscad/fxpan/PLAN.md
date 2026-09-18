@@ -6,7 +6,7 @@ The body is a clean sheet: it shares no printed part with `hybrid_shift/`,
 `hybrid/` or `v/`, and its bore is deliberately wider than theirs.
 
 **What it is.** Two D800 bodies behind one EL-Nikkor 180/5.6N and a
-75 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one half
+50 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one half
 of the field; the two frames stitch to **64.80 × 23.9 mm, 2.711:1,
 13248 × 4912 = 65.1 MP**. XPan is 65 × 24 mm and 2.708:1, so the aspect is
 within 0.1%. Horizontal field is **20.4°** — read the honest limits below
@@ -39,17 +39,46 @@ ym·(P−d)/P + (P/2N)·(d/P)          P = EL_FOCAL = 180, N = f-number
 
 That is largest at the sensor and smallest at the lens, so **the plate wants
 to be as far forward as it will go, and stopping down only ever helps.** With
-the plate at `d = 112.5 mm` and `ym = 32.4` (half the 64.80 stitch):
+the plate at `d = 112.5 mm`:
 
-| f-stop | need in plane | 75 mm plate (53.03) | 50 mm plate (35.36) |
-| --- | --- | --- | --- |
-| 5.6 | 44.39 mm | +19.5% | clips |
-| 8 | 38.72 mm | +37.0% | clips |
-| 11 | 34.93 mm | +51.8% | +1.2% |
-| 16 | 31.78 mm | +66.9% | +11.3% |
+| f-stop | across the fold (`ym` = 32.4) | `BS_W` = 75 → 53.03 | `BS_W` = 50 → 35.36 | along the fold (`ym` = 11.95) | `BS_H` = 50 |
+| --- | --- | --- | --- | --- | --- |
+| 5.6 | 44.39 mm | +19.5% | clips | 29.05 mm | +72.1% |
+| 8 | 38.36 mm | +38.2% | clips | 23.03 mm | +117.1% |
+| 11 | 34.53 mm | +53.6% | +2.4% | 19.19 mm | +160.6% |
+| 16 | 31.33 mm | +69.3% | +12.9% | 15.99 mm | +212.7% |
 
-So: **75 mm plate, clean from f/3.9. A 50 mm plate only works from f/11.**
-This is the whole reason the body is not just a rebore of `hybrid_shift`.
+So: **75 mm across the fold, clean from f/3.9. 50 mm there only works from
+f/11.** This is the whole reason the body is not just a rebore of
+`hybrid_shift`.
+
+### 1a. But only one of the plate's two directions is doing that job
+
+The foreshortening is in the plane of incidence and nowhere else. Across the
+fold the plate carries the 64.80 mm stitch through a √2 squeeze; along it
+there is no squeeze and nothing to carry but the 23.9 mm sensor height, which
+wants 29.05 mm at f/5.6. A square plate therefore buys margin in the one
+direction that never needed any — and pays for it in chassis height, because
+`BOX_Z` is set by the along-the-fold dimension and nothing else.
+
+`BS_SIZE` is split into **`BS_W` = 75 across and `BS_H` = 50 along**, which is
+Edmund **#37201**, a stock part. `BOX_Z` follows `BS_H` and falls from 108 to
+**83**, which is 25 mm of chamber that was holding a 4.5× margin on the easy
+axis. It buys nothing in the path budget — `BOX_XY` is the direction that
+costs path — but it is 25 mm less print, and the tray, lid and chamber all
+shrink with it.
+
+Two consequences worth knowing before you move either number:
+
+- **`BOX_Z` no longer sets how high the cameras sit.** It used to be close
+  enough to the right height that the cradles could be read off it. See the
+  load path section: the datum is now `d800_axis_base()`, and
+  `chassis_plinth()` makes up the difference.
+- **`bs_in_plane()` reads `BS_W`, `frame_top_z()` reads `BS_H`.** They are not
+  interchangeable. If you fit a plate the other way round, the stitch crosses
+  50/√2 = 35.36 mm and clips until f/11 while the chamber grows 25 mm. The
+  tray slot is keyed to the right orientation, but the slot will not stop you
+  putting a square plate in sideways.
 
 ### 2. The F throat has to pass the frame corners, and mostly can't
 
@@ -111,11 +140,14 @@ Note `BOX_XY` appears once but spans both legs — **every millimetre of
 chassis costs two millimetres of budget.** That is the trap. Two earlier
 attempts died here:
 
-- **A cube chassis does not fit.** A cube tall enough for a 75 mm plate on its
-  diagonal is 111 mm, which makes `PATH ≥ 207 mm`. Infinity is then
+- **A cube chassis does not fit.** A cube tall enough to stand a 75 mm plate
+  on its diagonal is 111 mm, which makes `PATH ≥ 207 mm`. Infinity is then
   unreachable at any helicoid setting. This is why `BOX_Z` and `BOX_XY` are
-  separate: `BOX_Z` (108) carries the plate, `BOX_XY` (92) comes out of the
-  path budget and only has to clear the shifted port windows.
+  separate: `BOX_Z` (83) carries `BS_H`, `BOX_XY` (92) comes out of the
+  path budget and only has to clear the shifted port windows. The two are
+  still separate now that `BS_H` is 50 and they happen to be close — do not
+  re-merge them, because `BS_W` can go back up without touching the path and
+  `BOX_XY` cannot move without re-solving infinity.
 - **A 20 mm M62 nut does not fit.** `hybrid_shift` puts a 20 mm female nut on
   its stem. 20 mm of nut plus 17 mm of collapsed helicoid is 37 mm on the lens
   side and blows the budget on its own. The stem here is an **8 mm female boss
@@ -165,7 +197,7 @@ Two changes, neither of which touches an optical number:
 - **The outboard retaining wall is gone** (`chassis_shell_t()` is now just
   `patch_t()`). On the camera faces that wall was precisely what the front
   panel landed on. The cookie is stopped inboard by the chamber wall it sits
-  against, on three sides by its rebate, and outboard by four countersunk
+  against, all the way round by its rebate, and outboard by four countersunk
   M3s — a better joint than the wall was, and worth 4 mm.
 - **`ARM_TUBE` is solved from the camera rather than picked**, and `BOX_XY`
   takes what the path budget has left. 5 mm becomes 8 mm, 95 becomes 92, and
@@ -211,13 +243,23 @@ proud of the metal ring that already has to live in that gap. Strength comes
 from `REV_LOCK_FLARE` widening each lug down onto the cookie instead of from
 standing it further out, which also makes it overhang-free printed arm-up.
 
-`REV_LOCK_HOME = 225` with `REV_LOCK_SPREAD = 70` puts the pair at 190° and
-260° from camera-up. Two azimuths are already spoken for, and on both faces
-they sit the same way round: `TUBE_FLASH_KEEP` rakes the OD back at camera-up
-for the pentaprism nose, and the cookie runs out of plate at the shift
-azimuth, which is +90° from camera-up on R and on T alike. The old pair sat at
-camera-up itself and 120° off it, so the first screw of the two had 1.4 mm of
-raked wall to work with.
+`REV_LOCK_HOME = 180` with `REV_LOCK_SPREAD = 90` puts the pair at **135° and
+225°** from camera-up, square about the azimuth directly opposite it. Two
+azimuths are already spoken for, and on both faces they sit the same way
+round: `TUBE_FLASH_KEEP` rakes the OD back at camera-up for the pentaprism
+nose, and the cookie runs out of plate at the shift azimuth, which is +90°
+from camera-up on R and on T alike. The old pair sat at camera-up itself and
+120° off it, so the first screw of the two had 1.4 mm of raked wall to work
+with; these two have 0.93 mm of wall left over a full-depth thread and full
+tube section behind them.
+
+An earlier pass had them at 190° and 260°, which is also clear of both claims
+but is not symmetric about anything. That was fine while the cookie was a
+90 mm square with room to spare on every side. It is not fine now the plate is
+sized off its features: a lug swung toward the shift azimuth is plate the
+cookie has to grow to cover, in the direction it is already widest. Sitting
+the pair square about 180° costs the same in both directions and nothing
+across — see section 6.
 
 `rev_lock_ok()` also replaced a test for a whole `F_REV_LEN` of tube. What the
 lock needs is room for the nut slot to floor above the cookie face, and the T
@@ -239,17 +281,70 @@ wall and became a panel of the body. Three things followed from that:
   shift pushed it past the cookie, but at `TUBE_OD` 58 and a 14.4 mm shift the
   tube reaches 43.4 mm against the plate's 45, so all it did was shave 0.4 mm
   off one edge and leave the plate 90 × 89.6. Gone.
-- **The outline follows the chassis.** `port_plate_r()` is `PORT_BOSS_R`
-  less `port_rim()` — subtracting the rim from the corner is exactly what an
-  inward offset does to a radius — so the rim stays 5 mm the whole way round
-  instead of pinching to 1.3 mm on the diagonals, where it was both ugly and
-  weak. `PORT_EDGE_CHAM` then takes 1.2 mm off the outer edge so the joint
-  reads as a shadow line. `port_slide_slot` sweeps the same outline, so the
-  rebate's closed corners match it.
+- **The plate was square and centred on the face, and it should be neither.**
+  A 90 mm square costs 8100 mm² of plate per cookie, three times over.
+  Everything it carries — the bore, the tube, the four clamp screws, the two
+  lock lugs — is centred on `cam_axis()`, 14.4 mm off the middle of the face,
+  so it reached 45 mm one way to catch a tube ending at 43.4 and spent the
+  other 25 mm over nothing at all.
+
+  `port_patch_u()` and `port_patch_v()` size each direction off the last
+  feature in it plus `PORT_PLATE_RIM`, centred on the bore. Along camera-up
+  that is the clamp screws; across it, the tube OD or a lock lug, whichever
+  is wider; on the stem face, across is the M62 boss instead. That gives
+  **77.8 × 62 for an arm and 77.8 × 74 for the stem, 36.6% less plate** than
+  three 90 mm squares. Everything that clocks off the bore — screws, lugs,
+  tags — is now sized against that rectangle rather than a face-centred
+  square, which is why the lock lugs moved in section 5.
+- **The outline follows the chassis, and then gets cut to it.**
+  `port_plate_r()` is `PORT_BOSS_R` less `port_rim()` — subtracting the rim
+  from the corner is exactly what an inward offset does to a radius — so the
+  rim stays even the whole way round instead of pinching on the diagonals.
+  But a rounded chassis corner is still curving away underneath the cookie's
+  outboard edge, so the plate stands proud of the skin it is supposed to be
+  flush with. `PORT_BOSS_R` is solved to keep that inside the chamfer:
+  `R − √(R²−d²) ≤ PORT_EDGE_CHAM` at the edge gives `R ≤ 9.12`, so **9**, and
+  at 9 the cookie stands **1.15 mm** proud against a 1.2 mm chamfer.
+  `port_chassis_clip()` then intersects the cookie with the chassis solid so
+  the last of it comes off exactly rather than nearly. `diagnostics()` reports
+  both numbers and will say so if either moves.
+- **The rebate was open at the top and took the chassis rim with it.** A
+  cookie slid down its slot from the lid side, which meant the slot had to be
+  open there, which meant a notch through the top rim of each camera face —
+  and a flat 100 mm lid then overhung those notches on two sides. The rebate
+  is now a **blind pocket, closed on all four sides**, so the rim is
+  continuous and the lid sits on it flush the whole way round. `lid_align_lip()`
+  loses the notches it had to have and is a plain ring again. Nothing holds a
+  cookie in but the four M3s, which was already true — the open top was never
+  doing any of the work, just costing the rim.
 
 All of it is on the top face. The cookies print flange-down with the arm up,
 so the bed face is the full flat plate and every one of these features only
 ever narrows the part on the way up.
+
+### 7. The M62 boss has to stand somewhere that is not on a screw
+
+`EL180_STEM_OD` was 82 mm and nothing had asked it to be. An M62×1 female
+needs a wall, not a flange — the helicoid's male bottoms on the cookie's face,
+not on the boss — so the only load it sees is the thread's own hoop. At 82 it
+reached r 41 against clamp screws at r 40.85, so the countersinks came out
+*inside* its footprint with 8 mm of thread standing over them. You could start
+a screw and then not turn it. It also set how wide the stem cookie had to be,
+which under section 6 is now a real cost.
+
+So take the wall as the number and check it clears the heads, rather than the
+other way round:
+
+```
+el180_stem_od() = min(EL180_M62_MAJOR + 2·EL180_M62_WALL,
+                      2·(|clamp_xy| − PORT_CSK_D/2 − 1.0))
+```
+
+`EL180_M62_WALL = 4` gives 70 mm, and the screw-clearance cap sits at 77.5, so
+the wall is what binds and the boss finishes **70 mm across with the nearest
+head edge at 38.76** — 4.6 mm of daylight. If you widen `PORT_CLAMP_SEP` or
+pull `port_clamp_r()` in, watch that second term: once the cap binds, thinning
+the M62 wall is what the model will quietly do.
 
 ## Locked numbers
 
@@ -262,14 +357,16 @@ open, with a margin report — check the echo before you trust this table.
 | `overlap_frac()` | 0.20 |
 | `sensor_shift()` | 14.40 mm |
 | `stitch_w()` | 64.80 mm, 2.711:1, 13248 × 4912, 65.1 MP |
-| `BOX_XY` × `BOX_Z` | 92 × 108 mm chamber (outer 100 × 100 × 116) |
-| `BS_SIZE` / `BS_THICK` / `BS_N` | 75 / 1.0 / 1.52, 45°, S1 toward the lens |
+| `BOX_XY` × `BOX_Z` | 92 × 92 × 83 mm chamber (outer 100 × 100 × 103.5) |
+| `BS_W` / `BS_H` / `BS_THICK` / `BS_N` | 75 across the fold / 50 along it / 1.0 / 1.52, 45°, S1 toward the lens |
 | `bs_t_comp()` | 0.303 mm — shortens the T arm only |
 | `TUBE_ID` / `TUBE_OD` / `WALL` | 46 / 58 / 6 mm |
 | `F_BORE` / `F_THROAT` | **44.0** mm, flush with the ring (others use 40.3) |
 | `ARM_TUBE` | 8.0 mm past the cookie — solved from `D800_PROUD`, not picked |
 | `D800_PROUD` / standoff | 13.0 mm of camera against 16.0 mm of air |
-| `EL180_M62_LEN` | 8 mm — the entire stem |
+| `EL180_M62_LEN` / `el180_stem_od()` | 8 mm boss, 70 mm across — the entire stem |
+| cookies | 77.8 × 62 arm, 77.8 × 74 stem, centred on the bore, rebate closed |
+| `d800_axis_base()` | 52.0 mm — plinth 20.5 + cradle 10 + base 8 follow it |
 | `PATH` | 179.5 … 193.5 mm, infinity at helicoid 17.5 |
 
 ### The two mouths are not equivalent
@@ -317,18 +414,20 @@ So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
   aspect matches; the angle of view does not. A shorter lens means a whole new
   path budget — `PATH` must equal the new focal length, which changes `BOX_XY`,
   which changes the plate size that fits.
-- **The 50 mm plate you already own is an f/11 build.** `BS_SIZE = 50` still
-  builds and `BOX_Z` shrinks to 83 automatically, but it clips the stitch axis
-  itself at f/5.6 and f/8 — a worse failure than the corner shading above,
-  because it eats the ends of the panorama rather than its corners.
+- **The 50 mm square plate you already own is an f/11 build.** `BS_W = 50`
+  still builds and costs nothing in chamber height, but it clips the stitch
+  axis itself at f/5.6 and f/8 — a worse failure than the corner shading
+  above, because it eats the ends of the panorama rather than its corners.
+  `BS_H = 50` is free; `BS_W = 50` is not, and the two are separate numbers
+  precisely so that distinction is visible.
 - **The two 50 mm first-surface mirrors are not in the imaging path.** Keeping
   the stitch axis off every fold's foreshortened dimension forces all folds
   coplanar, and coplanar folds cannot make the two bodies parallel. Two D800s
   side by side would need their axes 146 mm apart, which does not fit in a
   180 mm path. They stay with the V body.
-- **Cradle dimensions are unmeasured.** `D800_TRIPOD_ABOVE` and
-  `D800_TRIPOD_IN` default to 10.0 and 44 mm. Measure your own bodies and set
-  them in the customizer before printing `base` or the cradles.
+- **Cradle dimensions are unmeasured.** `D800_AXIS_BASE` and `D800_TRIPOD_IN`
+  default to 52.0 and 44 mm. Measure your own bodies and set them in the
+  customizer before printing `base` or the cradles.
 - **`D800_PROUD` is unmeasured too**, and it is the one that bites hardest:
   get it wrong and the camera will not go on at all. 13.0 mm is the reported
   figure, not a measured one, and the standoff is 16 mm. Measure before you
@@ -348,7 +447,7 @@ So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
 | --- | --- |
 | `params.scad` | every number above, with the derivations as comments |
 | `WATCH_ME.scad` | customizer, `assembly()`, all part modules, `export_part()`, `diagnostics()` |
-| `fxp_tray.scad` | 75 mm plate cartridge, sized off `BS_SIZE` |
+| `fxp_tray.scad` | plate cartridge, sized off `BS_W` × `BS_H` |
 | `fxp_f_mount.scad` | local F-mount copy bound to this body's bore |
 | `shims.scad` | 0.2 / 0.5 / 1.0 mm focus shims |
 | `../../kraken/fxpan_paths.py` | the ray trace that checks all of the above |
@@ -388,7 +487,7 @@ Every part carries `fxp_` + its name + the export timestamp, via `fxp_tag()`.
 | `fxp_lid` | `plate_stamp` | outer face |
 | `fxp_tray` | `part_stamp_cut` | −Y chamber wall, readable from the stem |
 | `fxp_stem` | `flange_stamp` | cookie, camera side |
-| `fxp_arm_r` / `fxp_arm_t` (+`f`) | `fxp_arm_stamp` | cookie, camera side, edge at up_az − 90 |
+| `fxp_arm_r` / `fxp_arm_t` (+`f`) | `fxp_port_stamp` | cookie, camera side, along the edge furthest from the lid |
 | `fxp_el180` | `part_stamp_stack_cut` | hex flat |
 | `fxp_base`, `fxp_cradle_r/t` | `part_stamp_cut` | top face |
 | `fxp_bf1`…`fxp_bf5` | `part_stamp_stack_cut` | each surviving baffle ring |
@@ -429,6 +528,27 @@ rather than fighting it: start it loose, seat the mount, then tighten.
 
 Tripod socket goes under the combined centre of mass — `base_tripod_xy()`
 weights the chassis-plus-lens at the origin against 1 kg at each camera pad.
+
+**The cradle height is read off the camera, not off the chassis.** The old
+knob was `D800_TRIPOD_ABOVE`, the 1/4-20's height above the chassis bottom,
+which is a datum that moves: shorten the chamber and the cameras rise with it,
+off the optical axis, for no reason anyone would notice in the model until the
+frames would not stitch. When `BS_H` took 25 mm out of `BOX_Z` that is exactly
+what would have happened.
+
+`d800_axis_base()` is instead **where the lens axis sits above a D800's own
+baseplate**, 52 mm, which is a property of the camera. Stand a body on a flat
+surface and measure to the centre of the mount. Everything below the chassis
+then solves from it: `CRADLE_T` is a fixed 10 mm plinth, `BASE_T` a fixed 8,
+and `chassis_plinth()` grows a skirt to make up the rest —
+
+```
+chassis_plinth() = max(PORT_SLOT_LIP, d800_axis_base() + CRADLE_T − BOX_Z/2)
+```
+
+— which is **20.5 mm** now, covering the 12.5 mm the short chamber no longer
+reaches. The chassis got shorter and the skirt got taller by the same amount;
+the cameras did not move.
 
 ## Export
 
@@ -473,8 +593,17 @@ tested directly.
 
 ## If you change something
 
-- **Moved `BS_SIZE`?** `BOX_Z` follows automatically. Re-read the plate margin
-  line in the echo.
+- **Moved `BS_H`?** `BOX_Z` follows automatically, and so does
+  `chassis_plinth()` in the other direction, so the cameras stay on the axis.
+  Re-read the plate margin and `under the chassis` lines in the echo.
+- **Moved `BS_W`?** Nothing follows it but the tray. Re-read the plate margin
+  line — this is the direction that clips.
+- **Moved a cookie feature — `PORT_CLAMP_SEP`, `REV_LOCK_*`, the M62 wall?**
+  The plate is sized off them, so the cookie changes shape and the rebate,
+  the stamp and the chassis clip all move with it. Re-read the `cookie` and
+  `cookie vs chassis skin` echo lines; the second one is the mismatch between
+  the plate's outboard edge and the chassis it has to disappear into, and it
+  has to stay under `PORT_EDGE_CHAM`.
 - **Moved `BOX_XY`, `ARM_TUBE`, `EL180_M62_LEN` or the mount?** You changed
   `PATH`. Check the `infinity:` echo line still says *in range*.
 - **Moved `overlap_frac()`?** `sensor_shift()` and `stitch_w()` both move, so

@@ -1,8 +1,10 @@
-// FXPAN 65 plate cartridge. 75×75×1 50/50 at 45° on the origin; drop it in
+// FXPAN 65 plate cartridge. 50×75×1 50/50 at 45° on the origin; drop it in
 // from +Z with S1 toward the lens (Edmund marks the coated side with a black
-// dot). Thick frame holds the glass, open-top walls reach the lid lip, three
-// port windows. Inner faces, plate window and beams are sawtoothed. No roof.
-// Everything here derives from BS_SIZE, so BS_SIZE = 50 shrinks the whole cup.
+// dot). The 75 lies across the fold — that is the direction √2 eats and the
+// stitch has to cross — and the 50 stands up, so it is BS_H that sets how
+// tall this cup and the chassis around it have to be. Thick frame holds the
+// glass, open-top walls reach the lid lip, three port windows. Inner faces,
+// plate window and beams are sawtoothed. No roof.
 
 include <params.scad>
 include <../lib/part_stamp.scad>
@@ -29,10 +31,11 @@ function half()       = inner() / 2;
 function floor_z()    = -BOX_Z / 2 + WALL;
 function wall_top()   = BOX_Z / 2 - LID_LIP_SEAT;
 function slot_t()     = BS_THICK + BS_CLEAR * 2;
-function plate_w()    = BS_SIZE + BS_CLEAR * 2;
+function plate_w()    = BS_W + BS_CLEAR * 2;   // along the plate, across the fold
+function plate_h()    = BS_H + BS_CLEAR * 2;   // standing up
 function frame_top()  = frame_top_z();
 function corner_y()   = half() * sqrt(2);
-function shelf_z()    = -BS_SIZE / 2 - 0.15;
+function shelf_z()    = -BS_H / 2 - 0.15;
 
 function retain_xy(side) =
     let (ly = side * (plate_w() / 2 + POST_OUT), a = -45)
@@ -42,7 +45,7 @@ module place_plate(glass = false) {
     rotate([0, 0, -45])
         if (glass) {
             color("gold", 0.45)
-                cube([BS_THICK, BS_SIZE, BS_SIZE], center = true);
+                cube([BS_THICK, BS_W, BS_H], center = true);
         } else {
             bs_frame();
         }
@@ -148,7 +151,7 @@ module chassis_fastener_relief(sh) {
 module bs_frame() {
     w  = CARTRIDGE_WALL;
     py = plate_w();
-    pz = plate_w();
+    pz = plate_h();
     st = slot_t();
     z0 = floor_z();
     top = frame_top();
