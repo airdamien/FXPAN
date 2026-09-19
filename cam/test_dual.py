@@ -734,6 +734,55 @@ class Pano(unittest.TestCase):
         dest = pano.thumb(wide.name, 80, self.root)
         self.assertEqual(pano._size(dest), (80, 20))
 
+    def test_hugin_profile_fxpan(self):
+        prof = pano.hugin_profile(7360, 4912)
+        self.assertTrue(prof["flip_r"])
+        self.assertAlmostEqual(prof["overlap"], 0.22)
+        self.assertEqual(prof["dy"], 0)
+        self.assertEqual(prof["profile"], "fxpan65")
+        d7 = pano.hugin_profile(4928, 3264)
+        self.assertAlmostEqual(d7["overlap"], 0.20)
+        self.assertEqual(d7["dy"], 0)
+
+    def test_similarity_sane(self):
+        M = [[1.0, 0.0, 5800.0], [0.0, 1.0, -20.0]]
+        self.assertTrue(pano._similarity_sane(M, 7360, 4912))
+        bad = [[1.4, 0.0, 5800.0], [0.0, 1.4, 0.0]]
+        self.assertFalse(pano._similarity_sane(bad, 7360, 4912))
+
+    def test_overlap_strip_rows(self):
+        self.assertEqual(pano._overlap_strip_rows(40, 0, 0), (0, 0, 40))
+        self.assertEqual(pano._overlap_strip_rows(40, 0, 2), (0, 2, 38))
+        self.assertEqual(pano._overlap_strip_rows(40, 2, 0), (2, 0, 38))
+        self.assertEqual(pano._overlap_canvas_y(0, 2), 2)
+        self.assertEqual(pano._overlap_canvas_y(2, 0), 2)
+
+    def test_crop_overlap_strips_dy(self):
+        t = self._jpeg("T_20260101_120000.jpg", "red", w=80, h=40)
+        r = self._jpeg("R_20260101_120000.jpg", "blue", w=80, h=40)
+        ol, x, out_w, out_h, ty, ry = pano._compose_geometry(80, 40, 0.25, 2)
+        tmp = self.root / "strips"
+        tmp.mkdir()
+        strip_h = pano._crop_overlap_strips(
+            r, t, tmp / "rol.png", tmp / "tol.png", 80, 40, ol, x, ty, ry,
+        )
+        self.assertEqual(strip_h, 38)
+        self.assertEqual(pano._size(tmp / "rol.png"), (ol, 38))
+        self.assertEqual(pano._size(tmp / "tol.png"), (ol, 38))
+
+    def test_stitch_hugin(self):
+        if not pano.hugin_available():
+            self.skipTest("hugin not installed")
+        self._jpeg("T_20260101_120000.jpg", "red", w=80, h=40)
+        self._jpeg("R_20260101_120000.jpg", "blue", w=80, h=40)
+        info = pano.stitch_stamp(
+            "20260101_120000", overlap=0.25, flip_r=True, mode="hugin", root=self.root
+        )
+        self.assertEqual(info["mode"], "hugin")
+        self.assertIn(info["engine"], ("feather", "enblend", "merge"))
+        self.assertGreater(info["width"], 70)
+        self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
+
     def test_stitch_width(self):
         self._jpeg("T_20260101_120000.jpg", "red")
         self._jpeg("R_20260101_120000.jpg", "blue")

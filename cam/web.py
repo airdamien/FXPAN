@@ -881,7 +881,7 @@ class Handler(BaseHTTPRequestHandler):
                     balance = prefs.get("balance", True)
                 if isinstance(balance, str):
                     balance = balance.lower() not in ("0", "false", "no", "")
-                mode = (data.get("mode") or "open").strip().lower()
+                mode = (data.get("mode") or prefs.get("stitch_mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                     deghost=bool(deghost), balance=bool(balance),

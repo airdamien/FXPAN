@@ -8,6 +8,7 @@ from pathlib import Path
 import gpio
 
 PATH = Path(__file__).resolve().parent / "settings.json"
+STITCH_MODES = ("match", "blend", "cut", "open", "hugin")
 BOOLS = (
     "download", "gpio", "flip_r", "sync", "lock_t", "deghost", "balance",
     "follow_cam",
@@ -31,6 +32,11 @@ def _brightness(val):
     if n < 1 or n > 100:
         return None
     return n
+
+
+def _stitch_mode(val):
+    s = str(val or "").strip().lower()
+    return s if s in STITCH_MODES else None
 
 
 def _overlap(val):
@@ -113,6 +119,7 @@ def defaults(pi=None):
         "download": on, "gpio": on, "flip_r": False, "overlap": OVERLAP,
         "sync": True, "lock_t": True, "master": "T", "preview_s": PREVIEW_S,
         "idle_min": IDLE_MIN, "deghost": False, "balance": True, "follow_cam": False,
+        "stitch_mode": "hugin" if on else "open",
     }
 
 
@@ -133,6 +140,10 @@ def load(pi=None):
         ol = _overlap(data["overlap"])
         if ol is not None:
             out["overlap"] = ol
+    if "stitch_mode" in data:
+        mode = _stitch_mode(data["stitch_mode"])
+        if mode:
+            out["stitch_mode"] = mode
     if "master" in data:
         m = _master(data["master"])
         if m:
@@ -174,6 +185,10 @@ def save(data, pi=None):
         ol = _overlap(data["overlap"])
         if ol is not None:
             out["overlap"] = ol
+    if "stitch_mode" in data:
+        mode = _stitch_mode(data["stitch_mode"])
+        if mode:
+            out["stitch_mode"] = mode
     if "master" in data:
         m = _master(data["master"])
         if m:

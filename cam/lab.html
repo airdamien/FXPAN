@@ -228,7 +228,8 @@
     <button id="panoRefresh">List pairs</button>
     <label>Mode
       <select id="panoMode">
-        <option value="open" selected>Open</option>
+        <option value="hugin" selected>Hugin</option>
+        <option value="open">Open</option>
         <option value="match">Match</option>
         <option value="blend">Blend</option>
         <option value="cut">Cut</option>
@@ -239,7 +240,7 @@
       <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
     </label>
   </div>
-  <p class="sub">Open is OpenStitching SIFT. Match searches overlap + flop. Cut/Blend use the slider.</p>
+  <p class="sub">Hugin: SIFT similarity (rotation+scale+shift) then enblend. Open is translation SIFT. Match is NCC overlap search.</p>
   <div id="pairs"></div>
 </section>
 </div>

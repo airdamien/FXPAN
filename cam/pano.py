@@ -20,6 +20,7 @@ Uses ImageMagick (`magick`) already on this Mac.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -46,8 +47,10 @@ PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
 SAFE = re.compile(r"^[\w.-]+$")
 DAY_RE = re.compile(r"^(\d{8})_")
-MODES = ("match", "blend", "cut", "open")
+MODES = ("match", "blend", "cut", "open", "hugin")
 WORK = 360
+HUGIN_DIR = Path(__file__).resolve().parent / "templates"
+HUGIN_PROFILE = HUGIN_DIR / "fxpan.json"
 
 _jobs = {}
 _jobs_lock = threading.Lock()
@@ -635,12 +638,14 @@ def _score_ol(t, r, ol, dy):
     return (1.0 - ncc) + 0.004 * abs(dy) + 0.10 * abs(frac - OVERLAP)
 
 
-def _search_shift(t, r, on_log=None):
+def _search_shift(t, r, on_log=None, max_dy=None):
+    if max_dy is None:
+        max_dy = min(8, t.h // 24)
+    max_dy = max(0, int(max_dy))
     best = (1e9, OVERLAP, 0)
     for pct in range(10, 43, 3):
         ol = max(4, int(round(t.w * pct / 100)))
-        max_dy = min(8, t.h // 24)
-        for dy in range(-max_dy, max_dy + 1, 2):
+        for dy in range(-max_dy, max_dy + 1, 2 if max_dy else 1):
             s = _score_ol(t, r, ol, dy)
             if s < best[0]:
                 best = (s, pct / 100, dy)
@@ -648,7 +653,6 @@ def _search_shift(t, r, on_log=None):
                     on_log(f"search ol={pct}% dy={dy:+d}  {s:.1f}")
     pct0 = int(round(best[1] * 100))
     dy0 = best[2]
-    max_dy = min(8, t.h // 24)
     for pct in range(max(10, pct0 - 3), min(44, pct0 + 4)):
         ol = max(4, int(round(t.w * pct / 100)))
         for dy in range(max(-max_dy, dy0 - 3), min(max_dy, dy0 + 3) + 1):
@@ -658,7 +662,7 @@ def _search_shift(t, r, on_log=None):
     return best
 
 
-def find_overlap(t_path, r_path, try_flip=True, on_log=None):
+def find_overlap(t_path, r_path, try_flip=True, on_log=None, max_dy=None):
     def log(msg):
         if on_log:
             on_log(msg)
@@ -676,7 +680,7 @@ def find_overlap(t_path, r_path, try_flip=True, on_log=None):
         for flop, path in candidates:
             log("gray " + ("flop" if flop else "as-shot"))
             r = _gray(path)
-            rmse, frac, dy = _search_shift(t, r, on_log=log)
+            rmse, frac, dy = _search_shift(t, r, on_log=log, max_dy=max_dy)
             row = (rmse, flop, frac, dy)
             log(f"{'flop' if flop else 'as-shot'}  ol={frac:.0%} dy={dy:+d}  {rmse:.1f}")
             if best is None:
@@ -690,6 +694,34 @@ def find_overlap(t_path, r_path, try_flip=True, on_log=None):
             Path(tmp.name).unlink(missing_ok=True)
     rmse, flop, frac, dy = best
     return {"rmse": rmse, "flip_r": flop, "overlap": frac, "dy": dy}
+
+
+def _search_align(
+    t_path, r_path, overlap, flip_r, dy=0, on_log=None, weak_rmse=0.42, max_dy=None,
+):
+    """Measure overlap / flop. max_dy=0 keeps the frames vertically locked."""
+    found = find_overlap(
+        t_path, r_path, try_flip=True, on_log=on_log, max_dy=max_dy,
+    )
+    if found["rmse"] <= weak_rmse:
+        overlap = found["overlap"]
+        flip_r = found["flip_r"]
+        if max_dy == 0:
+            dy = 0
+        else:
+            tw, _ = _size(t_path)
+            dy = int(round(found["dy"] * (tw / WORK)))
+        if on_log:
+            on_log(
+                f"align ol={overlap:.0%} dy={dy:+d} "
+                f"flip={'on' if flip_r else 'off'}  {found['rmse']:.2f}"
+            )
+    elif on_log:
+        on_log(
+            f"align weak ({found['rmse']:.2f}) — keep ol={overlap:.0%} "
+            f"dy={dy:+d} flip={'on' if flip_r else 'off'}"
+        )
+    return overlap, flip_r, dy, found
 
 
 def _mean(path):
@@ -838,6 +870,221 @@ def _match_seam_img(img):
     return out.astype(np.uint8), f"balance seam ×{scale:.2f}"
 
 
+def _compose_geometry(w, h, overlap, dy):
+    overlap = float(overlap)
+    if overlap < 0.05 or overlap > 0.50:
+        raise dual.CamError("overlap 0.05–0.50")
+    dy = int(dy)
+    ol = max(1, min(w - 1, int(round(w * overlap))))
+    x = w - ol
+    out_w = w + w - ol
+    ty = max(0, -dy)
+    ry = max(0, dy)
+    out_h = h + abs(dy)
+    return ol, x, out_w, out_h, ty, ry
+
+
+def _overlap_strip_rows(h, ty, ry):
+    """Row origin and height for R-east / T-west overlap strips when frames are offset."""
+    y0 = max(ty, ry)
+    r_y = y0 - ry
+    t_y = y0 - ty
+    strip_h = h - abs(ty - ry)
+    if strip_h < 8:
+        return 0, 0, h
+    return r_y, t_y, strip_h
+
+
+def _crop_overlap_strips(r_path, t_path, dest_r, dest_t, w, h, ol, x, ty, ry):
+    r_y, t_y, strip_h = _overlap_strip_rows(h, ty, ry)
+    for src, dest, crop in (
+        (r_path, dest_r, f"{ol}x{strip_h}+{x}+{r_y}"),
+        (t_path, dest_t, f"{ol}x{strip_h}+0+{t_y}"),
+    ):
+        _magick([str(src), "-crop", crop, "+repage", str(dest)])
+    return strip_h
+
+
+def _prep_compose_sources(
+    t_path, r_path, tmp, overlap, flip_r, dy=0, balance=True, lift=True, on_log=None,
+):
+    def log(msg):
+        if on_log:
+            on_log(msg)
+
+    w, h = _size(t_path)
+    rw, rh = _size(r_path)
+    ol, x, out_w, out_h, ty, ry = _compose_geometry(w, h, overlap, dy)
+    tmp = Path(tmp)
+    r_use = tmp / "r.jpg"
+    t_use = tmp / "t.jpg"
+    args = [str(r_path), "-colorspace", "sRGB"]
+    if flip_r:
+        args += ["-flop"]
+    if (rw, rh) != (w, h):
+        args += ["-resize", f"{w}x{h}!"]
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fr = pool.submit(_magick, args + [str(r_use)])
+        ft = pool.submit(_magick, [str(t_path), "-colorspace", "sRGB", str(t_use)])
+        fr.result()
+        ft.result()
+    if balance:
+        r_use = _balance_r(t_use, r_use, tmp / "r_bal.jpg", overlap, on_log=log)
+    if lift:
+        t_use = _lift_unique(t_use, tmp / "t_lift.jpg", east=True, overlap=overlap, on_log=log)
+        r_use = _lift_unique(r_use, tmp / "r_lift.jpg", east=False, overlap=overlap, on_log=log)
+    return t_use, r_use, w, h, ol, x, out_w, out_h, ty, ry, int(dy)
+
+
+def hugin_available():
+    return bool(shutil.which(MAGICK))
+
+
+def _load_hugin_profiles():
+    if not HUGIN_PROFILE.is_file():
+        return {}
+    try:
+        data = json.loads(HUGIN_PROFILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def hugin_profile(w, h, profile="fxpan65"):
+    data = _load_hugin_profiles()
+    base = dict(data.get(profile) or {})
+    sensors = base.pop("sensors", {})
+    if isinstance(sensors, dict):
+        row = sensors.get(f"{w}x{h}")
+        if isinstance(row, dict):
+            base.update(row)
+    base.setdefault("profile", profile)
+    base.setdefault("flip_r", True)
+    base.setdefault("overlap", OVERLAP)
+    base.setdefault("dy", 0)
+    base.setdefault("hfov", 50.0)
+    return base
+
+
+def _blend_overlap_strips(rol, tol, dest, ol, strip_h):
+    """Feather-blend two same-size overlap strips (row-aligned)."""
+    dest = Path(dest)
+    if ol <= 1:
+        _magick(["-size", f"{ol}x{strip_h}", "xc:#808080", str(dest)])
+        return
+    mask = dest.parent / "mask.png"
+    _magick([
+        "-size", f"{ol}x{strip_h}", "xc:",
+        "-sparse-color", "barycentric",
+        f"0,0 black {ol - 1},0 white",
+        str(mask),
+    ])
+    _magick([str(rol), str(tol), str(mask), "-compose", "over", "-composite", str(dest)])
+
+
+def _compose_overlap_blend(r_path, t_path, dest, w, h, ol, x, ty, ry):
+    """Blend the overlap band; strips are row-aligned for dy."""
+    tmp = Path(dest).parent
+    rol = tmp / "rol.png"
+    tol = tmp / "tol.png"
+    strip_h = _crop_overlap_strips(r_path, t_path, rol, tol, w, h, ol, x, ty, ry)
+    _blend_overlap_strips(rol, tol, dest, ol, strip_h)
+
+
+def _overlap_canvas_y(ty, ry):
+    return max(ty, ry)
+
+
+def _compose_pano(dest, r_path, t_path, ol_path, out_w, out_h, x, ty, ry):
+    """Place R, T, and the overlap blend on the output canvas."""
+    oy = _overlap_canvas_y(ty, ry)
+    _magick([
+        "-size", f"{out_w}x{out_h}",
+        "xc:black",
+        str(r_path), "-geometry", f"+0+{ry}", "-composite",
+        str(t_path), "-geometry", f"+{x}+{ty}", "-composite",
+        str(ol_path), "-geometry", f"+{x}+{oy}", "-composite",
+        "-quality", "92",
+        str(dest),
+    ])
+
+
+def stitch_hugin(
+    t_path, r_path, dest, overlap=OVERLAP, flip_r=True, dy=0, on_log=None,
+    balance=False, lift=True, profile="fxpan65",
+):
+    def log(msg):
+        if on_log:
+            on_log(msg)
+
+    w, h = _size(t_path)
+    prof = hugin_profile(w, h, profile=profile)
+    if flip_r is False and prof.get("flip_r"):
+        flip_r = True
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        t_use, r_use, w, h, ol, x, out_w, out_h, ty, ry, eff_dy = _prep_compose_sources(
+            t_path, r_path, tmp, overlap, flip_r, dy=dy,
+            balance=balance, lift=False, on_log=on_log,
+        )
+        found = None
+        try:
+            import cv2  # noqa: F401
+            tmask, rmask, band = _overlap_feature_masks(w, h, overlap, tmp)
+            log(f"hugin  SIFT similarity in {band}px overlap")
+            found = _sift_similarity(r_use, t_use, rmask, tmask)
+        except ImportError:
+            found = None
+        if found:
+            log(
+                f"hugin  rot={found['rot']:+.2f}° scale={found['scale']:.4f} "
+                f"ol={found['overlap']:.0%} n={found['n']}  flip={'on' if flip_r else 'off'}"
+            )
+            Mr, Mt, cw, ch = _affine_canvas(found["M"], w, h)
+            r_rgba = _warp_rgba(r_use, Mr, cw, ch)
+            t_rgba = _warp_rgba(t_use, Mt, cw, ch)
+            engine = _enblend_layers(r_rgba, t_rgba, dest, tmp)
+            ow, oh = _size(dest)
+            return {
+                "file": dest.name,
+                "width": ow,
+                "height": oh,
+                "overlap": int(round(w * found["overlap"])),
+                "overlap_frac": found["overlap"],
+                "dy": int(round(found["ty"])),
+                "rot": round(found["rot"], 3),
+                "scale": round(found["scale"], 5),
+                "inliers": found["n"],
+                "flip_r": bool(flip_r),
+                "mode": "hugin",
+                "engine": engine,
+                "profile": prof.get("profile", profile),
+            }
+        log(
+            f"hugin mosaic  ol={ol}px ({overlap:.0%}) dy={eff_dy:+d} "
+            f"flip={'on' if flip_r else 'off'}  {out_w}×{out_h}"
+        )
+        ol_blend = tmp / "ol.png"
+        _compose_overlap_blend(r_use, t_use, ol_blend, w, h, ol, x, ty, ry)
+        _compose_pano(dest, r_use, t_use, ol_blend, out_w, out_h, x, ty, ry)
+    ow, oh = _size(dest)
+    return {
+        "file": dest.name,
+        "width": ow,
+        "height": oh,
+        "overlap": ol,
+        "overlap_frac": overlap,
+        "dy": eff_dy,
+        "flip_r": bool(flip_r),
+        "mode": "hugin",
+        "engine": "feather",
+        "profile": prof.get("profile", profile),
+    }
+
+
 def stitch_files(
     t_path, r_path, dest, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, on_log=None,
     balance=True,
@@ -847,44 +1094,24 @@ def stitch_files(
             on_log(msg)
 
     mode = (mode or "blend").strip().lower()
-    if mode not in MODES:
-        raise dual.CamError("mode is match, blend, or cut")
+    if mode not in ("blend", "cut"):
+        raise dual.CamError("mode is blend or cut")
     overlap = float(overlap)
-    if overlap < 0.05 or overlap > 0.50:
-        raise dual.CamError("overlap 0.05–0.50")
     dy = int(dy)
     w, h = _size(t_path)
-    rw, rh = _size(r_path)
-    ol = max(1, min(w - 1, int(round(w * overlap))))
-    x = w - ol
-    out_w = w + w - ol
-    ty = max(0, -dy)
-    ry = max(0, dy)
-    out_h = h + abs(dy)
+    ol, x, out_w, out_h, ty, ry = _compose_geometry(w, h, overlap, dy)
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     log(f"compose {mode}  ol={ol}px ({overlap:.0%}) dy={dy:+d} flip={'on' if flip_r else 'off'}")
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        r_use = tmp / "r.jpg"
-        t_use = tmp / "t.jpg"
-        args = [str(r_path), "-colorspace", "sRGB"]
-        if flip_r:
-            args += ["-flop"]
-        if (rw, rh) != (w, h):
-            args += ["-resize", f"{w}x{h}!"]
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            fr = pool.submit(_magick, args + [str(r_use)])
-            ft = pool.submit(_magick, [str(t_path), "-colorspace", "sRGB", str(t_use)])
-            fr.result()
-            ft.result()
-        if balance:
-            r_use = _balance_r(t_use, r_use, tmp / "r_bal.jpg", overlap, on_log=log)
-        t_use = _lift_unique(t_use, tmp / "t_lift.jpg", east=True, overlap=overlap, on_log=log)
-        r_use = _lift_unique(r_use, tmp / "r_lift.jpg", east=False, overlap=overlap, on_log=log)
-        _magick([str(r_use), "-crop", f"{ol}x{h}+{x}+0", "+repage", str(tmp / "rol.png")])
-        _magick([str(t_use), "-crop", f"{ol}x{h}+0+0", "+repage", str(tmp / "tol.png")])
+        t_use, r_use, w, h, ol, x, out_w, out_h, ty, ry, _dy = _prep_compose_sources(
+            t_path, r_path, tmp, overlap, flip_r, dy=dy, balance=balance, on_log=log,
+        )
+        rol = tmp / "rol.png"
+        tol = tmp / "tol.png"
+        strip_h = _crop_overlap_strips(r_use, t_use, rol, tol, w, h, ol, x, ty, ry)
+        oy = _overlap_canvas_y(ty, ry)
         if mode == "cut":
             keep = w - ol + ol // 2
             take = w - (ol - ol // 2)
@@ -919,31 +1146,7 @@ def stitch_files(
                 ]
             )
         else:
-            if ol <= 1:
-                _magick(["-size", f"{ol}x{h}", "xc:#808080", str(tmp / "mask.png")])
-            else:
-                _magick(
-                    [
-                        "-size",
-                        f"{ol}x{h}",
-                        "xc:",
-                        "-sparse-color",
-                        "barycentric",
-                        f"0,0 black {ol - 1},0 white",
-                        str(tmp / "mask.png"),
-                    ]
-                )
-            _magick(
-                [
-                    str(tmp / "rol.png"),
-                    str(tmp / "tol.png"),
-                    str(tmp / "mask.png"),
-                    "-compose",
-                    "over",
-                    "-composite",
-                    str(tmp / "ol.png"),
-                ]
-            )
+            _blend_overlap_strips(rol, tol, tmp / "ol.png", ol, strip_h)
             _magick(
                 [
                     "-size",
@@ -959,7 +1162,7 @@ def stitch_files(
                     "-composite",
                     str(tmp / "ol.png"),
                     "-geometry",
-                    f"+{x}+{ty}",
+                    f"+{x}+{oy}",
                     "-composite",
                     "-quality",
                     "92",
@@ -1277,6 +1480,158 @@ def _sift_overlap_shift(left_path, right_path, left_mask, right_mask):
     }
 
 
+def _similarity_params(M):
+    a, b = float(M[0][0]), float(M[0][1])
+    scale = (a * a + b * b) ** 0.5
+    rot = float(math.degrees(math.atan2(b, a)))
+    return scale, rot, float(M[0][2]), float(M[1][2])
+
+
+def _similarity_sane(M, w, h):
+    if M is None:
+        return False
+    try:
+        scale, rot, tx, ty = _similarity_params(M)
+    except (TypeError, IndexError, ValueError):
+        return False
+    if not (0.94 <= scale <= 1.06):
+        return False
+    if abs(rot) > 8.0:
+        return False
+    if not (0.40 * w <= tx <= 0.95 * w):
+        return False
+    if abs(ty) > 0.20 * h:
+        return False
+    return True
+
+
+def _sift_similarity(left_path, right_path, left_mask, right_mask, work=2400):
+    """Similarity (scale+rot+trans) mapping right/T pixels onto left/R pixels."""
+    import cv2
+    import numpy as np
+
+    left = cv2.imread(str(left_path), cv2.IMREAD_GRAYSCALE)
+    right = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
+    ml = cv2.imread(str(left_mask), cv2.IMREAD_GRAYSCALE)
+    mr = cv2.imread(str(right_mask), cv2.IMREAD_GRAYSCALE)
+    if left is None or right is None or ml is None or mr is None:
+        return None
+    orig_w, orig_h = left.shape[1], left.shape[0]
+    h, w = left.shape
+    scale = 1.0
+    if w > work:
+        scale = work / float(w)
+        nw, nh = int(round(w * scale)), int(round(h * scale))
+        left = cv2.resize(left, (nw, nh), interpolation=cv2.INTER_AREA)
+        right = cv2.resize(right, (nw, nh), interpolation=cv2.INTER_AREA)
+        ml = cv2.resize(ml, (nw, nh), interpolation=cv2.INTER_NEAREST)
+        mr = cv2.resize(mr, (nw, nh), interpolation=cv2.INTER_NEAREST)
+    sift = cv2.SIFT_create(nfeatures=6000, contrastThreshold=0.02)
+    k1, d1 = sift.detectAndCompute(left, ml)
+    k2, d2 = sift.detectAndCompute(right, mr)
+    if d1 is None or d2 is None or len(k1) < 8 or len(k2) < 8:
+        return None
+    raw = cv2.BFMatcher(cv2.NORM_L2).knnMatch(d1, d2, k=2)
+    pts1, pts2 = [], []
+    for pair in raw:
+        if len(pair) < 2:
+            continue
+        m, n = pair
+        if m.distance >= 0.80 * n.distance:
+            continue
+        pts1.append(k1[m.queryIdx].pt)
+        pts2.append(k2[m.trainIdx].pt)
+    if len(pts1) < 8:
+        return None
+    pts1 = np.float32(pts1)
+    pts2 = np.float32(pts2)
+    M, inl = cv2.estimateAffinePartial2D(
+        pts2, pts1, method=cv2.RANSAC, ransacReprojThreshold=4.0,
+    )
+    if M is None or inl is None:
+        return None
+    n = int(inl.sum())
+    if n < 6:
+        return None
+    M = M.astype(np.float64)
+    M[0, 2] /= scale
+    M[1, 2] /= scale
+    if not _similarity_sane(M, orig_w, orig_h):
+        return None
+    sc, rot, tx, ty = _similarity_params(M)
+    ol = orig_w - tx
+    frac = ol / orig_w
+    if frac < 0.05 or frac > 0.50:
+        return None
+    return {
+        "M": M,
+        "overlap": frac,
+        "rot": rot,
+        "scale": sc,
+        "tx": tx,
+        "ty": ty,
+        "n": n,
+    }
+
+
+def _affine_canvas(M, w, h):
+    import cv2
+    import numpy as np
+
+    r_corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
+    t_corners = cv2.transform(r_corners, M)
+    pts = np.vstack([r_corners.reshape(-1, 2), t_corners.reshape(-1, 2)])
+    minx, miny = np.floor(pts.min(axis=0)).astype(int)
+    maxx, maxy = np.ceil(pts.max(axis=0)).astype(int)
+    off = np.array([[1.0, 0.0, float(-minx)], [0.0, 1.0, float(-miny)]], np.float64)
+    M3 = np.vstack([M, [0.0, 0.0, 1.0]])
+    off3 = np.vstack([off, [0.0, 0.0, 1.0]])
+    Mt = (off3 @ M3)[:2]
+    return off, Mt, int(maxx - minx), int(maxy - miny)
+
+
+def _warp_rgba(path, M, out_w, out_h):
+    import cv2
+    import numpy as np
+
+    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if img is None:
+        raise dual.CamError(f"cannot read {path}")
+    rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+    return cv2.warpAffine(
+        rgba, M.astype(np.float32), (out_w, out_h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0, 0),
+    )
+
+
+def _enblend_layers(r_rgba, t_rgba, dest, tmp):
+    import cv2
+
+    rp = Path(tmp) / "r_layer.png"
+    tp = Path(tmp) / "t_layer.png"
+    cv2.imwrite(str(rp), r_rgba)
+    cv2.imwrite(str(tp), t_rgba)
+    blend = shutil.which("enblend")
+    out_tif = Path(tmp) / "pano.tif"
+    if blend:
+        proc = subprocess.run(
+            [blend, "-o", str(out_tif), str(rp), str(tp)],
+            capture_output=True, text=True, timeout=900,
+        )
+        if proc.returncode:
+            err = (proc.stderr or proc.stdout or "enblend failed").strip().split("\n")[-1]
+            raise dual.CamError(err)
+        _magick([str(out_tif), "-quality", "92", str(dest)])
+        return "enblend"
+    _magick([
+        str(rp), str(tp), "-background", "black", "-layers", "merge",
+        "-quality", "92", str(dest),
+    ])
+    return "merge"
+
+
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
                 balance=True, overlap=OVERLAP):
     """SIFT in the hybrid overlap, then a translation blend (no affine shear)."""
@@ -1355,17 +1710,70 @@ def stitch_stamp(
     dest = root / f"P_{stamp}.jpg"
     mode = (mode or "blend").strip().lower()
     if mode not in MODES:
-        raise dual.CamError("mode is match, blend, cut, or open")
+        raise dual.CamError("mode is match, blend, cut, open, or hugin")
     requested = mode
     found = None
     ghost = {}
     # Independent T/R deghost shifts wreck SIFT on FX; deghost after a
     # geometric fallback instead.
-    tmp_ghost = tempfile.TemporaryDirectory() if (deghost and mode != "open") else None
+    tmp_ghost = tempfile.TemporaryDirectory() if (deghost and mode not in ("open", "hugin")) else None
     try:
         if tmp_ghost:
             t_path, ghost["T"] = _deghost_path(t_path, tmp_ghost.name, "T", on_log)
             r_path, ghost["R"] = _deghost_path(r_path, tmp_ghost.name, "R", on_log)
+        if mode == "hugin":
+            if on_log:
+                on_log("hugin  SIFT similarity + enblend")
+            tw, th = _size(t_path)
+            prof = hugin_profile(tw, th)
+            if not flip_r and prof.get("flip_r"):
+                flip_r = True
+            overlap = float(prof.get("overlap", overlap))
+            try:
+                info = stitch_hugin(
+                    t_path, r_path, dest,
+                    overlap=overlap, flip_r=flip_r, dy=0, on_log=on_log,
+                    balance=balance, lift=False,
+                    profile=prof.get("profile", "fxpan65"),
+                )
+            except dual.CamError as exc:
+                if on_log:
+                    on_log(f"hugin failed: {exc} — match blend")
+                info = stitch_files(
+                    t_path, r_path, dest,
+                    overlap=overlap, flip_r=flip_r, mode="blend", dy=dy,
+                    on_log=on_log, balance=balance,
+                )
+                info["engine"] = "blend"
+                info["hugin_error"] = str(exc)
+            info["stamp"] = stamp
+            info["mode"] = "blend" if info.get("hugin_error") else "hugin"
+            info["phase"] = "done"
+            info["error"] = ""
+            info["deghost"] = {}
+            if found:
+                info["rmse"] = round(found["rmse"], 2)
+            if info.get("hugin_error"):
+                info["message"] = (
+                    f"blend  (hugin missed)  ol={info.get('overlap_frac', overlap):.0%}  "
+                    f"dy={info.get('dy', dy):+d}  "
+                    f"flip={'on' if info.get('flip_r') else 'off'}  "
+                    f"{info['width']}×{info['height']}"
+                )
+            else:
+                info["message"] = (
+                    f"hugin  {info.get('engine', 'feather')}  "
+                    f"ol={info.get('overlap_frac', overlap):.0%}  "
+                    + (
+                        f"rot={info['rot']:+.2f}°  "
+                        if info.get("rot") is not None else
+                        f"dy={info.get('dy', dy):+d}  "
+                    )
+                    + f"flip={'on' if info.get('flip_r') else 'off'}  "
+                    f"{info['width']}×{info['height']}"
+                )
+            _write_sidecar(root, stamp, info)
+            return info
         if mode == "open":
             if on_log:
                 on_log("OpenStitching SIFT  https://github.com/OpenStitching/stitching")
@@ -1422,23 +1830,9 @@ def stitch_stamp(
         if mode == "match":
             if on_log:
                 on_log("match overlap + vertical + flop")
-            found = find_overlap(t_path, r_path, try_flip=True, on_log=on_log)
-            if found["rmse"] > 0.42:
-                if on_log:
-                    on_log(
-                        f"match weak ({found['rmse']:.2f}) — keep ol={overlap:.0%} "
-                        f"flip={'on' if flip_r else 'off'}"
-                    )
-            else:
-                overlap = found["overlap"]
-                flip_r = found["flip_r"]
-                tw, _ = _size(t_path)
-                dy = int(round(found["dy"] * (tw / WORK)))
-                if on_log:
-                    on_log(
-                        f"best ol={overlap:.0%} dy={dy:+d} "
-                        f"flip={'on' if flip_r else 'off'}  {found['rmse']:.1f}"
-                    )
+            overlap, flip_r, dy, found = _search_align(
+                t_path, r_path, overlap, flip_r, dy=dy, on_log=on_log,
+            )
             mode = "blend"
         info = stitch_files(
             t_path, r_path, dest,
@@ -1562,7 +1956,7 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
         raise dual.CamError("bad stamp")
     mode = (mode or "match").strip().lower()
     if mode not in MODES:
-        raise dual.CamError("mode is match, blend, cut, or open")
+        raise dual.CamError("mode is match, blend, cut, open, or hugin")
     item = {
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
         "root": root, "deghost": bool(deghost), "balance": bool(balance),
