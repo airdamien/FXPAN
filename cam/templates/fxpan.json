@@ -1,0 +1,18 @@
+{
+  "fxpan65": {
+    "body": "FXPAN 65",
+    "flip_r": true,
+    "overlap": 0.20,
+    "dy": 0,
+    "hfov": 50.0,
+    "sensors": {
+      "7360x4912": {
+        "notes": "Nikon D800 FX — overlap from 2026-09-19 checker pairs, dy locked",
+        "overlap": 0.22
+      },
+      "4928x3264": {
+        "notes": "Nikon D7000 DX"
+      }
+    }
+  }
+}

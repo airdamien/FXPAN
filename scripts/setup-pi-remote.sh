@@ -35,8 +35,8 @@ rsync -az \
   -e "$RSYNC_RSH" \
   "$ROOT/cam/" "$TARGET:~/nikonduals/cam/"
 
-echo "==> apt gphoto2 + ImageMagick"
-"${SSH[@]}" "$TARGET" 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gphoto2 imagemagick'
+echo "==> apt gphoto2 + ImageMagick + Hugin"
+"${SSH[@]}" "$TARGET" 'sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gphoto2 imagemagick enblend'
 echo "==> OpenStitching venv (PANO Open)"
 "${SSH[@]}" "$TARGET" 'chmod +x ~/nikonduals/cam/kiosk/install-openstitching.sh && bash ~/nikonduals/cam/kiosk/install-openstitching.sh'
 
