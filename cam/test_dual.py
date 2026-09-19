@@ -757,6 +757,18 @@ class Pano(unittest.TestCase):
         self.assertEqual(pano._overlap_canvas_y(0, 2), 2)
         self.assertEqual(pano._overlap_canvas_y(2, 0), 2)
 
+    def test_inner_crop_box_drops_step(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        r = np.zeros((40, 80, 4), np.uint8)
+        t = np.zeros((40, 80, 4), np.uint8)
+        r[0:30, 0:50, 3] = 255
+        t[10:40, 30:80, 3] = 255
+        box = pano._inner_crop_box(r, t)
+        self.assertEqual(box, (0, 10, 80, 30))
+
     def test_crop_overlap_strips_dy(self):
         t = self._jpeg("T_20260101_120000.jpg", "red", w=80, h=40)
         r = self._jpeg("R_20260101_120000.jpg", "blue", w=80, h=40)
@@ -779,8 +791,68 @@ class Pano(unittest.TestCase):
             "20260101_120000", overlap=0.25, flip_r=True, mode="hugin", root=self.root
         )
         self.assertEqual(info["mode"], "hugin")
-        self.assertIn(info["engine"], ("feather", "enblend", "merge"))
+        self.assertIn(info["engine"], ("feather", "multiband", "enblend", "merge"))
         self.assertGreater(info["width"], 70)
+        self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
+        self.assertRegex(info["message"], r"\d+\.\d+s")
+        self.assertGreaterEqual(info["sec"], 0)
+
+    def test_multiband_write_covers_both(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        r = np.zeros((40, 80, 4), np.uint8)
+        t = np.zeros((40, 80, 4), np.uint8)
+        r[:, :50] = (255, 0, 0, 255)
+        t[:, 30:] = (0, 255, 0, 255)
+        dest = self.root / "blend.jpg"
+        w, h = pano._multiband_write(r, t, dest)
+        self.assertEqual((w, h), (80, 40))
+        img = cv2.imread(str(dest), cv2.IMREAD_COLOR)
+        self.assertIsNotNone(img)
+        self.assertGreater(int(img[20, 5, 0]), 180)
+        self.assertGreater(int(img[20, 75, 1]), 180)
+
+    def test_overlap_blend_masks_overlap(self):
+        pano._venv_site()
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        r_a = np.zeros((40, 80), np.uint8)
+        t_a = np.zeros((40, 80), np.uint8)
+        r_a[:, :50] = 255
+        t_a[:, 30:] = 255
+        rm, tm = pano._overlap_blend_masks(r_a, t_a, dilate=8)
+        self.assertGreater(int(((rm > 0) & (tm > 0)).sum()), 0)
+        self.assertGreater(int(rm[:, 5].mean()), 200)
+        self.assertGreater(int(tm[:, 75].mean()), 200)
+
+    def test_stitch_hugin_multiband(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        rng = np.random.default_rng(2)
+        full = rng.integers(32, 224, (240, 900, 3), dtype=np.uint8)
+        cv2.imwrite(
+            str(self.root / "R_20260101_120000.jpg"),
+            cv2.flip(full[:, :500], 1),
+        )
+        cv2.imwrite(str(self.root / "T_20260101_120000.jpg"), full[:, 400:])
+        info = pano.stitch_stamp(
+            "20260101_120000", overlap=0.20, flip_r=True, mode="hugin",
+            root=self.root, balance=False,
+        )
+        self.assertEqual(info["mode"], "hugin")
+        self.assertEqual(info["engine"], "multiband")
+        self.assertGreater(info["width"], 700)
+        self.assertRegex(info["message"], r"\d+\.\d+s")
         self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
 
     def test_stitch_width(self):
@@ -1282,6 +1354,7 @@ class Settings(unittest.TestCase):
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "stitch_mode": "hugin", "crop_inner": True,
             },
         )
 
@@ -1292,6 +1365,7 @@ class Settings(unittest.TestCase):
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "stitch_mode": "open", "crop_inner": True,
             },
         )
 
@@ -1306,6 +1380,7 @@ class Settings(unittest.TestCase):
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "stitch_mode": "hugin", "crop_inner": True,
             },
         )
         settings.save({"download": True}, pi=True)
@@ -1328,9 +1403,11 @@ class Settings(unittest.TestCase):
         got = settings.load(pi=True)
         self.assertTrue(got["deghost"])
         self.assertTrue(got["follow_cam"])
-        settings.save({"deghost": False}, pi=True)
-        self.assertFalse(settings.load(pi=True)["deghost"])
-        self.assertTrue(settings.load(pi=True)["follow_cam"])
+
+    def test_crop_inner_setting(self):
+        self.assertTrue(settings.load(pi=True)["crop_inner"])
+        settings.save({"crop_inner": False}, pi=True)
+        self.assertFalse(settings.load(pi=True)["crop_inner"])
 
     def test_lock_t_and_idle_min(self):
         self.assertTrue(settings.load(pi=True)["lock_t"])

@@ -516,6 +516,8 @@ class Handler(BaseHTTPRequestHandler):
                         + ("on" if prefs.get("deghost") else "off")
                         + "  balance="
                         + ("on" if prefs.get("balance", True) else "off")
+                        + "  clip="
+                        + ("on" if prefs.get("crop_inner", True) else "off")
                         + "  live-ae="
                         + ("cam" if prefs.get("follow_cam") else "app")
                         + "  lock-t="
@@ -881,10 +883,16 @@ class Handler(BaseHTTPRequestHandler):
                     balance = prefs.get("balance", True)
                 if isinstance(balance, str):
                     balance = balance.lower() not in ("0", "false", "no", "")
+                crop_inner = data.get("crop_inner")
+                if crop_inner is None:
+                    crop_inner = prefs.get("crop_inner", True)
+                if isinstance(crop_inner, str):
+                    crop_inner = crop_inner.lower() not in ("0", "false", "no", "")
                 mode = (data.get("mode") or prefs.get("stitch_mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                     deghost=bool(deghost), balance=bool(balance),
+                    crop_inner=bool(crop_inner),
                 )
                 stat = pano.queue_status()
                 return _json(

@@ -28,6 +28,7 @@ import sys
 import tempfile
 import threading
 import shutil
+import time
 from datetime import date
 from pathlib import Path
 
@@ -139,11 +140,19 @@ def _write_sidecar(root, stamp, info):
         for k in (
             "mode", "overlap", "overlap_frac", "dy", "flip_r", "rmse",
             "width", "height", "file", "message", "phase", "error",
-            "deghost",
+            "deghost", "sec", "engine",
         )
         if k in info
     }
     path.write_text(json.dumps(keep, indent=2) + "\n")
+
+
+def _with_sec(info, t0):
+    sec = round(max(0.0, time.monotonic() - t0), 1)
+    info["sec"] = sec
+    msg = (info.get("message") or "").rstrip()
+    info["message"] = f"{msg}  {sec:.1f}s" if msg else f"{sec:.1f}s"
+    return info
 
 
 def jobs_snapshot():
@@ -1012,42 +1021,58 @@ def _compose_pano(dest, r_path, t_path, ol_path, out_w, out_h, x, ty, ry):
 
 def stitch_hugin(
     t_path, r_path, dest, overlap=OVERLAP, flip_r=True, dy=0, on_log=None,
-    balance=False, lift=True, profile="fxpan65",
+    balance=False, lift=True, profile="fxpan65", crop_inner=True,
 ):
     def log(msg):
         if on_log:
             on_log(msg)
 
-    w, h = _size(t_path)
-    prof = hugin_profile(w, h, profile=profile)
-    if flip_r is False and prof.get("flip_r"):
-        flip_r = True
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        t_use, r_use, w, h, ol, x, out_w, out_h, ty, ry, eff_dy = _prep_compose_sources(
-            t_path, r_path, tmp, overlap, flip_r, dy=dy,
-            balance=balance, lift=False, on_log=on_log,
-        )
-        found = None
-        try:
-            import cv2  # noqa: F401
-            tmask, rmask, band = _overlap_feature_masks(w, h, overlap, tmp)
-            log(f"hugin  SIFT similarity in {band}px overlap")
-            found = _sift_similarity(r_use, t_use, rmask, tmask)
-        except ImportError:
-            found = None
+    try:
+        import cv2
+        cv2.setNumThreads(_cpu_count())
+    except ImportError:
+        cv2 = None
+    found = None
+    t_bgr = r_bgr = None
+    if cv2 is not None:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ft = pool.submit(_imread_bgr, t_path)
+            fr = pool.submit(_imread_bgr, r_path)
+            t_bgr, r_bgr = ft.result(), fr.result()
+        h, w = t_bgr.shape[:2]
+        prof = hugin_profile(w, h, profile=profile)
+        if flip_r is False and prof.get("flip_r"):
+            flip_r = True
+        if flip_r:
+            r_bgr = cv2.flip(r_bgr, 1)
+        rh, rw = r_bgr.shape[:2]
+        if (rh, rw) != (h, w):
+            r_bgr = cv2.resize(r_bgr, (w, h), interpolation=cv2.INTER_AREA)
+        if balance:
+            r_bgr, msg = _balance_r_bgr(t_bgr, r_bgr, overlap)
+            if msg:
+                log(msg)
+        tmask, rmask, band = _overlap_feature_masks(w, h, overlap)
+        log(f"hugin  SIFT similarity in {band}px overlap")
+        found = _sift_similarity(r_bgr, t_bgr, rmask, tmask)
         if found:
             log(
                 f"hugin  rot={found['rot']:+.2f}° scale={found['scale']:.4f} "
                 f"ol={found['overlap']:.0%} n={found['n']}  flip={'on' if flip_r else 'off'}"
             )
             Mr, Mt, cw, ch = _affine_canvas(found["M"], w, h)
-            r_rgba = _warp_rgba(r_use, Mr, cw, ch)
-            t_rgba = _warp_rgba(t_use, Mt, cw, ch)
-            engine = _enblend_layers(r_rgba, t_rgba, dest, tmp)
-            ow, oh = _size(dest)
+            r_rgba = _warp_bgr(r_bgr, Mr, cw, ch)
+            t_rgba = _warp_bgr(t_bgr, Mt, cw, ch)
+            if crop_inner:
+                x0, y0, x1, y1 = _inner_crop_box(r_rgba, t_rgba)
+                r_rgba = r_rgba[y0:y1, x0:x1]
+                t_rgba = t_rgba[y0:y1, x0:x1]
+                log(f"hugin  clip inner  {x1 - x0}×{y1 - y0}")
+            log("hugin  overlap + multiband")
+            ow, oh = _multiband_write(r_rgba, t_rgba, dest)
             return {
                 "file": dest.name,
                 "width": ow,
@@ -1060,9 +1085,21 @@ def stitch_hugin(
                 "inliers": found["n"],
                 "flip_r": bool(flip_r),
                 "mode": "hugin",
-                "engine": engine,
+                "engine": "multiband",
+                "crop_inner": bool(crop_inner),
                 "profile": prof.get("profile", profile),
             }
+        log("hugin  SIFT missed — feather")
+    w, h = (t_bgr.shape[1], t_bgr.shape[0]) if t_bgr is not None else _size(t_path)
+    prof = hugin_profile(w, h, profile=profile)
+    if flip_r is False and prof.get("flip_r"):
+        flip_r = True
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        t_use, r_use, w, h, ol, x, out_w, out_h, ty, ry, eff_dy = _prep_compose_sources(
+            t_path, r_path, tmp, overlap, flip_r, dy=dy,
+            balance=balance, lift=False, on_log=on_log,
+        )
         log(
             f"hugin mosaic  ol={ol}px ({overlap:.0%}) dy={eff_dy:+d} "
             f"flip={'on' if flip_r else 'off'}  {out_w}×{out_h}"
@@ -1399,8 +1436,7 @@ def _deghost_path(path, tmp, tag, on_log=None):
     return dest, info
 
 
-def _overlap_feature_masks(w, h, overlap, tmp):
-    import cv2
+def _overlap_feature_masks(w, h, overlap, tmp=None):
     import numpy as np
 
     band = max(int(w * overlap * 1.5), int(w * 0.22))
@@ -1409,10 +1445,7 @@ def _overlap_feature_masks(w, h, overlap, tmp):
     tmask[:, :band] = 255
     rmask = np.zeros((h, w), np.uint8)
     rmask[:, w - band :] = 255
-    tp, rp = Path(tmp) / "tmask.png", Path(tmp) / "rmask.png"
-    cv2.imwrite(str(tp), tmask)
-    cv2.imwrite(str(rp), rmask)
-    return tp, rp, band
+    return tmask, rmask, band
 
 
 def _sift_overlap_shift(left_path, right_path, left_mask, right_mask):
@@ -1425,10 +1458,10 @@ def _sift_overlap_shift(left_path, right_path, left_mask, right_mask):
     import cv2
     import numpy as np
 
-    left = cv2.imread(str(left_path), cv2.IMREAD_GRAYSCALE)
-    right = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
-    ml = cv2.imread(str(left_mask), cv2.IMREAD_GRAYSCALE)
-    mr = cv2.imread(str(right_mask), cv2.IMREAD_GRAYSCALE)
+    left = _cv_u8(left_path)
+    right = _cv_u8(right_path)
+    ml = _cv_u8(left_mask)
+    mr = _cv_u8(right_mask)
     if left is None or right is None or ml is None or mr is None:
         return None
     orig_w = left.shape[1]
@@ -1510,10 +1543,10 @@ def _sift_similarity(left_path, right_path, left_mask, right_mask, work=2400):
     import cv2
     import numpy as np
 
-    left = cv2.imread(str(left_path), cv2.IMREAD_GRAYSCALE)
-    right = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
-    ml = cv2.imread(str(left_mask), cv2.IMREAD_GRAYSCALE)
-    mr = cv2.imread(str(right_mask), cv2.IMREAD_GRAYSCALE)
+    left = _cv_u8(left_path)
+    right = _cv_u8(right_path)
+    ml = _cv_u8(left_mask)
+    mr = _cv_u8(right_mask)
     if left is None or right is None or ml is None or mr is None:
         return None
     orig_w, orig_h = left.shape[1], left.shape[0]
@@ -1590,13 +1623,80 @@ def _affine_canvas(M, w, h):
     return off, Mt, int(maxx - minx), int(maxy - miny)
 
 
-def _warp_rgba(path, M, out_w, out_h):
-    import cv2
+def _inner_crop_box(r_rgba, t_rgba):
+    """Crop top/bottom to a straight edge; keep the full mosaic width."""
     import numpy as np
+
+    a = np.maximum(r_rgba[:, :, 3], t_rgba[:, :, 3])
+    h, w = a.shape
+    opaque = a > 32
+    col_n = opaque.sum(axis=0)
+    has_c = col_n > 0
+    if not has_c.any():
+        return 0, 0, w, h
+    tops = np.where(has_c, np.argmax(opaque, axis=0), 0)
+    bots = np.where(has_c, h - 1 - np.argmax(opaque[::-1], axis=0), h - 1)
+    ch = np.where(has_c, bots - tops + 1, 0)
+    med_h = float(np.median(ch[has_c]))
+    good_c = has_c & (ch >= 0.90 * med_h)
+    if not good_c.any():
+        return 0, 0, w, h
+    x0 = int(np.argmax(has_c))
+    x1 = int(w - np.argmax(has_c[::-1]))
+    y0 = int(tops[good_c].max())
+    y1 = int(bots[good_c].min()) + 1
+    if x1 <= x0 or y1 <= y0:
+        return 0, 0, w, h
+    return x0, y0, x1, y1
+
+
+def _imread_bgr(path):
+    import cv2
 
     img = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if img is None:
         raise dual.CamError(f"cannot read {path}")
+    return img
+
+
+def _cv_u8(src):
+    import cv2
+    import numpy as np
+
+    if src is None:
+        return None
+    if isinstance(src, (str, Path)):
+        return cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
+    img = src.get() if hasattr(src, "get") else src
+    img = np.asarray(img)
+    if img.ndim == 3:
+        code = cv2.COLOR_BGRA2GRAY if img.shape[2] == 4 else cv2.COLOR_BGR2GRAY
+        return cv2.cvtColor(img, code)
+    return img
+
+
+def _balance_r_bgr(t, r, overlap):
+    import numpy as np
+
+    h, w = t.shape[:2]
+    ol = max(1, min(w - 1, int(round(w * float(overlap)))))
+    t_m = float(t[:, :ol].mean())
+    r_m = float(r[:, w - ol:].mean())
+    if r_m <= 5.0 or t_m <= 5.0:
+        return r, ""
+    scale = t_m / r_m
+    if abs(scale - 1) <= 0.03:
+        return r, ""
+    if not (0.40 <= scale <= 2.50):
+        return r, f"balance skip R ×{scale:.2f} (overlap too different)"
+    out = np.clip(r.astype(np.float32) * scale, 0, 255).astype(np.uint8)
+    return out, f"balance R ×{scale:.2f} (overlap)"
+
+
+def _warp_bgr(img, M, out_w, out_h):
+    import cv2
+    import numpy as np
+
     rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
     return cv2.warpAffine(
         rgba, M.astype(np.float32), (out_w, out_h),
@@ -1606,30 +1706,66 @@ def _warp_rgba(path, M, out_w, out_h):
     )
 
 
-def _enblend_layers(r_rgba, t_rgba, dest, tmp):
+def _overlap_blend_masks(r_a, t_a, dilate=96):
+    """Voronoi seam in the overlap, then widen so multiband can hide it."""
+    import cv2
+    import numpy as np
+
+    r_m = (r_a > 32).astype(np.uint8)
+    t_m = (t_a > 32).astype(np.uint8)
+    only_r = r_m & (1 - t_m)
+    only_t = t_m & (1 - r_m)
+    both = r_m & t_m
+    h, w = r_m.shape
+    if int(only_r.sum()) >= 8 and int(only_t.sum()) >= 8:
+        dr = cv2.distanceTransform(
+            ((1 - only_r) * 255).astype(np.uint8), cv2.DIST_L2, 5,
+        )
+        dt = cv2.distanceTransform(
+            ((1 - only_t) * 255).astype(np.uint8), cv2.DIST_L2, 5,
+        )
+        prefer_r = dr <= dt
+    else:
+        xs = np.broadcast_to(np.arange(w, dtype=np.float32), (h, w))
+        prefer_r = xs < (w * 0.5)
+    rm = np.where(only_r | (both & prefer_r), 255, 0).astype(np.uint8)
+    tm = np.where(only_t | (both & ~prefer_r), 255, 0).astype(np.uint8)
+    rad = max(8, int(dilate))
+    k = np.ones((1, 2 * rad + 1), np.uint8)
+    rm = cv2.dilate(rm, k)
+    tm = cv2.dilate(tm, k)
+    rm = np.minimum(rm, r_m * 255)
+    tm = np.minimum(tm, t_m * 255)
+    return rm, tm
+
+
+def _write_jpeg(path, bgr, quality=92):
     import cv2
 
-    rp = Path(tmp) / "r_layer.png"
-    tp = Path(tmp) / "t_layer.png"
-    cv2.imwrite(str(rp), r_rgba)
-    cv2.imwrite(str(tp), t_rgba)
-    blend = shutil.which("enblend")
-    out_tif = Path(tmp) / "pano.tif"
-    if blend:
-        proc = subprocess.run(
-            [blend, "-o", str(out_tif), str(rp), str(tp)],
-            capture_output=True, text=True, timeout=900,
-        )
-        if proc.returncode:
-            err = (proc.stderr or proc.stdout or "enblend failed").strip().split("\n")[-1]
-            raise dual.CamError(err)
-        _magick([str(out_tif), "-quality", "92", str(dest)])
-        return "enblend"
-    _magick([
-        str(rp), str(tp), "-background", "black", "-layers", "merge",
-        "-quality", "92", str(dest),
-    ])
-    return "merge"
+    path = Path(path)
+    ok = cv2.imwrite(str(path), bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+    if not ok:
+        raise dual.CamError(f"cannot write {path}")
+
+
+def _multiband_write(r_rgba, t_rgba, dest):
+    import cv2
+    import numpy as np
+
+    r_bgr, t_bgr = r_rgba[:, :, :3], t_rgba[:, :, :3]
+    rm, tm = _overlap_blend_masks(r_rgba[:, :, 3], t_rgba[:, :, 3])
+    h, w = r_bgr.shape[:2]
+    blender = cv2.detail.MultiBandBlender()
+    blender.setNumBands(5)
+    blender.prepare((0, 0, w, h))
+    blender.feed(r_bgr.astype(np.int16), rm, (0, 0))
+    blender.feed(t_bgr.astype(np.int16), tm, (0, 0))
+    dst, dm = blender.blend(None, None)
+    dst = np.clip(dst, 0, 255).astype(np.uint8)
+    if dm is not None:
+        dst[np.asarray(dm) == 0] = 0
+    _write_jpeg(dest, dst)
+    return w, h
 
 
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
@@ -1703,7 +1839,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
-    deghost=False, balance=True,
+    deghost=False, balance=True, crop_inner=True,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -1714,6 +1850,7 @@ def stitch_stamp(
     requested = mode
     found = None
     ghost = {}
+    t0 = time.monotonic()
     # Independent T/R deghost shifts wreck SIFT on FX; deghost after a
     # geometric fallback instead.
     tmp_ghost = tempfile.TemporaryDirectory() if (deghost and mode not in ("open", "hugin")) else None
@@ -1723,7 +1860,7 @@ def stitch_stamp(
             r_path, ghost["R"] = _deghost_path(r_path, tmp_ghost.name, "R", on_log)
         if mode == "hugin":
             if on_log:
-                on_log("hugin  SIFT similarity + enblend")
+                on_log("hugin  SIFT similarity + multiband")
             tw, th = _size(t_path)
             prof = hugin_profile(tw, th)
             if not flip_r and prof.get("flip_r"):
@@ -1733,7 +1870,7 @@ def stitch_stamp(
                 info = stitch_hugin(
                     t_path, r_path, dest,
                     overlap=overlap, flip_r=flip_r, dy=0, on_log=on_log,
-                    balance=balance, lift=False,
+                    balance=balance, lift=False, crop_inner=crop_inner,
                     profile=prof.get("profile", "fxpan65"),
                 )
             except dual.CamError as exc:
@@ -1772,6 +1909,7 @@ def stitch_stamp(
                     + f"flip={'on' if info.get('flip_r') else 'off'}  "
                     f"{info['width']}×{info['height']}"
                 )
+            _with_sec(info, t0)
             _write_sidecar(root, stamp, info)
             return info
         if mode == "open":
@@ -1825,6 +1963,7 @@ def stitch_stamp(
                     f"flip={'on' if info.get('flip_r') else 'off'}  "
                     f"{info['width']}×{info['height']}"
                 )
+            _with_sec(info, t0)
             _write_sidecar(root, stamp, info)
             return info
         if mode == "match":
@@ -1850,6 +1989,7 @@ def stitch_stamp(
             f"{info['mode']}  ol={info['overlap_frac']:.0%}  dy={info['dy']:+d}  "
             f"flip={'on' if info['flip_r'] else 'off'}  {info['width']}×{info['height']}"
         )
+        _with_sec(info, t0)
         _write_sidecar(root, stamp, info)
         return info
     finally:
@@ -1918,6 +2058,7 @@ def _run_item(item):
             mode=item["mode"], root=item.get("root"), on_log=on_log,
             deghost=item.get("deghost", False),
             balance=item.get("balance", True),
+            crop_inner=item.get("crop_inner", True),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -1950,7 +2091,7 @@ def _kick_queue():
 
 
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
-                 deghost=False, balance=True):
+                 deghost=False, balance=True, crop_inner=True):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
@@ -1960,6 +2101,7 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
     item = {
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
         "root": root, "deghost": bool(deghost), "balance": bool(balance),
+        "crop_inner": bool(crop_inner),
     }
     with _queue_lock:
         live = job_get(stamp)

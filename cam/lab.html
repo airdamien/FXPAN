@@ -236,11 +236,12 @@
       </select>
     </label>
     <label class="dlchk"><input type="checkbox" id="flipR">Flip R</label>
+    <label class="dlchk"><input type="checkbox" id="cropInnerOn" checked>Clip edges</label>
     <label>Overlap <span id="olVal">20%</span>
       <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
     </label>
   </div>
-  <p class="sub">Hugin: SIFT similarity (rotation+scale+shift) then enblend. Open is translation SIFT. Match is NCC overlap search.</p>
+  <p class="sub">Hugin: SIFT similarity (rotation+scale+shift), then OpenCV multiband across the overlap. Open is translation SIFT. Match is NCC overlap search.</p>
   <div id="pairs"></div>
 </section>
 </div>
@@ -576,7 +577,8 @@ const startPano = async (which) => {
   const j = await api("/api/pano", { method:"POST", headers:{"content-type":"application/json"},
     body: JSON.stringify({ stamp: which, mode: document.getElementById("panoMode").value,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
-      flip_r: document.getElementById("flipR").checked }) });
+      flip_r: document.getElementById("flipR").checked,
+      crop_inner: document.getElementById("cropInnerOn").checked }) });
   log(j.message);
   await loadPairs(true);
 };
@@ -691,8 +693,10 @@ const paintSettings = (s) => {
   if (!s) return;
   const dl = document.getElementById("dl");
   const g = document.getElementById("gpioOn");
+  const clip = document.getElementById("cropInnerOn");
   if (dl && "download" in s) dl.checked = !!s.download;
   if (g && "gpio" in s) g.checked = !!s.gpio;
+  if (clip && "crop_inner" in s) clip.checked = !!s.crop_inner;
 };
 const saveSettings = async () => {
   const j = await api("/api/settings", { method:"POST",
@@ -700,12 +704,14 @@ const saveSettings = async () => {
     body: JSON.stringify({
       download: document.getElementById("dl").checked,
       gpio: document.getElementById("gpioOn").checked,
+      crop_inner: document.getElementById("cropInnerOn").checked,
     }) });
   paintSettings(j);
   log(j.message);
 };
 document.getElementById("dl").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("gpioOn").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("cropInnerOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 const paintGpio = (g) => {
   const box = document.getElementById("simPi");
   if (box) box.checked = !!(g && g.sim);

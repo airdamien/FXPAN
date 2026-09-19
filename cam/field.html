@@ -658,6 +658,7 @@
   <label class="dlchk"><input type="checkbox" id="flipR">Flop R</label>
   <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost T and R before stitch</label>
   <label class="dlchk"><input type="checkbox" id="balanceOn" checked>Match T/R brightness</label>
+  <label class="dlchk"><input type="checkbox" id="cropInnerOn" checked>Clip to aligned edges</label>
   <div class="drag">
     <div class="k">Overlap <b id="olVal">20%</b></div>
     <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
@@ -1783,7 +1784,8 @@ const startPano = (stamp, el) => {
     body: JSON.stringify({ stamp,
       mode,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
-      flip_r: document.getElementById("flipR").checked }) })
+      flip_r: document.getElementById("flipR").checked,
+      crop_inner: document.getElementById("cropInnerOn").checked }) })
     .then(j => {
       paintPanoStat(j.queue || j);
       log(j.message);
@@ -2326,6 +2328,8 @@ const paintSettings = (s) => {
   if (dg && "deghost" in s) dg.checked = !!s.deghost;
   const bal = document.getElementById("balanceOn");
   if (bal && "balance" in s) bal.checked = !!s.balance;
+  const clip = document.getElementById("cropInnerOn");
+  if (clip && "crop_inner" in s) clip.checked = !!s.crop_inner;
   const fc = document.getElementById("followCam");
   if (fc && "follow_cam" in s) {
     fc.checked = !!s.follow_cam;
@@ -2373,6 +2377,7 @@ const saveSettings = async () => {
       flip_r: document.getElementById("flipR").checked,
       deghost: document.getElementById("deghostOn").checked,
       balance: document.getElementById("balanceOn").checked,
+      crop_inner: document.getElementById("cropInnerOn").checked,
       follow_cam: document.getElementById("followCam").checked,
       lock_t: document.getElementById("lockTOn").checked,
       iso: state.iso,
@@ -2405,6 +2410,7 @@ document.getElementById("flipR").onchange = () => {
 };
 document.getElementById("deghostOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("balanceOn").onchange = () => saveSettings().catch(e => log(e.message, true));
+document.getElementById("cropInnerOn").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("followCam").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("olDrag").oninput = () => { paintOl(); composePano(); };
 document.getElementById("olDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
