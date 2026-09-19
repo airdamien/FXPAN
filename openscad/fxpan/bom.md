@@ -99,6 +99,42 @@ Only the T camera gets it, which is worse than it sounds: the stitch would
 have a ghost on one side of the seam and none on the other. #37201 is AR
 coated, so this costs nothing on the recommended build.
 
+## Anamorphic adapter (optional)
+
+Not required. Spherical FXPAN is already XPan's 2.71:1 at 20.3°. A cylinder
+on the **front** of the 180 is how you go wider without changing the chassis.
+Buy **one** family, not all three. Rear M62 is already in the helicoid;
+`EL180_LENS_OD` is 76 mm and there is no useful front filter thread, so
+everything clamps onto the barrel. Measure that OD on your own 180 before
+you order a clamp.
+
+Same Tuscany still as [`docs/kraken/fxpan_anamorph_scene.png`](../../docs/kraken/fxpan_anamorph_scene.png): 1.5× is 30.1° / 26.9 m / 4.07:1; 1.33× is 26.8° / 23.9 m; 2× is 39.5° / 35.9 m / 5.42:1.
+
+**Do not buy** ISCO Ultra-Star HD Plus **60 mm integrated** (stock **748.50.06**). That is a 60 mm f/2.1 projector taking lens, BFL 36 mm, 21.3 × 18.2 mm Scope gate. It is not a front adapter and it cannot cover two D800s.
+
+| Qty | Item | Why | Link |
+|-----|------|-----|------|
+| 1 | **Schneider 1101111** — ISCORAMA 54 CU-1.5× (MFR **08-1101111**) | The stills pick. 1.5×, rear **M77×0.75** female, 1.4 m close focus, 1/4-20 support bracket in the box, M77/M72 SLIM already mounted. $4,950 new. Vintage **Iscorama 54** (ISCO-Göttingen, same 77 mm rear) is the used equivalent, usually cheaper, dual-focus. Schneider **1104267** M77/M62 is the *wrong* M62 — that is the 180's rear, already occupied. | [Duclos 08-1101111](https://www.ducloslenses.com/products/iscorama-54) · [Schneider IDs](https://schneiderkreuznach.com/en/cine-optics/lenses/isco-family) · used [Iscorama 54](https://www.ebay.com/sch/i.html?_nkw=iscorama+54) |
+| 1 | **RafCamera custom: 76 mm ID clamp → M77×0.75 male** | So the Iscorama's female rear can screw onto the 180. Stock [76 mm → M77 female](https://rafcamera.com/clamp-76mm-to-m77x0-75f-od80mm) is a filter ring, wrong gender. Print a collar if you would rather. Measure first. | [RafCamera custom](https://rafcamera.com/custom-adapter) |
+
+1.33× if you want new, light, and in-catalogue rather than the extra 9°:
+
+| Qty | Item | Why | Link |
+|-----|------|-----|------|
+| 1 | **SLR Magic SLRA65133X** — Anamorphot-65 1.33× | Rear **82 mm**, takes a 65 mm front element (the 180's pupil is 32 mm). B&H **SLMA13365A**. Anamorphot-40/50 are 52/62 mm rear and will not reach a 76 mm barrel. | [B&H SLRA65133X](https://www.bhphotovideo.com/c/product/1413511-REG/sigma_slra65133x_anamorphot_65_1_33x_anamorphic_adapter.html) |
+| 1 | **RafCamera custom: 76 mm ID clamp → M82×0.75 male** | Same job as the M77 collar, one step up. | [RafCamera custom](https://rafcamera.com/custom-adapter) |
+
+2× if the point is cinema (5.42:1). Compact **attachment**, not the 60 mm integrated lens:
+
+| Qty | Item | Why | Link |
+|-----|------|-----|------|
+| 1 | **ISCO Ultra-Star Gold / Red / Studio** compact 2× attachment | ~52.5 mm rear barrel. Search those three words plus *attachment*, not *60 mm* and not *HD Plus*. KuSeRa **xop-03236** is the large HD attachment (≈68 mm thread / 72 mm tube) — projector hardware, skip it. | [eBay Ultra-Star attachment](https://www.ebay.com/sch/i.html?_nkw=isco+ultra+star+cinemascope+attachment) |
+| *or* 1 | **Kowa Prominar 16-H** (Europe: **8-Z**) | Same 2× class, 52 mm rear barrel, used $500–700. | [eBay Kowa 16-H](https://www.ebay.com/sch/i.html?_nkw=kowa+16-h+anamorphic) · [eBay Kowa 8-Z](https://www.ebay.com/sch/i.html?_nkw=kowa+8-z+anamorphic) |
+| 1 | **RafCamera 52.5 mm clamp → M77×0.75 male** (Ultra-Star) *or* **52 mm clamp → M77 male** (Kowa 16-H) | Holds the attachment. | [52.5 mm / M77](https://rafcamera.com/clamp-52-5mm-to-m77x0-75m) · [52 mm / M77](https://rafcamera.com/clamp-52mm-to-m77x0-75m) |
+| 1 | **RafCamera 76 mm clamp → M77×0.75 female** | On the 180. The two RafCamera rings then screw together: 180 → 76 mm clamp → M77 → attachment clamp. | [76 mm / M77 F](https://rafcamera.com/clamp-76mm-to-m77x0-75f-od80mm) |
+
+Hang the adapter off the chassis **1/4-20**, not the M62 helicoid. 1101111 already has the small bracket (**1101470**); the bigger 1/4 + 3/8 plate is **1103882**. A kilo of glass on the helicoid is how you chew the printed boss.
+
 ## Cameras and sync
 
 | Qty | Item | Why | Link |
@@ -183,7 +219,8 @@ the apertures stop matching `params.scad`.
   interchangeable with `hybrid_shift` parts even where they look similar —
   which is why everything is stamped `fxp_`.
 - **20.4° horizontal.** XPan's aspect ratio, not XPan's angle of view. 65 mm
-  at 180 mm of focal length is a telephoto panorama.
+  at 180 mm of focal length is a telephoto panorama. A 1.5× adapter on the
+  front of the 180 takes that to 30.1° / 4.07:1 without touching the path.
 - The two 50 mm first-surface mirrors are not used here. Keeping the stitch
   axis off every fold's foreshortened dimension forces all folds coplanar, and
   coplanar folds cannot make two bodies parallel. They stay with the V body.
