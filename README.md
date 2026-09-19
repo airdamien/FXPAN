@@ -110,6 +110,14 @@ Open [`openscad/fxpan/WATCH_ME.scad`](openscad/fxpan/WATCH_ME.scad) and read the
 
 Three caveats up front. It is a **20.4° horizontal** field — XPan's aspect, not XPan's angle of view. The working aperture is **f/8 to f/22**: at f/5.6 the frame corners drop to 0.84 while the long axis stays clean, because the 44 mm Nikon F throat is a hard ceiling and a 14.4 mm shift spends nearly all the margin it ever had. And the **metal 52 mm F reverse rings are not optional** — the printed bayonet mesh is 38 mm clear against the 38.47 mm the corners need at *any* f-number, so it never passes the whole frame.
 
+An afocal anamorphic **adapter** on the front of the 180 is the optic that actually belongs here — a cylinder that squeezes a wider object into the same 64.80 mm stitch. 180 mm is long enough that even 2× should clear both FX windows (photo 2× attachments vignette below ~85 mm on full frame). The EL-Nikkor's rear is M62 into the helicoid; the barrel is 76 mm OD, so the adapter clamps onto that, it does not step-ring onto a filter thread. Same Tuscany still as the D800 180 countryside below: one D800 is **11.4° / 10.0 m**; FXPAN spherical is **20.3° / 17.9 m / 2.71:1**; 1.33× is **26.8° / 23.9 m / 3.61:1**; 1.5× is **30.1° / 26.9 m / 4.07:1**; 2× is **39.5° / 35.9 m / 5.42:1**. 1.5× is the stills pick (6×17 / 6×24 territory). 2× is cinema. The ISCO Ultra-Star HD Plus **60 mm integrated** projector lens (stock 748.50.06) is the wrong class: 60 mm f/2.1, BFL 36 mm, 21.3×18.2 mm Scope gate — it cannot cover two D800s and it is not a front adapter.
+
+![FXPAN 65 vs anamorphic adapters at 50 m](docs/kraken/fxpan_anamorph_scene.png)
+
+```
+kraken/.venv/bin/python kraken/fxpan_scene.py   # countryside: spherical vs 1.33 / 1.5 / 2×
+```
+
 ### Shadowgraph kit (`stls/hybrid_shadowgraph/`)
 
 Same box, stem, tray, and lid as hybrid. Tubes are not toed — both bodies see one frame. `arm_t` is the conjugate tube (`▲ T shadowgraph`). `arm_r` is the longer razor-slot tube (`▲ R shadowgraph`). Do not stack a 0.6 mm ring to fake it. Export: `./export_stls.sh --shadowgraph` or `./export_shadowgraph.sh`. Sims, what it can do, and the bench setup: [Shadowgraph](#shadowgraph).
