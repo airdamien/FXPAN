@@ -88,6 +88,7 @@ instead.
 | `ringgauge` | 1, before anything else | flat |
 | `chassis` | 1 | floor down |
 | `lid` | 1 | outer face down |
+| `display_mount` | 1 pair | rails on their flat face |
 | `fxp_tray` | 1 | floor down |
 | `stem` | 1 (with the helicoid) | cookie flange on the bed, M62 boss up |
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
@@ -163,8 +164,10 @@ plate and print time than the 90 mm squares they replace.
    50 mm up**: that way round the stitch crosses 53 mm of glass, the other way
    it crosses 35 and clips. The slot is keyed for both; the plate drops in
    from the top and sits on the shelf.
-5. **Tray into the chassis**, floor down, then the two retention posts stand
-   up through the lid's forks.
+5. **Tray into the chassis**, floor down. One retention post stands on the
+   plate frame in the dead corner between the cameras; the other stands on
+   the inactive beam under the −X wall, so the lid forks are not in the cup
+   walls and not on the monitor-rail screws. Both go up through the lid.
 6. **Cookies into their rebates.** Each of the three port cookies drops
    straight into a blind pocket in its face, closed all the way round, and
    stops against the chamber wall behind it. **Four M3 × 12 countersunk** per
@@ -187,7 +190,9 @@ plate and print time than the 90 mm squares they replace.
 8. **Lid** with four M3 × 20 into the corner nuts. It sits on an unbroken rim
    and its edges should be flush with the chassis on all four sides — the
    cookie pockets are blind and do not break the top. Check the forks have
-   captured the tray posts before you tighten.
+   captured the tray posts before you tighten. Six M3 holes with nut traps
+   under the lid take the `display_mount` rails (same easel as the other
+   bodies).
 9. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Bolt each
    cradle to its camera pad with four M3 × 16, heads sunk into the plinth top
    and nuts under the base. The cradles are bare plinths — nothing stands up
