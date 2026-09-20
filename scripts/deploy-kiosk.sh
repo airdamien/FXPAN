@@ -38,6 +38,11 @@ rsync -az \
   -e "$RSYNC_RSH" \
   "$ROOT/cam/" "$TARGET:~/nikonduals/cam/"
 
+echo "==> rsync logos/fxpan.svg → $TARGET:~/nikonduals/logos/"
+"${SSH[@]}" "$TARGET" 'mkdir -p ~/nikonduals/logos'
+rsync -az -e "$RSYNC_RSH" \
+  "$ROOT/logos/fxpan.svg" "$TARGET:~/nikonduals/logos/fxpan.svg"
+
 "${SSH[@]}" "$TARGET" 'chmod +x ~/nikonduals/cam/kiosk/*.sh'
 
 if [[ $RESTART -eq 1 ]]; then

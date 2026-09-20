@@ -161,7 +161,7 @@ files afterwards.
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
 | ~1.5 spool | **PETG or ABS**, dark | Chassis, lid, tray, arms, stem, base, cradles. Not PLA — the M52 mouths and the cookie screws both see real load, and a 1 kg body hanging on a brittle mouth is how you break a D800. | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
-| scraps | 4 accent colours | Only if you want the FXPAN badge in filament rather than paint: gold, off-white, red, grey. A few grams each. | — |
+| scraps | 4 accent colours | Only if you want the FXPAN badge in filament rather than paint: gold (FX), off-white (PAN), red (outline + stripe), grey (spec). A few grams each. | — |
 | 12 | **M3 × 12 countersunk** (DIN 7991) + 12 **M3 nuts** | Port cookies, 4 per cookie into wall nut traps — two above the bore, two below. Three cookies: stem, arm R, arm T. Countersunk, not cap head: there is no wall outboard of a cookie any more, so its face is the outside of the camera and the D800 comes right up to it. | [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) · [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
 | 4 | **M3 × 20** + 4 **M3 nuts** | Lid to chassis, one per corner. Nuts drop into the corner pockets before the lid goes on. | as above |
 | 8 | **M3 × 16–20** + 8 **M3 nuts** | Cradle to base, 4 per cradle. Heads sink into the plinth top, nuts sit under the base. | as above |

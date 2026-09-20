@@ -607,7 +607,7 @@ class CardPull(unittest.TestCase):
             return before + [{"folder": "/dcim", "name": "B.JPG", "n": 2}]
 
         new = dual.wait_new_images(
-            "usb:1", before, timeout=2, interval=0.01, list_fn=fake
+            "usb:1", before, timeout=2, interval=0.01, list_fn=fake, settle=0
         )
         self.assertEqual(new[0]["name"], "B.JPG")
 
@@ -618,6 +618,25 @@ class CardPull(unittest.TestCase):
                 "usb:1", before, timeout=0.05, interval=0.01,
                 list_fn=lambda _p: before,
             )
+
+    def test_wait_picks_up_nef_companion(self):
+        before = [{"folder": "/dcim", "name": "A.JPG", "n": 1}]
+        calls = {"n": 0}
+
+        def fake(_port):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return before + [{"folder": "/dcim", "name": "B.JPG", "n": 2}]
+            return before + [
+                {"folder": "/dcim", "name": "B.JPG", "n": 2},
+                {"folder": "/dcim", "name": "B.NEF", "n": 3},
+            ]
+
+        new = dual.wait_new_images(
+            "usb:1", before, timeout=2, interval=0.01, list_fn=fake, settle=0.05
+        )
+        names = {row["name"] for row in new}
+        self.assertEqual(names, {"B.JPG", "B.NEF"})
 
 
 class Pano(unittest.TestCase):
@@ -696,6 +715,47 @@ class Pano(unittest.TestCase):
         self.assertEqual(len(ready), 1)
         self.assertEqual(ready[0]["stamp"], "20260101_120000")
         self.assertEqual(ready[0]["t"], "T_20260101_120000.jpg")
+
+    def test_list_pairs_nef_and_extract(self):
+        jpeg = self._jpeg("preview.jpg", "red")
+        (self.root / "T_20260101_120000.nef").write_bytes(b"NEF" + jpeg.read_bytes() + b"\x00")
+        (self.root / "R_20260101_120000.nef").write_bytes(b"NEF" + jpeg.read_bytes() + b"\x00")
+        rows = pano.list_pairs(self.root)
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["ready"])
+        self.assertEqual(rows[0]["t_nef"], "T_20260101_120000.nef")
+        self.assertEqual(rows[0]["r_nef"], "R_20260101_120000.nef")
+        t_path, r_path = pano.find_pair("20260101_120000", self.root)
+        self.assertEqual(t_path.suffix.lower(), ".jpg")
+        self.assertTrue(t_path.is_file())
+        self.assertTrue(r_path.is_file())
+        self.assertTrue((self.root / "T_20260101_120000.nef").is_file())
+        got = pano.list_pairs(self.root)[0]
+        self.assertEqual(got["t"], "T_20260101_120000.jpg")
+        self.assertEqual(got["t_nef"], "T_20260101_120000.nef")
+
+    def test_desqueeze_writes_ana(self):
+        src = self._jpeg("P_20260101_120000.jpg", "green", w=40, h=20)
+        dest = self.root / "P_20260101_120000_ana.jpg"
+        pano.desqueeze_jpeg(src, dest, 2.0)
+        self.assertEqual(pano._size(dest), (80, 20))
+        rows = pano.list_pairs(self.root)
+        self.assertEqual(rows[0]["pano"], "P_20260101_120000.jpg")
+        self.assertEqual(rows[0]["pano_ana"], "P_20260101_120000_ana.jpg")
+
+    def test_delete_stamp_removes_nef_and_ana(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        (self.root / "T_20260101_120000.nef").write_bytes(b"NEF")
+        self._jpeg("P_20260101_120000.jpg", "green")
+        self._jpeg("P_20260101_120000_ana.jpg", "green", w=80, h=20)
+        pano.delete_stamp("20260101_120000", self.root, sides=["P"])
+        self.assertFalse((self.root / "P_20260101_120000.jpg").is_file())
+        self.assertFalse((self.root / "P_20260101_120000_ana.jpg").is_file())
+        self.assertTrue((self.root / "T_20260101_120000.nef").is_file())
+        pano.delete_stamp("20260101_120000", self.root)
+        self.assertEqual(pano.list_pairs(self.root), [])
+        self.assertFalse((self.root / "T_20260101_120000.nef").is_file())
 
     def test_stitch_status_stays_on_pair(self):
         self._jpeg("T_20260101_120000.jpg", "red")
@@ -1354,7 +1414,7 @@ class Settings(unittest.TestCase):
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
-                "stitch_mode": "hugin", "crop_inner": True,
+                "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
             },
         )
 
@@ -1365,7 +1425,7 @@ class Settings(unittest.TestCase):
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
-                "stitch_mode": "open", "crop_inner": True,
+                "stitch_mode": "open", "crop_inner": True, "ana_squeeze": 1.0,
             },
         )
 
@@ -1380,7 +1440,7 @@ class Settings(unittest.TestCase):
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
-                "stitch_mode": "hugin", "crop_inner": True,
+                "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
             },
         )
         settings.save({"download": True}, pi=True)
@@ -1408,6 +1468,15 @@ class Settings(unittest.TestCase):
         self.assertTrue(settings.load(pi=True)["crop_inner"])
         settings.save({"crop_inner": False}, pi=True)
         self.assertFalse(settings.load(pi=True)["crop_inner"])
+
+    def test_ana_squeeze_setting(self):
+        self.assertEqual(settings.load(pi=True)["ana_squeeze"], 1.0)
+        settings.save({"ana_squeeze": 2}, pi=True)
+        self.assertEqual(settings.load(pi=True)["ana_squeeze"], 2.0)
+        settings.save({"ana_squeeze": "off"}, pi=True)
+        self.assertEqual(settings.load(pi=True)["ana_squeeze"], 1.0)
+        settings.save({"ana_squeeze": 1.33}, pi=True)
+        self.assertEqual(settings.load(pi=True)["ana_squeeze"], 1.33)
 
     def test_lock_t_and_idle_min(self):
         self.assertTrue(settings.load(pi=True)["lock_t"])

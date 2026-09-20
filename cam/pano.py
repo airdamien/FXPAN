@@ -1,8 +1,13 @@
-"""List downloaded T/R JPEG pairs and stitch a hybrid pano.
+"""List downloaded T/R JPEG or NEF pairs and stitch a hybrid pano.
 
 After R flop, R is image −X (left) and T is image +X (right) — same order
 as LIVE PREVIEW. Match searches overlap, vertical shift, and whether R needs
 a flop, so the default below is only a starting guess and a prior.
+
+NEF originals stay on disk. Stitch uses the camera JPEG: either the Fine
+companion or the full-size preview embedded in the NEF (Nikon's own tone
+curve / WB / NR). Anamorphic squeeze (1.33 / 1.5 / 2) desqueezes P_ after
+the splice; P_ and P_*_ana both stay.
 
 Designed overlap by body:
 
@@ -44,8 +49,11 @@ CAPTURES = Path(__file__).resolve().parent.parent / "captures"
 def _cpu_count():
     return max(1, os.cpu_count() or 2)
 OVERLAP = 0.20
-PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g)$", re.I)
+PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g|nef)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
+PANO_ANA_RE = re.compile(r"^P_(.+)_ana\.(jpe?g)$", re.I)
+JPEG_EXTS = {".jpg", ".jpeg"}
+RAW_EXTS = {".nef"}
 SAFE = re.compile(r"^[\w.-]+$")
 DAY_RE = re.compile(r"^(\d{8})_")
 MODES = ("match", "blend", "cut", "open", "hugin")
@@ -118,6 +126,168 @@ def _size(path):
     return int(w), int(h)
 
 
+def _pair_kind(name):
+    ext = Path(name).suffix.lower()
+    if ext in JPEG_EXTS:
+        return "jpg"
+    if ext in RAW_EXTS:
+        return "nef"
+    return ""
+
+
+def _scan_pairs(root):
+    """stamp → role → {jpg: name, nef: name}."""
+    sides = {}
+    root = Path(root)
+    if not root.is_dir():
+        return sides
+    for path in root.iterdir():
+        if not path.is_file():
+            continue
+        m = PAIR_RE.match(path.name)
+        if not m:
+            continue
+        kind = _pair_kind(path.name)
+        if not kind:
+            continue
+        sides.setdefault(m.group(2), {}).setdefault(m.group(1).upper(), {})[kind] = path.name
+    return sides
+
+
+def _scan_panos(root):
+    """Return (native, ana) maps stamp → filename. ANA names are not native."""
+    native, ana = {}, {}
+    root = Path(root)
+    if not root.is_dir():
+        return native, ana
+    for path in root.iterdir():
+        if not path.is_file():
+            continue
+        m = PANO_ANA_RE.match(path.name)
+        if m:
+            ana[m.group(1)] = path.name
+            continue
+        m = PANO_RE.match(path.name)
+        if m:
+            native[m.group(1)] = path.name
+    return native, ana
+
+
+def extract_nef_jpeg(src, dest):
+    """Pull the largest embedded JPEG from a Nikon NEF (camera preview)."""
+    src, dest = Path(src), Path(dest)
+    try:
+        data = src.read_bytes()
+    except OSError as exc:
+        raise dual.CamError(f"read {src.name}") from exc
+    best = b""
+    start = 0
+    while True:
+        i = data.find(b"\xff\xd8\xff", start)
+        if i < 0:
+            break
+        j = data.find(b"\xff\xd9", i + 3)
+        if j < 0:
+            break
+        blob = data[i:j + 2]
+        if len(blob) > len(best):
+            best = blob
+        start = i + 2
+    if len(best) < 128:
+        raise dual.CamError(f"no JPEG preview in {src.name}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_bytes(best)
+        tmp.replace(dest)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return dest
+
+
+def working_jpeg(role_files, stamp, role, root):
+    """Camera JPEG for stitch/preview. Fine companion wins; else NEF preview."""
+    root = Path(root)
+    got = role_files or {}
+    jpg = got.get("jpg")
+    if jpg:
+        path = root / jpg
+        if path.is_file():
+            return path
+    nef = got.get("nef")
+    if not nef:
+        return None
+    src = root / nef
+    if not src.is_file():
+        return None
+    dest = root / f"{role}_{stamp}.jpg"
+    if dest.is_file() and dest.stat().st_mtime >= src.stat().st_mtime:
+        return dest
+    return extract_nef_jpeg(src, dest)
+
+
+def ensure_pair_jpegs(stamp, root=None):
+    """Make sure T/R JPEGs exist for this stamp. NEF originals are left in place."""
+    root = Path(root or CAPTURES)
+    files = _scan_pairs(root).get(stamp) or {}
+    out = {}
+    for role in ("T", "R"):
+        path = working_jpeg(files.get(role), stamp, role, root)
+        if path is not None:
+            out[role] = path
+    return out
+
+
+def desqueeze_jpeg(src, dest, squeeze, on_log=None):
+    """Widen a squeezed splice by `squeeze` (2× HD → 5.42:1)."""
+    squeeze = float(squeeze)
+    if squeeze < 1.05:
+        return None
+    src, dest = Path(src), Path(dest)
+    w, h = _size(src)
+    nw = max(w + 1, int(round(w * squeeze)))
+    if on_log:
+        on_log(f"ana  {squeeze:g}×  {w}×{h} → {nw}×{h}")
+    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+    try:
+        _magick([
+            str(src), "-filter", "Lanczos",
+            "-resize", f"{nw}x{h}!",
+            "-quality", "92",
+            str(tmp),
+        ])
+        tmp.replace(dest)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return dest
+
+
+def _finish_pano(info, dest, stamp, root, squeeze, on_log, t0):
+    sq = float(squeeze or 1.0)
+    dest = Path(dest)
+    if sq >= 1.05 and dest.is_file():
+        ana = Path(root) / f"P_{stamp}_ana.jpg"
+        try:
+            desqueeze_jpeg(dest, ana, sq, on_log)
+            info["pano_ana"] = ana.name
+            info["squeeze"] = sq
+            aw, ah = _size(ana)
+            info["ana_width"] = aw
+            info["ana_height"] = ah
+            msg = (info.get("message") or "").rstrip()
+            extra = f"ana {sq:g}× {aw}×{ah}"
+            info["message"] = f"{msg}  {extra}" if msg else extra
+        except dual.CamError as exc:
+            if on_log:
+                on_log(f"ana failed: {exc}")
+            info["ana_error"] = str(exc)
+    _with_sec(info, t0)
+    _write_sidecar(root, stamp, info)
+    return info
+
+
 def _sidecar_path(root, stamp):
     return Path(root) / f"P_{stamp}.json"
 
@@ -140,7 +310,8 @@ def _write_sidecar(root, stamp, info):
         for k in (
             "mode", "overlap", "overlap_frac", "dy", "flip_r", "rmse",
             "width", "height", "file", "message", "phase", "error",
-            "deghost", "sec", "engine",
+            "deghost", "sec", "engine", "squeeze", "pano_ana",
+            "ana_width", "ana_height",
         )
         if k in info
     }
@@ -335,11 +506,12 @@ def refresh_exif(root, stamp):
     """Read T/R EXIF and write X_<stamp>.json. Returns {T: {...}, R: {...}}."""
     root = Path(root or CAPTURES)
     have = {}
-    if root.is_dir():
-        for path in root.iterdir():
-            m = PAIR_RE.match(path.name)
-            if m and m.group(2) == stamp:
-                have[m.group(1).upper()] = path.name
+    files = _scan_pairs(root).get(stamp) or {}
+    for role in ("T", "R"):
+        got = files.get(role) or {}
+        name = got.get("jpg") or got.get("nef")
+        if name:
+            have[role] = name
     return pair_exif(root, stamp, have)
 
 
@@ -375,35 +547,38 @@ def pair_exif(root, stamp, have):
 
 def list_pairs(root=None):
     root = Path(root or CAPTURES)
-    sides = {}
-    panos = {}
-    if not root.is_dir():
-        return []
-    for path in root.iterdir():
-        if not path.is_file():
-            continue
-        m = PAIR_RE.match(path.name)
-        if m:
-            sides.setdefault(m.group(2), {})[m.group(1).upper()] = path.name
-            continue
-        m = PANO_RE.match(path.name)
-        if m:
-            panos[m.group(1)] = path.name
-    stamps = set(sides) | set(panos)
+    sides = _scan_pairs(root)
+    panos, panos_ana = _scan_panos(root)
+    stamps = set(sides) | set(panos) | set(panos_ana)
     locked = protected_set(root)
     rows = []
     for stamp in stamps:
         have = sides.get(stamp) or {}
+        t_files = have.get("T") or {}
+        r_files = have.get("R") or {}
+        t_jpg, t_nef = t_files.get("jpg"), t_files.get("nef")
+        r_jpg, r_nef = r_files.get("jpg"), r_files.get("nef")
+        have_exif = {}
+        if t_jpg or t_nef:
+            have_exif["T"] = t_jpg or t_nef
+        if r_jpg or r_nef:
+            have_exif["R"] = r_jpg or r_nef
         rows.append(
             {
                 "stamp": stamp,
-                "t": have.get("T"),
-                "r": have.get("R"),
+                "t": t_jpg or t_nef,
+                "r": r_jpg or r_nef,
+                "t_nef": t_nef,
+                "r_nef": r_nef,
                 "pano": panos.get(stamp),
+                "pano_ana": panos_ana.get(stamp),
                 "pano_mtime": _mtime(root / panos[stamp]) if panos.get(stamp) else 0,
-                "ready": bool(have.get("T") and have.get("R")),
+                "pano_ana_mtime": (
+                    _mtime(root / panos_ana[stamp]) if panos_ana.get(stamp) else 0
+                ),
+                "ready": bool((t_jpg or t_nef) and (r_jpg or r_nef)),
                 "protected": stamp in locked,
-                "exif": pair_exif(root, stamp, have),
+                "exif": pair_exif(root, stamp, have_exif),
                 "stitch": _stitch_of(root, stamp),
             }
         )
@@ -420,12 +595,16 @@ def disk_stats(root=None):
     if root.is_dir():
         by_stamp = {}
         for path in root.iterdir():
-            if not path.is_file() or path.suffix.lower() not in (".jpg", ".jpeg"):
+            if not path.is_file() or path.suffix.lower() not in (".jpg", ".jpeg", ".nef"):
                 continue
-            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
-            if not m:
-                continue
-            stamp = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
+            m = PANO_ANA_RE.match(path.name)
+            if m:
+                stamp = m.group(1)
+            else:
+                m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
+                if not m:
+                    continue
+                stamp = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
             by_stamp.setdefault(stamp, 0)
             try:
                 by_stamp[stamp] += path.stat().st_size
@@ -486,6 +665,10 @@ def _prune_protected(root, stamp):
     left = False
     if Path(root).is_dir():
         for path in Path(root).iterdir():
+            m = PANO_ANA_RE.match(path.name)
+            if m and m.group(1) == stamp:
+                left = True
+                break
             m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
             if not m:
                 continue
@@ -513,6 +696,8 @@ def content_type(path):
         return "image/jpeg"
     if ext == ".png":
         return "image/png"
+    if ext == ".nef":
+        return "application/octet-stream"
     raise dual.CamError("not an image")
 
 
@@ -545,27 +730,38 @@ def thumb(name, width, root=None):
 
 
 def serve(name, width=None, root=None):
+    src = resolve(name, root)
+    if src.suffix.lower() in RAW_EXTS:
+        if not width:
+            return src
+        m = PAIR_RE.match(src.name)
+        if not m:
+            raise dual.CamError("not an image")
+        jpg = working_jpeg(
+            {"nef": src.name}, m.group(2), m.group(1).upper(), src.parent
+        )
+        if jpg is None:
+            raise dual.CamError("not an image")
+        try:
+            return thumb(jpg.name, width, src.parent)
+        except dual.CamError:
+            return jpg
     if width:
         try:
             return thumb(name, width, root)
         except dual.CamError:
             pass
-    return resolve(name, root)
+    return src
 
 
 def find_pair(stamp, root=None):
     root = Path(root or CAPTURES)
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
-    have = {}
-    if root.is_dir():
-        for path in root.iterdir():
-            m = PAIR_RE.match(path.name)
-            if m and m.group(2) == stamp:
-                have[m.group(1).upper()] = path
-    if "T" not in have or "R" not in have:
-        raise dual.CamError(f"need T and R JPEGs for {stamp}")
-    return have["T"], have["R"]
+    got = ensure_pair_jpegs(stamp, root)
+    if "T" not in got or "R" not in got:
+        raise dual.CamError(f"need T and R for {stamp}")
+    return got["T"], got["R"]
 
 
 class _Gray:
@@ -1257,12 +1453,18 @@ def delete_stamp(stamp, root=None, sides=None):
     for row in list_pairs(root):
         if row["stamp"] != stamp:
             continue
-        if "T" in want and row["t"]:
-            names.append(row["t"])
-        if "R" in want and row["r"]:
-            names.append(row["r"])
-        if "P" in want and row["pano"]:
-            names.append(row["pano"])
+        def add(name):
+            if name and name not in names:
+                names.append(name)
+        if "T" in want:
+            add(row.get("t"))
+            add(row.get("t_nef"))
+        if "R" in want:
+            add(row.get("r"))
+            add(row.get("r_nef"))
+        if "P" in want:
+            add(row.get("pano"))
+            add(row.get("pano_ana"))
         break
     else:
         raise dual.CamError("missing pair")
@@ -1272,6 +1474,10 @@ def delete_stamp(stamp, root=None, sides=None):
     left = False
     if root.is_dir():
         for path in root.iterdir():
+            m = PANO_ANA_RE.match(path.name)
+            if m and m.group(1) == stamp:
+                left = True
+                break
             m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
             if not m:
                 continue
@@ -1839,7 +2045,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
-    deghost=False, balance=True, crop_inner=True,
+    deghost=False, balance=True, crop_inner=True, squeeze=1.0,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -1909,8 +2115,7 @@ def stitch_stamp(
                     + f"flip={'on' if info.get('flip_r') else 'off'}  "
                     f"{info['width']}×{info['height']}"
                 )
-            _with_sec(info, t0)
-            _write_sidecar(root, stamp, info)
+            _finish_pano(info, dest, stamp, root, squeeze, on_log, t0)
             return info
         if mode == "open":
             if on_log:
@@ -1963,8 +2168,7 @@ def stitch_stamp(
                     f"flip={'on' if info.get('flip_r') else 'off'}  "
                     f"{info['width']}×{info['height']}"
                 )
-            _with_sec(info, t0)
-            _write_sidecar(root, stamp, info)
+            _finish_pano(info, dest, stamp, root, squeeze, on_log, t0)
             return info
         if mode == "match":
             if on_log:
@@ -1989,8 +2193,7 @@ def stitch_stamp(
             f"{info['mode']}  ol={info['overlap_frac']:.0%}  dy={info['dy']:+d}  "
             f"flip={'on' if info['flip_r'] else 'off'}  {info['width']}×{info['height']}"
         )
-        _with_sec(info, t0)
-        _write_sidecar(root, stamp, info)
+        _finish_pano(info, dest, stamp, root, squeeze, on_log, t0)
         return info
     finally:
         if tmp_ghost:
@@ -2059,6 +2262,7 @@ def _run_item(item):
             deghost=item.get("deghost", False),
             balance=item.get("balance", True),
             crop_inner=item.get("crop_inner", True),
+            squeeze=item.get("squeeze", 1.0),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -2091,17 +2295,23 @@ def _kick_queue():
 
 
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
-                 deghost=False, balance=True, crop_inner=True):
+                 deghost=False, balance=True, crop_inner=True, squeeze=1.0):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
     mode = (mode or "match").strip().lower()
     if mode not in MODES:
         raise dual.CamError("mode is match, blend, cut, open, or hugin")
+    try:
+        squeeze = float(squeeze or 1.0)
+    except (TypeError, ValueError) as exc:
+        raise dual.CamError("bad squeeze") from exc
+    if squeeze < 1.0 or squeeze > 2.5:
+        raise dual.CamError("squeeze is 1–2.5")
     item = {
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
         "root": root, "deghost": bool(deghost), "balance": bool(balance),
-        "crop_inner": bool(crop_inner),
+        "crop_inner": bool(crop_inner), "squeeze": squeeze,
     }
     with _queue_lock:
         live = job_get(stamp)

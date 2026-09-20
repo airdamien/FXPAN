@@ -1157,7 +1157,7 @@ def _file_key(row):
     return (row["folder"], row["name"])
 
 
-def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None):
+def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None, settle=0.6):
     """Poll the card until a new file appears after a remote / GPIO fire."""
     seen = {_file_key(row) for row in before}
     list_fn = list_images if list_fn is None else list_fn
@@ -1168,6 +1168,13 @@ def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None):
             now = list_fn(port)
             new = [row for row in now if _file_key(row) not in seen]
             if new:
+                if settle > 0:
+                    time.sleep(settle)
+                    try:
+                        now = list_fn(port)
+                        new = [row for row in now if _file_key(row) not in seen] or new
+                    except CamError:
+                        pass
                 return new
             last = None
         except CamError as exc:

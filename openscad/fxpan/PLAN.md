@@ -496,14 +496,15 @@ Every part carries `fxp_` + its name + the export timestamp, via `fxp_tag()`.
 `box_floor_stamp` is written for a cube, so the chassis call feeds it `BOX_XY`
 and then drops it `-(BOX_Z − BOX_XY)/2` to reach the real floor.
 
-The −X wall carries the FXPAN badge inlay: the D3-era Nikon FX body badge
-standing in for the X of the XPan wordmark, then PAN with its underline, then
+The −X wall carries the FXPAN badge inlay: the colour-separated mark from
+`logos/fxpan_gen.py` (gold FX + sweep, white PAN, red outline), then
 65MP over the native stitch `13248×4912 · 2.71:1` and, as its own colour
 layers, 130MP over the 2× anamorphic delivery `26496×4912 · 5.42:1`. The two
 spec lines share columns (middot and aspect on the same x) so they read as a
-pair rather than two centred strings of different width. Badge and PAN are drawn geometry
-traced off the originals; the type is Futura, which ships with macOS —
-re-exporting on Linux needs the same family installed. A 1.6 mm groove
+pair rather than two centred strings of different width. The three logo STLs
+are projected to 2D and scaled to the spec-line width so they sit in the
+same pocket as the old D3-badge lockup; the type is Futura, which ships
+with macOS — re-exporting on Linux needs the same family installed. A 1.6 mm groove
 (`STRIPE_H`) runs around the plinth 5 mm above the floor (`STRIPE_LIFT`) —
 the D3/D4/D5 red line — through the same colour-plug path as `LOGO_LAYER=stripe`.
 

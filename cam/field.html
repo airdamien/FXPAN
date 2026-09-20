@@ -5,9 +5,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="D12600">
+<meta name="apple-mobile-web-app-title" content="FXPAN">
 <meta name="theme-color" content="#0b0b0c">
-<title>D12600</title>
+<title>FXPAN</title>
 <style>
   :root {
     color-scheme: dark;
@@ -46,13 +46,18 @@
     min-height: 48px;
   }
   .brand {
-    flex: 0 0 auto; font: 700 18px/1 "DejaVu Sans", sans-serif;
+    flex: 0 0 auto; display: flex; align-items: center;
+    font: 700 18px/1 "DejaVu Sans", sans-serif;
     letter-spacing: 0.08em; color: #f2f4f8;
   }
   .brand.fx {
     font-family: Futura, "Avenir Next", "Century Gothic", sans-serif;
     letter-spacing: 0.16em;
   }
+  .brand-mark { display: block; height: 34px; width: auto; }
+  .brand-word { display: none; }
+  .brand.dx .brand-mark { display: none; }
+  .brand.dx .brand-word { display: block; }
   header a { color: var(--r); font-size: 12px; letter-spacing: 0.12em; text-decoration: none; }
   #host, .pulse { color: var(--dim); font-size: 12px; letter-spacing: 0.06em; white-space: nowrap; }
   .pulse { min-width: 4.5em; text-align: right; }
@@ -355,6 +360,7 @@
   .pair-frames figcaption { color: var(--dim); font-size: 10px; letter-spacing: 0.12em; }
   .pair img { width: 100%; aspect-ratio: 3/2; object-fit: contain; background: #000; }
   .pair-pano img { aspect-ratio: 8/3; object-fit: contain; }
+  .pair-pano.ana img { aspect-ratio: 16/3; }
   .pano-stat {
     flex: 1; min-width: 0; color: var(--dim);
     font: 12px/1.3 ui-monospace, Menlo, monospace;
@@ -493,7 +499,10 @@
 </style>
 <div class="app">
 <header>
-  <div class="brand" id="brand">D12600</div>
+  <div class="brand fx" id="brand">
+    <img class="brand-mark" src="/fxpan.svg" width="65" height="34" alt="FXPAN">
+    <span class="brand-word">D12600</span>
+  </div>
   <div class="hud" id="hud">
     <div class="hud-cam r off" id="hudR">
       <b>R</b>
@@ -571,6 +580,14 @@
       <option value="cut">Cut</option>
     </select>
   </label>
+  <label>Ana
+    <select id="anaSqueeze">
+      <option value="1" selected>Off</option>
+      <option value="1.33">1.33×</option>
+      <option value="1.5">1.5×</option>
+      <option value="2">2× HD</option>
+    </select>
+  </label>
   <div id="panoStat" class="pano-stat">idle</div>
 </div>
 <div id="pairs"></div>
@@ -627,6 +644,7 @@
       <select id="quality"></select>
     </label>
   </div>
+  <div class="lbl">NEF keeps 14-bit RAW plus Nikon’s JPEG. Stitch uses that JPEG look.</div>
 </div>
 <div class="sect">
   <div class="lbl">Master</div>
@@ -659,6 +677,16 @@
   <label class="dlchk"><input type="checkbox" id="deghostOn">Deghost T and R before stitch</label>
   <label class="dlchk"><input type="checkbox" id="balanceOn" checked>Match T/R brightness</label>
   <label class="dlchk"><input type="checkbox" id="cropInnerOn" checked>Clip to aligned edges</label>
+  <div class="picks">
+    <label>Anamorphic
+      <select id="anaSqueezeSet">
+        <option value="1" selected>Off</option>
+        <option value="1.33">1.33×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2× HD</option>
+      </select>
+    </label>
+  </div>
   <div class="drag">
     <div class="k">Overlap <b id="olVal">20%</b></div>
     <input type="range" id="olDrag" min="5" max="50" value="20" step="1">
@@ -857,7 +885,13 @@ const fillSelect = (id, items, key) => {
     if (item[0] === state[key]) opt.selected = true;
     el.appendChild(opt);
   });
-  el.onchange = () => { state[key] = el.value; };
+  el.onchange = () => {
+    state[key] = el.value;
+    if (key === "quality" || key === "wb" || key === "program") {
+      persistExposure();
+      scheduleApply();
+    }
+  };
 };
 const roleOf = (row) => {
   if (row.serial && row.serial === state.t) return "T";
@@ -889,16 +923,30 @@ const shortEv = (s) => {
 const isFxModel = (m) =>
   /\bD8(00E?|10|50)\b|\bD6(00|10)\b|\bDf\b/i.test(
     String(m || "").replace(/^Nikon DSC /i, ""));
+const isDxModel = (m) => {
+  const s = String(m || "").replace(/^Nikon DSC /i, "");
+  if (isFxModel(s)) return false;
+  return /\bD(7\d{3}|5\d{3}|3\d{3}|90|300s?|200|100|500)\b/i.test(s);
+};
 const paintBrand = () => {
-  const fx = ["T", "R"].some((role) => {
+  const models = [];
+  ["T", "R"].forEach((role) => {
     const s = state.stats[role];
-    return s && s.on && isFxModel(s.model);
-  }) || (state.rows || []).some((row) => isFxModel(row.model));
-  const name = fx ? "FXPAN" : "D12600";
+    if (s && s.on && s.model) models.push(s.model);
+  });
+  (state.rows || []).forEach((row) => {
+    if (row && row.model) models.push(row.model);
+  });
+  const dxOnly = models.length > 0
+    && models.every(isDxModel)
+    && !models.some(isFxModel);
+  const name = dxOnly ? "D12600" : "FXPAN";
   const el = document.getElementById("brand");
   if (el) {
-    el.textContent = name;
-    el.classList.toggle("fx", fx);
+    const word = el.querySelector(".brand-word");
+    el.classList.toggle("fx", name === "FXPAN");
+    el.classList.toggle("dx", name !== "FXPAN");
+    if (word && name !== "FXPAN") word.textContent = name;
   }
   document.title = name;
   const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
@@ -1370,7 +1418,10 @@ const persistExposure = () => {
     api("/api/settings", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ iso: state.iso, shutter: state.shutter }),
+      body: JSON.stringify({
+        iso: state.iso, shutter: state.shutter, fstop: state.fstop,
+        wb: state.wb, quality: state.quality, program: state.program,
+      }),
     }).catch(() => {});
   }, 250);
 };
@@ -1701,6 +1752,7 @@ const loadPairs = async (silent) => {
           <figure><figcaption>T</figcaption><img class="pt" alt="T"></figure>
           <figure><figcaption>R</figcaption><img class="pr" alt="R"></figure>
           <figure class="pair-pano"><figcaption>PANO</figcaption><img class="pp" alt="P"></figure>
+          <figure class="pair-pano ana" hidden><figcaption>ANA</figcaption><img class="pa" alt="A"></figure>
         </div>
         <div class="pair-stat"></div>
         <div class="pair-exif"></div>
@@ -1723,6 +1775,9 @@ const loadPairs = async (silent) => {
     setImg(".pt", p.t, 640, "T");
     setImg(".pr", p.r, 640, "R");
     setImg(".pp", p.pano, 1280, "P", p.pano_mtime);
+    setImg(".pa", p.pano_ana, 1280, "A", p.pano_ana_mtime);
+    const anaFig = el.querySelector(".pair-pano.ana");
+    if (anaFig) anaFig.hidden = !p.pano_ana;
     const frames = el.querySelector(".pair-frames");
     if (frames) {
       orderTr(frames, frames.querySelector("figure:has(.pt)"), frames.querySelector("figure:has(.pr)"));
@@ -1745,7 +1800,7 @@ const loadPairs = async (silent) => {
   });
   if (!(j.pairs || []).length) {
     if (!box.querySelector(".cam"))
-      box.innerHTML = "<div class='cam'><div><b>NO PAIRS</b><span>回収 FIRE writes T_/R_ JPEGs</span></div></div>";
+      box.innerHTML = "<div class='cam'><div><b>NO PAIRS</b><span>回収 FIRE writes T_/R_ JPEG or NEF</span></div></div>";
   } else {
     const empty = box.querySelector(":scope > .cam");
     if (empty) empty.remove();
@@ -1762,7 +1817,7 @@ const startPano = (stamp, el) => {
   const mode = document.getElementById("panoMode").value;
   if (el) el.dataset.pending = "1";
   if (el && el.dataset.ready !== "1") {
-    const msg = "need T and R JPEGs";
+    const msg = "need T and R";
     paintPanoStat({ error: msg, message: stamp + "  " + msg });
     paintPairStat(el.querySelector(".pair-stat"), {
       stitch: { phase: "error", error: msg, message: msg },
@@ -1785,7 +1840,8 @@ const startPano = (stamp, el) => {
       mode,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
       flip_r: document.getElementById("flipR").checked,
-      crop_inner: document.getElementById("cropInnerOn").checked }) })
+      crop_inner: document.getElementById("cropInnerOn").checked,
+      squeeze: parseFloat(document.getElementById("anaSqueeze").value) || 1 }) })
     .then(j => {
       paintPanoStat(j.queue || j);
       log(j.message);
@@ -1873,8 +1929,8 @@ const loadFiles = async (pairs, message, disk) => {
     el.dataset.protected = p.protected ? "1" : "0";
     el.innerHTML = `<div class="thumbs"><button type="button" class="lock${p.protected ? " on" : ""}" aria-label="protect">${LOCK_SVG}</button>${
       flopOn()
-        ? fileThumb(p.r,"R")+fileThumb(p.t,"T")+fileThumb(p.pano,"P")
-        : fileThumb(p.t,"T")+fileThumb(p.r,"R")+fileThumb(p.pano,"P")
+        ? fileThumb(p.r,"R")+fileThumb(p.t,"T")+fileThumb(p.pano,"P")+(p.pano_ana ? fileThumb(p.pano_ana,"A") : "")
+        : fileThumb(p.t,"T")+fileThumb(p.r,"R")+fileThumb(p.pano,"P")+(p.pano_ana ? fileThumb(p.pano_ana,"A") : "")
     }</div>
       <span class="who">${p.stamp}${p.ready ? "" : " · incomplete"}</span>
       ${exifBlock(p.exif)}
@@ -1885,7 +1941,12 @@ const loadFiles = async (pairs, message, disk) => {
       img.dataset.label = img.getAttribute("alt") || "";
     });
     const acts = el.querySelector(".acts");
-    const files = [["T", p.t], ["R", p.r], ["pano", p.pano]];
+    const files = [
+      ["T", p.t], ["R", p.r],
+      ["NEF T", p.t_nef && p.t_nef !== p.t ? p.t_nef : ""],
+      ["NEF R", p.r_nef && p.r_nef !== p.r ? p.r_nef : ""],
+      ["pano", p.pano], ["ana", p.pano_ana],
+    ];
     files.forEach(([label, name]) => {
       if (!name) return;
       const a = document.createElement("a");
@@ -2352,6 +2413,12 @@ const paintSettings = (s) => {
   }
   const pm = document.getElementById("panoMode");
   if (pm && "stitch_mode" in s) pm.value = s.stitch_mode || "open";
+  const squeeze = (s.ana_squeeze == null ? 1 : Number(s.ana_squeeze)) || 1;
+  const anaVal = squeeze >= 1.75 ? "2" : squeeze >= 1.4 ? "1.5" : squeeze >= 1.2 ? "1.33" : "1";
+  ["anaSqueeze", "anaSqueezeSet"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = anaVal;
+  });
   const prev = document.getElementById("prevDrag");
   if (prev && "preview_s" in s) {
     const n = Math.min(15, Math.max(0, parseInt(s.preview_s, 10) || 0));
@@ -2382,8 +2449,10 @@ const saveSettings = async () => {
       lock_t: document.getElementById("lockTOn").checked,
       iso: state.iso,
       shutter: state.shutter,
+      quality: state.quality,
       overlap: parseInt(document.getElementById("olDrag").value, 10) / 100,
       stitch_mode: document.getElementById("panoMode").value,
+      ana_squeeze: parseFloat(document.getElementById("anaSqueeze").value) || 1,
       preview_s: parseInt(document.getElementById("prevDrag").value, 10),
       idle_min: parseInt(document.getElementById("idleDrag").value, 10),
       sync: document.getElementById("syncOn").checked,
@@ -2415,6 +2484,16 @@ document.getElementById("followCam").onchange = () => saveSettings().catch(e => 
 document.getElementById("olDrag").oninput = () => { paintOl(); composePano(); };
 document.getElementById("olDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("panoMode").onchange = () => saveSettings().catch(e => log(e.message, true));
+["anaSqueeze", "anaSqueezeSet"].forEach((id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.onchange = () => {
+    const other = id === "anaSqueeze" ? "anaSqueezeSet" : "anaSqueeze";
+    const peer = document.getElementById(other);
+    if (peer) peer.value = el.value;
+    saveSettings().catch(e => log(e.message, true));
+  };
+});
 document.getElementById("prevDrag").oninput = () => paintPrev();
 document.getElementById("prevDrag").onchange = () => saveSettings().catch(e => log(e.message, true));
 document.getElementById("idleDrag").oninput = () => paintIdle();
@@ -2594,6 +2673,7 @@ api("/api/meta").then(j => {
   paintBright(j.brightness);
   paintKiosk(j.kiosk);
   paintWifi(j.wifi);
+  paintBrand();
   if (j.pair) applyPair(j.pair);
   if (j.settings) {
     ["iso","shutter","fstop","wb","quality","program"].forEach((key) => {

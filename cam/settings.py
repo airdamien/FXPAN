@@ -17,6 +17,7 @@ EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
 OVERLAP = 0.20
 PREVIEW_S = 10
 IDLE_MIN = 10
+ANA_SQUEEZE = (1.0, 1.33, 1.5, 2.0)
 
 
 def _master(val):
@@ -71,6 +72,21 @@ def _idle_min(val):
     return n
 
 
+def _ana_squeeze(val):
+    s = str(val or "").strip().lower()
+    if s in ("off", "0", "false", "no"):
+        return 1.0
+    try:
+        n = float(val)
+    except (TypeError, ValueError):
+        return None
+    if n < 1.05:
+        return 1.0
+    if n > 2.5:
+        return None
+    return min(ANA_SQUEEZE[1:], key=lambda x: abs(x - n))
+
+
 def _iso(val):
     s = str(val or "").replace("ISO", "").replace("iso", "").strip()
     if not s:
@@ -121,6 +137,7 @@ def defaults(pi=None):
         "idle_min": IDLE_MIN, "deghost": False, "balance": True, "follow_cam": False,
         "stitch_mode": "hugin" if on else "open",
         "crop_inner": True,
+        "ana_squeeze": 1.0,
     }
 
 
@@ -161,6 +178,10 @@ def load(pi=None):
         n = _idle_min(data["idle_min"])
         if n is not None:
             out["idle_min"] = n
+    if "ana_squeeze" in data:
+        n = _ana_squeeze(data["ana_squeeze"])
+        if n is not None:
+            out["ana_squeeze"] = n
     for key in EXPOSURE:
         if key not in data:
             continue
@@ -206,6 +227,10 @@ def save(data, pi=None):
         n = _idle_min(data["idle_min"])
         if n is not None:
             out["idle_min"] = n
+    if "ana_squeeze" in data:
+        n = _ana_squeeze(data["ana_squeeze"])
+        if n is not None:
+            out["ana_squeeze"] = n
     for key in EXPOSURE:
         if key not in data:
             continue
