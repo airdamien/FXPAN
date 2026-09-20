@@ -22,7 +22,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -59,11 +59,12 @@ BODY_T_Z = -5; // [-20:0.5:20]
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG, logo:Logo inlay]
 // Wall badge, one STL per colour. The chassis pocket is always every layer.
-LOGO_LAYER = "all"; // [all:All, fx:Nikon FX badge, word:PAN, mp:65MP, rule:Hairline, spec:Pixels]
+LOGO_LAYER = "all"; // [all:All, fx:Nikon FX badge, word:PAN, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
 
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:printed F]
 F_MOUNT_CLOCK = 0;
+STEM = 1; // [0:EL 180 helicoid, 1:EL 180 infinity]
 EL180_M62_PITCH = 1.0; // [0.75, 1.0]
 
 /* [Optics check] */
@@ -85,14 +86,17 @@ function fxp_arm_tag(mark) =
 
 function printed_f() =
     ARM_MOUNT || PART == "arm_r_f" || PART == "arm_t_f";
+function inf_stem() =
+    STEM || PART == "stem_el180_inf";
+function el180_inf_h() = heli_at_infinity();
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
 // Narrowest thing in the light path at the flange. The metal reverse ring
-// keeps the real 44 mm F throat; the printed bayonet mesh is only 38 mm.
+// keeps the real 44 mm F throat; the printed bayonet is F_STL_THROAT (43.5).
 function mouth_clear() = printed_f() ? F_STL_THROAT : F_THROAT;
 // Widest aperture that puts the whole frame, corners included, through that
 // mouth. need_bore() falls as you stop down, so bisect for where it crosses.
 // It does not fall to zero: at f/inf the field term alone remains, so a mouth
-// narrower than that never passes the corners. The printed bayonet is one.
+// narrower than that never passes the corners. The old 38 mm scan was one.
 function bore_floor() = need_bore(1e6, FLANGE_F);
 function mouth_ever_clean() = mouth_clear() > bore_floor();
 function _mouth_fstop(lo, hi, i) =
@@ -104,7 +108,7 @@ function _mouth_fstop(lo, hi, i) =
 function mouth_fstop() = _mouth_fstop(1, 64, 40);
 
 // Arm tube past the cookie. Both mouths put their F register at the same
-// d_plate_to_mount(), so the printed F (a 1.75 mm stack) needs a longer tube
+// d_plate_to_mount(), so the printed F (a 3 mm stack) needs a longer tube
 // than the reverse ring (8 mm) to land in the same place.
 function reflect_tube_len()  =
     d_plate_to_mount() - BOX_XY / 2 - patch_t() - mount_stack();
@@ -458,11 +462,11 @@ module box_lining_mask() {
 
 // -----------------------------------------------------------------------------
 // FXPAN wall badge — the D3-era Nikon FX body badge standing in for the X of
-// the XPan wordmark, then PAN and its underline, then 65MP over the
-// 13248×4912 / 2.71:1 stitch. Badge and PAN are drawn geometry traced off the
-// originals; 65MP and the spec line are Futura, which ships with macOS —
-// re-exporting on Linux needs the same family installed.
-// layer: all | fx | word | mp | rule | spec — one STL per filament.
+// the XPan wordmark, then PAN and its underline, then 65MP over the native
+// stitch and 130MP over the 2× anamorphic delivery. Badge and PAN are
+// drawn geometry traced off the originals; the type is Futura, which ships
+// with macOS — re-exporting on Linux needs the same family installed.
+// layer: all | fx | word | mp | rule | spec | ana_mp | ana_rule | ana | stripe.
 // -----------------------------------------------------------------------------
 function fx_badge_s()   = 20.0;
 function fx_pan_cap()   = 12.4;
@@ -654,24 +658,67 @@ module fxpan_pan() {
         square([x0 + fx_pan_w() - rx, t]);
 }
 
-module fxpan_wall_2d(layer = "all") {
-    word  = "Futura:style=Bold";
+// Spec lines share columns measured off the native string in Futura
+// Condensed Medium 5 / spacing 1.08, so the middot and the aspect sit
+// on the same x whether the label is NATIVE or ANA 2×. Advances are
+// baked (textmetrics is still experimental in the GUI).
+SPEC_SIZE   = 5.0;
+SPEC_SP     = 1.08;
+SPEC_W      = 71.9167;   // NATIVE  13248×4912  ·  2.71:1
+SPEC_X_LAB  = 16.1316;   // NATIVE
+SPEC_X_PIX  = 19.2371;   // NATIVE<two spaces>
+SPEC_X_DOT  = 51.9106;   // …4912<two spaces>, left of ·
+SPEC_X_AR   = 56.5687;   // …  ·<two spaces>
+
+module fxpan_spec_line(label, pix, ar) {
     specf = "Futura:style=Condensed Medium";
+    x0 = -SPEC_W / 2;
+    translate([x0 + SPEC_X_LAB, 0])
+        text(label, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "right", valign = "center");
+    translate([x0 + SPEC_X_PIX, 0])
+        text(pix, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+    translate([x0 + SPEC_X_DOT, 0])
+        text("·", size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+    translate([x0 + SPEC_X_AR, 0])
+        text(ar, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+}
+
+module fxpan_mp_mark(s) {
+    text(s, size = 6.2, font = "Futura:style=Bold", spacing = 1.12,
+         halign = "center", valign = "center");
+}
+
+module fxpan_rule() {
+    square([max(46, fxpan_w()), 0.45], center = true);
+}
+
+module fxpan_wall_2d(layer = "all") {
     if (layer == "all" || layer == "fx")
         fxpan_badge();
     if (layer == "all" || layer == "word")
         fxpan_pan();
     if (layer == "all" || layer == "mp")
         translate([0, -8.15])
-            text("65MP", size = 6.2, font = word, spacing = 1.12,
-                 halign = "center", valign = "center");
+            fxpan_mp_mark("65MP");
     if (layer == "all" || layer == "rule")
         translate([0, -12.95])
-            square([max(46, fxpan_w()), 0.45], center = true);
+            fxpan_rule();
     if (layer == "all" || layer == "spec")
-        translate([0, -16.65])
-            text("13248×4912  ·  2.71:1", size = 3.45, font = specf,
-                 spacing = 1.20, halign = "center", valign = "center");
+        translate([0, -17.35])
+            fxpan_spec_line("NATIVE", "13248×4912", "2.71:1");
+    if (layer == "all" || layer == "ana_mp")
+        translate([0, -27.25])
+            fxpan_mp_mark("130MP");
+    if (layer == "all" || layer == "ana_rule")
+        translate([0, -32.05])
+            fxpan_rule();
+    if (layer == "all" || layer == "ana")
+        translate([0, -36.45])
+            fxpan_spec_line("ANA 2×", "26496×4912", "5.42:1");
 }
 
 // grow  — swell the footprint and deepen the floor (plug interference)
@@ -688,6 +735,32 @@ module fxpan_inlay(layer = "all", grow = 0, proud = 0.05,
                     offset(0.02 + grow)
                         scale(LOGO_SCALE)
                             fxpan_wall_2d(layer);
+}
+
+// Groove around the plinth, a few millimetres above the floor so the first
+// layers stay solid and the cookies (centred on the axis) never reach it.
+// proud is an outward offset — the ring has no single face-normal to
+// translate along the way the −X badge does.
+function stripe_z0() = -BOX_Z / 2 - chassis_plinth() + STRIPE_LIFT;
+
+module fxpan_stripe(grow = 0, proud = 0.05, deep = MARK_DEPTH + 0.10) {
+    out = chassis_out();
+    translate([0, 0, stripe_z0() - grow])
+        linear_extrude(STRIPE_H + 2 * grow)
+            difference() {
+                offset(0.02 + grow + proud)
+                    round_rect(out, out, PORT_BOSS_R);
+                offset(-(deep + grow))
+                    round_rect(out, out, PORT_BOSS_R);
+            }
+}
+
+module fxpan_colour(layer = "all", grow = 0, proud = 0.05,
+                    deep = MARK_DEPTH + 0.10) {
+    if (layer != "stripe")
+        fxpan_inlay(layer, grow, proud, deep);
+    if (layer == "all" || layer == "stripe")
+        fxpan_stripe(grow, proud, deep);
 }
 
 module chassis_blank() {
@@ -714,11 +787,11 @@ module part_chassis() {
                     box_bore();
                     box_fastener_cuts();
                 }
-                fxpan_inlay(layer, LOGO_FIT, 0);
+                fxpan_colour(layer, LOGO_FIT, 0);
             }
             // Lip standing outside the wall, so the plug face is not
             // coplanar with it either. Nothing out here to clip against.
-            fxpan_inlay(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+            fxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
         }
     else
     mm_split() {
@@ -731,12 +804,12 @@ module part_chassis() {
             translate([0, 0, -(BOX_Z - BOX_XY) / 2])
                 box_floor_stamp(fxp_tag("chassis"), BOX_XY, WALL);
             if (SHELL == "full")
-                fxpan_inlay("all");
+                fxpan_colour("all");
         }
         union() {
             box_lining_mask();
             if (SHELL == "outer")
-                fxpan_inlay("all");
+                fxpan_colour("all");
         }
     }
 }
@@ -957,6 +1030,48 @@ module part_stem() {
             tube_lining_mask(0, m62 = EL180_M62_LEN);
             translate([0, 0, z0 - 0.2])
                 cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
+        }
+    }
+}
+
+// One piece: 180 flange where the helicoid would put infinity (17.5 mm of
+// travel). No printed male. Female M62 is the outer EL180_M62_LEN only.
+// Swap for `stem` + the bought helicoid when that lands.
+module part_stem_el180_inf() {
+    z0 = patch_t();
+    bh = el180_inf_h();
+    hf = EL180_M62_LEN;
+    fh = (el180_stem_od() - TUBE_OD) / 2;   // 45° flare, prints cookie-down
+    h82 = bh - fh;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            union() {
+                port_flange("");
+                translate([0, 0, z0]) {
+                    hull() {
+                        cylinder(h = 0.2, d = TUBE_OD);
+                        translate([0, 0, fh])
+                            cylinder(h = 0.2, d = el180_stem_od());
+                    }
+                    translate([0, 0, fh])
+                        ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                                  tolerance = EL180_M62_TOL,
+                                  position = [0, 0, h82 - hf])
+                            cylinder(h = h82, d = el180_stem_od());
+                }
+            }
+            translate([0, 0, -2])
+                cylinder(h = patch_t() + 2.2, d1 = TUBE_ID, d2 = STEM_BORE);
+            translate([0, 0, z0 - 0.1])
+                cylinder(h = bh - hf + 0.4, d = STEM_BORE);
+            port_clamp_screws("") port_csk_cut();
+            fxp_port_stamp(fxp_tag("stem_inf"), "");
+        }
+        union() {
+            tube_lining_mask(0, m62 = bh);
+            translate([0, 0, z0 - 0.2])
+                cylinder(h = bh + 0.4, d = EL180_M62_MAJOR + 8);
         }
     }
 }
@@ -1390,8 +1505,9 @@ module taking_lens_at() {
     if (SHOW_LENS)
         color("DimGray", 0.92)
             at_stem()
-                translate([0, 0, patch_t() + EL180_M62_LEN
-                                 + el180_spacer_add()
+                translate([0, 0, patch_t()
+                                 + (inf_stem() ? el180_inf_h()
+                                    : EL180_M62_LEN + el180_spacer_add())
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     el180_ghost();
 }
@@ -1426,11 +1542,15 @@ module assembly() {
     if (SHOW_PANELS) {
         at_stem()
             translate([0, 0, EXPLODED ? ex : 0])
-                part_stem();
-        at_stem()
-            translate([0, 0, patch_t() + EL180_M62_LEN - EL180_HELI_MALE
-                             + (EXPLODED ? ex * 1.4 : 0)])
-                part_el180_adapter();
+                if (inf_stem())
+                    part_stem_el180_inf();
+                else
+                    part_stem();
+        if (!inf_stem())
+            at_stem()
+                translate([0, 0, patch_t() + EL180_M62_LEN - EL180_HELI_MALE
+                                 + (EXPLODED ? ex * 1.4 : 0)])
+                    part_el180_adapter();
         at_reflect()
             translate([0, 0, EXPLODED ? ex : 0])
                 part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
@@ -1482,10 +1602,13 @@ module diagnostics() {
              round(heli_at_infinity() * 10) / 10, " mm of ",
              EL180_HELI_MIN, "..", EL180_HELI_MAX,
              (path_min() <= EL_FOCAL && EL_FOCAL <= path_max())
-               ? "  → in range" 
+               ? "  → in range"
                : "  *** OUT OF RANGE — resize BOX_XY ***",
-             ";  printed spacer adds ", round(el180_spacer_add() * 10) / 10,
-             " mm (fixed, infinity only)"));
+             inf_stem() ? ";  infinity stem boss " : ";  printed spacer adds ",
+             inf_stem() ? round(el180_inf_h() * 10) / 10
+                        : round(el180_spacer_add() * 10) / 10,
+             inf_stem() ? " mm (fixed, no helicoid)"
+                        : " mm (fixed, infinity only)"));
     echo(str("body fit: F register stands ", mount_standoff(),
              " mm off the chassis face (arm tube ", ARM_TUBE,
              " + ring ", F_REV_STACK, ", no retaining wall)",
@@ -1528,7 +1651,7 @@ module diagnostics() {
                      round(mouth_fstop() * 10) / 10)
                : "NEVER passes the frame corners at any aperture",
              printed_f()
-               ? "   *** the printed mesh is 38 mm and clips the corners at every stop; fit the metal reverse ring ***"
+               ? "   (Archive-663, bored to 43.5 mm; metal reverse ring is 44 mm / f/8.4)"
                : "   (44 mm is the real F throat — this is the hard ceiling, not a print limit)"));
     echo(str("baffle rings that fit at f/", FSTOP, ": ", baffle_ring_count(),
              " of ", BAFFLE_RINGS,
@@ -1579,6 +1702,9 @@ module diagnostics() {
                ? str(" (the plinth is making up ",
                      round((chassis_plinth() - PORT_SLOT_LIP) * 10) / 10,
                      " mm the short chamber does not have)") : ""));
+    echo(str("pro line: ", STRIPE_H, " mm groove ", STRIPE_LIFT,
+             " mm above the floor, depth ", MARK_DEPTH,
+             "  →  chassis_logo_stripe"));
     echo(str("chassis ", BOX_XY, "×", BOX_XY, "×", BOX_Z,
              " chamber (outer ", chassis_out(), "×", chassis_out(), "×",
              chassis_out_z(), ")  |  arm tube R ",
@@ -1594,6 +1720,8 @@ module export_part() {
         part_chassis();
     else if (PART == "stem")
         part_stem();
+    else if (PART == "stem_el180_inf")
+        part_stem_el180_inf();
     else if (PART == "arm_r" || PART == "arm_r_f")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t" || PART == "arm_t_f")

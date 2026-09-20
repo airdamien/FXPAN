@@ -21,9 +21,9 @@ measures more than 16, set `D800_PROUD` before you print anything.
   Along the fold nothing is foreshortened and nothing is being carried but the
   23.9 mm sensor height, so 50 mm is already +72% and a square plate is 25 mm
   of chassis height bought for a margin nobody will ever spend.
-- **Metal reverse rings, not the printed bayonet.** The ring keeps the real
-  44 mm F throat, which is what sets the f/8.4 limit. The printed F mesh is
-  38 mm clear and **never** passes the whole frame, at any aperture.
+- **Metal reverse rings, not the printed bayonet — still the default.** The ring keeps the real
+  44 mm F throat, which is what sets the f/8.4 limit. The printed Archive-663 mouth is
+  43.5 mm (f/9.2) after the lips are bored; close, not equal.
 
 Why: [PLAN.md](PLAN.md). How: [README.md](README.md).
 
@@ -180,8 +180,9 @@ build.
 
 | Part | Instead of | What it costs |
 |------|-----------|---------------|
-| `el180_adapter` | the M62 helicoid | A fixed spacer solved for infinity — **no focus travel at all**, distant subjects only. Its length tracks `BOX_XY`, so it stays correct if you change the chassis. Print a second at +0.5 mm if the first lands long; shims can only add length. |
-| `arm_r_f` / `arm_t_f` (`ARM_MOUNT = 1`) | the 52 mm reverse rings | The printed bayonet mesh is **38 mm** clear, and the frame corners need 38.47 mm even at infinite f-number, so it **never** passes the whole frame — f/22 still leaves the corners at 0.34. Fine for dry-fitting and checking clocking; not a way to avoid buying the rings. `WATCH_ME.scad` warns about this in its echo. |
+| `stem_el180_inf` | the M62 helicoid + short `stem` | One-piece cookie, 17.5 mm boss, 180 flange at infinity. **No focus travel.** Female M62 in the outer 8 mm. Same path as the helicoid at 17.5 mm, so it tracks `BOX_XY`. Print a second at +0.5 mm if the first lands long; shims can only add. |
+| `el180_adapter` | the M62 helicoid, keeping short `stem` | Two-piece stand-in: printed male into the 8 mm boss. Prefer `stem_el180_inf`. |
+| `arm_r_f` / `arm_t_f` (`ARM_MOUNT = 1`) | the 52 mm reverse rings | Archive-663 male F, bored to **43.5 mm**. Whole frame from **f/9.2** (metal is 44 mm / f/8.4). Plastic lugs still should not carry a D800 — the cradles take the weight. Dry-fit clocking with `F_MOUNT_CLOCK`. |
 
 ## Export
 

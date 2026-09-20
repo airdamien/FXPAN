@@ -134,7 +134,7 @@ function f_rev_minor() = F_REV_MAJOR + F_REV_CLEAR - F_REV_TOOTH / tan(30);
 F_BORE         = 44.0;
 F_THROAT       = 44.0;    // metal M52 -> F reverse ring = a real F throat
 F_COLLAR_OD    = 62;      // F bayonet collar, and the cap on the lock lugs
-F_FMOUNT_STACK = 1.75;
+F_FMOUNT_STACK = 3.0;  // Archive-663 lens mount: register is 3 mm from the back
 F_PEG_H        = 5.5;
 FX_FMOUNT_EXTRA = 5.0;
 // --- how far the body has to stand off the chassis -------------------------
@@ -479,6 +479,10 @@ LOGO_PROUD   = 0.06;
 // The lockup was drawn for the 90 mm hybrid box; scale it to this wall.
 // Applied inside the plug fit, so LOGO_FIT and LOGO_PROUD stay in real mm.
 LOGO_SCALE   = 1.15;
+// D3/D4/D5 red line around the plinth. Same bite as the wall type; fill it
+// with chassis_logo_stripe (or paint). Depth is MARK_DEPTH.
+STRIPE_LIFT  = 5.0;   // mm above the floor, so the bed layers stay solid
+STRIPE_H     = 1.6;   // the painted line on a D3 is about this
 BAFFLE_H     = 1.6;
 BAFFLE_PITCH = 4.0;
 // Glare stop in the F throat. The window has to pass the whole shifted

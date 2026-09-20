@@ -3,42 +3,29 @@
 // This is a local copy of openscad/f_mount_male.scad rather than a `use` of
 // it, because that file `include`s the top-level openscad/params.scad — and
 // with `use` its modules keep those values (F_BORE 40.3, TUBE_ID 52, TUBE_OD
-// 68), not this body's (44.0 / 46 / 60). A 14.4 mm shift needs 46.8 mm at the
+// 68), not this body's (44.0 / 46 / 58). A 14.4 mm shift needs 46.8 mm at the
 // flange, so a 40.3 mm bore would vignette the outer corner of both frames.
-// The bayonet mesh itself is shared and untouched.
 //
-// Do NOT difference() the imported mesh — that shreds preview and render.
-// Peg / collar / tine pads are unions only.
+// Printed mouth: Archive-663 mountLensBase (CC BY-NC-SA 4.0)
+//   https://github.com/Archive-663/lensMounts  (Nikon F / STL)
+// CAD, not the old scanned f-mount_raw.stl, so a through-bore is safe.
+// As shipped the lips are 40 mm and the bayonet is 43.5 mm; the import is
+// opened to 43.5 so the lips are not the stop. Metal reverse ring is still
+// 44 mm / f/8.4; printed is f/9.2. ARM_MOUNT = 0 stays the default.
 //
 // Parent must include params.scad and lib/threads.scad.
 
-F_STL_FILE   = "../../f-mount_raw.stl";
-F_STL_ZMIN   = -1.750;
-F_STL_ZMAX   = 5.000;
+F_STL_FILE   = "../../f-mount_archive663.stl";
+F_STL_ZMIN   = 0;
+F_STL_ZMAX   = 7.75;
 F_STL_HEIGHT = F_STL_ZMAX - F_STL_ZMIN;
-F_STL_OD     = 52;
-// Measured off the mesh: its narrowest inner diameter is 38.00 mm, not the
-// 44 mm of a real F throat. Opening F_BORE only widens the peg and collar
-// behind it, so the printed bayonet is the stop, and the mesh cannot be
-// difference()d.
-//
-// At a 14.4 mm shift that makes the printed F a fitting aid and nothing more:
-// the frame corners need 38.47 mm even stopped fully down, so 38.00 never
-// passes the whole frame at any aperture. The metal reverse ring keeps the
-// real 44 mm throat and is clean from f/8.4, which is why ARM_MOUNT = 0 is
-// the default. See bom.md.
-F_STL_THROAT = 38.0;
+F_STL_OD     = 62;     // adapter flange; peg into the tube is F_PEG_OD
+F_PEG_OD     = 52;     // sits in the tube wall (TUBE_ID 46 / TUBE_OD 58)
+F_STL_THROAT = 43.5;   // after the through-bore; bayonet ID as modelled
 // F_COLLAR_OD is in params.scad: the lock lugs are sized off it, and
 // fxp_tray.scad reaches the port geometry without seeing this file.
 F_COLLAR_Z0  = -1.6;
 F_COLLAR_H   = 2.0;
-// Body lock pin (measured ~1.95 mm). The groove bridges the open floor under
-// the STL fork tines so the body cannot roll once bayoneted.
-F_PIN_W       = 1.88;   // CAD; slicer ~+0.05 → 1.93
-F_PIN_FLOOR_Z = 0;
-F_PIN_SEAT_Z1 = 1.35;
-F_PIN_X_IN    = 23.8;   // groove inner radius — clear of a 44.0 mm bore
-F_PIN_X_OUT   = 29.4;
 
 // Female M52×0.75 in the tube wall (Fotodiox reverse ring).
 // difference() this — NOT ScrewHole, which bloats the OD.
@@ -61,8 +48,16 @@ module f_rev_thread_cut(h = undef, clear = undef) {
 }
 
 module f_mount_stl_raw() {
-    translate([0, 0, -F_STL_ZMIN])
-        import(F_STL_FILE, convexity = 12);
+    difference() {
+        // 180° so the lock-pin recess sits at +X, matching f_pin_az.
+        rotate([0, 0, 180])
+            translate([0, 0, -F_STL_ZMIN])
+                import(F_STL_FILE, convexity = 12);
+        // Open the 40 mm lips to the 43.5 mm bayonet. Do not go to F_BORE
+        // (44): the lugs are only ~1.15 mm radially.
+        translate([0, 0, -1])
+            cylinder(h = F_STL_HEIGHT + 2, d = F_STL_THROAT);
+    }
 }
 
 // Raw forks sit at +X. The pin is 90° left of flange-mark-up (look −Z, CCW).
@@ -150,40 +145,20 @@ module rev_lock_cut_one(out_len, az) {
     }
 }
 
-// Tine roots only (y ≈ ±2.55). The pin slot is bridged by f_pin_seat_floor().
-module f_fork_pads() {
-    for (s = [-1, 1])
-        translate([26.6, s * 2.38, 0.72])
-            cube([5.5, 2.45, 1.44], center = true);
-}
-
-// Solid floor under the lock forks with a y-centred pin groove (+X).
-module f_pin_seat_floor() {
-    z0 = F_PIN_FLOOR_Z;
-    z1 = F_PIN_SEAT_Z1;
-    x0 = F_PIN_X_IN;
-    x1 = F_PIN_X_OUT;
-    difference() {
-        translate([(x0 + x1) / 2, 0, (z0 + z1) / 2])
-            cube([x1 - x0, 6.0, z1 - z0 + 0.05], center = true);
-        translate([(x0 + x1) / 2, 0, (z0 + z1) / 2])
-            cube([x1 - x0 + 0.4, F_PIN_W + 0.05, z1 - z0 + 0.1], center = true);
-    }
-}
-
-// Back at z=0 (tube end); register face at z=1.75. Clock so the raw mesh's
-// +X forks sit 90° left of flange-mark-up — that is where the body pin is.
+// Back at z=0 (tube end); register face at z=3 (62 mm flange front).
+// Mesh is imported +180° so the lock-pin recess is at +X. T/R still add
+// 0 / −90; F_MOUNT_CLOCK is extra if a dry-fit is still off.
 // back_extra deepens the rear support without moving the register face.
 module f_mount_on_tube(clock = 0, peg_face = 0, back_extra = 0) {
     translate([0, 0, -F_PEG_H - back_extra])
         difference() {
-            cylinder(h = F_PEG_H + back_extra + 0.4, d = F_STL_OD);
+            cylinder(h = F_PEG_H + back_extra + 0.4, d = F_PEG_OD);
             translate([0, 0, -0.1])
                 cylinder(h = F_PEG_H + back_extra + 0.6, d = F_BORE);
             if (peg_face > 0)
                 translate([0, 0, -0.1])
                     cylinder(h = peg_face + back_extra + 0.1,
-                             d = F_STL_OD + 0.4);
+                             d = F_PEG_OD + 0.4);
         }
     translate([0, 0, F_COLLAR_Z0])
         difference() {
@@ -191,9 +166,6 @@ module f_mount_on_tube(clock = 0, peg_face = 0, back_extra = 0) {
             translate([0, 0, -0.1])
                 cylinder(h = F_COLLAR_H + 0.2, d = F_BORE);
         }
-    rotate([0, 0, clock]) {
+    rotate([0, 0, clock])
         f_mount_stl_raw();
-        f_fork_pads();
-        f_pin_seat_floor();
-    }
 }
