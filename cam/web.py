@@ -94,6 +94,16 @@ def _html(handler, name):
     handler.wfile.write(body)
 
 
+def _svg(handler, path):
+    body = path.read_bytes()
+    handler.send_response(200)
+    handler.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _read_json(handler):
     n = int(handler.headers.get("Content-Length") or 0)
     if n == 0:
@@ -229,14 +239,18 @@ def _status_now(rows):
 
 def _shot_files(saved=None, dest=None, stamp=None):
     names = []
-    if saved:
-        for role in sorted(saved):
-            names.extend(saved[role] or [])
-        return names
     if dest and stamp:
+        pano.ensure_pair_jpegs(stamp, dest)
         for path in sorted(Path(dest).glob(f"*_{stamp}.*")):
             if path.suffix.lower() in (".jpg", ".jpeg", ".png"):
                 names.append(path.name)
+        return names
+    if saved:
+        for role in sorted(saved):
+            for name in saved[role] or []:
+                if Path(name).suffix.lower() in (".jpg", ".jpeg", ".png"):
+                    names.append(name)
+        return names
     return names
 
 
@@ -346,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
             return _html(self, "field.html")
         if path == "/lab":
             return _html(self, "lab.html")
+        if path == "/fxpan.svg":
+            return _svg(self, HERE.parent / "logos" / "fxpan.svg")
         try:
             if path == "/api/meta":
                 port = self.server.server_address[1]
@@ -400,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                         "jobs": pano.jobs_snapshot(),
                         "queue": pano.queue_status(),
                         "disk": pano.disk_stats(),
-                        "message": f"{n} JPEG pair(s) in captures/",
+                        "message": f"{n} pair(s) in captures/",
                     },
                 )
             if path == "/api/pano/job":
@@ -733,12 +749,13 @@ class Handler(BaseHTTPRequestHandler):
                         bits = "  ".join(
                             f"{role} {','.join(saved[role])}" for role in sorted(saved)
                         )
+                        pano.ensure_pair_jpegs(stamp, dest)
                         pano.refresh_exif(dest, stamp)
                         return shot_json(
                             f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
                             f"  → {bits}"
                             + (f"  {copied}" if copied else ""),
-                            _shot_files(saved=saved),
+                            _shot_files(dest=dest, stamp=stamp),
                             stamp,
                         )
                     have = dual.require_online(dual.detect_bodies())
@@ -779,6 +796,7 @@ class Handler(BaseHTTPRequestHandler):
                     where = "cards" if target == "card" else "captures/"
                     files = []
                     if target != "card":
+                        pano.ensure_pair_jpegs(stamp, dest)
                         pano.refresh_exif(dest, stamp)
                         files = _shot_files(dest=dest, stamp=stamp)
                     return shot_json(
@@ -888,11 +906,18 @@ class Handler(BaseHTTPRequestHandler):
                     crop_inner = prefs.get("crop_inner", True)
                 if isinstance(crop_inner, str):
                     crop_inner = crop_inner.lower() not in ("0", "false", "no", "")
+                squeeze = data.get("squeeze")
+                if squeeze is None:
+                    squeeze = prefs.get("ana_squeeze", 1.0)
+                try:
+                    squeeze = float(squeeze)
+                except (TypeError, ValueError):
+                    raise dual.CamError("bad squeeze")
                 mode = (data.get("mode") or prefs.get("stitch_mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                     deghost=bool(deghost), balance=bool(balance),
-                    crop_inner=bool(crop_inner),
+                    crop_inner=bool(crop_inner), squeeze=squeeze,
                 )
                 stat = pano.queue_status()
                 return _json(

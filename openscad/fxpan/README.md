@@ -104,8 +104,9 @@ into the chassis as a separate part and give it its own material:
 
 | STL | suggested |
 | --- | --- |
-| `chassis_logo_fx` | gold |
-| `chassis_logo_word` | off-white (PAN + its underline) |
+| `chassis_logo_fx` | gold (FX monogram + sweep, from `logos/fxpan_fx_gold.stl`) |
+| `chassis_logo_word` | off-white (`logos/fxpan_pan_white.stl`) |
+| `chassis_logo_outline` | red (`logos/fxpan_outline_red.stl`) |
 | `chassis_logo_mp` | red (65MP) |
 | `chassis_logo_rule` | any accent (hairline under 65MP) |
 | `chassis_logo_spec` | grey (`NATIVE  13248×4912 · 2.71:1`) |

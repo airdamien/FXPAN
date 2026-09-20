@@ -63,7 +63,7 @@ BODY_T_Z = -5; // [-20:0.5:20]
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG, logo:Logo inlay]
 // Wall badge, one STL per colour. The chassis pocket is always every layer.
-LOGO_LAYER = "all"; // [all:All, fx:Nikon FX badge, word:PAN, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
+LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
 
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:printed F]
@@ -465,201 +465,52 @@ module box_lining_mask() {
 }
 
 // -----------------------------------------------------------------------------
-// FXPAN wall badge — the D3-era Nikon FX body badge standing in for the X of
-// the XPan wordmark, then PAN and its underline, then 65MP over the native
-// stitch and 130MP over the 2× anamorphic delivery. Badge and PAN are
-// drawn geometry traced off the originals; the type is Futura, which ships
-// with macOS — re-exporting on Linux needs the same family installed.
-// layer: all | fx | word | mp | rule | spec | ana_mp | ana_rule | ana | stripe.
+// FXPAN wall badge — colour-separated STLs from logos/fxpan_gen.py (gold FX
+// + sweep, white PAN, red outline) then 65MP over the native stitch and
+// 130MP over the 2× anamorphic delivery. The mark is projected to 2D so the
+// existing offset / extrude plug fit still applies. Spec type is Futura,
+// which ships with macOS — re-exporting on Linux needs the same family.
+// layer: all | fx | word | outline | mp | rule | spec | ana_mp | ana_rule |
+//        ana | stripe.
 // -----------------------------------------------------------------------------
-function fx_badge_s()   = 20.0;
-function fx_pan_cap()   = 12.4;
-function fx_pan_t()     = 1.15;   // monoline weight; the trace is thinner
-                                  // than an inlay can survive
-function fx_pan_gap()   = 2.4;    // badge → P
-function fx_rule_gap()  = 1.0;    // badge → underline
-function fx_word_y()    = 9.05;   // badge centre on the wall
-function fx_pan_w()     = XP_N_STEM_R * fx_pan_cap() + fx_pan_t() / 2;
-function fxpan_w()      = fx_badge_s() + fx_pan_gap() + fx_pan_w();
-function fx_pan_cap_y() = fx_word_y() - fx_badge_s() / 2 + fx_pan_t() / 2
-                          + XP_RULE_W * fx_pan_cap();
+// Native bounding box of logos/fxpan_outline_red.stl. Gold and PAN share
+// that origin, so one translate keeps the three layers registered.
+LOGO_ART_FILE = "../../logos";
+LOGO_ART_X0   = -1.200;
+LOGO_ART_Y0   = -3.963;
+LOGO_ART_W    = 143.367;
+LOGO_ART_H    = 74.771;
 
-module fx_round_sq(w, r) {
-    offset(r)
-        offset(-r)
-            square([w, w], center = true);
-}
+function fx_word_y()      = 9.05;   // mark centre on the wall
+function logo_art_scale() = SPEC_W / LOGO_ART_W;
+function logo_art_h()     = LOGO_ART_H * logo_art_scale();
+function logo_art_bottom()= fx_word_y() - logo_art_h() / 2;
+function fx_mp_y()        = logo_art_bottom() - 7.2;
+function fx_rule_y()      = fx_mp_y() - 4.8;
+function fx_spec_y()      = fx_mp_y() - 9.2;
+function fx_ana_mp_y()    = fx_mp_y() - 19.1;
+function fx_ana_rule_y()  = fx_mp_y() - 23.9;
+function fx_ana_y()       = fx_mp_y() - 28.3;
 
-// D3 body-badge geometry, traced by rectifying the badge to a unit square.
-// Every constant is a fraction of the side s; v runs 0 at the top edge to 1
-// at the bottom, u left to right. Letters are wide and squat.
-FXB_RING_T  = 0.057;
-FXB_RING_R  = 0.098;
-FXB_CAP     = 0.250;
-FXB_BASE    = 0.736;
-FXB_STROKE  = 0.097;
-FXB_F_LEFT  = 0.150;
-FXB_BAR1_T  = 0.251;
-FXB_BAR1_B  = 0.346;
-FXB_BAR2_T  = 0.439;
-FXB_BAR2_B  = 0.534;
-FXB_X_SLOPE = 0.655;   // du per unit v — both X strokes
-FXB_X_LEFT  = 0.4445;
-FXB_X_RIGHT = 0.8535;
-FXB_X_W     = 0.104;
-FXB_F_CUT   = 0.3725;  // both F bars die on this line, parallel to the
-                       // backslash — that is the F↔X channel
-FXB_SLOT_T  = 0.457;   // level break straight through the X crossing
-FXB_SLOT_B  = 0.518;
-
-function fxb_at(s, u, v)  = [(u - 0.5) * s, (0.5 - v) * s];
-function fxb_cut(v)       = FXB_F_CUT   + FXB_X_SLOPE * (v - FXB_CAP);
-function fxb_back(v)      = FXB_X_LEFT  + FXB_X_SLOPE * (v - FXB_CAP);
-function fxb_fwd(v)       = FXB_X_RIGHT - FXB_X_SLOPE * (v - FXB_CAP);
-
-module fxb_bar(s, vt, vb) {
-    polygon([
-        fxb_at(s, FXB_F_LEFT,  vt),
-        fxb_at(s, fxb_cut(vt), vt),
-        fxb_at(s, fxb_cut(vb), vb),
-        fxb_at(s, FXB_F_LEFT,  vb)
-    ]);
-}
-
-module fxb_f(s) {
-    polygon([
-        fxb_at(s, FXB_F_LEFT,              FXB_CAP),
-        fxb_at(s, FXB_F_LEFT + FXB_STROKE, FXB_CAP),
-        fxb_at(s, FXB_F_LEFT + FXB_STROKE, FXB_BASE),
-        fxb_at(s, FXB_F_LEFT,              FXB_BASE)
-    ]);
-    fxb_bar(s, FXB_BAR1_T, FXB_BAR1_B);
-    fxb_bar(s, FXB_BAR2_T, FXB_BAR2_B);
-}
-
-// Two shear-cut parallelograms, flat top and bottom, crossing sliced out.
-module fxb_x(s) {
-    difference() {
-        union() {
-            polygon([
-                fxb_at(s, fxb_back(FXB_CAP),                FXB_CAP),
-                fxb_at(s, fxb_back(FXB_CAP)  + FXB_X_W,     FXB_CAP),
-                fxb_at(s, fxb_back(FXB_BASE) + FXB_X_W,     FXB_BASE),
-                fxb_at(s, fxb_back(FXB_BASE),               FXB_BASE)
-            ]);
-            polygon([
-                fxb_at(s, fxb_fwd(FXB_CAP)   - FXB_X_W,     FXB_CAP),
-                fxb_at(s, fxb_fwd(FXB_CAP),                 FXB_CAP),
-                fxb_at(s, fxb_fwd(FXB_BASE),                FXB_BASE),
-                fxb_at(s, fxb_fwd(FXB_BASE)  - FXB_X_W,     FXB_BASE)
-            ]);
-        }
-        polygon([
-            fxb_at(s, 0.30, FXB_SLOT_T),
-            fxb_at(s, 1.00, FXB_SLOT_T),
-            fxb_at(s, 1.00, FXB_SLOT_B),
-            fxb_at(s, 0.30, FXB_SLOT_B)
-        ]);
-    }
-}
-
-module nikon_fx_gold(s) {
-    difference() {
-        fx_round_sq(s, FXB_RING_R * s);
-        fx_round_sq(s * (1 - 2 * FXB_RING_T),
-                    (FXB_RING_R - FXB_RING_T) * s);
-    }
-    fxb_f(s);
-    fxb_x(s);
+module fxpan_art_stl(name) {
+    translate([0, fx_word_y()])
+        scale(logo_art_scale())
+            translate([-LOGO_ART_X0 - LOGO_ART_W / 2,
+                       -LOGO_ART_Y0 - LOGO_ART_H / 2])
+                projection(cut = false)
+                    import(str(LOGO_ART_FILE, "/", name), convexity = 12);
 }
 
 module fxpan_badge() {
-    translate([-fxpan_w() / 2 + fx_badge_s() / 2, fx_word_y()])
-        nikon_fx_gold(fx_badge_s());
-}
-
-// XPAN wordmark, traced off the Hasselblad badge the same way. Fractions of
-// the cap height: u runs right from the left edge, w runs down from the cap
-// line. Monoline skeleton, so the weight is a free parameter.
-XP_P_STEM     = 0.033;
-XP_P_BOWL_R   = 0.880;
-XP_P_BOWL_B   = 0.478;
-XP_P_BOWL_RAD = 0.087;
-XP_A_FOOT_L   = 0.815;
-XP_A_APEX     = 1.283;
-XP_A_FOOT_R   = 1.761;
-XP_A_BAR      = 0.674;
-XP_N_STEM_L   = 1.913;
-XP_N_STEM_R   = 2.826;
-XP_RULE_W     = 1.196;
-
-module xp_bar(p, q, t) {
-    d = q - p;
-    translate(p)
-        rotate(atan2(d.y, d.x))
-            translate([0, -t / 2])
-                square([norm(d), t]);
-}
-
-function xp_unit(p, q) = (q - p) / norm(q - p);
-
-// Bowl path runs off to the left so its left corners fall outside the cap
-// band — that squares the bars where they meet the stem.
-module xp_bowl_path(hc, t) {
-    r = XP_P_BOWL_RAD * hc;
-    offset(r)
-        offset(-r)
-            polygon([[-hc,               -XP_P_BOWL_B * hc],
-                     [XP_P_BOWL_R * hc,  -XP_P_BOWL_B * hc],
-                     [XP_P_BOWL_R * hc,  -t / 2],
-                     [-hc,               -t / 2]]);
-}
-
-module xp_diag(hc, t, u0, w0, u1, w1) {
-    over = 2 * t;
-    a = [u0 * hc, -w0 * hc];
-    b = [u1 * hc, -w1 * hc];
-    d = xp_unit(a, b);
-    xp_bar(a - d * over, b + d * over, t);
-}
-
-module xpan_pan_2d(hc, t) {
-    over = 2 * t;
-    xl = XP_A_APEX + (XP_A_FOOT_L - XP_A_APEX) * XP_A_BAR;
-    xr = XP_A_APEX + (XP_A_FOOT_R - XP_A_APEX) * XP_A_BAR;
-    intersection() {
-        union() {
-            xp_bar([XP_P_STEM * hc, over],
-                   [XP_P_STEM * hc, -hc - over], t);
-            difference() {
-                offset(t / 2)  xp_bowl_path(hc, t);
-                offset(-t / 2) xp_bowl_path(hc, t);
-            }
-            xp_diag(hc, t, XP_A_APEX, 0, XP_A_FOOT_L, 1);
-            xp_diag(hc, t, XP_A_APEX, 0, XP_A_FOOT_R, 1);
-            xp_bar([xl * hc - t / 2, -XP_A_BAR * hc],
-                   [xr * hc + t / 2, -XP_A_BAR * hc], t);
-            xp_bar([XP_N_STEM_L * hc, over],
-                   [XP_N_STEM_L * hc, -hc - over], t);
-            xp_bar([XP_N_STEM_R * hc, over],
-                   [XP_N_STEM_R * hc, -hc - over], t);
-            xp_diag(hc, t, XP_N_STEM_L, 0, XP_N_STEM_R, 1);
-        }
-        translate([0, -hc])
-            square([XP_N_STEM_R * hc + t / 2, hc]);
-    }
+    fxpan_art_stl("fxpan_fx_gold.stl");
 }
 
 module fxpan_pan() {
-    hc = fx_pan_cap();
-    t  = fx_pan_t();
-    x0 = -fxpan_w() / 2 + fx_badge_s() + fx_pan_gap();
-    translate([x0, fx_pan_cap_y()])
-        xpan_pan_2d(hc, t);
-    // The rule runs out from under the badge and stops flush with the N.
-    rx = -fxpan_w() / 2 + fx_badge_s() + fx_rule_gap();
-    translate([rx, fx_pan_cap_y() - XP_RULE_W * hc - t / 2])
-        square([x0 + fx_pan_w() - rx, t]);
+    fxpan_art_stl("fxpan_pan_white.stl");
+}
+
+module fxpan_outline() {
+    fxpan_art_stl("fxpan_outline_red.stl");
 }
 
 // Spec lines share columns measured off the native string in Futura
@@ -697,7 +548,7 @@ module fxpan_mp_mark(s) {
 }
 
 module fxpan_rule() {
-    square([max(46, fxpan_w()), 0.45], center = true);
+    square([SPEC_W, 0.45], center = true);
 }
 
 module fxpan_wall_2d(layer = "all") {
@@ -705,23 +556,25 @@ module fxpan_wall_2d(layer = "all") {
         fxpan_badge();
     if (layer == "all" || layer == "word")
         fxpan_pan();
+    if (layer == "all" || layer == "outline")
+        fxpan_outline();
     if (layer == "all" || layer == "mp")
-        translate([0, -8.15])
+        translate([0, fx_mp_y()])
             fxpan_mp_mark("65MP");
     if (layer == "all" || layer == "rule")
-        translate([0, -12.95])
+        translate([0, fx_rule_y()])
             fxpan_rule();
     if (layer == "all" || layer == "spec")
-        translate([0, -17.35])
+        translate([0, fx_spec_y()])
             fxpan_spec_line("NATIVE", "13248×4912", "2.71:1");
     if (layer == "all" || layer == "ana_mp")
-        translate([0, -27.25])
+        translate([0, fx_ana_mp_y()])
             fxpan_mp_mark("130MP");
     if (layer == "all" || layer == "ana_rule")
-        translate([0, -32.05])
+        translate([0, fx_ana_rule_y()])
             fxpan_rule();
     if (layer == "all" || layer == "ana")
-        translate([0, -36.45])
+        translate([0, fx_ana_y()])
             fxpan_spec_line("ANA 2×", "26496×4912", "5.42:1");
 }
 
@@ -1724,6 +1577,9 @@ module diagnostics() {
     echo(str("pro line: ", STRIPE_H, " mm groove ", STRIPE_LIFT,
              " mm above the floor, depth ", MARK_DEPTH,
              "  →  chassis_logo_stripe"));
+    echo(str("wall mark: ", round(SPEC_W * LOGO_SCALE * 10) / 10,
+             " × ", round(logo_art_h() * LOGO_SCALE * 10) / 10,
+             " mm from logos/fxpan_*.stl  →  chassis_logo_fx / _word / _outline"));
     echo(str("chassis ", BOX_XY, "×", BOX_XY, "×", BOX_Z,
              " chamber (outer ", chassis_out(), "×", chassis_out(), "×",
              chassis_out_z(), ")  |  arm tube R ",

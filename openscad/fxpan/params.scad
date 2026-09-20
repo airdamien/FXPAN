@@ -470,14 +470,16 @@ BASE_HEX_CELL   = 11;
 // --- shell, light trap, marks ---------------------------------------------
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;
-MARK_DEPTH   = 1.2;   // FXPAN badge + 65MP on the blank −X wall
+MARK_DEPTH   = 1.2;   // FXPAN mark + 65MP on the blank −X wall
 // Colour plugs vs the pocket they drop into. Matching them exactly leaves the
 // slicer two coincident faces per surface and it renders the pair as garbage,
 // so the plugs bite into the pocket and stand off the wall.
 LOGO_FIT     = 0.08;
 LOGO_PROUD   = 0.06;
 // The lockup was drawn for the 90 mm hybrid box; scale it to this wall.
-// Applied inside the plug fit, so LOGO_FIT and LOGO_PROUD stay in real mm.
+// The imported mark is sized to SPEC_W first, then this factor, so the
+// spec lines and the artwork stay the same width. Applied inside the plug
+// fit, so LOGO_FIT and LOGO_PROUD stay in real mm.
 LOGO_SCALE   = 1.15;
 // D3/D4/D5 red line around the plinth. Same bite as the wall type; fill it
 // with chassis_logo_stripe (or paint). Depth is MARK_DEPTH.
