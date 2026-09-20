@@ -106,6 +106,9 @@ function f50_kit()           =
 function el180_kit()         = STEM == 2 || PART == "stem_el180";
 function el180_inf_kit()     = STEM == 3 || PART == "stem_el180_inf";
 function el180_inf_h()       = EL180_NUT_H + EL180_HELI_MIN;
+// 45° so cookie-on-bed prints without support. Starts above the U/cookie.
+function el180_flare_h()     = (EL180_STEM_OD - TUBE_OD) / 2;
+function el180_flare_z0()    = patch_t() + port_u_fill_t();
 function patch_t()           = f50_kit() ? PORT_PATCH_T_SHORT : PORT_PATCH_T;
 function stem_tube_len()     =
     ((STEM == 1 || PART == "stem_f50") ? D_LENS_TO_PLATE_F50 : D_LENS_TO_PLATE_LONG)
@@ -980,25 +983,31 @@ module part_stem_el180() {
 
 // One piece, 180 flange where the collapsed helicoid would put it. No printed
 // male, no adapter. Swap for stem_el180 when the M62 helicoid lands.
+// 45° flare from the 68 mm tube once it has cleared the cookie/U — cookie
+// stays 90 mm, chassis U still sees 68 mm, boss prints without support.
 module part_stem_el180_inf() {
     z0 = patch_t() + stem_tube_len();
     bh = el180_inf_h();
     hf = EL180_M62_LEN;
+    fz = el180_flare_z0();
+    fh = el180_flare_h();
+    h82 = z0 + bh - fz - fh;
     color("SlateGray")
     mm_split() {
         difference() {
             union() {
                 port_tube_solid(stem_tube_len());
-                translate([0, 0, z0]) {
+                translate([0, 0, fz]) {
                     hull() {
                         cylinder(h = 0.2, d = TUBE_OD);
-                        translate([0, 0, 4])
+                        translate([0, 0, fh])
                             cylinder(h = 0.2, d = EL180_STEM_OD);
                     }
-                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
-                              tolerance = EL180_M62_TOL,
-                              position = [0, 0, bh - hf])
-                        cylinder(h = bh, d = EL180_STEM_OD);
+                    translate([0, 0, fh])
+                        ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                                  tolerance = EL180_M62_TOL,
+                                  position = [0, 0, h82 - hf])
+                            cylinder(h = h82, d = EL180_STEM_OD);
                 }
             }
             translate([0, 0, -2])
