@@ -55,7 +55,7 @@ elif [[ "${1:-}" == "--fxpan" ]]; then
     shift
     scad=$root/openscad/fxpan/WATCH_ME.scad
     out=$root/stls/fxpan
-    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec stem stem_inner stem_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer fxp_tray base cradle_r cradle_t baffle ringgauge shims el180_adapter)
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec chassis_logo_ana_mp chassis_logo_ana_rule chassis_logo_ana chassis_logo_stripe stem stem_inner stem_outer stem_el180_inf stem_el180_inf_inner stem_el180_inf_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer fxp_tray base cradle_r cradle_t baffle ringgauge shims el180_adapter)
     tail_note="FXPAN 65: print ringgauge FIRST and set F_REV_CLEAR from it — the M52 mouth is the one fit this body cannot recover from. Then chassis floor-down; arms flange-on-bed (camera mouth up); lid outer face down; tray floor-down; base and cradles flat (inserts and screw heads from the bed); baffles and gauge flat. *_inner = PETG lining, *_outer = PCTG shell; chassis_logo_* drop into the chassis pocket as separate filaments."
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
@@ -194,6 +194,26 @@ for req in "${parts[@]}"; do
             scad_part=chassis
             shell=logo
             logo_layer=spec
+            ;;
+        chassis_logo_ana_mp)
+            scad_part=chassis
+            shell=logo
+            logo_layer=ana_mp
+            ;;
+        chassis_logo_ana_rule)
+            scad_part=chassis
+            shell=logo
+            logo_layer=ana_rule
+            ;;
+        chassis_logo_ana)
+            scad_part=chassis
+            shell=logo
+            logo_layer=ana
+            ;;
+        chassis_logo_stripe)
+            scad_part=chassis
+            shell=logo
+            logo_layer=stripe
             ;;
         arm_l_f|arm_r_f|arm_t_f)
             scad_part=${core%_f}

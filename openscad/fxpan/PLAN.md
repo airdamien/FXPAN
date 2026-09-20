@@ -110,7 +110,7 @@ At the F flange (`b = 46.5`) that gives **46.77 mm at f/5.6**, against the
 while the stitch axis stays perfectly clean, so it shows up as corner
 shading, not as a broken stitch.
 
-Three things follow, and none of them are fixable by printing differently:
+Three things follow. The first two are mount physics; the third is which mesh you print:
 
 - **44 mm is a ceiling, not a choice.** `F_BORE` is set to 44.0 so the printed
   part is flush with the ring and the bought ring is the sole limit. It used
@@ -119,9 +119,10 @@ Three things follow, and none of them are fixable by printing differently:
   had 3.65 mm of margin; a 14.4 mm shift spends essentially all of it. This is
   a property of putting a shifted full-frame bundle through an F mount, not of
   this design.
-- **The printed bayonet never works.** Its corner term alone is 38.47 mm and
-  the mesh is 38.0, so a printed F mouth clips the frame corners at *every*
-  aperture, including f/22. See the mouth section below.
+- **The printed bayonet is 43.5 mm, not 44.** Archive-663 `f-mount_archive663.stl`
+  (male lens-rear) is bored to the modelled bayonet ID. That is clean from
+  **f/9.2**. The old scanned `f-mount_raw.stl` was 38.0 mm and never cleared
+  the 38.47 mm corner term. Metal reverse ring stays the f/8.4 ceiling.
 
 The only way to buy f/5.6 back is to shrink the shift to 8.29 mm, which drops
 the stitch to 52.6 mm and 2.20:1 — it stops being an XPan frame. Not worth it.
@@ -364,28 +365,27 @@ open, with a margin report — check the echo before you trust this table.
 | `F_BORE` / `F_THROAT` | **44.0** mm, flush with the ring (others use 40.3) |
 | `ARM_TUBE` | 8.0 mm past the cookie — solved from `D800_PROUD`, not picked |
 | `D800_PROUD` / standoff | 13.0 mm of camera against 16.0 mm of air |
-| `EL180_M62_LEN` / `el180_stem_od()` | 8 mm boss, 70 mm across — the entire stem |
+| `EL180_M62_LEN` / `el180_stem_od()` | 8 mm female on the helicoid stem, 70 mm across |
 | cookies | 77.8 × 62 arm, 77.8 × 74 stem, centred on the bore, rebate closed |
 | `d800_axis_base()` | 52.0 mm — plinth 20.5 + cradle 10 + base 8 follow it |
-| `PATH` | 179.5 … 193.5 mm, infinity at helicoid 17.5 |
+| `PATH` | 179.5 … 193.5 mm, infinity at helicoid 17.5 — `stem_el180_inf` is that 17.5 mm as a one-piece boss |
 
 ### The two mouths are not equivalent
 
 | mouth | clear | frame corners |
 | --- | --- | --- |
 | metal M52→F reverse ring | 44.0 mm (real F throat) | clean from **f/8.4** |
-| printed F bayonet (`f-mount_raw.stl`) | **38.0 mm** | **never clean** |
+| printed F bayonet (`f-mount_archive663.stl`) | **43.5 mm** (bored lips) | clean from **f/9.2** |
 
-That 38 mm is measured off the mesh, not guessed. Raising `F_BORE` only opens
-the peg and collar *behind* the bayonet; the mesh is its own stop and cannot
-be `difference()`d without shredding preview and render. Since the corner term
-alone is 38.47 mm, no aperture ever brings the printed mouth inside the frame:
-at f/22 the corners still sit at 0.34 illumination.
+The 40 mm lips on the Archive-663 mesh are opened with a through-cylinder;
+the bayonet itself is already 43.5 mm and the lugs are only ~1.15 mm radially,
+so the cut stops there rather than at `F_BORE` 44. The old scanned
+`f-mount_raw.stl` was 38.0 mm and could not be `difference()`d.
 
-**So the metal reverse ring is not optional, and `ARM_MOUNT = 0` is the
-default for that reason.** The printed variant is a fitting aid — use it to
-check clocking and lug fit, not to shoot with. `WATCH_ME.scad` says so in its
-echo when `ARM_MOUNT = 1`.
+**`ARM_MOUNT = 0` stays the default** so the metal ring remains the f/8.4
+ceiling. Print `arm_r_f` / `arm_t_f` when you would rather skip the short
+M52 reverse-ring thread; clock with `F_MOUNT_CLOCK`. `WATCH_ME.scad` echoes
+the mouth f-stop either way.
 
 `TUBE_ID = 46` is not the binding aperture: it clears the corners from f/6.95,
 comfortably wide of the f/8.4 the mouth allows.
@@ -454,11 +454,12 @@ So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
 
 `fxp_f_mount.scad` exists because `openscad/f_mount_male.scad` `include`s the
 top-level `openscad/params.scad`. With `use`, its modules keep *those* values
-(`F_BORE` 40.3, `TUBE_ID` 52) rather than this body's. The bayonet mesh itself
-is shared and untouched.
+(`F_BORE` 40.3, `TUBE_ID` 52) rather than this body's. The printed bayonet is
+`../../f-mount_archive663.stl` (Archive-663, CC BY-NC-SA 4.0), not the old
+shared scan.
 
 Reused unchanged: `../lib/part_stamp.scad`, `../lib/threads.scad`,
-`../camera_body.scad`, `../../f-mount_raw.stl`.
+`../camera_body.scad`.
 
 The `SHELL = full | inner | outer | logo` split and `mm_split()` are kept from
 `hybrid_shift`: the inner PETG lining matters for light-tightness and the
@@ -497,16 +498,23 @@ and then drops it `-(BOX_Z − BOX_XY)/2` to reach the real floor.
 
 The −X wall carries the FXPAN badge inlay: the D3-era Nikon FX body badge
 standing in for the X of the XPan wordmark, then PAN with its underline, then
-65MP over `13248×4912 · 2.71:1`. Badge and PAN are drawn geometry traced off
-the originals; the two text lines are Futura, which ships with macOS —
-re-exporting on Linux needs the same family installed.
+65MP over the native stitch `13248×4912 · 2.71:1` and, as its own colour
+layers, 130MP over the 2× anamorphic delivery `26496×4912 · 5.42:1`. The two
+spec lines share columns (middot and aspect on the same x) so they read as a
+pair rather than two centred strings of different width. Badge and PAN are drawn geometry
+traced off the originals; the type is Futura, which ships with macOS —
+re-exporting on Linux needs the same family installed. A 1.6 mm groove
+(`STRIPE_H`) runs around the plinth 5 mm above the floor (`STRIPE_LIFT`) —
+the D3/D4/D5 red line — through the same colour-plug path as `LOGO_LAYER=stripe`.
 
 `LOGO_FIT = 0.08` and `LOGO_PROUD = 0.06` are load-bearing. The colour plugs
 bite 0.08 mm into the pocket walls and floor and stand 0.06 mm proud of the
 wall, so **no face is coplanar with the chassis**. Match them exactly and the
 slicer gets two coincident faces per surface and renders the pair as speckled
 garbage. `LOGO_SCALE = 1.15` fits the lockup to this wall; it is applied
-inside the plug fit, so the two fit numbers stay in real mm.
+inside the plug fit, so the two fit numbers stay in real mm. The stripe
+uses the same pair; its outward offset is radial because the ring has no
+single face-normal.
 
 ## Load path
 

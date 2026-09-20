@@ -57,11 +57,7 @@ locally. As shipped the standoff is 16 mm, 3 mm of slack. If yours measures
 more than 16, change `D800_PROUD` and reprint; the console will tell you if
 the chassis can no longer reach infinity.
 
-**Buy the metal reverse rings.** They keep the real 44 mm F throat. The printed
-F bayonet mesh is 38 mm clear, and because the frame corners need 38.47 mm even
-at infinite f-number, **it never passes the whole frame at any aperture** —
-f/22 still leaves the corners at 0.34. `ARM_MOUNT = 0` is the default for that
-reason; the printed variant is a fitting aid for checking clocking and lug fit.
+**Buy the metal reverse rings if you want the last 0.5 mm.** They keep the real 44 mm F throat (clean from f/8.4). The printed Archive-663 bayonet on `arm_r_f` / `arm_t_f` is 43.5 mm after a through-bore, clean from f/9.2. `ARM_MOUNT = 0` is still the default. Plastic lugs locate; the cradles carry the bodies.
 
 **Buy the 50 × 75 plate, and put the 75 across the fold.** A plate at 45°
 presents only `size/√2` in its plane of incidence, and that is the direction
@@ -93,7 +89,8 @@ instead.
 | `chassis` | 1 | floor down |
 | `lid` | 1 | outer face down |
 | `fxp_tray` | 1 | floor down |
-| `stem` | 1 | cookie flange on the bed, M62 boss up |
+| `stem` | 1 (with the helicoid) | cookie flange on the bed, M62 boss up |
+| `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
 | `base` | 1 | flat; tripod insert and screw heads enter from the bed |
 | `cradle_r`, `cradle_t` | 1 each | flat, either way up |
@@ -109,14 +106,20 @@ into the chassis as a separate part and give it its own material:
 | `chassis_logo_fx` | gold |
 | `chassis_logo_word` | off-white (PAN + its underline) |
 | `chassis_logo_mp` | red (65MP) |
-| `chassis_logo_rule` | any accent (hairline) |
-| `chassis_logo_spec` | grey (`13248×4912 · 2.71:1`) |
+| `chassis_logo_rule` | any accent (hairline under 65MP) |
+| `chassis_logo_spec` | grey (`NATIVE  13248×4912 · 2.71:1`) |
+| `chassis_logo_ana_mp` | gold or a second red (130MP) |
+| `chassis_logo_ana_rule` | any accent (hairline under 130MP) |
+| `chassis_logo_ana` | grey or gold (`ANA 2×  26496×4912 · 5.42:1`) |
+| `chassis_logo_stripe` | Nikon pro red (the D3/D4/D5 line around the plinth) |
 
-The chassis pocket always contains all five. The plugs deliberately overrun
+The chassis pocket always contains every layer. The plugs deliberately overrun
 it — 0.08 mm into the walls and floor, 0.06 mm proud of the face — so no
 surface is coplanar with the chassis and the slicer resolves each colour
-instead of speckling the pocket. `chassis_logo` is all five merged if you
-would rather paint one part.
+instead of speckling the pocket. `chassis_logo` is the lot merged if you
+would rather paint one part. The stripe is a 1.6 mm groove 5 mm up from the
+floor, around all four walls and the R9 corners; load `chassis_logo_stripe`
+on the chassis as red, or fill the pocket with paint.
 
 Print the arms and the stem in the same material and from the same spool if
 you can: the two camera legs have to agree to a fraction of a millimetre, and
@@ -310,10 +313,12 @@ the screw reacts the nut outward, into the 1.2 mm cap.
 | 24 mm | 5.2 m |
 | 31 mm (open) | 2.6 m |
 
-If the helicoid has not arrived, `el180_adapter` is a printed fixed spacer
-solved for infinity — no travel at all. Its length tracks the chassis, so it
-stays correct if you change `BOX_XY`. Print a second at +0.5 mm if the first
-lands long; shims can only add.
+If the helicoid has not arrived, print `stem_el180_inf` instead of `stem`.
+It is the same cookie with a 17.5 mm boss — the 180's flange lands where the
+collapsed-plus-a-hair helicoid would have put infinity. Female M62 is the
+outer 8 mm; no printed male. Swap for `stem` + the bought helicoid when that
+lands. `el180_adapter` is the older two-piece stand-in (male into the short
+boss) and is not needed if you print the inf stem.
 
 ## Apertures
 
