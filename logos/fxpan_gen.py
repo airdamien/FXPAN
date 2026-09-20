@@ -27,15 +27,16 @@ HERE = Path(__file__).resolve().parent
 # --- physical parameters -------------------------------------------------
 MARK_WIDTH_MM = 140.0   # gold silhouette width; +outline lands on 145 mm
 RELIEF_MM = 3.0         # height of every coloured part
-OUTLINE_GAP_MM = 2.2    # silhouette -> outline centreline
-OUTLINE_WIDTH_MM = 0.8
+OUTLINE_GAP_MM = 0.9    # silhouette -> outline centreline
+OUTLINE_WIDTH_MM = 0.6
 BACKER_MM = 2.0
 BACKER_MARGIN_MM = 4.0
 
-# Fill the F's counters before offsetting so the outline reads as one frame
-# around the mark, the way the reference render draws it, instead of threading
-# into every notch.
-OUTLINE_FRAME_ONLY = True
+# "merged"   one loop around F and X together. At OUTLINE_GAP the two offsets
+#            touch, so the line mitres across the gap between them.
+# "separate" a closed circuit around the F and another around the X+sweep.
+#            Needs a gap small enough that the two never collide.
+OUTLINE_MODE = "separate"
 
 MITRE = dict(join_style="mitre", mitre_limit=24)
 
@@ -79,12 +80,6 @@ F_RING = [
     (235, 346),
     (175, 436),   # stem foot
 ]
-# The F with its counters closed off by a single diagonal, so the outline
-# frames the mark instead of threading around the bars. Outer edges (left,
-# top, bar chamfer, stem foot) are the real ones; only the right side is
-# bridged, and that bridge is swallowed by the X in the union.
-F_ENVELOPE = [(175, 82), (490, 82), (450, 142), (235, 346), (175, 436)]
-
 # --- X strokes and sweep -------------------------------------------------
 # Vertices of the diamond where the two X strokes cross.
 X_TOP = (429.8, 198.1)
@@ -98,8 +93,10 @@ SWEEP_BOT = ((886.0, 395.0), (490.3, 419.7), (537.6, 405.0), (426.8, 310.5))
 
 X_RING = (
     [
-        (319, 151),   # upper-left arm tip, tucked under the F's top bar
-        (398, 151),
+        # Upper-left arm tip. Held 18 px clear of the F's top bar so the two
+        # outline circuits have room to pass between them.
+        (325.1, 160),
+        (404.1, 160),
         X_TOP,
         (509, 81),    # upper-right arm tip
         (582, 81),
@@ -157,13 +154,14 @@ def build():
         poly(P_OUTER, P_COUNTER), poly(A_OUTER, A_COUNTER), poly(N_OUTER)
     ])
 
-    source = gold
-    if OUTLINE_FRAME_ONLY:
-        source = unary_union([poly(F_ENVELOPE), poly(X_RING)])
     half = OUTLINE_WIDTH_MM / 2
-    outline = source.buffer(OUTLINE_GAP_MM + half, **MITRE).difference(
-        source.buffer(OUTLINE_GAP_MM - half, **MITRE)
-    )
+    sources = [gold] if OUTLINE_MODE == "merged" else list(parts_of(gold))
+    outline = unary_union([
+        s.buffer(OUTLINE_GAP_MM + half, **MITRE).difference(
+            s.buffer(OUTLINE_GAP_MM - half, **MITRE)
+        )
+        for s in sources
+    ])
     # Tight notches pinch off specks that would print as loose chips.
     outline = unary_union([p for p in parts_of(outline) if p.area > 20.0])
     return gold, pan, outline
@@ -255,6 +253,13 @@ def main():
         for nb, b in named[i + 1:]:
             if a.intersection(b).area > 1e-9:
                 print(f"  WARNING: {na} overlaps {nb}")
+    pieces = list(parts_of(outline))
+    clear = min(
+        (a.distance(b) for i, a in enumerate(pieces) for b in pieces[i + 1:]),
+        default=float("inf"),
+    )
+    print(f"outline: {len(pieces)} circuit(s), closest approach {clear:.2f} mm,"
+          f" {outline.distance(gold):.2f} mm off the gold")
 
     svg = SVG_TEMPLATE.format(
         vb=f"{x0:.3f} 0 {x1 - x0:.3f} {y1 - y0:.3f}",
