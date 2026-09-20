@@ -1,0 +1,28 @@
+<svg xmlns="http://w3.org" viewBox="0 0 500 250" width="100%" height="100%">
+  <!-- Background Container for UI Workspace Visibility -->
+  <rect width="100%" height="100%" fill="#111111" />
+
+  <g transform="translate(25, 20)">
+    <!-- ========================================== -->
+    <!--   THE "FX" FRAMES & SWOOPING X (GOLD BLOCK)-->
+    <!-- ========================================== -->
+    <path d="
+      M 35,45 L 125,45 L 105,75 L 55,75 L 55,100 L 90,100 L 90,125 L 55,125 L 55,195 L 35,215 Z 
+      M 95,75 L 115,75 L 155,130 L 195,75 L 215,75 L 165,145 
+      C 195,185 245,200 375,200 
+      L 375,212 
+      C 230,212 170,195 140,155 
+      L 105,205 L 85,205 L 135,135 Z" 
+      fill="#D4AF37" 
+      stroke="#AA820A" 
+      stroke-width="1.5" 
+      stroke-linejoin="round" />
+
+    <!-- ========================================== -->
+    <!--   THE "PAN" TYPOGRAPHY BLOCK (WHITE TEXT)   -->
+    <!-- ========================================== -->
+    <g fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="64" letter-spacing="12">
+      <text x="215" y="145">PAN</text>
+    </g>
+  </g>
+</svg>
