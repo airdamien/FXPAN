@@ -22,7 +22,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -31,10 +31,14 @@ include <fxp_f_mount.scad>
 use <fxp_tray.scad>
 use <shims.scad>
 use <../camera_body.scad>
+use <../monitor/display_mount.scad>
+use <../monitor/monitor.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
 SHOW_PANELS = 1; // [0:hide, 1:show]
+SHOW_MONITOR = 0; // [0:hide, 1:show]
+SHOW_PI = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:D800]
 SHOW_LENS = 0; // [0:hide, 1:show]
 SHOW_BASE = 1; // [0:hide, 1:show]
@@ -1148,16 +1152,20 @@ module part_lid() {
             translate([0, 0, -LID_LIP / 2 + 0.01])
                 lid_align_lip();
             lid_retain_tabs(lip = LID_LIP);
+            display_lid_nut_pads(LID_LIP);
+            display_lid_bosses(LID_T);
         }
         translate([0, 0, BOX_Z / 2 + ex * 0.4]) {
             for (x = [-1, 1], y = [-1, 1])
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW),
                            -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
+            display_lid_cuts(LID_T, LID_LIP);
             plate_stamp(fxp_tag("lid"), s, LID_T, STAMP_DEPTH, 5.0);
             difference() {
                 lid_inner_ribs();
                 lid_retain_keepout();
+                display_lid_pad_keepout();
             }
         }
     }
@@ -1566,6 +1574,17 @@ module assembly() {
 
     if (SHOW_LID)
         part_lid();
+    if (SHOW_MONITOR || SHOW_PI)
+        translate([0, 0, BOX_Z / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)]) {
+            if (SHOW_MONITOR)
+                display_mount();
+            monitor_easel() {
+                if (SHOW_MONITOR)
+                    monitor_ghost();
+                if (SHOW_PI)
+                    monitor_pi();
+            }
+        }
 
     base_at();
 
@@ -1728,6 +1747,8 @@ module export_part() {
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "lid")
         part_lid();
+    else if (PART == "display_mount")
+        display_mount_print();
     else if (PART == "fxp_tray" || PART == "tray")
         fxp_cartridge(show_glass = false, sh = sensor_shift(),
                       tag = fxp_tag("tray"));

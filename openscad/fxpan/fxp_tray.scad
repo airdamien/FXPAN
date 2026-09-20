@@ -11,7 +11,10 @@ include <../lib/part_stamp.scad>
 
 POST_W         = 8.0;
 POST_D         = 3.2;
-POST_OUT       = 8.0;
+// Just past the glass. 8 mm was the 50 mm-plate value and on a 75 mm plate
+// it drove both pegs into the cup walls; the −X−Y one also sat on a
+// monitor-rail screw.
+POST_OUT       = 4.5;
 FORK_CLEAR     = 0.4;
 FORK_LEN       = 10.0;
 SLIP           = 0.4;
@@ -37,9 +40,21 @@ function frame_top()  = frame_top_z();
 function corner_y()   = half() * sqrt(2);
 function shelf_z()    = -BS_H / 2 - 0.15;
 
+// +X+Y sits on the plate frame (dead corner between the cameras). −X+Y sits
+// on the inactive beam so the lid fork is not in the cup wall and not on
+// the rail screws at (−32, −32).
+function retain_r() = (plate_w() / 2 + POST_OUT) * sqrt(2) / 2;
 function retain_xy(side) =
-    let (ly = side * (plate_w() / 2 + POST_OUT), a = -45)
-        [-ly * sin(a), ly * cos(a)];
+    let (r = retain_r())
+        side > 0 ? [r, r] : [-r, r];
+function retain_az(side) = side > 0 ? -45 : 45;
+
+module retain_at(side) {
+    p = retain_xy(side);
+    translate([p[0], p[1], 0])
+        rotate([0, 0, retain_az(side)])
+            children();
+}
 
 module place_plate(glass = false) {
     rotate([0, 0, -45])
@@ -246,9 +261,17 @@ module inactive_beams() {
 module cartridge_posts() {
     top = frame_top();
     for (side = [-1, 1]) {
-        p = retain_xy(side);
-        translate([p[0], p[1], top + POST_H / 2])
-            cube([POST_W, POST_D, POST_H], center = true);
+        retain_at(side)
+            translate([0, 0, top + POST_H / 2])
+                cube([POST_D, POST_W, POST_H], center = true);
+        // −X+Y is not on the plate frame; drop a riser onto the inactive
+        // beam so the peg is the same part as the cup.
+        if (side < 0) {
+            z0 = floor_z() + SKIRT_H;
+            retain_at(side)
+                translate([0, 0, (z0 + top) / 2])
+                    cube([POST_D, POST_W, max(0.8, top - z0)], center = true);
+        }
     }
 }
 
@@ -276,27 +299,23 @@ module fxp_cartridge(show_glass = true, sh, tag = "fxp_tray") {
 }
 
 module lid_retain_tabs(lip = 3) {
-    for (side = [-1, 1]) {
-        p = retain_xy(side);
-        translate([p[0], p[1], 0])
+    for (side = [-1, 1])
+        retain_at(side)
             difference() {
                 translate([0, 0, (-lip - FORK_LEN + 1.2) / 2])
-                    cube([POST_W + 4, POST_D + 3.2,
+                    cube([POST_D + 3.2, POST_W + 4,
                           lip + FORK_LEN + 1.2], center = true);
                 translate([0, 0, -lip - FORK_LEN / 2 - 0.6])
-                    cube([POST_W + FORK_CLEAR * 2,
-                          POST_D + FORK_CLEAR * 2,
+                    cube([POST_D + FORK_CLEAR * 2,
+                          POST_W + FORK_CLEAR * 2,
                           FORK_LEN], center = true);
             }
-    }
 }
 
 module lid_retain_keepout(h = 10) {
-    for (side = [-1, 1]) {
-        p = retain_xy(side);
-        translate([p[0], p[1], 0])
-            cube([POST_W + 6, POST_D + 5, h], center = true);
-    }
+    for (side = [-1, 1])
+        retain_at(side)
+            cube([POST_D + 5, POST_W + 6, h], center = true);
 }
 
 module fxp_pair(show_glass = true, explode_z = 0, sh, tag = "fxp_tray") {
