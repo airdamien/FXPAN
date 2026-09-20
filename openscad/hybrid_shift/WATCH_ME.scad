@@ -10,18 +10,20 @@
 // ARM_MOUNT 0 = female 52×0.75 + nut pocket; 1 = printed F-bayonet (clocked).
 // F_MOUNT_CLOCK: add if the first F-print locks 90° off.
 // STEM 0 = helicoid + L39 (EL-Nikkor 135). STEM 1 = female F (50 mm test).
-// STEM 2 = M62 stem + M62 helicoid (or printed spacer) for EL-Nikkor 180/5.6N.
+// STEM 2 = M62 stem + bought M62 helicoid for EL-Nikkor 180/5.6N.
+// STEM 3 = one-piece M62 stem, 180 seated at infinity (no helicoid, no adapter).
 // F 50 uses the 54 mm camera tubes + 2 mm cookies (ARMS=1). 135/180 keep 72 / 4.
 // Brace: triangle under the box + both body 1/4-20s. Tripod insert in the brace.
 // F_STEM_CLOCK: add if the first F50 stem locks off the index.
 // FX_MODE=1 (Customizer or ./export_hybrid_shift_fx.sh): D800 FX bores at
 // sensor_shift ~11.5 mm, stitch ~59.0 mm (36% overlap). Ghost uses
-// openscad/d800_body.stl (Thingiverse #4815092). Reuse stem/tools from DX
-// kit; print FX tray. FX parts stamp FX + the part name (not hs_).
+// openscad/d800_body.stl (Thingiverse #4815092). Print FX tray, FX arms
+// (truncated M52 mouth), and stem_el180_inf until the M62 helicoid
+// lands. FX parts stamp FX + the part name (not hs_).
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135, stem_f50:Stem F 50, stem_el180:Stem EL 180, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem 135, stem_f50:Stem F 50, stem_el180:Stem EL 180, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R 72 mm, arm_t:Arm T 72 mm, arm_r_s:Arm R F50, arm_t_s:Arm T F50, arm_r_sf:Arm R F50 printed F, arm_t_sf:Arm T F50 printed F, lid:Lid, display_mount:Display mount, hybrid_tray:Tray, brace:Tripod brace, shims:Shims, elnikkor_adapter:EL 135 adapter, el180_adapter:EL 180 adapter]
 
 /* [Camera] */
 FX_MODE = 0; // [0:DX D7000, 1:FX D800]
@@ -32,7 +34,7 @@ D800_TRIPOD_IN    = 44;   // mm, lens axis → tripod along base (measure yours)
 FX_FMOUNT_EXTRA   = 5.0;  // extra rear support behind the printed FX F-mount
 
 /* [Stem] */
-STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
+STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180 helicoid, 3:EL-Nikkor 180 infinity]
 ARMS = 0; // [0:72 mm 135/180, 1:54 mm F 50]
 
 include <params.scad>
@@ -102,6 +104,8 @@ function f50_kit()           =
     || PART == "arm_r_s" || PART == "arm_t_s"
     || PART == "arm_r_sf" || PART == "arm_t_sf";
 function el180_kit()         = STEM == 2 || PART == "stem_el180";
+function el180_inf_kit()     = STEM == 3 || PART == "stem_el180_inf";
+function el180_inf_h()       = EL180_NUT_H + EL180_HELI_MIN;
 function patch_t()           = f50_kit() ? PORT_PATCH_T_SHORT : PORT_PATCH_T;
 function stem_tube_len()     =
     ((STEM == 1 || PART == "stem_f50") ? D_LENS_TO_PLATE_F50 : D_LENS_TO_PLATE_LONG)
@@ -268,7 +272,7 @@ module port_retain_cut(mark = "") {
     }
 }
 function hs_tag(name) = str("hs_", name);
-// FX-only reprints (chassis, arms, lid, brace, tray). Stem/adapters stay hs_.
+// FX reprints (chassis, arms, lid, brace, tray, stem_el180_inf). DX 135 stem stays hs_.
 function kit_tag(dx, fx) = fx_mode() ? fx : str("hs_", dx);
 function hs_arm_tag(mark) =
     fx_mode()
@@ -974,6 +978,44 @@ module part_stem_el180() {
     }
 }
 
+// One piece, 180 flange where the collapsed helicoid would put it. No printed
+// male, no adapter. Swap for stem_el180 when the M62 helicoid lands.
+module part_stem_el180_inf() {
+    z0 = patch_t() + stem_tube_len();
+    bh = el180_inf_h();
+    hf = EL180_M62_LEN;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            union() {
+                port_tube_solid(stem_tube_len());
+                translate([0, 0, z0]) {
+                    hull() {
+                        cylinder(h = 0.2, d = TUBE_OD);
+                        translate([0, 0, 4])
+                            cylinder(h = 0.2, d = EL180_STEM_OD);
+                    }
+                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                              tolerance = EL180_M62_TOL,
+                              position = [0, 0, bh - hf])
+                        cylinder(h = bh, d = EL180_STEM_OD);
+                }
+            }
+            translate([0, 0, -2])
+                cylinder(h = z0 + 2.2, d = TUBE_ID);
+            translate([0, 0, z0 - 0.2])
+                cylinder(h = bh - hf + 0.4, d = EL180_BARREL);
+            flange_stamp(kit_tag("el180_inf", "FX STEM 180 INF"),
+                         "", PORT_PATCH, patch_t());
+        }
+        union() {
+            tube_lining_mask(stem_tube_len());
+            translate([0, 0, z0 - 0.2])
+                cylinder(h = bh + 0.4, d = EL180_M62_MAJOR + 8);
+        }
+    }
+}
+
 module part_stem_f50() {
     t = STEM_F50_PATCH;
     color("SlateGray")
@@ -996,6 +1038,8 @@ module part_stem_f50() {
 module stem_chosen() {
     if (STEM == 1)
         part_stem_f50();
+    else if (el180_inf_kit())
+        part_stem_el180_inf();
     else if (el180_kit())
         part_stem_el180();
     else
@@ -1003,7 +1047,8 @@ module stem_chosen() {
 }
 
 function stem_label() =
-    STEM == 1 ? "F 50" : STEM == 2 ? "EL 180" : "EL 135";
+    STEM == 1 ? "F 50" : STEM == 2 ? "EL 180 helicoid"
+    : STEM == 3 ? "EL 180 infinity" : "EL 135";
 
 function el180_adapter_h() = EL180_ADAPTER_MALE + EL180_HELI_MIN;
 
@@ -1078,6 +1123,20 @@ module el180_ghost() {
     cylinder(h = EL180_LENS_L, d = EL180_LENS_OD);
 }
 
+// DX: full-height V from f_mount_male.scad (unchanged). FX: truncated tooth
+// plus clearance on the major so the reverse ring sits on its flanks.
+module hs_f_rev_thread_cut(h = undef) {
+    _h = is_undef(h) ? F_REV_LEN + 0.3 : h;
+    if (fx_mode())
+        ScrewThread(F_REV_MAJOR + F_REV_CLEAR, _h,
+                    pitch = F_REV_PITCH,
+                    tolerance = 0,
+                    tooth_height = F_REV_TOOTH,
+                    tooth_angle = 30);
+    else
+        f_rev_thread_cut(h);
+}
+
 module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
     p = cam_patch();
     color("SlateGray")
@@ -1098,7 +1157,12 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
         if (!printed_f())
             along_cam(rx, ry, mark) {
                 translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
-                    f_rev_thread_cut();
+                    hs_f_rev_thread_cut();
+                if (fx_mode())
+                    translate([0, 0, out_len - F_REV_LEAD])
+                        cylinder(h = F_REV_LEAD + 0.1,
+                                 d1 = f_rev_minor(),
+                                 d2 = f_rev_minor() + 2 * F_REV_LEAD);
                 if (out_len >= F_REV_LEN) {
                     rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
                     f_pin_line_cut(out_len, mark == "T" ? -90 : 180);
@@ -1195,7 +1259,7 @@ module taking_lens_at() {
                     translate([0, 0, STEM_F50_PATCH + stem_tube_len() + f_fem_h(0)
                                      + (EXPLODED ? ex * 1.4 : 0)])
                         f50_ghost();
-                else if (el180_kit())
+                else if (el180_kit() || el180_inf_kit())
                     translate([0, 0, patch_t() + stem_tube_len()
                                      + EL180_NUT_H + EL180_HELI_MIN
                                      + (EXPLODED ? ex * 1.4 : 0)])
@@ -1475,7 +1539,7 @@ module assembly() {
              " mm  field_toe=", field_toe(), " deg"));
     if (fx_mode())
         echo(str("FX print STLs: ./export_hybrid_shift_fx.sh → stls/hybrid_shift_fx/ ",
-                 "(chassis, arms, lid, brace, tray; reuse stem from hybrid_shift)"));
+                 "(chassis, arms, lid, brace, tray, stem_el180_inf)"));
 }
 
 module export_part() {
@@ -1487,6 +1551,8 @@ module export_part() {
         part_stem_f50();
     else if (PART == "stem_el180")
         part_stem_el180();
+    else if (PART == "stem_el180_inf")
+        part_stem_el180_inf();
     else if (PART == "arm_r" || PART == "arm_r_s"
           || PART == "arm_r_f" || PART == "arm_r_sf")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
