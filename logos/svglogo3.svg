@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 250" width="100%" height="100%">
+  <!-- Deep Matte Dark Background for Vector Visibility -->
+  <rect width="100%" height="100%" fill="#141414" />
+
+  <g transform="translate(10, 15)">
+    <!-- ========================================== -->
+    <!--  THE "FX" BRAND MONOGRAM & UNDER-SWOOP (GOLD) -->
+    <!-- ========================================== -->
+    <!-- Outer framing path and inner counter-space path combined as a single donut path to guarantee native rendering engines punch out the holes correctly -->
+    <path d="M 40,40 L 230,40 L 195,80 L 85,80 L 85,100 L 140,100 L 140,130 L 85,130 L 85,190 L 40,190 Z" fill="#D4AF37" stroke="#9A7B1C" stroke-width="1" stroke-linejoin="miter" />
+
+    <!-- Sharp Interlocking X Assembly -->
+    <path d="M 120,80 L 155,80 L 205,140 L 255,80 L 290,80 L 225,160 L 255,200 L 220,200 L 190,155 L 150,200 L 115,200 L 170,140 Z" fill="#D4AF37" stroke="#9A7B1C" stroke-width="1" stroke-linejoin="miter" />
+
+    <!-- Swooping Horizon Underline Tail -->
+    <path d="M 215,147 C 235,175 270,190 460,190 L 460,202 C 260,202 215,185 180,147 Z" fill="#D4AF37" stroke="#9A7B1C" stroke-width="0.5" />
+
+    <!-- ========================================== -->
+    <!--     THE "PAN" TYPOGRAPHY ACCENT (WHITE)     -->
+    <!-- ========================================== -->
+    <!-- Raw path coordinates for the text blocks to eliminate reliance on systemic local fonts (Arial/Helvetica/etc) in the rendering stack -->
+    <!-- Letter 'P' -->
+    <path fill-rule="evenodd" d="M 265,100 L 300,100 C 315,100 325,106 325,117 C 325,128 315,134 300,134 L 282,134 L 282,165 L 265,165 Z M 282,114 L 282,120 L 297,120 C 303,120 307,118 307,117 C 307,115 303,114 297,114 Z" fill="#FFFFFF" />
+
+    <!-- Letter 'A' -->
+    <path fill-rule="evenodd" d="M 335,165 L 355,100 L 372,100 L 392,165 L 374,165 L 370,150 L 357,150 L 353,165 Z M 360,136 L 367,136 L 364,120 Z" fill="#FFFFFF" />
+
+    <!-- Letter 'N' -->
+    <path d="M 403,165 L 403,100 L 420,100 L 451,148 L 451,100 L 468,100 L 468,165 L 451,165 L 420,121 L 420,165 Z" fill="#FFFFFF" />
+  </g>
+</svg>

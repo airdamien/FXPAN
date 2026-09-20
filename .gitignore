@@ -8,6 +8,10 @@
 !openscad/pi4_body.stl
 !openscad/monitor/*.stl
 !stls/**/*.stl
+!logos/fxpan_fx_gold.stl
+!logos/fxpan_pan_white.stl
+!logos/fxpan_outline_red.stl
+!logos/fxpan_backer_optional.stl
 openscad/preview.png
 openscad/bsplit/preview.png
 openscad/hybrid/preview.png
@@ -17,6 +21,8 @@ kraken/__pycache__/
 kraken/preview_*.png
 cam/__pycache__/
 cam/.venv/
+logos/__pycache__/
+logos/.venv/
 cam/cameras.json
 cam/gpio.json
 cam/settings.json
