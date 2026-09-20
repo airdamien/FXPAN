@@ -103,14 +103,17 @@ coated, so this costs nothing on the recommended build.
 
 Not required. Spherical FXPAN is already XPan's 2.71:1 at 20.3°. A cylinder
 on the **front** of the 180 is how you go wider without changing the chassis.
-Buy **one** family, not all three. Rear M62 is already in the helicoid;
-`EL180_LENS_OD` is 76 mm and there is no useful front filter thread, so
-everything clamps onto the barrel. Measure that OD on your own 180 before
-you order a clamp.
+Rear M62 is already in the helicoid; `EL180_LENS_OD` is 76 mm and there is
+no useful front filter thread, so everything clamps onto the barrel. Measure
+that OD on your own 180 before you order a clamp.
 
 Same Tuscany still as [`docs/kraken/fxpan_anamorph_scene.png`](../../docs/kraken/fxpan_anamorph_scene.png): 1.5× is 30.1° / 26.9 m / 4.07:1; 1.33× is 26.8° / 23.9 m; 2× is 39.5° / 35.9 m / 5.42:1.
 
-**Do not buy** ISCO Ultra-Star HD Plus **60 mm integrated** (stock **748.50.06**). That is a 60 mm f/2.1 projector taking lens, BFL 36 mm, 21.3 × 18.2 mm Scope gate. It is not a front adapter and it cannot cover two D800s.
+**This build is 2× HD.** Compact Gold / Iscorama / SLR Magic below stay as
+the unused families. **Do not keep** the red spherical taking lens, and do
+not confuse this with ISCO Ultra-Star HD Plus **60 mm integrated** (stock
+**748.50.06**) — that is a 60 mm f/2.1 projector lens, BFL 36 mm, 21.3 × 18.2
+mm Scope gate, one barrel, does not unscrew into an adapter.
 
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
@@ -124,16 +127,24 @@ Same Tuscany still as [`docs/kraken/fxpan_anamorph_scene.png`](../../docs/kraken
 | 1 | **SLR Magic SLRA65133X** — Anamorphot-65 1.33× | Rear **82 mm**, takes a 65 mm front element (the 180's pupil is 32 mm). B&H **SLMA13365A**. Anamorphot-40/50 are 52/62 mm rear and will not reach a 76 mm barrel. | [B&H SLRA65133X](https://www.bhphotovideo.com/c/product/1413511-REG/sigma_slra65133x_anamorphot_65_1_33x_anamorphic_adapter.html) |
 | 1 | **RafCamera custom: 76 mm ID clamp → M82×0.75 male** | Same job as the M77 collar, one step up. | [RafCamera custom](https://rafcamera.com/custom-adapter) |
 
-2× if the point is cinema (5.42:1). Compact **attachment**, not the 60 mm integrated lens:
+2× cinema (5.42:1). **Bought:** ISCO Ultra-Star **HD Cinemascope attachment**
+(the large gold/orange cylinder). Unscrew the red **HD Plus** spherical
+(`f=xx mm`, marked **1.85**) — threads are often glued; tap the joint, do
+**not** undo the ring of six screws. Keep only the front piece. Caliper its
+**rear tube** before you order the clamp: US turret is **70.6 mm**, KuSeRa
+lists **~72 mm** tube / **~68 mm** thread / **~90 mm** front.
 
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
-| 1 | **ISCO Ultra-Star Gold / Red / Studio** compact 2× attachment | ~52.5 mm rear barrel. Search those three words plus *attachment*, not *60 mm* and not *HD Plus*. KuSeRa **xop-03236** is the large HD attachment (≈68 mm thread / 72 mm tube) — projector hardware, skip it. | [eBay Ultra-Star attachment](https://www.ebay.com/sch/i.html?_nkw=isco+ultra+star+cinemascope+attachment) |
-| *or* 1 | **Kowa Prominar 16-H** (Europe: **8-Z**) | Same 2× class, 52 mm rear barrel, used $500–700. | [eBay Kowa 16-H](https://www.ebay.com/sch/i.html?_nkw=kowa+16-h+anamorphic) · [eBay Kowa 8-Z](https://www.ebay.com/sch/i.html?_nkw=kowa+8-z+anamorphic) |
-| 1 | **RafCamera 52.5 mm clamp → M77×0.75 male** (Ultra-Star) *or* **52 mm clamp → M77 male** (Kowa 16-H) | Holds the attachment. | [52.5 mm / M77](https://rafcamera.com/clamp-52-5mm-to-m77x0-75m) · [52 mm / M77](https://rafcamera.com/clamp-52mm-to-m77x0-75m) |
-| 1 | **RafCamera 76 mm clamp → M77×0.75 female** | On the 180. The two RafCamera rings then screw together: 180 → 76 mm clamp → M77 → attachment clamp. | [76 mm / M77 F](https://rafcamera.com/clamp-76mm-to-m77x0-75f-od80mm) |
+| 1 | **ISCO Ultra-Star HD Cinemascope attachment** | Owned. 2× afocal, ~70–72 mm rear. 180 mm pupil is 32 mm so coverage is the easy case. Theater focus (often 5–150 m) is fine at 50 m. | (bought) |
+| 1 | **RafCamera 71 mm clamp → M77×0.75 male** | Stock if the rear is **70.6 mm** (clamp ID 70.65, made for Cinelux / US turret). | [71 mm / M77 M](https://rafcamera.com/clamp-71mm-to-m77x0-75m) |
+| *or* 1 | **RafCamera custom: 72 mm clamp → M77×0.75 male** | If the rear tube is **72 mm**. There is no stock 72 → M77 male; do not buy 72 → M75 (that is a diopter mount). | [custom](https://rafcamera.com/custom-adapter) |
+| 1 | **RafCamera 76 mm clamp → M77×0.75 female** | On the 180. Measure `EL180_LENS_OD` first. Then: 180 → 76 mm clamp → M77 → attachment clamp. | [76 mm / M77 F](https://rafcamera.com/clamp-76mm-to-m77x0-75f-od80mm) |
+| 1 | **1/4-20 support** (15 mm rod from the chassis, or a ~77–90 mm collar) | This one is a kilo. Hang it off the chassis **1/4-20**, not the M62 helicoid. Compact Iscorama brackets (**1101470** / **1103882**) will not fit the 90 mm front. | rail from the box 1/4-20 |
 
-Hang the adapter off the chassis **1/4-20**, not the M62 helicoid. 1101111 already has the small bracket (**1101470**); the bigger 1/4 + 3/8 plate is **1103882**. A kilo of glass on the helicoid is how you chew the printed boss.
+Compact Gold / Studio / Red (~52.5 mm rear) and Kowa 16-H / 8-Z are the
+small 2× class. Not this build. Hang any adapter off the chassis **1/4-20**,
+not the M62 helicoid — a kilo of glass on the printed boss is how it fails.
 
 ## Cameras and sync
 
