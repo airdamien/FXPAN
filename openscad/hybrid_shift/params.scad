@@ -122,7 +122,14 @@ F_REV_MAJOR    = 52.0;    // M52×0.75 — Fotodiox 52 mm filter thread, ISO maj
 F_REV_PITCH    = 0.75;
 F_REV_LEN      = 8;       // female thread in inner PETG sleeve
 F_REV_STACK    = 8;
-F_REV_TOL      = 0.12;    // PETG 6H-ish; do not use ScrewHole’s 1.01×+1.25× formula
+F_REV_TOL      = 0.12;    // DX only. ScrewThread adds 0.25×tol on the major.
+// FX mouths: the old full-height V (tooth = pitch) stands 0.65 mm into the
+// ring roots, so the ring rides the crests and feels like a loose 52. Truncate
+// the tooth and put clearance on the major. FX_MODE only — DX arms stay.
+F_REV_CLEAR    = 0.15;
+F_REV_TOOTH    = 0.52;    // axial base → 0.450 mm radial
+F_REV_LEAD     = 0.9;
+function f_rev_minor() = F_REV_MAJOR + F_REV_CLEAR - F_REV_TOOTH / tan(30);
 F_BORE         = 40.3;
 F_FMOUNT_STACK = 1.75;
 F_REGISTER_T   = F_REV_STACK;

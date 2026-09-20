@@ -50,7 +50,7 @@ elif [[ "${1:-}" == "--hybrid-shift-fx" ]]; then
     scad=$root/openscad/hybrid_shift/WATCH_ME.scad
     out=$root/stls/hybrid_shift_fx
     fx_extra=(-D "FX_MODE=1")
-    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer brace hybrid_tray)
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer brace hybrid_tray stem_el180_inf stem_el180_inf_inner stem_el180_inf_outer)
 elif [[ "${1:-}" == "--fxpan" ]]; then
     shift
     scad=$root/openscad/fxpan/WATCH_ME.scad
