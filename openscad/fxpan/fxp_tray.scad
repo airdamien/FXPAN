@@ -3,7 +3,7 @@
 // dot). The 75 lies across the fold — that is the direction √2 eats and the
 // stitch has to cross — and the 50 stands up, so it is BS_H that sets how
 // tall this cup and the chassis around it have to be. Thick frame holds the
-// glass, open-top walls reach the lid lip, three port windows. Inner faces,
+// glass, open-top walls reach the lid shelf, three port windows. Inner faces,
 // plate window and beams are sawtoothed. No roof.
 
 include <params.scad>
@@ -183,20 +183,13 @@ module bs_frame() {
         translate([0, 0, (shelf_z() + top + 6) / 2])
             cube([st, py + 0.3, top + 6 - shelf_z()], center = true);
 
-        translate([0, 0, top - 0.2])
-            hull() {
-                cube([st, py + 0.3, 0.4], center = true);
-                translate([0, 0, 2.2])
-                    cube([st + 1.8, py + 0.8, 0.4], center = true);
-            }
-
         cube([40, win_y, win_z], center = true);
 
         // Outer cheeks, full length (slot faces stay smooth for the glass).
         for (sx = [-1, 1])
             translate([sx * face, 0, (z0 + top) / 2])
                 rotate([0, 0, sx > 0 ? 180 : 0])
-                    trap_ribs(2 * reach - 2, top - z0 - 2);
+                    trap_ribs(2 * reach - 2, top - z0 + 2);
 
         // Inner window around the plate.
         for (sy = [-1, 1])
@@ -212,25 +205,33 @@ module bs_frame() {
     }
 }
 
-// Open-top cup: V-groove inner faces, then recut the three port windows.
+// Open-top cup: uniform wall thickness, then recut the three port windows.
+// Floor is a separate slab so the inner faces stay vertical — the old skirt
+// step at FLOOR_T left an inward shelf that needed support when printing
+// floor-down.
 module chamber_walls(sh, tag = "fxp_tray") {
     z0 = floor_z();
     h  = wall_top() - z0;
     t  = SKIRT_T;
+    wall_h = h - FLOOR_T;
     difference() {
-        difference() {
-            translate([0, 0, z0 + h / 2])
-                cube([inner(), inner(), h], center = true);
-            translate([0, 0, z0 + FLOOR_T + 50])
-                cube([inner() - 2 * t, inner() - 2 * t, 100], center = true);
-            floor_ribs();
-            for (a = [0, 90, 180, 270])
-                rotate([0, 0, a])
-                    translate([half() - t, 0,
-                               z0 + FLOOR_T + (h - FLOOR_T) / 2])
-                        trap_ribs(inner() - 2 * t - 0.2, h - FLOOR_T - 0.2);
-            tray_stamp(tag);
+        union() {
+            difference() {
+                translate([0, 0, z0 + FLOOR_T + wall_h / 2])
+                    cube([inner(), inner(), wall_h], center = true);
+                translate([0, 0, z0 + FLOOR_T + wall_h / 2])
+                    cube([inner() - 2 * t, inner() - 2 * t, wall_h + 0.2],
+                         center = true);
+                for (a = [0, 90, 180, 270])
+                    rotate([0, 0, a])
+                        translate([half() - t, 0, z0 + FLOOR_T + wall_h / 2])
+                            trap_ribs(inner() - 2 * t - 0.2, wall_h + 2);
+            }
+            translate([0, 0, z0 + FLOOR_T / 2])
+                cube([inner(), inner(), FLOOR_T], center = true);
         }
+        floor_ribs();
+        tray_stamp(tag);
         chamber_ports(sh);
     }
 }
@@ -254,7 +255,7 @@ module inactive_beams() {
             for (sx = [-1, 1])
                 translate([sx * SKIRT_T / 2, 0, z0 + SKIRT_H / 2])
                     rotate([0, 0, sx > 0 ? 180 : 0])
-                        trap_ribs(L - 4, SKIRT_H - 0.4);
+                        trap_ribs(L - 4, SKIRT_H + 2);
         }
 }
 
