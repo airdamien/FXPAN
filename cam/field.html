@@ -329,6 +329,18 @@
     flex: 0 0 auto; position: relative; z-index: 6;
   }
   body.kiosk { cursor: none; }
+  html.kiosk { scrollbar-gutter: auto; }
+  body.kiosk .main {
+    padding-right: 0;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  body.kiosk .side {
+    padding-right: max(8px, env(safe-area-inset-right));
+    box-sizing: border-box;
+  }
+  body.kiosk header {
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
   body.kiosk header a[href="/lab"] { display: none; }
   #kioskExit[hidden] { display: none !important; }
   .pair {
@@ -2279,7 +2291,10 @@ if (navigator.wakeLock) {
     if (document.visibilityState === "visible") lock();
   });
 }
-if (inKiosk) document.body.classList.add("kiosk");
+if (inKiosk) {
+  document.documentElement.classList.add("kiosk");
+  document.body.classList.add("kiosk");
+}
 const paintKiosk = (on) => {
   document.getElementById("kioskExit").hidden = !(inKiosk || on);
 };
