@@ -325,6 +325,16 @@ function port_clamp_r() =
 // a plate this size, and on the stem face it is what leaves the M62 boss
 // somewhere to stand: at ±15 the 82 mm boss overhung both screws.
 PORT_CLAMP_SEP  = 25;
+// cam_axis() centres the bore off the face, so ±SEP parks two screws past the
+// flat and into the rounded corner — no wall left there for a trapped M3 nut.
+// Pull only those two inboard; the stem face is centred and does not need it.
+PORT_CLAMP_CORNER_INSET = 13;
+function clamp_across_sep(mark, side, up = 1) =
+    let (u = port_up(mark) * up, v = [-u.y, u.x],
+         outbound = mark == "R" ? (v.y * side < 0)
+                    : mark == "T" ? (v.x * side > 0)
+                    : false)
+        PORT_CLAMP_SEP - (outbound ? PORT_CLAMP_CORNER_INSET : 0);
 // R and T shift in opposite senses so the two sensors sample opposite halves
 // of the field. Which one ends up image-left is settled by find_overlap() and
 // flip_r in cam/pano.py, not here.
@@ -344,9 +354,10 @@ function port_up_az(mark) =
 // the only thing holding a cookie out of its rebate, so they are no longer
 // a pair on the lid side alone.
 function clamp_xy(mark, side, up = 1, sh = undef) =
-    let (ax = cam_axis(mark, sh), u = port_up(mark) * up, v = [-u.y, u.x])
-        [ax.x + u.x * port_clamp_r() + v.x * side * PORT_CLAMP_SEP,
-         ax.y + u.y * port_clamp_r() + v.y * side * PORT_CLAMP_SEP];
+    let (ax = cam_axis(mark, sh), u = port_up(mark) * up, v = [-u.y, u.x],
+         sep = clamp_across_sep(mark, side, up))
+        [ax.x + u.x * port_clamp_r() + v.x * side * sep,
+         ax.y + u.y * port_clamp_r() + v.y * side * sep];
 PORT_SCREW_D = 3.2;
 PORT_HEAD_D  = 6.4;
 PORT_HEAD_H  = 3.4;
