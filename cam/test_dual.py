@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brightness
@@ -565,6 +566,13 @@ class Gpio(unittest.TestCase):
         (root / "gpiochip4" / "label").write_text("pinctrl-rp1\n")
         self.assertEqual(gpio.find_chip(root), "/dev/gpiochip4")
 
+    def test_find_chip_unlabeled_pi5(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        for name in ("gpiochip0", "gpiochip4", "gpiochip13"):
+            (root / name).mkdir()
+        self.assertEqual(gpio.find_chip(root), "/dev/gpiochip4")
+
     def test_fire_mock_drive(self):
         seen = []
 
@@ -618,6 +626,18 @@ class CardPull(unittest.TestCase):
                 "usb:1", before, timeout=0.05, interval=0.01,
                 list_fn=lambda _p: before,
             )
+
+    def test_gpio_window_frees_usb(self):
+        ln = link.Link(live.Live())
+        calls = []
+
+        def mark_free():
+            calls.append("free")
+
+        with patch.object(dual, "free_usb", mark_free):
+            with ln.gpio_window(settle=0):
+                calls.append("inside")
+        self.assertEqual(calls, ["free", "inside"])
 
     def test_wait_picks_up_nef_companion(self):
         before = [{"folder": "/dcim", "name": "A.JPG", "n": 1}]

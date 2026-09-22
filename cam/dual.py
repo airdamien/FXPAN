@@ -1182,7 +1182,10 @@ def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None, settl
         time.sleep(interval)
     if last:
         raise last
-    raise CamError("GPIO fired; no new file on the card")
+    raise CamError(
+        "GPIO fired but no new file appeared — card polling only works with a "
+        "memory card; Internal RAM needs the event download path"
+    )
 
 
 def _download_one(port, row, dest_path):
