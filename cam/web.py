@@ -164,6 +164,73 @@ def _maybe_sync(have, prefs):
         return str(exc)
 
 
+def _gpio_shoot(shot_json, prefs, assignments):
+    """Align over USB, release, pulse GPIO, pull over USB again."""
+    from datetime import datetime
+
+    snap = gpio.snapshot()
+    if not snap["available"]:
+        raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
+    if not snap["pi"]:
+        info = gpio.fire()
+        return shot_json(
+            f"gpio sim  BCM {info['pin']}  (no pulse)  "
+            "on a Pi: Y-lead fire"
+            + (
+                ", then USB download → captures/"
+                if prefs["download"]
+                else ", files stay on RAM"
+            ),
+        )
+    have = None
+    copied = ""
+    before = None
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = pano.CAPTURES
+    with LINK.usb():
+        try:
+            have = dual.require_online(dual.detect_bodies())
+        except dual.CamError:
+            have = None
+        if have:
+            try:
+                dual.sync_clocks(have)
+            except dual.CamError:
+                pass
+            assignments, copied = _align_for_shot(have, prefs, assignments)
+            if prefs["download"]:
+                before = dual.list_cards(have)
+    # Nikon bodies ignore the 10-pin remote while USB is claimed.
+    with LINK.gpio_window():
+        info = gpio.fire()
+    if not prefs["download"]:
+        return shot_json(
+            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}  remote"
+            + (f"  {copied}" if copied else ""),
+        )
+    if not have or before is None:
+        raise dual.CamError("no cameras")
+    with LINK.usb():
+        have = dual.require_online(dual.detect_bodies())
+        LINK.absorb(have.values())
+        try:
+            saved = dual.pull_new(have, before, dest, stamp)
+        except dual.CamError as exc:
+            raise dual.CamError(
+                f"{exc}  (10-pin needs USB released — "
+                "check remote wiring / Internal RAM)"
+            ) from exc
+    bits = "  ".join(f"{role} {','.join(saved[role])}" for role in sorted(saved))
+    pano.ensure_pair_jpegs(stamp, dest)
+    pano.refresh_exif(dest, stamp)
+    return shot_json(
+        f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}  → {bits}"
+        + (f"  {copied}" if copied else ""),
+        _shot_files(dest=dest, stamp=stamp),
+        stamp,
+    )
+
+
 def _align_for_shot(have, prefs, assignments):
     """Meter T (or master), freeze those numbers on both; else app/sync."""
     if not have:
@@ -679,85 +746,33 @@ class Handler(BaseHTTPRequestHandler):
                 from concurrent.futures import ThreadPoolExecutor
                 from datetime import datetime
 
-                with LINK.usb():
+                prefs = settings.load()
+                follow = bool(prefs.get("follow_cam"))
+                exp = _merge_exposure(data, prefs)
+                if exp and not follow:
+                    settings.save(exp)
                     prefs = settings.load()
-                    follow = bool(prefs.get("follow_cam"))
-                    exp = _merge_exposure(data, prefs)
-                    if exp and not follow:
-                        settings.save(exp)
-                        prefs = settings.load()
-                    assignments = [] if follow else _assignments(exp)
-                    if assignments:
-                        LINK.remember(assignments)
-                    preview_s = prefs.get("preview_s", settings.PREVIEW_S)
-                    target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
+                assignments = [] if follow else _assignments(exp)
+                if assignments:
+                    LINK.remember(assignments)
+                preview_s = prefs.get("preview_s", settings.PREVIEW_S)
+                target = (data.get("target") or "").strip() or settings.shoot_target(prefs)
 
-                    def shot_json(message, files=None, stamp=""):
-                        return _json(
-                            self, 200,
-                            {
-                                "message": message,
-                                "files": files or [],
-                                "stamp": stamp,
-                                "preview_s": preview_s,
-                            },
-                        )
+                def shot_json(message, files=None, stamp=""):
+                    return _json(
+                        self, 200,
+                        {
+                            "message": message,
+                            "files": files or [],
+                            "stamp": stamp,
+                            "preview_s": preview_s,
+                        },
+                    )
 
-                    if target == "gpio":
-                        snap = gpio.snapshot()
-                        if not snap["available"]:
-                            raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
-                        if not snap["pi"]:
-                            info = gpio.fire()
-                            return shot_json(
-                                f"gpio sim  BCM {info['pin']}  (no pulse)  "
-                                "on a Pi: Y-lead fire"
-                                + (
-                                    ", then USB download → captures/"
-                                    if prefs["download"]
-                                    else ", files stay on cards"
-                                ),
-                            )
-                        have = None
-                        try:
-                            have = dual.require_online(dual.detect_bodies())
-                        except dual.CamError:
-                            have = None
-                        copied = ""
-                        clock_msg = ""
-                        if have:
-                            try:
-                                clock_msg = (dual.sync_clocks(have) or {}).get("message") or ""
-                            except dual.CamError:
-                                clock_msg = ""
-                            assignments, copied = _align_for_shot(have, prefs, assignments)
-                        if not prefs["download"]:
-                            info = gpio.fire()
-                            return shot_json(
-                                f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                                "  cards"
-                                + (f"  {copied}" if copied else ""),
-                            )
-                        if not have:
-                            raise dual.CamError("no cameras")
-                        LINK.absorb(have.values())
-                        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        dest = pano.CAPTURES
-                        before = dual.list_cards(have)
-                        info = gpio.fire()
-                        saved = dual.pull_new(have, before, dest, stamp)
-                        bits = "  ".join(
-                            f"{role} {','.join(saved[role])}" for role in sorted(saved)
-                        )
-                        pano.ensure_pair_jpegs(stamp, dest)
-                        pano.refresh_exif(dest, stamp)
-                        return shot_json(
-                            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}"
-                            f"  → {bits}"
-                            + (f"  {copied}" if copied else ""),
-                            _shot_files(dest=dest, stamp=stamp),
-                            stamp,
-                        )
+                if target == "gpio":
+                    return _gpio_shoot(shot_json, prefs, assignments)
+
+                with LINK.usb():
                     have = dual.require_online(dual.detect_bodies())
                     LINK.absorb(have.values())
                     clock_msg = ""

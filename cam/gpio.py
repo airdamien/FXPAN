@@ -65,10 +65,11 @@ def snapshot():
 
 
 def find_chip(devices=Path("/sys/bus/gpio/devices")):
-    """RP1 on Pi 5 is gpiochip4, not gpiochip0."""
+    """RP1 on Pi 5 is gpiochip4; gpiochip0 is the legacy header on many images."""
     ranked = []
-    if Path(devices).is_dir():
-        for sys in sorted(Path(devices).glob("gpiochip*")):
+    root = Path(devices)
+    if root.is_dir():
+        for sys in root.glob("gpiochip*"):
             label = ""
             lab = sys / "label"
             if lab.is_file():
@@ -78,13 +79,17 @@ def find_chip(devices=Path("/sys/bus/gpio/devices")):
                     label = ""
             score = 0
             if "pinctrl" in label or "rp1" in label:
-                score = 2
+                score = 3
             elif label.startswith("bcm") or "brcm" in label:
-                score = 1
-            ranked.append((score, sys.name))
+                score = 2
+            num = int(sys.name.replace("gpiochip", "") or "0")
+            # Unlabeled Pi 5 images expose many gpiochips; only 4 and 0 carry
+            # the 40-pin header. Do not pick the highest chip number by default.
+            pref = {4: 2, 0: 1}.get(num, 0)
+            ranked.append((score, pref, num, sys.name))
         ranked.sort(reverse=True)
         if ranked:
-            return f"/dev/{ranked[0][1]}"
+            return f"/dev/{ranked[0][3]}"
     return "/dev/gpiochip0"
 
 
@@ -186,9 +191,7 @@ def _drive(pin, pulse_s):
             return fn(pin, pulse_s)
         except ImportError:
             continue
-        except FileNotFoundError as exc:
-            errors.append(str(exc))
-        except OSError as exc:
+        except (FileNotFoundError, OSError, ValueError, PermissionError) as exc:
             errors.append(str(exc))
     hint = "; ".join(errors[:2])
     raise dual.CamError(

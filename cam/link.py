@@ -189,6 +189,23 @@ class Link:
             self._fail_n = {}
             self._kick.set()
 
+    @contextmanager
+    def gpio_window(self, settle=1.0):
+        """Drop gphoto2 USB so the 10-pin remote can fire."""
+        self.live.stop()
+        dual.free_usb()
+        time.sleep(0.35)
+        with self._lock:
+            self._busy += 1
+        try:
+            yield
+        finally:
+            time.sleep(settle)
+            with self._lock:
+                self._busy = max(0, self._busy - 1)
+            self._fail_n = {}
+            self._kick.set()
+
     def _loop(self):
         self._boot()
         while not self._stop.is_set():
