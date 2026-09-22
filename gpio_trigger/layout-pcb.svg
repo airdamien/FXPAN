@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="11">
+<style>.brd{fill:#1a472a;stroke:#0f2d1a;stroke-width:2}.cu{fill:#c9a227;opacity:.35}.pad{fill:#c9a227;stroke:#8a6d12}.silk{fill:none;stroke:#fff;stroke-width:.8}.outline{fill:none;stroke:#333;stroke-width:2}.hole{fill:#222}</style>
+<rect width="800" height="700" fill="#2d5016"/>
+<text x="60" y="36" fill="#fff" font-size="18" font-weight="bold">PCB layout — plugs onto Pi GPIO (78×45 mm, stepped)</text>
+<text x="60" y="54" fill="#ccc">J1 and J2 exit the pin-1 end, away from Ethernet · 2×20 socket on the bottom · D1–D4 camera lamps</text>
+<rect x="60" y="60" width="468" height="270" class="brd" rx="3"/>
+<rect x="60" y="60" width="468" height="270" class="outline" rx="3"/>
+<rect x="84.0" y="96.0" width="45.7" height="60.0" class="pad" rx="1"/>
+<text x="86.0" y="129.0" fill="#fff" font-size="9">U1</text>
+<rect x="84.0" y="168.0" width="45.7" height="60.0" class="pad" rx="1"/>
+<text x="86.0" y="201.0" fill="#fff" font-size="9">U2</text>
+<rect x="84.0" y="240.0" width="45.7" height="60.0" class="pad" rx="1"/>
+<text x="86.0" y="273.0" fill="#fff" font-size="9">U3</text>
+<rect x="84.0" y="312.0" width="45.7" height="60.0" class="pad" rx="1"/>
+<text x="86.0" y="345.0" fill="#fff" font-size="9">U4</text>
+<rect x="156.0" y="102.0" width="30.0" height="15.0" class="pad" rx="1"/>
+<text x="158.0" y="112.5" fill="#fff" font-size="9">R1</text>
+<rect x="156.0" y="174.0" width="30.0" height="15.0" class="pad" rx="1"/>
+<text x="158.0" y="184.5" fill="#fff" font-size="9">R2</text>
+<rect x="156.0" y="246.0" width="30.0" height="15.0" class="pad" rx="1"/>
+<text x="158.0" y="256.5" fill="#fff" font-size="9">R3</text>
+<rect x="156.0" y="318.0" width="30.0" height="15.0" class="pad" rx="1"/>
+<text x="158.0" y="328.5" fill="#fff" font-size="9">R4</text>
+<rect x="72.0" y="156.0" width="96.0" height="60.0" class="pad" rx="1"/>
+<text x="74.0" y="189.0" fill="#fff" font-size="9">← J1</text>
+<rect x="72.0" y="84.0" width="96.0" height="60.0" class="pad" rx="1"/>
+<text x="74.0" y="117.0" fill="#fff" font-size="9">← J2</text>
+<rect x="192.0" y="72.0" width="324.0" height="48.0" class="pad" rx="1"/>
+<text x="194.0" y="99.0" fill="#fff" font-size="9">J3 Pi 2x20  pin1 left</text>
+<rect x="432.0" y="228.0" width="30.0" height="30.0" class="pad" rx="1"/>
+<text x="434.0" y="246.0" fill="#fff" font-size="9">1 focus</text>
+<rect x="480.0" y="228.0" width="30.0" height="30.0" class="pad" rx="1"/>
+<text x="482.0" y="246.0" fill="#fff" font-size="9">1 shutter</text>
+<rect x="432.0" y="276.0" width="30.0" height="30.0" class="pad" rx="1"/>
+<text x="434.0" y="294.0" fill="#fff" font-size="9">2 focus</text>
+<rect x="480.0" y="276.0" width="30.0" height="30.0" class="pad" rx="1"/>
+<text x="482.0" y="294.0" fill="#fff" font-size="9">2 shutter</text>
+<text x="60" y="354" fill="#fff">J3: 1=GND 2=FOCUS 3=SHUTTER · 2.54 mm header · mount on board edge to Pi dupont</text>
+<text x="60" y="372" fill="#ccc">Gerbers: open kicad/gpio_trigger.kicad_pcb in KiCad → File → Fabrication Outputs</text>
+</svg>

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#333"/>
+    </marker>
+    <style>
+      .wire { stroke:#1a1a1a; stroke-width:2; fill:none }
+      .bus { stroke:#0b5; stroke-width:2.5; fill:none }
+      .iso { stroke:#c33; stroke-width:2; stroke-dasharray:8 6; fill:none }
+      .box { fill:#f8f8f8; stroke:#333; stroke-width:1.5 }
+      .pi { fill:#e8f4ff; stroke:#2563eb; stroke-width:2 }
+      .cam { fill:#fff7ed; stroke:#c2410c; stroke-width:2 }
+      .lbl { fill:#111 }
+      .sub { fill:#555; font-size:11px }
+      .title { font-size:20px; font-weight:bold; fill:#111 }
+    </style>
+  </defs>
+  <rect width="1100" height="720" fill="#fff"/>
+  <text x="40" y="36" class="title">Pi dual TRS Nikon trigger — electrical schematic</text>
+  <text x="40" y="58" class="sub">3.5 mm TRS × 2 · BCM 20/21 both cameras, or cut JP1/JP2 and use BCM 26/19 for camera B</text>
+
+  <!-- Pi -->
+  <rect x="40" y="90" width="170" height="150" class="pi" rx="8"/>
+  <text x="58" y="118" class="lbl" font-weight="bold">Raspberry Pi GPIO</text>
+  <text x="58" y="142" class="lbl">BCM 20 (pin 38) — FOCUS</text>
+  <text x="58" y="166" class="lbl">BCM 21 (pin 40) — SHUTTER</text>
+  <text x="58" y="190" class="lbl">GND (pin 39) · J2 alt: pin 37 focus, pin 35 shutter</text>
+  <text x="58" y="220" class="sub">3.3 V logic · no battery</text>
+
+  <!-- isolation barrier -->
+  <line x1="320" y1="70" x2="320" y2="650" class="iso"/>
+  <text x="328" y="88" class="sub" fill="#c33">optical isolation — Pi GND ≠ camera GND</text>
+
+  <!-- focus bus -->
+  <line x1="210" y1="138" x2="300" y2="138" class="bus"/>
+  <text x="230" y="128" class="sub" fill="#0b5">FOCUS</text>
+
+  <!-- shutter bus -->
+  <line x1="210" y1="162" x2="300" y2="162" class="bus"/>
+  <text x="228" y="152" class="sub" fill="#0b5">SHUTTER</text>
+
+  <!-- gnd bus -->
+  <line x1="210" y1="186" x2="300" y2="186" class="wire"/>
+  <line x1="300" y1="186" x2="300" y2="600" class="wire"/>
+  <text x="218" y="176" class="sub">GND</text>
+
+  <!-- channel template positions -->
+  <line x1="300" y1="138" x2="340" y2="138" class="bus"/>
+  <rect x="340" y="110" width="28" height="14" fill="#fff" stroke="#333"/>
+  <text x="344" y="121" font-size="10">R1</text>
+  <text x="374" y="121" class="sub">330Ω</text>
+  <line x1="368" y1="117" x2="430" y2="117" class="wire"/>
+  <rect x="430" y="80" width="120" height="90" class="box" rx="4"/>
+  <text x="438" y="98" font-weight="bold">U1 4N35</text>
+  <text x="438" y="114" class="sub">1 anode ← R1</text>
+  <text x="438" y="130" class="sub">2 cathode → GND</text>
+  <text x="438" y="146" class="sub">4 emitter → J1 SLEEVE</text>
+  <text x="438" y="162" class="sub">5 collector → J1 RING</text>
+  <line x1="430" y1="117" x2="438" y2="117" class="wire"/>
+  <line x1="438" y1="117" x2="438" y2="114" class="wire"/>
+  <line x1="550" y1="162" x2="895" y2="162" class="wire"/>
+  <text x="625" y="158" class="sub">J1.RING</text>
+  <line x1="438" y1="130" x2="300" y2="186" class="wire"/>
+  <line x1="300" y1="162" x2="340" y2="162" class="bus"/>
+  <rect x="340" y="190" width="28" height="14" fill="#fff" stroke="#333"/>
+  <text x="344" y="201" font-size="10">R2</text>
+  <text x="374" y="201" class="sub">330Ω</text>
+  <line x1="368" y1="197" x2="430" y2="197" class="wire"/>
+  <rect x="430" y="160" width="120" height="90" class="box" rx="4"/>
+  <text x="438" y="178" font-weight="bold">U2 4N35</text>
+  <text x="438" y="194" class="sub">1 anode ← R2</text>
+  <text x="438" y="210" class="sub">2 cathode → GND</text>
+  <text x="438" y="226" class="sub">4 emitter → J1 SLEEVE</text>
+  <text x="438" y="242" class="sub">5 collector → J1 TIP</text>
+  <line x1="430" y1="197" x2="438" y2="197" class="wire"/>
+  <line x1="438" y1="197" x2="438" y2="194" class="wire"/>
+  <line x1="550" y1="242" x2="895" y2="242" class="wire"/>
+  <text x="625" y="238" class="sub">J1.TIP</text>
+  <line x1="438" y1="210" x2="300" y2="186" class="wire"/>
+  <line x1="300" y1="138" x2="340" y2="138" class="bus"/>
+  <rect x="340" y="270" width="28" height="14" fill="#fff" stroke="#333"/>
+  <text x="344" y="281" font-size="10">R3</text>
+  <text x="374" y="281" class="sub">330Ω</text>
+  <line x1="368" y1="277" x2="430" y2="277" class="wire"/>
+  <rect x="430" y="240" width="120" height="90" class="box" rx="4"/>
+  <text x="438" y="258" font-weight="bold">U3 4N35</text>
+  <text x="438" y="274" class="sub">1 anode ← R3</text>
+  <text x="438" y="290" class="sub">2 cathode → GND</text>
+  <text x="438" y="306" class="sub">4 emitter → J2 SLEEVE</text>
+  <text x="438" y="322" class="sub">5 collector → J2 RING</text>
+  <line x1="430" y1="277" x2="438" y2="277" class="wire"/>
+  <line x1="438" y1="277" x2="438" y2="274" class="wire"/>
+  <line x1="550" y1="322" x2="895" y2="322" class="wire"/>
+  <text x="625" y="318" class="sub">J2.RING</text>
+  <line x1="438" y1="290" x2="300" y2="186" class="wire"/>
+  <line x1="300" y1="162" x2="340" y2="162" class="bus"/>
+  <rect x="340" y="350" width="28" height="14" fill="#fff" stroke="#333"/>
+  <text x="344" y="361" font-size="10">R4</text>
+  <text x="374" y="361" class="sub">330Ω</text>
+  <line x1="368" y1="357" x2="430" y2="357" class="wire"/>
+  <rect x="430" y="320" width="120" height="90" class="box" rx="4"/>
+  <text x="438" y="338" font-weight="bold">U4 4N35</text>
+  <text x="438" y="354" class="sub">1 anode ← R4</text>
+  <text x="438" y="370" class="sub">2 cathode → GND</text>
+  <text x="438" y="386" class="sub">4 emitter → J2 SLEEVE</text>
+  <text x="438" y="402" class="sub">5 collector → J2 TIP</text>
+  <line x1="430" y1="357" x2="438" y2="357" class="wire"/>
+  <line x1="438" y1="357" x2="438" y2="354" class="wire"/>
+  <line x1="550" y1="402" x2="895" y2="402" class="wire"/>
+  <text x="625" y="398" class="sub">J2.TIP</text>
+  <line x1="438" y1="370" x2="300" y2="186" class="wire"/>
+  <rect x="900" y="180" width="150" height="120" class="cam" rx="8"/>
+  <text x="918" y="208" font-weight="bold">J1 — 3.5 mm TRS</text>
+  <text x="918" y="232" class="lbl">TIP ← U2 (shutter)</text>
+  <text x="918" y="252" class="lbl">RING ← U1 (focus)</text>
+  <text x="918" y="272" class="lbl">SLEEVE ← U1E + U2E</text>
+  <text x="918" y="292" class="sub">→ D800 top (T)</text>
+
+  <rect x="900" y="380" width="150" height="120" class="cam" rx="8"/>
+  <text x="918" y="408" font-weight="bold">J2 — 3.5 mm TRS</text>
+  <text x="918" y="432" class="lbl">TIP ← U4 (shutter)</text>
+  <text x="918" y="452" class="lbl">RING ← U3 (focus)</text>
+  <text x="918" y="472" class="lbl">SLEEVE ← U3E + U4E</text>
+  <text x="918" y="492" class="sub">→ D800 right (R)</text>
+
+  <rect x="40" y="560" width="1020" height="130" fill="#fafafa" stroke="#ccc"/>
+  <text x="58" y="588" font-weight="bold">Sequence (gpio_seq.py)</text>
+  <text x="58" y="612" class="lbl">1. FOCUS high → ring→sleeve on both jacks</text>
+  <text x="58" y="634" class="lbl">2. wait 50–200 ms</text>
+  <text x="58" y="656" class="lbl">3. SHUTTER high → tip→sleeve · pulse · release shutter · release focus</text>
+  <text x="560" y="612" class="sub">Nikon 10-pin: pin 9 focus, pin 4 shutter, pin 6 ground</text>
+  <text x="560" y="634" class="sub">If tip/ring swapped on cable, swap GPIO 20/21 at Pi only</text>
+
+</svg>
