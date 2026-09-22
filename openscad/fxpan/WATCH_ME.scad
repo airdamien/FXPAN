@@ -893,35 +893,30 @@ module part_stem() {
 
 // One piece: 180 flange where the helicoid would put infinity (17.5 mm of
 // travel). No printed male. Female M62 is the outer EL180_M62_LEN only.
+// The boss is a straight cylinder. A flare back to TUBE_OD is narrower than
+// the lens barrel, so the 60 mm bore was cutting the cookie off the stem.
 // Swap for `stem` + the bought helicoid when that lands.
 module part_stem_el180_inf() {
     z0 = patch_t();
     bh = el180_inf_h();
     hf = EL180_M62_LEN;
-    fh = (el180_stem_od() - TUBE_OD) / 2;   // 45° flare, prints cookie-down
-    h82 = bh - fh;
     color("SlateGray")
     mm_split() {
         difference() {
             union() {
                 port_flange("");
-                translate([0, 0, z0]) {
-                    hull() {
-                        cylinder(h = 0.2, d = TUBE_OD);
-                        translate([0, 0, fh])
-                            cylinder(h = 0.2, d = el180_stem_od());
-                    }
-                    translate([0, 0, fh])
-                        ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
-                                  tolerance = EL180_M62_TOL,
-                                  position = [0, 0, h82 - hf])
-                            cylinder(h = h82, d = el180_stem_od());
-                }
+                translate([0, 0, z0])
+                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                              tolerance = EL180_M62_TOL,
+                              position = [0, 0, bh - hf])
+                        cylinder(h = bh, d = el180_stem_od());
             }
             translate([0, 0, -2])
                 cylinder(h = patch_t() + 2.2, d1 = TUBE_ID, d2 = STEM_BORE);
+            // Barrel clearance behind the threads. The thread zone itself
+            // stays the M62 minor so the lens still screws in.
             translate([0, 0, z0 - 0.1])
-                cylinder(h = bh - hf + 0.4, d = STEM_BORE);
+                cylinder(h = bh - hf + 0.2, d = EL180_BARREL);
             port_clamp_screws("") port_csk_cut();
             fxp_port_stamp(fxp_tag("stem_inf"), "");
         }

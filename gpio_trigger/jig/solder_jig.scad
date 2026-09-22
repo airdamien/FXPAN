@@ -241,6 +241,9 @@ logo_cy = oy + 42.0;
 logo_deep = 0.8;    // pocket, at least 0.6 mm
 logo_fit = 0.04;    // plug bites the pocket wall so the sides are not coplanar
 logo_proud = 0;     // flush with the deck; the board sits on this face
+logo_outline_w_native = 0.6;  // fxpan_gen.py OUTLINE_WIDTH_MM
+logo_outline_w_min = 0.42;    // printable with a 0.4 mm nozzle
+logo_outline_boost = max(0, (logo_outline_w_min - logo_outline_w_native * logo_s) / 2);
 
 module fxpan_art(name) {
     translate([logo_cx, logo_cy])
@@ -251,11 +254,23 @@ module fxpan_art(name) {
                     import(str(logo_art, "/", name), convexity = 12);
 }
 
+module fxpan_outline_art() {
+    offset(delta = logo_outline_boost)
+        fxpan_art("fxpan_outline_red.stl");
+}
+
 module logo_plug(name) {
     translate([0, 0, ledge_z - logo_deep - logo_fit])
         linear_extrude(logo_deep + logo_fit + logo_proud)
             offset(delta = logo_fit)
                 fxpan_art(name);
+}
+
+module logo_plug_outline() {
+    translate([0, 0, ledge_z - logo_deep - logo_fit])
+        linear_extrude(logo_deep + logo_fit + logo_proud)
+            offset(delta = logo_fit)
+                fxpan_outline_art();
 }
 
 module logo_pocket() {
@@ -264,7 +279,7 @@ module logo_pocket() {
             union() {
                 fxpan_art("fxpan_fx_gold.stl");
                 fxpan_art("fxpan_pan_white.stl");
-                fxpan_art("fxpan_outline_red.stl");
+                fxpan_outline_art();
             }
 }
 
@@ -288,13 +303,13 @@ if (part == "jig") {
     jig();
     %color("Gold") logo_plug("fxpan_fx_gold.stl");
     %color("White") logo_plug("fxpan_pan_white.stl");
-    %color("Crimson") logo_plug("fxpan_outline_red.stl");
+    %color("Crimson") logo_plug_outline();
 } else if (part == "fx")
     color("Gold") logo_plug("fxpan_fx_gold.stl");
 else if (part == "pan")
     color("White") logo_plug("fxpan_pan_white.stl");
 else if (part == "outline")
-    color("Crimson") logo_plug("fxpan_outline_red.stl");
+    color("Crimson") logo_plug_outline();
 
 if (show_assembly && part == "jig")
     %assembly_ghost();
