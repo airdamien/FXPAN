@@ -33,6 +33,7 @@ use <shims.scad>
 use <../camera_body.scad>
 use <../monitor/display_mount.scad>
 use <../monitor/monitor.scad>
+use <../isco/el_nikkor_180n.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
@@ -41,6 +42,7 @@ SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:D800]
 SHOW_LENS = 0; // [0:hide, 1:show]
+SHOW_LENS_MARKS = 0; // [0:hide, 1:pupils and focal plane]
 SHOW_BASE = 1; // [0:hide, 1:show]
 SHOW_AXES = 1; // [0:hide, 1:show]
 
@@ -972,9 +974,9 @@ module part_el180_adapter() {
 }
 
 module el180_ghost() {
-    translate([0, 0, -6])
-        cylinder(h = 6, d = EL180_SNOUT_D);
-    cylinder(h = EL180_LENS_L, d = EL180_LENS_OD);
+    // Flange face on the stem face. +Z is the front of the lens, so the
+    // Ø60 barrel runs back through the M62 into the boss.
+    el180n(show_glass = SHOW_LENS_MARKS);
 }
 
 // -----------------------------------------------------------------------------
