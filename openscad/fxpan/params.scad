@@ -24,14 +24,12 @@
 //    for why this must be worked at the corner and not along the stitch axis.
 //
 // 3. PATH_TOTAL — lens flange to sensor along the fold — has to land on the
-//    EL-Nikkor's 180 mm flange focal distance. The path is
-//      BOX_XY + 2·PORT_PATCH_T + arm tube + mount stack + FLANGE_F
-//      + stem M62 boss + helicoid
-//    so every millimetre of chassis costs two millimetres of budget. This is
-//    why the chamber is NOT a cube: a cube tall enough to stand the plate on
-//    its diagonal would put the shortest possible path past 200 mm and make
-//    infinity unreachable. BOX_Z carries BS_H and nothing else; BOX_XY is
-//    set by the path budget and only has to clear the shifted port windows.
+//    EL-Nikkor's 158.5 mm flange focal distance. 180 mm is the focal length,
+//    used for the bundle, not the register. The seats are recessed into the
+//    lens wall and the camera cookies sit CAM_RECESS deeper, so the path is
+//    the seat position plus the shortened camera stack, not a boss standing
+//    on the skin. BOX_Z carries BS_H and nothing else; BOX_XY stays on the
+//    port floor. Shrinking it does not reach the register.
 //
 // 4. A D800 is not flat at its flange. Its front panel stands D800_PROUD
 //    past the register, and it goes on by pushing that panel at the chassis
@@ -46,7 +44,8 @@
 // eats the ends of the panorama. BS_H = 50 costs nothing. See bom.md.
 
 FLANGE_F = 46.5;
-EL_FOCAL = 180.0;   // EL-Nikkor 180/5.6N; PATH_TOTAL must reach this
+EL_FOCAL = 180.0;   // focal length: bundle, baffles, mouth. Not the register.
+EL_FFD   = 158.5;   // flange focal distance, sheet. Path target.
 
 // D800 FX only. 20% overlap lands the stitch on the XPan aspect.
 SENSOR_W      = 36.0;
@@ -151,7 +150,10 @@ FX_FMOUNT_EXTRA = 5.0;
 // rather than picked. BOX_XY then takes whatever the path budget has left.
 // D800_PROUD is the customizer knob in WATCH_ME.scad; measure yours.
 function d800_proud() = is_undef(D800_PROUD) ? 13.0 : D800_PROUD;
-MOUNT_CLEAR = 3.0;    // slop for the twist, the grip rubber and print error
+MOUNT_CLEAR = 3.0;    // what the 16 mm standoff used to leave in front of a D800
+// Spent on the register. The arm tube stays F_REV_LEN; the cookies sit this
+// much deeper, so the body clears the skin by MOUNT_CLEAR − CAM_RECESS.
+CAM_RECESS = 2.5;
 // Also has to be deep enough to hold the whole M52 female.
 ARM_TUBE = max(F_REV_LEN, d800_proud() + MOUNT_CLEAR - F_REV_STACK);
 
@@ -172,6 +174,7 @@ EL180_HELI_MALE = 8;
 EL180_ADAPTER_OD = 76;
 EL180_BORE      = EL180_M62_MAJOR - 1.6;
 EL180_BARREL    = 61.2;   // 60 mm measured barrel + clearance
+EL180_PAST      = 9.2;    // that barrel, past the 8 mm mount thread
 // The boss was 82 across and nothing asked it to be. An M62×1 female needs
 // a wall, not a flange: the helicoid bottoms on the cookie's face, not on
 // this, so the only load it takes is the thread's own hoop. At 82 it reached
@@ -199,12 +202,8 @@ function frame_top_z() = (BS_H + BS_CLEAR * 2) / 2 + CARTRIDGE_WALL;
 function box_z_calc()  = ceil(2 * (frame_top_z() + POST_H + LID_LIP_SEAT + 0.5));
 BOX_Z = box_z_calc();     // 83 at BS_H 50, 108 at 75
 
-// BOX_XY comes out of the path budget. Working backwards from PATH_TOTAL at
-// the helicoid's collapsed end:
-//   PATH = BOX_XY + 2·patch + ARM_TUBE + F_REV_STACK + FLANGE_F
-//          + EL180_M62_LEN + (EL180_HELI_MIN − EL180_HELI_MALE)
-// Solved and rounded DOWN to a whole mm, because the shims can only ever add
-// length — a chassis 1 mm too big can never reach infinity.
+// The port floor already wins. Recessing the seats is what reaches EL_FFD;
+// shrinking BOX_XY does not, and the shifted windows still need this width.
 function box_xy_path() =
     floor(EL_FOCAL - (2 * PORT_PATCH_T + ARM_TUBE + F_REV_STACK + FLANGE_F
                       + EL180_M62_LEN + (EL180_HELI_MIN - EL180_HELI_MALE)));
@@ -213,26 +212,42 @@ function box_xy_path() =
 function box_xy_ports() = 2 * (sensor_shift() + (TUBE_ID + 0.6) / 2 + WALL + 2);
 BOX_XY = max(box_xy_path(), box_xy_ports());   // 92, against a 91.4 port floor
 
-// Now the path follows from the geometry instead of being asserted, so the
-// echo() report is the real number and not a wish.
+// Stem frame: z = 0 on the BOX_XY face, +z outward. Skin at +patch, air at −WALL.
+// A flange at `path` sits at flange_z. The helicoid's collapsed 9 mm stays in
+// the path, so its nut is deeper than the infinity seat by that 9 mm.
+// HELI_SHORT keeps infinity 0.5 mm off the collapsed stop. Shims only add.
+HELI_SHORT = 0.5;
 function d_plate_to_mount() =
-    BOX_XY / 2 + patch_t() + ARM_TUBE + F_REV_STACK;
+    BOX_XY / 2 + patch_t() + ARM_TUBE + F_REV_STACK - CAM_RECESS;
 function path_after_plate() = d_plate_to_mount() + FLANGE_F;
-function d_plate_to_flange(heli) =
-    BOX_XY / 2 + patch_t() + EL180_M62_LEN + (heli - EL180_HELI_MALE);
+function flange_z(path) = path - path_after_plate() - BOX_XY / 2;
+function path_heli(heli) = EL_FFD - HELI_SHORT + (heli - EL180_HELI_MIN);
+function inf_seat_z() = flange_z(EL_FFD);
+function heli_flange_z(heli) = flange_z(path_heli(heli));
+// Male bottoms here. The 8 mm female runs outward from this face.
+function heli_bottom_z() = heli_flange_z(EL180_HELI_MIN) - EL180_HELI_MIN;
+function heli_boss_z() = heli_bottom_z() + EL180_HELI_MALE;
+function d_plate_to_flange(heli) = BOX_XY / 2 + heli_flange_z(heli);
 function path_total(heli)   = d_plate_to_flange(heli) + path_after_plate();
 function path_min()         = path_total(EL180_HELI_MIN);
 function path_max()         = path_total(EL180_HELI_MAX);
+function path_inf()         = d_plate_to_flange_inf() + path_after_plate();
+function d_plate_to_flange_inf() = BOX_XY / 2 + inf_seat_z();
 // Helicoid extension that puts the lens at infinity.
-function heli_at_infinity()  = EL180_HELI_MIN + (EL_FOCAL - path_min());
-// Air between the chassis face and the F register, which is what the body's
-// protruding front has to fit into. chassis_shell_t() lives in WATCH_ME.scad
-// with the rest of the shell, so state the same thing from the parameters.
-function mount_standoff() = ARM_TUBE + F_REV_STACK;
+function heli_at_infinity()  = EL180_HELI_MIN + (EL_FFD - path_min());
+// Air between the chassis skin and the F register. The cookies moved in by
+// CAM_RECESS; the skin did not.
+function mount_standoff() = ARM_TUBE + F_REV_STACK - CAM_RECESS;
 function mount_standoff_ok() = mount_standoff() >= d800_proud();
-// Printed stand-in for the bought helicoid: a fixed spacer at infinity.
-function el180_spacer_add() = EL_FOCAL - path_min() + EL180_HELI_MIN
-                              - EL180_HELI_MALE;
+// Clamp screws cap a nut at about 75 mm. 74 leaves a millimetre, and the
+// passage is 2 mm of wall under that. A bought helicoid body has to be
+// under HELI_PASS to reach the female. A fatter one means moving the screws.
+HELI_NUT_OD = 74;
+function heli_pass_d() = HELI_NUT_OD - 4;
+// Printed stand-in for the bought helicoid: male plus enough shank that the
+// lens flange lands on the infinity seat.
+function el180_spacer_add() =
+    inf_seat_z() - heli_bottom_z() - EL180_HELI_MALE;
 
 // --- optics envelope -------------------------------------------------------
 // Exit pupil at the lens, EL_FOCAL from the sensor. At a station d ahead of
@@ -291,27 +306,22 @@ function port_patch_u() =                              // along camera-up
     2 * (port_clamp_r() + PORT_CSK_D / 2 + PORT_PLATE_RIM);
 function port_patch_v(mark = "") =                     // across it
     2 * PORT_PLATE_RIM + (mark == ""
-        ? el180_stem_od()                              // the M62 boss stands on it
+        ? max(el180_stem_od(), EL180_LENS_OD)          // seat has to catch the Ø76
         : 2 * max(TUBE_OD / 2, rev_lock_reach_v()));
 PORT_PLATE_R    = 6;     // corner of the seam, cosmetic
-// The chassis corner has to stay behind the cookie, and a 14 mm one does not.
-// A cookie's outboard edge lands 45.4 mm off the middle of its face, by which
-// point a 14 mm corner has curved 3.3 mm away — so the plate hangs over air,
-// and the rebate behind it takes the corner off the chassis as well. Whatever
-// the chassis has receded at that edge is exactly how proud the plate stands.
-//
-// Hold that inside PORT_EDGE_CHAM and the mismatch disappears into the
-// chamfer the cookie already has. R − √(R²−d²) ≤ c at d = R − 4.6 solves to
-// R ≤ 9.12, so: 9. Still a corner you can see; diagnostics() reports what it
-// costs and says so if anything here moves.
-PORT_BOSS_R     = 9;
+// The chassis corner has to stay behind the cookie. The skin is the infinity
+// seat, 2.5 mm outside the box face, so the plan is 97 mm, not 100. At that
+// size a 9 mm corner curves away 2.2 mm by the cookie's outboard edge and the
+// plate stands past its chamfer. R − √(R²−d²) ≤ 1.2 solves to R ≤ 7.
+// diagnostics() says so if the edge moves out again.
+PORT_BOSS_R     = 7;
 function chassis_face_at(v) =
-    let (o = (BOX_XY + 2 * PORT_PATCH_T) / 2,
+    let (o = BOX_XY / 2 + inf_seat_z(),
          f = o - PORT_BOSS_R,
          d = min(PORT_BOSS_R, max(0, abs(v) - f)))
         f + sqrt(PORT_BOSS_R * PORT_BOSS_R - d * d);
 function port_edge_proud() =
-    (BOX_XY + 2 * PORT_PATCH_T) / 2
+    BOX_XY / 2 + inf_seat_z()
     - chassis_face_at(sensor_shift() + port_patch_v("R") / 2);
 // 45° off the outer edge. The cookie prints arm-up, so the outer face is the
 // last thing off the bed and a chamfer there only ever narrows — the bed face
