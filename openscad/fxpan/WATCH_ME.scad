@@ -3,12 +3,9 @@
 // =============================================================================
 // Two D800 behind one EL-Nikkor 180/5.6N and a 75×75×1 50/50 plate.
 // 64.80 × 23.9 mm stitch, 2.711:1 (XPan is 2.708:1), 13248 × 4912 = 65.1 MP.
-// The chamber is deliberately NOT a cube. BOX_Z carries BS_H, the plate's
-// along-the-fold dimension; BOX_XY is whatever the path budget leaves,
-// because every mm of chassis costs two mm of the 180 mm flange-to-sensor
-// distance. A cube tall enough to stand a 75 mm plate on its diagonal would
-// put the shortest path at 207 mm and put infinity out of reach entirely —
-// read the derivation in params.scad.
+// The chamber is deliberately NOT a cube. BOX_Z carries BS_H. The flange
+// register is 158.5 mm, not the 180 mm focal length: the lens nut is recessed
+// into the wall and the camera cookies sit CAM_RECESS deeper. Read params.scad.
 //
 // Lens −Y. Plate at the origin, 45°, S1 (the 50/50 coating) toward the lens.
 // Reflect leg → +X (camera R), transmit leg → +Y (camera T). Both bores are
@@ -94,7 +91,6 @@ function printed_f() =
     ARM_MOUNT || PART == "arm_r_f" || PART == "arm_t_f";
 function inf_stem() =
     STEM || PART == "stem_el180_inf";
-function el180_inf_h() = heli_at_infinity();
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
 // Narrowest thing in the light path at the flange. The metal reverse ring
 // keeps the real 44 mm F throat; the printed bayonet is F_STL_THROAT (43.5).
@@ -114,10 +110,11 @@ function _mouth_fstop(lo, hi, i) =
 function mouth_fstop() = _mouth_fstop(1, 64, 40);
 
 // Arm tube past the cookie. Both mouths put their F register at the same
-// d_plate_to_mount(), so the printed F (a 3 mm stack) needs a longer tube
-// than the reverse ring (8 mm) to land in the same place.
+// station, so the printed F (a 3 mm stack) needs a longer tube than the
+// reverse ring (8 mm). CAM_RECESS moves the whole arm in; it does not
+// shorten the tube, because the tube is the M52 thread.
 function reflect_tube_len()  =
-    d_plate_to_mount() - BOX_XY / 2 - patch_t() - mount_stack();
+    ARM_TUBE + F_REV_STACK - mount_stack();
 // The transmit leg crosses 1 mm of glass at 45°, which pushes its focus
 // back by bs_t_comp(). Shorten the tube by the same amount.
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
@@ -141,13 +138,13 @@ module round_rect(w, h, r) {
             square([w, h], center = true);
 }
 
-// The shell stops at the cookie face. There used to be a 4 mm retaining wall
-// outboard of it, and on the two camera faces that wall is precisely what a
-// D800's front panel lands on — the body is wider than the chassis, so there
-// is no relieving it locally. The cookie is stopped inboard by the chamber
-// wall it sits against, all the way round by its rebate, and outboard by
-// four countersunk M3s, which is a better joint than the wall was.
-function chassis_shell_t() = patch_t();
+// The shell used to stop on the cookie face. Recessing the seats left the
+// 4 mm skin standing proud of every cookie. The skin now lands on the
+// infinity seat, which is the outermost cookie face, and the camera cookies
+// are faced out to that same plane. The register does not move.
+function skin_z() = inf_seat_z();
+function cam_face_cap() = skin_z() - patch_t() + CAM_RECESS;
+function chassis_shell_t() = skin_z();
 function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
 // The chamber is only as tall as the plate; the skirt under it is what puts
 // the optical axis where the cameras have to stand.
@@ -210,7 +207,8 @@ TUBE_FLASH_KEEP = 27.0;
 module tube_flash_waste(mark, out_len) {
     n  = port_up(mark);
     ax = cam_axis(mark);
-    z1 = patch_t() + out_len;
+    z_face = patch_t() + (mark == "" ? 0 : cam_face_cap());
+    z1 = z_face + out_len;
     w  = 80;
     if (mark == "R" || mark == "T")
         hull() {
@@ -219,7 +217,7 @@ module tube_flash_waste(mark, out_len) {
                 cube([w, w, 16], center = true);
             translate([ax.x + n.x * (TUBE_OD / 2 + w / 2),
                        ax.y + n.y * (TUBE_OD / 2 + w / 2),
-                       patch_t() + 0.5])
+                       z_face + 0.5])
                 cube([w, w, 1], center = true);
         }
 }
@@ -264,9 +262,10 @@ module port_clamp_anchor_cut() {
 // Closing it also captures the cookie on four sides instead of three. The
 // ceiling is a 4.35 mm ledge off the wall behind it, tied at both ends and
 // facing into a pocket a plate then fills — droop there costs nothing.
-module port_slide_slot(mark = "") {
-    d = patch_t() + 0.35;
-    translate([0, 0, d / 2 - 0.2])
+module port_slide_slot(mark = "", extra = 0) {
+    d = patch_t() + 0.35 + extra;
+    // extra deepens the floor. The mouth stays at the skin.
+    translate([0, 0, d / 2 - 0.2 - extra])
         linear_extrude(d, center = true)
             port_plate_2d(mark, PORT_SLOT_CLEAR / 2);
 }
@@ -338,9 +337,16 @@ module box_bore() {
         cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
     }
 
-    at_each_bore()
-        translate([0, 0, -WALL / 2])
+    at_reflect_face()
+        translate([cam_axis("R").x, cam_axis("R").y, -WALL / 2])
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
+    at_transmit_face()
+        translate([cam_axis("T").x, cam_axis("T").y, -WALL / 2])
+            cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
+    // Both stems drop a nut through this. The chamber beyond is already open.
+    at_stem_face()
+        translate([0, 0, -WALL / 2])
+            cylinder(h = WALL + 2, d = HELI_NUT_OD + 0.8, center = true);
 }
 
 // M3 hex in each top corner, fed from a side slot. Roof stays solid so the
@@ -427,16 +433,16 @@ module chassis_port_mark(kind) {
 module box_fastener_cuts() {
     lid_body_fastener_cuts();
     at_stem_face() {
-        port_slide_slot("");
+        port_slide_slot("", stem_drop());
         port_clamp_screws("") port_clamp_anchor_cut();
     }
     at_reflect_face() {
-        port_slide_slot("R");
+        port_slide_slot("R", CAM_RECESS);
         port_clamp_screws("R") port_clamp_anchor_cut();
         chassis_port_mark("R");
     }
     at_transmit_face() {
-        port_slide_slot("T");
+        port_slide_slot("T", CAM_RECESS);
         port_clamp_screws("T") port_clamp_anchor_cut();
         chassis_port_mark("T");
     }
@@ -458,12 +464,21 @@ module box_lining_mask() {
         cube([s - 2 * WALL + 2 * L,
               s - 2 * WALL + 2 * L,
               L - FLOOR_SKIN], center = true);
-    at_each_bore()
+    module bore_liner(d) {
         translate([0, 0, -WALL / 2])
             difference() {
-                cylinder(h = WALL + 0.4, d = TUBE_ID + 1 + 2 * L, center = true);
-                cylinder(h = WALL + 0.8, d = TUBE_ID + 1, center = true);
+                cylinder(h = WALL + 0.4, d = d + 2 * L, center = true);
+                cylinder(h = WALL + 0.8, d = d, center = true);
             }
+    }
+    at_reflect_face()
+        translate([cam_axis("R").x, cam_axis("R").y, 0])
+            bore_liner(TUBE_ID + 1);
+    at_transmit_face()
+        translate([cam_axis("T").x, cam_axis("T").y, 0])
+            bore_liner(TUBE_ID + 1);
+    at_stem_face()
+        bore_liner(HELI_NUT_OD + 0.8);
 }
 
 // -----------------------------------------------------------------------------
@@ -773,6 +788,15 @@ module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
     difference() {
         union() {
             port_flange(mark);
+            // Brings the camera cookie face out to the thinned skin. The
+            // tube and the register stay where they are.
+            if (mark != "" && cam_face_cap() > 0.05)
+                intersection() {
+                    translate([0, 0, patch_t()])
+                        linear_extrude(cam_face_cap())
+                            port_plate_2d(mark);
+                    port_chassis_clip(mark);
+                }
             if (out_len > 0.05)
                 along_cam(rx, ry, mark)
                     cylinder(h = out_len, d = TUBE_OD);
@@ -781,7 +805,8 @@ module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
         tube_flash_waste(mark, out_len);
-        port_clamp_screws(mark) port_csk_cut();
+        translate([0, 0, mark == "" ? 0 : cam_face_cap()])
+            port_clamp_screws(mark) port_csk_cut();
     }
 }
 
@@ -813,8 +838,10 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                     rev_lock_cuts(out_len, port_up_az(mark));
                 f_pin_line_cut(out_len, port_up_az(mark));
             }
-        flange_marks(mark);
-        fxp_port_stamp(fxp_arm_tag(mark), mark);
+        translate([0, 0, cam_face_cap()]) {
+            flange_marks(mark);
+            fxp_port_stamp(fxp_arm_tag(mark), mark);
+        }
         tube_flash_waste(mark, out_len);
     }
         translate([-p, -p, 0])
@@ -847,86 +874,95 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
 }
 
 // -----------------------------------------------------------------------------
-// stem — EL-Nikkor 180/5.6N on an M62×1 helicoid
+// stems — one cookie rebate. Helicoid nut is 9 mm deeper than the infinity
+// seat, because the collapsed helicoid stays in the path.
 // -----------------------------------------------------------------------------
-module m62_nut(h = EL180_M62_LEN) {
-    ScrewHole(EL180_M62_MAJOR, h, pitch = EL180_M62_PITCH,
-              tolerance = EL180_M62_TOL)
-        cylinder(h = h, d = el180_stem_od());
+// Shared cookie face: the helicoid's collapsed flange. The infinity seat is
+// HELI_SHORT above that, a pad so the fixed stem lands on 158.5.
+function stem_drop() = patch_t() - heli_flange_z(EL180_HELI_MIN);
+
+module stem_cookie() {
+    translate([0, 0, -stem_drop()])
+        port_flange("");
 }
 
-// The whole stem is the cookie plus an EL180_M62_LEN female boss. There is
-// no tube and no deep nut: hybrid_shift's 20 mm nut plus a 17 mm helicoid
-// would put the shortest path at 207 mm and infinity out of reach. The
-// bought helicoid's male bottoms on the cookie's outer face, so the lens
-// flange sits at d_plate_to_flange() and the helicoid racks from there.
-// Bore tapers STEM_BORE → TUBE_ID toward the plate so the lens's own cone
-// is never the stop.
-module part_stem() {
-    z0 = patch_t();
-    color("SlateGray")
-    mm_split() {
-        difference() {
-            union() {
-                port_flange("");
-                translate([0, 0, z0]) {
-                    hull() {
-                        cylinder(h = 0.2, d = TUBE_OD);
-                        translate([0, 0, 3])
-                            cylinder(h = 0.2, d = el180_stem_od());
-                    }
-                    m62_nut();
-                }
-            }
-            translate([0, 0, -2])
-                cylinder(h = patch_t() + 2.2, d1 = TUBE_ID, d2 = STEM_BORE);
-            translate([0, 0, z0 - 0.1])
-                cylinder(h = EL180_M62_LEN + 4, d = STEM_BORE);
-            port_clamp_screws("") port_csk_cut();
-            fxp_port_stamp(fxp_tag("stem"), "");
-        }
-        union() {
-            tube_lining_mask(0, m62 = EL180_M62_LEN);
-            translate([0, 0, z0 - 0.2])
-                cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
-        }
+module stem_cookie_cuts(tag) {
+    translate([0, 0, -stem_drop()]) {
+        port_clamp_screws("") port_csk_cut();
+        fxp_port_stamp(tag, "");
     }
 }
 
-// One piece: 180 flange where the helicoid would put infinity (17.5 mm of
-// travel). No printed male. Female M62 is the outer EL180_M62_LEN only.
-// The boss is a straight cylinder. A flare back to TUBE_OD is narrower than
-// the lens barrel, so the 60 mm bore was cutting the cookie off the stem.
-// Swap for `stem` + the bought helicoid when that lands.
-module part_stem_el180_inf() {
-    z0 = patch_t();
-    bh = el180_inf_h();
-    hf = EL180_M62_LEN;
+module stem_thread_liner(z0) {
+    translate([0, 0, z0 - 0.2])
+        cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
+}
+
+// Bought M62 helicoid. Female is heli_bottom_z() .. heli_boss_z(). The body
+// has to pass through heli_pass_d(). Collapsed, the lens flange is flush
+// with the cookie face.
+module part_stem() {
+    od = HELI_NUT_OD;
+    z_bot = heli_bottom_z();
+    z_top = heli_boss_z();
+    z_cookie = heli_flange_z(EL180_HELI_MIN) - patch_t();
     color("SlateGray")
     mm_split() {
         difference() {
-            union() {
-                port_flange("");
-                translate([0, 0, z0])
-                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
-                              tolerance = EL180_M62_TOL,
-                              position = [0, 0, bh - hf])
-                        cylinder(h = bh, d = el180_stem_od());
+            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_bot])
+                union() {
+                    stem_cookie();
+                    translate([0, 0, z_bot - 1])
+                        cylinder(h = z_cookie - (z_bot - 1), d = od);
+                }
+            stem_cookie_cuts(fxp_tag("stem"));
+            translate([0, 0, z_top - 0.05])
+                cylinder(h = heli_flange_z(EL180_HELI_MIN) - z_top + 4,
+                         d = heli_pass_d());
+            translate([0, 0, z_bot - 1.2])
+                cylinder(h = 1.3, d = EL180_BARREL);
+        }
+        stem_thread_liner(z_bot);
+    }
+}
+
+// Lens screws straight in. The cookie is HELI_SHORT thicker than the helicoid
+// one, so its face is the 158.5 seat and its back still sits on the same
+// rebate floor. Thread is the 8 mm under that face. The Ø60 barrel continues
+// EL180_PAST past the thread.
+module part_stem_el180_inf() {
+    od = el180_stem_od();
+    seat = inf_seat_z();
+    z_thread = seat - EL180_M62_LEN;
+    z_tip = z_thread - EL180_PAST;
+    face_drop = patch_t() - seat;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_thread])
+                union() {
+                    translate([0, 0, -face_drop])
+                        port_flange("");
+                    // Back to the shared rebate floor. The helicoid cookie is
+                    // HELI_SHORT thinner and ends here too.
+                    translate([0, 0, -stem_drop()])
+                        linear_extrude(HELI_SHORT)
+                            port_plate_2d("");
+                    translate([0, 0, z_tip])
+                        cylinder(h = -face_drop + 0.2 - z_tip, d = od);
+                }
+            translate([0, 0, -face_drop]) {
+                port_clamp_screws("") port_csk_cut();
+                fxp_port_stamp(fxp_tag("stem_inf"), "");
             }
-            translate([0, 0, -2])
-                cylinder(h = patch_t() + 2.2, d1 = TUBE_ID, d2 = STEM_BORE);
-            // Barrel clearance behind the threads. The thread zone itself
-            // stays the M62 minor so the lens still screws in.
-            translate([0, 0, z0 - 0.1])
-                cylinder(h = bh - hf + 0.2, d = EL180_BARREL);
-            port_clamp_screws("") port_csk_cut();
-            fxp_port_stamp(fxp_tag("stem_inf"), "");
+            translate([0, 0, z_tip - 0.1])
+                cylinder(h = EL180_PAST + 0.15, d = EL180_BARREL);
         }
-        union() {
-            tube_lining_mask(0, m62 = bh);
-            translate([0, 0, z0 - 0.2])
-                cylinder(h = bh + 0.4, d = EL180_M62_MAJOR + 8);
-        }
+        stem_thread_liner(z_thread);
     }
 }
 
@@ -941,6 +977,7 @@ module part_el180_adapter() {
     hb = el180_spacer_add();            // what it adds past the boss face
     hf = EL180_M62_LEN;                 // female for the lens
     overlap = 3;
+    hex_od = heli_pass_d() - 0.8;       // has to pass the recessed nut
     shank_d = EL180_M62_MAJOR - 1.6;
     hex_h = hb + overlap;
     color("SlateGray")
@@ -954,7 +991,7 @@ module part_el180_adapter() {
                     ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
                               tolerance = EL180_M62_TOL,
                               position = [0, 0, hex_h - hf])
-                        cylinder(h = hex_h, d = EL180_ADAPTER_OD, $fn = 6);
+                        cylinder(h = hex_h, d = hex_od, $fn = 6);
         }
         // Through-bore at the M62 minor; the hex behind the female stays
         // EL180_BARREL so the 60 mm lens barrel drops in.
@@ -962,7 +999,7 @@ module part_el180_adapter() {
             cylinder(h = hex_h - hf + 0.4, d = EL180_BARREL);
         translate([0, 0, -0.2])
             cylinder(h = hm + hex_h + 0.4, d = EL180_BORE);
-        translate([0, -EL180_ADAPTER_OD / 2 * cos(30) - 0.05,
+        translate([0, -hex_od / 2 * cos(30) - 0.05,
                    hm + hb * 0.5])
             rotate([90, 0, 0])
                 part_stamp_stack_cut(fxp_tag("el180"), size = 2.2);
@@ -1341,7 +1378,7 @@ module camera_body_at(out_len, rx = 0, ry = 0, roll = 0, mark = "") {
     if (SHOW_BODIES > 0)
         color("DimGray", 0.92)
             along_cam(rx, ry, mark)
-                translate([0, 0, out_len + mount_stack() + ex])
+                translate([0, 0, out_len + mount_stack() - CAM_RECESS + ex])
                     translate([body_shift_x(mark), body_shift_y(mark),
                                body_shift_z(mark)])
                         camera_body(roll, which = 2);
@@ -1363,9 +1400,9 @@ module taking_lens_at() {
     if (SHOW_LENS)
         color("DimGray", 0.92)
             at_stem()
-                translate([0, 0, patch_t()
-                                 + (inf_stem() ? el180_inf_h()
-                                    : EL180_M62_LEN + el180_spacer_add())
+                translate([0, 0, (inf_stem()
+                                    ? inf_seat_z()
+                                    : heli_flange_z(heli_at_infinity()))
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     el180_ghost();
 }
@@ -1406,14 +1443,14 @@ module assembly() {
                     part_stem();
         if (!inf_stem())
             at_stem()
-                translate([0, 0, patch_t() + EL180_M62_LEN - EL180_HELI_MALE
+                translate([0, 0, heli_bottom_z()
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     part_el180_adapter();
         at_reflect()
-            translate([0, 0, EXPLODED ? ex : 0])
+            translate([0, 0, (EXPLODED ? ex : 0) - CAM_RECESS])
                 part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
         at_transmit()
-            translate([0, 0, EXPLODED ? ex : 0])
+            translate([0, 0, (EXPLODED ? ex : 0) - CAM_RECESS])
                 part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     }
 
@@ -1466,28 +1503,30 @@ module diagnostics() {
              d_plate_to_flange(EL180_HELI_MAX),
              " + plate→mount ", d_plate_to_mount(),
              " + flange ", FLANGE_F,
-             "  =  PATH ", path_min(), "..", path_max(), " mm"));
-    echo(str("infinity: EL-Nikkor f = ", EL_FOCAL, " mm lands at helicoid ",
+             "  =  PATH ", path_min(), "..", path_max(), " mm",
+             "  |  infinity stem ", path_inf(), " mm"));
+    echo(str("infinity: register ", EL_FFD, " mm (focal length ", EL_FOCAL,
+             ") lands at helicoid ",
              round(heli_at_infinity() * 10) / 10, " mm of ",
              EL180_HELI_MIN, "..", EL180_HELI_MAX,
-             (path_min() <= EL_FOCAL && EL_FOCAL <= path_max())
+             (path_min() <= EL_FFD && EL_FFD <= path_max())
                ? "  → in range"
-               : "  *** OUT OF RANGE — resize BOX_XY ***",
-             inf_stem() ? ";  infinity stem boss " : ";  printed spacer adds ",
-             inf_stem() ? round(el180_inf_h() * 10) / 10
-                        : round(el180_spacer_add() * 10) / 10,
-             inf_stem() ? " mm (fixed, no helicoid)"
-                        : " mm (fixed, infinity only)"));
-    echo(str("body fit: F register stands ", mount_standoff(),
-             " mm off the chassis face (arm tube ", ARM_TUBE,
-             " + ring ", F_REV_STACK, ", no retaining wall)",
+               : "  *** OUT OF RANGE ***",
+             "  |  seat z ", inf_seat_z(),
+             "  helicoid nut ", heli_bottom_z(), "..", heli_boss_z(),
+             "  passage ", heli_pass_d()));
+    echo(str("body fit: F register stands ",
+             round((patch_t() + mount_standoff() - skin_z()) * 10) / 10,
+             " mm off the chassis skin (skin ", skin_z(),
+             " mm, was ", patch_t(), "; arm tube ", ARM_TUBE,
+             " + ring ", F_REV_STACK, ", cookies recessed ", CAM_RECESS, ")",
              "  vs a D800 front panel ", d800_proud(), " mm proud of its flange",
-             mount_standoff() >= d800_proud() + MOUNT_CLEAR
-               ? str("  → ", round((mount_standoff() - d800_proud()) * 10) / 10,
+             patch_t() + mount_standoff() - skin_z() >= d800_proud()
+               ? str("  → ",
+                     round((patch_t() + mount_standoff() - skin_z()
+                            - d800_proud()) * 10) / 10,
                      " mm to twist it on")
-             : mount_standoff() >= d800_proud()
-               ? "  → fits, but tight; raise MOUNT_CLEAR"
-               : "  *** THE BODY CANNOT GO ON — raise ARM_TUBE ***"));
+               : "  *** THE BODY CANNOT GO ON ***"));
     echo(str("stitch: overlap ", overlap_frac(), "  sensor_shift ",
              sensor_shift(), " mm  stitch_w ", stitch_w(), " mm  ",
              stitch_px(), "×", SENSOR_PX_H, " px  ",

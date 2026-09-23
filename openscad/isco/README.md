@@ -56,5 +56,5 @@ The stations agree with each other:
 
 `SHOW_GLASS` draws those stations. They are not part of the STL.
 
-The FXPAN path is still built on 180 mm from flange to sensor. Seating this
-lens on that stem does not land infinity at 158.5.
+The FXPAN infinity stem seats this flange at 158.5 mm. The helicoid stem is
+0.5 mm shorter at its collapsed stop, so infinity is just off that stop.
