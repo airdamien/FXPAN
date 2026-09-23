@@ -134,6 +134,34 @@ F_BORE         = 44.0;
 F_THROAT       = 44.0;    // metal M52 -> F reverse ring = a real F throat
 F_COLLAR_OD    = 62;      // F bayonet collar, and the cap on the lock lugs
 F_FMOUNT_STACK = 3.0;  // Archive-663 lens mount: register is 3 mm from the back
+// Bought camera helicoid. Amazon does not list M52-to-M52. The part it
+// does list is Pixco/Fotasy M52 female (front) to M42 male (rear), 17–31 mm.
+// The rear male screws into the cookie. The printed mount is an M52 male
+// into the front female. Body is about 65 mm and drops into the recess.
+//
+// The M42 male is a ~41 mm hole. That clears the frame corners from about
+// f/16. The printed bayonet lip is 40 mm and is still the tighter stop.
+//
+// Collapsed, the register is the fixed-arm infinity station. The D800 panel
+// is 13 mm proud, so the flange cannot come closer. Extending the helicoid
+// moves the camera out. The tripod screw is the lock.
+CAM_HELI_REAR   = 42;     // M42×1 male into the cookie
+CAM_HELI_NOSE   = 52;     // M52×1 female, printed male
+CAM_HELI_PITCH  = 1.0;
+CAM_HELI_TOL    = 0.30;
+CAM_HELI_TOOTH  = 0.70;
+CAM_HELI_MIN    = 17;     // collapsed overall
+CAM_HELI_MAX    = 31;
+CAM_HELI_MALE   = 8;      // rear male into the cookie
+CAM_HELI_OD     = 65;     // body. Measure the one that arrives.
+CAM_HELI_ID     = 50;     // clear at the M52 end
+CAM_HELI_NECK   = 41;     // clear through the M42 male
+CAM_HELI_RECESS = 2.5;    // pocket the body sits in; the seat is its floor
+CAM_HELI_FRONT  = 5;      // printed male into the front female
+// Shown a little extended, on the far side of the collapsed infinity stop.
+CAM_HELI_SHOW   = 1.5;
+function cam_heli_travel() = CAM_HELI_MAX - CAM_HELI_MIN;
+function cam_heli_proud()  = CAM_HELI_MIN - CAM_HELI_MALE;
 F_PEG_H        = 5.5;
 FX_FMOUNT_EXTRA = 5.0;
 // --- how far the body has to stand off the chassis -------------------------
