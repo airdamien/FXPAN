@@ -19,7 +19,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -66,7 +66,7 @@ SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG
 LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
 
 /* [Mount] */
-ARM_MOUNT = 0; // [0:reverse ring, 1:printed F]
+ARM_MOUNT = 0; // [0:reverse ring, 1:printed F, 2:helicoid F]
 F_MOUNT_CLOCK = 0;
 STEM = 1; // [0:EL 180 helicoid, 1:EL 180 infinity]
 EL180_M62_PITCH = 1.0; // [0.75, 1.0]
@@ -89,7 +89,25 @@ function fxp_arm_tag(mark) =
     str("fxp_arm_", mark == "T" ? "t" : "r", printed_f() ? "f" : "");
 
 function printed_f() =
-    ARM_MOUNT || PART == "arm_r_f" || PART == "arm_t_f";
+    (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f";
+function heli_cam() =
+    ARM_MOUNT == 2 || PART == "arm_r_h" || PART == "arm_t_h"
+    || PART == "fmount_h_r" || PART == "fmount_h_t";
+// Infinity register in the arm's own frame (cookie back at z = 0). Same
+// station as the fixed arms. T is shorter by the glass path.
+function cam_heli_register_z(mark) =
+    patch_t() + mount_standoff() + CAM_RECESS
+    - (mark == "T" ? bs_t_comp() : 0);
+// Shoulder the male bottoms on. The mesh register is F_FMOUNT_STACK
+// further out.
+function cam_heli_face_z() = patch_t() + cam_face_cap();
+// Floor of the recess. The bought male bottoms here.
+function cam_heli_seat_z() = cam_heli_face_z() - CAM_HELI_RECESS;
+// Front face of the helicoid, collapsed. The printed mount's shoulder
+// lands on it. T's mount is shorter; the helicoid itself is the same.
+function cam_heli_front_z() = cam_heli_seat_z() + cam_heli_proud();
+function cam_heli_shoulder(mark) =
+    cam_heli_register_z(mark) - F_FMOUNT_STACK - cam_heli_front_z();
 function inf_stem() =
     STEM || PART == "stem_el180_inf";
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
@@ -354,6 +372,8 @@ module box_bore() {
         cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
     }
 
+    // Optical hole. The helicoid's M42 male (42 mm) passes this; the
+    // cookie covers it. Fixed-arm tubes are smaller and still land.
     at_reflect_face()
         translate([cam_axis("R").x, cam_axis("R").y, -WALL / 2])
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
@@ -910,6 +930,157 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
                         translate([0, 0, -0.1])
                             cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
                     }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// helicoid camera arms. The cookie takes the M42 male of a bought
+// M52-female / M42-male 17–31 mm helicoid. The printed mount is an M52
+// male into that helicoid's front female.
+// Collapsed is infinity. Extending moves the camera out. The tripod screw
+// locks it; there is no set screw.
+// -----------------------------------------------------------------------------
+module cam_csk_cut() {
+    h = patch_t() + cam_face_cap();
+    translate([0, 0, -1])
+        cylinder(h = h + 2, d = PORT_SCREW_D);
+    translate([0, 0, h - PORT_CSK_H])
+        cylinder(h = PORT_CSK_H + 0.4, d1 = PORT_SCREW_D, d2 = PORT_CSK_D);
+}
+
+module part_cam_heli_arm(mark) {
+    ax = cam_axis(mark);
+    z_seat = cam_heli_seat_z();
+    color("SlateGray")
+    mm_split() {
+        ScrewHole(CAM_HELI_REAR, z_seat + 0.2,
+                  position = [ax.x, ax.y, 0],
+                  pitch = CAM_HELI_PITCH,
+                  tolerance = CAM_HELI_TOL,
+                  tooth_height = CAM_HELI_TOOTH)
+            difference() {
+                cam_cookie(mark);
+                // Pocket the helicoid body. The male bottoms on the floor.
+                // The thread itself is the bore; a clearance cylinder here
+                // would wipe it out.
+                translate([ax.x, ax.y, z_seat])
+                    cylinder(h = cam_heli_face_z() - z_seat + 0.02,
+                             d = CAM_HELI_OD + 0.8);
+                port_clamp_screws(mark) cam_csk_cut();
+                translate([0, 0, cam_face_cap()]) {
+                    flange_marks(mark);
+                    fxp_port_stamp(str("fxp_arm_", mark == "T" ? "t" : "r", "h"),
+                                   mark);
+                }
+            }
+        translate([ax.x, ax.y, -0.2])
+            cylinder(h = z_seat + 0.5,
+                     d = CAM_HELI_REAR + 2 * INNER_LINING + 1.2);
+    }
+}
+
+// Bought helicoid, collapsed plus `lift`. Sits on the recess floor.
+module cam_helicoid_body(lift = 0) {
+    h = cam_heli_proud() + lift;
+    color("Silver")
+        difference() {
+            union() {
+                translate([0, 0, -CAM_HELI_MALE])
+                    cylinder(h = CAM_HELI_MALE + 0.2, d = CAM_HELI_REAR - 1);
+                cylinder(h = h, d = CAM_HELI_OD);
+                translate([0, 0, h * 0.55])
+                    difference() {
+                        cylinder(h = 0.8, d = CAM_HELI_OD + 1.2);
+                        translate([0, 0, -0.1])
+                            cylinder(h = 1.0, d = CAM_HELI_OD - 3);
+                    }
+            }
+            translate([0, 0, -0.2])
+                cylinder(h = h + 0.4, d = CAM_HELI_ID);
+            translate([0, 0, -CAM_HELI_MALE - 0.2])
+                cylinder(h = CAM_HELI_MALE + 0.4, d = CAM_HELI_NECK);
+        }
+}
+
+// Printed male into the helicoid's front female, then the bayonet.
+// z = 0 at the thread tip. The shoulder flares out to the flange so the
+// 62 mm disk is not a shelf.
+module part_cam_heli_mount(mark) {
+    clock = (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK;
+    shoulder = cam_heli_shoulder(mark);
+    z_mesh = CAM_HELI_FRONT + shoulder;
+    color("Goldenrod")
+        union() {
+            difference() {
+                union() {
+                    ScrewThread(CAM_HELI_NOSE, CAM_HELI_FRONT + 0.2,
+                                pitch = CAM_HELI_PITCH,
+                                tolerance = CAM_HELI_TOL,
+                                tooth_height = CAM_HELI_TOOTH,
+                                tip_height = 1.2);
+                    translate([0, 0, CAM_HELI_FRONT - 1.6])
+                        cylinder(h = shoulder + 1.8,
+                                 d1 = CAM_HELI_NOSE, d2 = F_STL_OD);
+                }
+                translate([0, 0, -1])
+                    cylinder(h = CAM_HELI_FRONT + 1.2, d = CAM_HELI_ID);
+                translate([0, 0, CAM_HELI_FRONT - 0.2])
+                    cylinder(h = shoulder + 0.5, d = TUBE_ID);
+            }
+            translate([0, 0, z_mesh])
+                rotate([0, 0, clock])
+                    f_mount_stl_raw();
+        }
+}
+
+// Printable stand-in for the bought unit, collapsed. Male tip at z = 0.
+// M42 male into the cookie, M52 female for fmount_h_*. Not the real part.
+module cam_helicoid_gauge() {
+    proud = cam_heli_proud();
+    male_h = CAM_HELI_MALE;
+    nose_h = CAM_HELI_FRONT + 0.2;
+    // Root of the M42 tooth. The bore stays 2 mm inside it so a 0.4 mm
+    // nozzle has a shank to print, not a bare coil.
+    male_root = CAM_HELI_REAR - CAM_HELI_TOOTH / tan(30);
+    color("Silver")
+        ScrewHole(CAM_HELI_NOSE, nose_h + 0.2,
+                  position = [0, 0, male_h + proud - nose_h],
+                  pitch = CAM_HELI_PITCH,
+                  tolerance = CAM_HELI_TOL,
+                  tooth_height = CAM_HELI_TOOTH)
+            difference() {
+                union() {
+                    translate([0, 0, male_h])
+                        rotate([180, 0, 0])
+                            ScrewThread(CAM_HELI_REAR, male_h,
+                                        pitch = CAM_HELI_PITCH,
+                                        tolerance = CAM_HELI_TOL,
+                                        tooth_height = CAM_HELI_TOOTH,
+                                        tip_height = 1.2);
+                    translate([0, 0, -0.1])
+                        cylinder(h = male_h + 0.3, d = male_root - 0.3);
+                    translate([0, 0, male_h - 1.8])
+                        cylinder(h = proud + 1.8, d = CAM_HELI_OD);
+                    translate([0, 0, male_h + proud * 0.55])
+                        difference() {
+                            cylinder(h = 0.8, d = CAM_HELI_OD + 1.2);
+                            translate([0, 0, -0.1])
+                                cylinder(h = 1.0, d = CAM_HELI_OD - 3);
+                        }
+                }
+                translate([0, 0, -0.2])
+                    cylinder(h = male_h + proud + 0.4, d = male_root - 4);
+            }
+}
+
+// lift > 0 is the helicoid extended, camera on the far side of infinity.
+module cam_heli_mount_at(mark, lift = 0) {
+    ax = cam_axis(mark);
+    translate([ax.x, ax.y, cam_heli_seat_z()]) {
+        if ($preview)
+            cam_helicoid_body(lift);
+        translate([0, 0, cam_heli_proud() + lift - CAM_HELI_FRONT])
+            part_cam_heli_mount(mark);
     }
 }
 
@@ -1496,10 +1667,18 @@ module assembly() {
                     part_el180_adapter();
         at_reflect()
             translate([0, 0, (EXPLODED ? ex : 0) - CAM_RECESS])
-                part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+                if (heli_cam()) {
+                    part_cam_heli_arm("R");
+                    cam_heli_mount_at("R", CAM_HELI_SHOW);
+                } else
+                    part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
         at_transmit()
             translate([0, 0, (EXPLODED ? ex : 0) - CAM_RECESS])
-                part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+                if (heli_cam()) {
+                    part_cam_heli_arm("T");
+                    cam_heli_mount_at("T", CAM_HELI_SHOW);
+                } else
+                    part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     }
 
     fxp_pair(show_glass = $preview,
@@ -1613,8 +1792,17 @@ module diagnostics() {
                      round(mouth_fstop() * 10) / 10)
                : "NEVER passes the frame corners at any aperture",
              printed_f()
-               ? "   (Archive-663, bored to 43.5 mm; metal reverse ring is 44 mm / f/8.4)"
+               ? "   (Archive-663 lip is 40 mm; metal reverse ring is 44 mm / f/8.4)"
                : "   (44 mm is the real F throat — this is the hard ceiling, not a print limit)"));
+    echo(str("camera helicoid: bought M", CAM_HELI_NOSE, " female / M",
+             CAM_HELI_REAR, " male ×", CAM_HELI_PITCH,
+             " ", CAM_HELI_MIN, "–", CAM_HELI_MAX,
+             "  body ", CAM_HELI_OD, "  neck ", CAM_HELI_NECK,
+             "  recess ", CAM_HELI_RECESS,
+             "  |  collapsed is infinity, register R ",
+             cam_heli_register_z("R"), " T ", cam_heli_register_z("T"),
+             "  |  ", cam_heli_travel(), " mm outward",
+             "  |  shown ", CAM_HELI_SHOW, " mm out"));
     echo(str("baffle rings that fit at f/", FSTOP, ": ", baffle_ring_count(),
              " of ", BAFFLE_RINGS,
              baffle_ring_count() == 0
@@ -1690,6 +1878,16 @@ module export_part() {
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t" || PART == "arm_t_f")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    else if (PART == "arm_r_h")
+        part_cam_heli_arm("R");
+    else if (PART == "arm_t_h")
+        part_cam_heli_arm("T");
+    else if (PART == "fmount_h_r")
+        part_cam_heli_mount("R");
+    else if (PART == "fmount_h_t")
+        part_cam_heli_mount("T");
+    else if (PART == "cam_helicoid")
+        cam_helicoid_gauge();
     else if (PART == "lid")
         part_lid();
     else if (PART == "display_mount")
