@@ -309,19 +309,24 @@ function port_patch_v(mark = "") =                     // across it
         ? max(el180_stem_od(), EL180_LENS_OD)          // seat has to catch the Ø76
         : 2 * max(TUBE_OD / 2, rev_lock_reach_v()));
 PORT_PLATE_R    = 6;     // corner of the seam, cosmetic
-// The chassis corner has to stay behind the cookie. The skin is the infinity
-// seat, 2.5 mm outside the box face, so the plan is 97 mm, not 100. At that
-// size a 9 mm corner curves away 2.2 mm by the cookie's outboard edge and the
-// plate stands past its chamfer. R − √(R²−d²) ≤ 1.2 solves to R ≤ 7.
-// diagnostics() says so if the edge moves out again.
-PORT_BOSS_R     = 7;
+// The chassis corner has to stay behind the cookie, and a 14 mm one does not.
+// A cookie's outboard edge lands 45.4 mm off the middle of its face, by which
+// point a 14 mm corner has curved 3.3 mm away — so the plate hangs over air,
+// and the rebate behind it takes the corner off the chassis as well. Whatever
+// the chassis has receded at that edge is exactly how proud the plate stands.
+//
+// Hold that inside PORT_EDGE_CHAM and the mismatch disappears into the
+// chamfer the cookie already has. R − √(R²−d²) ≤ c at d = R − 4.6 solves to
+// R ≤ 9.12, so: 9. Still a corner you can see; diagnostics() reports what it
+// costs and says so if anything here moves.
+PORT_BOSS_R     = 9;
 function chassis_face_at(v) =
-    let (o = BOX_XY / 2 + inf_seat_z(),
+    let (o = (BOX_XY + 2 * PORT_PATCH_T) / 2,
          f = o - PORT_BOSS_R,
          d = min(PORT_BOSS_R, max(0, abs(v) - f)))
         f + sqrt(PORT_BOSS_R * PORT_BOSS_R - d * d);
 function port_edge_proud() =
-    BOX_XY / 2 + inf_seat_z()
+    (BOX_XY + 2 * PORT_PATCH_T) / 2
     - chassis_face_at(sensor_shift() + port_patch_v("R") / 2);
 // 45° off the outer edge. The cookie prints arm-up, so the outer face is the
 // last thing off the bed and a chamfer there only ever narrows — the bed face
@@ -491,7 +496,10 @@ BASE_HEX_CELL   = 11;
 // --- shell, light trap, marks ---------------------------------------------
 INNER_LINING = 1.6;
 FLOOR_SKIN   = 0;
-MARK_DEPTH   = 1.2;   // FXPAN mark + 65MP on the blank −X wall
+// Into the −X wall. 1.2 was three 0.4 mm perimeters and nothing else, so the
+// plugs came out as skins. 2.4 is real meat. The wall is 10 mm here, so the
+// pocket still leaves about 7 mm of chassis behind it.
+MARK_DEPTH   = 2.4;
 // Colour plugs vs the pocket they drop into. Matching them exactly leaves the
 // slicer two coincident faces per surface and it renders the pair as garbage,
 // so the plugs bite into the pocket and stand off the wall.

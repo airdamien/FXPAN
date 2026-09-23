@@ -83,9 +83,10 @@ module chamber_ports(sh) {
     d = TUBE_ID + 0.6;
     t = SKIRT_T;
     w = t + 6;
+    // Lens face: the barrel comes through. The stem itself stops at the wall.
     translate([0, -half() + t / 2, 0])
         rotate([90, 0, 0])
-            cylinder(h = w, d = d, center = true);
+            cylinder(h = w, d = EL180_BARREL, center = true);
     translate([half() - t / 2, cam_axis("R", sh).y, 0])
         rotate([0, 90, 0])
             cylinder(h = w, d = d, center = true);
@@ -236,11 +237,11 @@ module chamber_walls(sh, tag = "fxp_tray") {
     }
 }
 
-// Readable from the stem, looking at the −Y face.
+// Readable from the stem, above the barrel hole on the −Y face.
 module tray_stamp(tag = "fxp_tray") {
-    translate([0, -half() + STAMP_DEPTH, floor_z() + 5])
+    translate([0, -half() + STAMP_DEPTH, EL180_BARREL / 2 + 3.2])
         rotate([90, 0, 180])
-            part_stamp_cut(tag, STAMP_DEPTH, STAMP_SIZE);
+            part_stamp_cut(tag, STAMP_DEPTH, 3.0);
 }
 
 // Diagonal stiffener perpendicular to the plate — the dead quadrant no
