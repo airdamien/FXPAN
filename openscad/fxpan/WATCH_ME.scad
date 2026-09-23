@@ -61,7 +61,8 @@ BODY_T_Z = -5; // [-20:0.5:20]
 
 /* [Shell] */
 SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG, logo:Logo inlay]
-// Wall badge, one STL per colour. The chassis pocket is always every layer.
+// Fills the wall pockets in the preview. The chassis STL stays pocketed;
+// each colour is still its own STL (chassis_logo_*).
 LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
 
 /* [Mount] */
@@ -138,11 +139,9 @@ module round_rect(w, h, r) {
             square([w, h], center = true);
 }
 
-// The shell used to stop on the cookie face. Recessing the seats left the
-// 4 mm skin standing proud of every cookie. The skin now lands on the
-// infinity seat, which is the outermost cookie face, and the camera cookies
-// are faced out to that same plane. The register does not move.
-function skin_z() = inf_seat_z();
+// Skin is the 4 mm shell. Camera cookies are faced out to it. The infinity
+// cookie's rim is too; the lens sits in a step down to the 158.5 seat.
+function skin_z() = patch_t();
 function cam_face_cap() = skin_z() - patch_t() + CAM_RECESS;
 function chassis_shell_t() = skin_z();
 function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
@@ -153,12 +152,17 @@ function chassis_out_z()   = BOX_Z + chassis_plinth();
 // Cookie outline: a rectangle on camera-up, centred on the bore rather than
 // on the face, sized by port_patch_u() and port_patch_v() off the features it
 // actually has to carry.
+// Square, and wide enough that the infinity step has a land outside the Ø76.
+function stem_plate_w() =
+    max(port_patch_u(), port_patch_v(""), EL180_LENS_OD + 4);
+
 module port_plate_2d(mark = "", grow = 0) {
     ax = cam_axis(mark);
+    w = mark == "" ? stem_plate_w() : port_patch_u();
+    h = mark == "" ? stem_plate_w() : port_patch_v(mark);
     translate([ax.x, ax.y])
         rotate([0, 0, port_up_az(mark)])
-            round_rect(port_patch_u() + 2 * grow,
-                       port_patch_v(mark) + 2 * grow,
+            round_rect(w + 2 * grow, h + 2 * grow,
                        max(0.4, PORT_PLATE_R + grow));
 }
 
@@ -173,8 +177,13 @@ module port_chassis_clip(mark = "") {
     out = chassis_out();
     // Camera-up is vertical on every face, so the chassis's rounding — which
     // is all in plan — is always across the plate, never along it.
+    // The clip ends on the skin for a part that sits on the box face. Camera
+    // cookies are placed CAM_RECESS inboard, and the face cap has to reach
+    // back out to the skin from that frame — without the lift the cap is
+    // trimmed off and the plate sits in the rebate.
     rot = abs(u.x) > 0.5 ? [0, 90, 0] : [-90, 0, 0];
-    translate([0, 0, -BOX_XY / 2])
+    lift = mark == "" ? 0 : cam_face_cap();
+    translate([0, 0, -BOX_XY / 2 + lift])
         rotate(rot)
             linear_extrude(height = 4 * out, center = true)
                 round_rect(out, out, PORT_BOSS_R);
@@ -343,7 +352,8 @@ module box_bore() {
     at_transmit_face()
         translate([cam_axis("T").x, cam_axis("T").y, -WALL / 2])
             cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
-    // Both stems drop a nut through this. The chamber beyond is already open.
+    // Big enough for the helicoid nut. The infinity stem stops at this
+    // hole; only the lens barrel passes into the chamber.
     at_stem_face()
         translate([0, 0, -WALL / 2])
             cylinder(h = WALL + 2, d = HELI_NUT_OD + 0.8, center = true);
@@ -646,28 +656,46 @@ module chassis_blank() {
             round_rect(out, out, PORT_BOSS_R);
 }
 
-module part_chassis() {
-    // Full / inner / outer always pocket every layer so the colour STLs seat.
-    // SHELL=logo exports one LOGO_LAYER as a drop-in.
-    layer = (SHELL == "logo") ? LOGO_LAYER : "all";
-    color("SlateGray")
-    if (SHELL == "logo")
-        union() {
-            // Body, clipped to the chassis in case a glyph ever reaches a
-            // bore or a fastener. LOGO_FIT keeps it off the pocket faces.
-            intersection() {
-                difference() {
-                    chassis_blank();
-                    box_bore();
-                    box_fastener_cuts();
-                }
-                fxpan_colour(layer, LOGO_FIT, 0);
+// One colour, clipped to the chassis so a glyph cannot cross a bore.
+// The proud lip is the part that stands off the wall face.
+module logo_plug(layer) {
+    union() {
+        intersection() {
+            difference() {
+                chassis_blank();
+                box_bore();
+                box_fastener_cuts();
             }
-            // Lip standing outside the wall, so the plug face is not
-            // coplanar with it either. Nothing out here to clip against.
-            fxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+            fxpan_colour(layer, LOGO_FIT, 0);
         }
-    else
+        fxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+    }
+}
+
+module logo_fills() {
+    // Same plugs the colour STLs export, drawn into the pockets. No second
+    // chassis boolean — the pocket cut already made the seat.
+    module one(layer, c) {
+        if (LOGO_LAYER == "all" || LOGO_LAYER == layer)
+            color(c) {
+                fxpan_colour(layer, LOGO_FIT, 0);
+                fxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+            }
+    }
+    one("fx", "Gold");
+    one("word", "White");
+    one("outline", "Crimson");
+    one("mp", "White");
+    one("rule", "Crimson");
+    one("spec", "White");
+    one("ana_mp", "White");
+    one("ana_rule", "Crimson");
+    one("ana", "White");
+    one("stripe", "Crimson");
+}
+
+module chassis_body() {
+    color("SlateGray")
     mm_split() {
         difference() {
             chassis_blank();
@@ -677,7 +705,7 @@ module part_chassis() {
             // drop it to the real floor, which is BOX_Z deep.
             translate([0, 0, -(BOX_Z - BOX_XY) / 2])
                 box_floor_stamp(fxp_tag("chassis"), BOX_XY, WALL);
-            if (SHELL == "full")
+            if (SHELL == "full" || SHELL == "logo")
                 fxpan_colour("all");
         }
         union() {
@@ -686,6 +714,16 @@ module part_chassis() {
                 fxpan_colour("all");
         }
     }
+}
+
+module part_chassis() {
+    // Full / inner / outer always pocket every layer so the colour STLs seat.
+    // SHELL=logo exports one LOGO_LAYER as a drop-in. The assembly preview
+    // draws those plugs back into the pockets; see logo_fills().
+    if (SHELL == "logo")
+        color("SlateGray") logo_plug(LOGO_LAYER);
+    else
+        chassis_body();
 }
 
 // -----------------------------------------------------------------------------
@@ -788,8 +826,8 @@ module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
     difference() {
         union() {
             port_flange(mark);
-            // Brings the camera cookie face out to the thinned skin. The
-            // tube and the register stay where they are.
+            // Brings the camera cookie face out to the skin. The tube and
+            // the register stay where they are.
             if (mark != "" && cam_face_cap() > 0.05)
                 intersection() {
                     translate([0, 0, patch_t()])
@@ -877,8 +915,9 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
 // stems — one cookie rebate. Helicoid nut is 9 mm deeper than the infinity
 // seat, because the collapsed helicoid stays in the path.
 // -----------------------------------------------------------------------------
-// Shared cookie face: the helicoid's collapsed flange. The infinity seat is
-// HELI_SHORT above that, a pad so the fixed stem lands on 158.5.
+// Shared rebate floor. The helicoid cookie's face is the collapsed flange.
+// The infinity cookie's rim is the skin; its seat is HELI_SHORT above that
+// flange, down inside the step.
 function stem_drop() = patch_t() - heli_flange_z(EL180_HELI_MIN);
 
 module stem_cookie() {
@@ -928,16 +967,14 @@ module part_stem() {
     }
 }
 
-// Lens screws straight in. The cookie is HELI_SHORT thicker than the helicoid
-// one, so its face is the 158.5 seat and its back still sits on the same
-// rebate floor. Thread is the 8 mm under that face. The Ø60 barrel continues
-// EL180_PAST past the thread.
+// Lens screws into the cookie. The rim is the chassis skin. Inside the Ø76
+// the face steps down to the 158.5 seat. The M62 is the 8 mm under that
+// seat and it stops at the inner face of the wall — the Ø60 barrel goes
+// on through the chassis hole, so there is no printed tube in the chamber.
 module part_stem_el180_inf() {
     od = el180_stem_od();
     seat = inf_seat_z();
     z_thread = seat - EL180_M62_LEN;
-    z_tip = z_thread - EL180_PAST;
-    face_drop = patch_t() - seat;
     color("SlateGray")
     mm_split() {
         difference() {
@@ -945,22 +982,24 @@ module part_stem_el180_inf() {
                       pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
                       position = [0, 0, z_thread])
                 union() {
-                    translate([0, 0, -face_drop])
-                        port_flange("");
-                    // Back to the shared rebate floor. The helicoid cookie is
-                    // HELI_SHORT thinner and ends here too.
+                    port_flange("");
                     translate([0, 0, -stem_drop()])
-                        linear_extrude(HELI_SHORT)
+                        linear_extrude(stem_drop())
                             port_plate_2d("");
-                    translate([0, 0, z_tip])
-                        cylinder(h = -face_drop + 0.2 - z_tip, d = od);
+                    translate([0, 0, z_thread])
+                        cylinder(h = seat + 0.2 - z_thread, d = od);
                 }
-            translate([0, 0, -face_drop]) {
-                port_clamp_screws("") port_csk_cut();
-                fxp_port_stamp(fxp_tag("stem_inf"), "");
+            // Step down to the flange. The rim outside this stays at the skin.
+            translate([0, 0, seat])
+                cylinder(h = patch_t() - seat + 2, d = EL180_LENS_OD + 0.6);
+            port_clamp_screws("") {
+                port_csk_cut();
+                translate([0, 0, -stem_drop() - 0.2])
+                    cylinder(h = stem_drop() + 0.4, d = PORT_SCREW_D);
             }
-            translate([0, 0, z_tip - 0.1])
-                cylinder(h = EL180_PAST + 0.15, d = EL180_BARREL);
+            // The step eats the rim, so the tag sits on the seat.
+            translate([0, 0, seat - patch_t()])
+                fxp_port_stamp(fxp_tag("stem_inf"), "");
         }
         stem_thread_liner(z_thread);
     }
@@ -1432,7 +1471,14 @@ module optical_axis_guides() {
 
 // -----------------------------------------------------------------------------
 module assembly() {
-    part_chassis();
+    if (SHELL == "logo")
+        chassis_body();
+    else
+        part_chassis();
+    // Pockets stay empty in the chassis STL. Here the plugs sit back in
+    // them so the wall reads as printed. LOGO_LAYER picks one colour.
+    if (SHELL != "inner" && SHELL != "outer")
+        logo_fills();
 
     if (SHOW_PANELS) {
         at_stem()
@@ -1515,10 +1561,16 @@ module diagnostics() {
              "  |  seat z ", inf_seat_z(),
              "  helicoid nut ", heli_bottom_z(), "..", heli_boss_z(),
              "  passage ", heli_pass_d()));
+    echo(str("infinity cookie: rim at the skin z ", skin_z(),
+             ", step ", EL180_LENS_OD + 0.6, " down ",
+             round((skin_z() - inf_seat_z()) * 10) / 10,
+             " mm to the seat at z ", inf_seat_z(),
+             "  |  thread ", inf_seat_z() - EL180_M62_LEN, "..", inf_seat_z(),
+             " (wall inner face ", -WALL, ")"));
     echo(str("body fit: F register stands ",
              round((patch_t() + mount_standoff() - skin_z()) * 10) / 10,
              " mm off the chassis skin (skin ", skin_z(),
-             " mm, was ", patch_t(), "; arm tube ", ARM_TUBE,
+             " mm; arm tube ", ARM_TUBE,
              " + ring ", F_REV_STACK, ", cookies recessed ", CAM_RECESS, ")",
              "  vs a D800 front panel ", d800_proud(), " mm proud of its flange",
              patch_t() + mount_standoff() - skin_z() >= d800_proud()
@@ -1582,9 +1634,8 @@ module diagnostics() {
     head_r = norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2;
     echo(str("cookie ", round(port_patch_u() * 10) / 10, "×",
              round(port_patch_v("R") * 10) / 10, " arm, ",
-             round(port_patch_u() * 10) / 10, "×",
-             round(port_patch_v("") * 10) / 10,
-             " stem, centred on the bore, rebate closed all round",
+             round(stem_plate_w() * 10) / 10, " square stem, ",
+             "centred on the bore, rebate closed all round",
              "  |  clamp M3 at r ", round(port_clamp_r() * 10) / 10,
              " ± ", PORT_CLAMP_SEP,
              "  |  M62 boss ", el180_stem_od(), " inside heads at ",
