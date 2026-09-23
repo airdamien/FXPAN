@@ -9,9 +9,11 @@
 // Printed mouth: Archive-663 mountLensBase (CC BY-NC-SA 4.0)
 //   https://github.com/Archive-663/lensMounts  (Nikon F / STL)
 // CAD, not the old scanned f-mount_raw.stl, so a through-bore is safe.
-// As shipped the lips are 40 mm and the bayonet is 43.5 mm; the import is
-// opened to 43.5 so the lips are not the stop. Metal reverse ring is still
-// 44 mm / f/8.4; printed is f/9.2. ARM_MOUNT = 0 stays the default.
+// As shipped the lips are 40 mm and the bayonet throat is 43.5 mm. Do not
+// difference() this mesh: a bore coincident with that throat turns the
+// barrel into a stack of hairline slots. The 40 mm lip is what enters the
+// camera, and it is the printed mouth. Metal reverse ring is still 44 mm
+// / f/8.4. ARM_MOUNT = 0 stays the default.
 //
 // Parent must include params.scad and lib/threads.scad.
 
@@ -21,7 +23,7 @@ F_STL_ZMAX   = 7.75;
 F_STL_HEIGHT = F_STL_ZMAX - F_STL_ZMIN;
 F_STL_OD     = 62;     // adapter flange; peg into the tube is F_PEG_OD
 F_PEG_OD     = 52;     // sits in the tube wall (TUBE_ID 46 / TUBE_OD 58)
-F_STL_THROAT = 43.5;   // after the through-bore; bayonet ID as modelled
+F_STL_THROAT = 40;     // the lip. The bayonet behind it is already 43.5 in the mesh.
 // F_COLLAR_OD is in params.scad: the lock lugs are sized off it, and
 // fxp_tray.scad reaches the port geometry without seeing this file.
 F_COLLAR_Z0  = -1.6;
@@ -48,16 +50,12 @@ module f_rev_thread_cut(h = undef, clear = undef) {
 }
 
 module f_mount_stl_raw() {
-    difference() {
-        // 180° so the lock-pin recess sits at +X, matching f_pin_az.
-        rotate([0, 0, 180])
-            translate([0, 0, -F_STL_ZMIN])
-                import(F_STL_FILE, convexity = 12);
-        // Open the 40 mm lips to the 43.5 mm bayonet. Do not go to F_BORE
-        // (44): the lugs are only ~1.15 mm radially.
-        translate([0, 0, -1])
-            cylinder(h = F_STL_HEIGHT + 2, d = F_STL_THROAT);
-    }
+    // 180° so the lock-pin recess sits at +X, matching f_pin_az.
+    // Imported whole. A bore through this mesh splits the barrel wall
+    // into the gap slots.
+    rotate([0, 0, 180])
+        translate([0, 0, -F_STL_ZMIN])
+            import(F_STL_FILE, convexity = 12);
 }
 
 // Raw forks sit at +X. The pin is 90° left of flange-mark-up (look −Z, CCW).
