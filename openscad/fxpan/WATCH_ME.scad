@@ -94,7 +94,7 @@ function inf_stem() =
     STEM || PART == "stem_el180_inf";
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
 // Narrowest thing in the light path at the flange. The metal reverse ring
-// keeps the real 44 mm F throat; the printed bayonet is F_STL_THROAT (43.5).
+// keeps the real 44 mm F throat; the printed bayonet lip is F_STL_THROAT.
 function mouth_clear() = printed_f() ? F_STL_THROAT : F_THROAT;
 // Widest aperture that puts the whole frame, corners included, through that
 // mouth. need_bore() falls as you stop down, so bisect for where it crosses.
@@ -189,9 +189,8 @@ module port_chassis_clip(mark = "") {
                 round_rect(out, out, PORT_BOSS_R);
 }
 
-// Chamfered on the outer face only. Printed arm-up the outer face is the last
-// thing off the bed, so the chamfer only ever narrows the part and the bed
-// face stays the full flat plate.
+// Chamfered on the outer face only. The stem prints this face up, so the
+// chamfer only narrows the last layers and the bed face stays the full plate.
 module port_flange(mark = "") {
     c = min(PORT_EDGE_CHAM, patch_t() - 1.5);
     intersection() {
@@ -203,6 +202,15 @@ module port_flange(mark = "") {
         }
         port_chassis_clip(mark);
     }
+}
+
+// Camera cookie. Straight through, same outline on both faces, so the edge
+// is a vertical wall and sits flat on the bed. Following the chassis corner
+// back through the thickness left a slope there, and that slope is a ledge
+// once the flange is the bed face.
+module cam_cookie(mark) {
+    linear_extrude(patch_t() + cam_face_cap())
+        port_plate_2d(mark);
 }
 
 // Camera-up chord at the F mouth so the pentaprism nose clears the OD. It
@@ -825,16 +833,10 @@ module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
     ax = cam_axis(mark);
     difference() {
         union() {
-            port_flange(mark);
-            // Brings the camera cookie face out to the skin. The tube and
-            // the register stay where they are.
-            if (mark != "" && cam_face_cap() > 0.05)
-                intersection() {
-                    translate([0, 0, patch_t()])
-                        linear_extrude(cam_face_cap())
-                            port_plate_2d(mark);
-                    port_chassis_clip(mark);
-                }
+            if (mark != "")
+                cam_cookie(mark);
+            else
+                port_flange(mark);
             if (out_len > 0.05)
                 along_cam(rx, ry, mark)
                     cylinder(h = out_len, d = TUBE_OD);
