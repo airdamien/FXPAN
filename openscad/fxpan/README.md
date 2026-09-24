@@ -164,7 +164,11 @@ plate and print time than the 90 mm squares they replace.
    compensation then works against you. And the plate is **75 mm across,
    50 mm up**: that way round the stitch crosses 53 mm of glass, the other way
    it crosses 35 and clips. The slot is keyed for both; the plate drops in
-   from the top and sits on the shelf.
+   from the top and sits on the shelf. Two **2 mm holes** on the top of the
+   plate frame, one on each cheek and inboard of the glass ends, take
+   **1.75 mm filament**. Each bore drops in and then crosses the slot just
+   above the glass. Lid off, push a scrap into each hole so the plate cannot
+   lift out of the slot.
 5. **Tray into the chassis**, floor down. One retention post stands on the
    plate frame in the dead corner between the cameras; the other stands on
    the inactive beam under the −X wall, so the lid forks are not in the cup

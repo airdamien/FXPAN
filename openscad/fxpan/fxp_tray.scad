@@ -11,6 +11,12 @@ include <../lib/part_stamp.scad>
 
 POST_W         = 8.0;
 POST_D         = 3.2;
+// Upside-down plate retention. Plate-local: X across the slot, Y along the
+// 75 mm glass. Each bore starts on a cheek top and crosses the open slot
+// just above the glass, so a 1.75 mm scrap blocks the plate from lifting.
+PLATE_PIN_D    = 2.05;
+PLATE_PIN_Y    = 18;     // along the glass, clear of both ends
+PLATE_PIN_DROP = 1.6;    // after the vertical lead-in, still above the glass
 // Just past the glass. 8 mm was the 50 mm-plate value and on a 75 mm plate
 // it drove both pegs into the cup walls; the −X−Y one also sat on a
 // monitor-rail screw.
@@ -57,6 +63,42 @@ module retain_at(side) {
     translate([p[0], p[1], 0])
         rotate([0, 0, retain_az(side)])
             children();
+}
+
+// side +1 enters the +X cheek; −1 the −X cheek. Coords are plate-local.
+function plate_pin_entry(side) =
+    let (x = side * (slot_t() / 2 + CARTRIDGE_WALL / 2))
+        [x, side * PLATE_PIN_Y, frame_top()];
+
+module plate_pin_span(side) {
+    p = plate_pin_entry(side);
+    // Vertical lead-in so the top face stays a round hole, then the
+    // angled run stays under the skin and only opens across the slot.
+    z0 = p[2] - 2.0;
+    a = [p[0], p[1], z0];
+    b = [-side * (slot_t() / 2 + 1.6), p[1], z0 - PLATE_PIN_DROP];
+    translate([p[0], p[1], (p[2] + 0.6 + z0) / 2])
+        cylinder(d = PLATE_PIN_D, h = p[2] + 0.6 - z0, center = true);
+    hull() {
+        translate(a) sphere(d = PLATE_PIN_D);
+        translate(b) sphere(d = PLATE_PIN_D);
+    }
+}
+
+module plate_filament_pin_preview() {
+    rotate([0, 0, -45])
+        for (side = [-1, 1]) {
+            p = plate_pin_entry(side);
+            color("DarkOrange", 0.9)
+                translate([p[0], p[1], p[2] + 1.2])
+                    cylinder(d = PLATE_PIN_D, h = 2.4, center = true);
+        }
+}
+
+module plate_filament_pin_holes() {
+    rotate([0, 0, -45])
+        for (side = [-1, 1])
+            plate_pin_span(side);
 }
 
 module place_plate(glass = false) {
@@ -291,6 +333,7 @@ module fxp_cartridge(show_glass = true, sh, tag = "fxp_tray") {
                 cartridge_posts();
             }
             chassis_fastener_relief(sh);
+            plate_filament_pin_holes();
             translate([0, -half() - 1, 0])
                 rotate([-90, 0, 0])
                     cylinder(h = lens_window_h(), d = EL180_BARREL);
@@ -304,6 +347,8 @@ module fxp_cartridge(show_glass = true, sh, tag = "fxp_tray") {
             place_plate(glass = true);
             cube([inner(), inner(), BOX_Z - 1], center = true);
         }
+    if ($preview)
+        plate_filament_pin_preview();
 }
 
 module lid_retain_tabs(lip = 3) {
