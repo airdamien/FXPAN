@@ -227,8 +227,13 @@ module port_flange(mark = "") {
 // back through the thickness left a slope there, and that slope is a ledge
 // once the flange is the bed face.
 module cam_cookie(mark) {
-    linear_extrude(patch_t() + cam_face_cap())
-        port_plate_2d(mark);
+    // Straight wall, but the shifted edge runs past the chassis corner and
+    // sits proud of it. Clip that edge to the skin; the other three stay.
+    intersection() {
+        linear_extrude(patch_t() + cam_face_cap())
+            port_plate_2d(mark);
+        port_chassis_clip(mark);
+    }
 }
 
 // Camera-up chord at the F mouth so the pentaprism nose clears the OD. It
