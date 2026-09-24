@@ -39,6 +39,9 @@ function plate_h()    = BS_H + BS_CLEAR * 2;   // standing up
 function frame_top()  = frame_top_z();
 function corner_y()   = half() * sqrt(2);
 function shelf_z()    = -BS_H / 2 - 0.15;
+// Rear tip of the seated lens, in cup Y. The window stops 1.5 mm past it.
+function lens_tip_y() = -BOX_XY / 2 - (inf_seat_z() - (8 + 9.2));
+function lens_window_h() = lens_tip_y() + 1.5 - (-half() - 1);
 
 // +X+Y sits on the plate frame (dead corner between the cameras). −X+Y sits
 // on the inactive beam so the lid fork is not in the cup wall and not on
@@ -83,10 +86,10 @@ module chamber_ports(sh) {
     d = TUBE_ID + 0.6;
     t = SKIRT_T;
     w = t + 6;
-    // Lens face: the barrel comes through. The stem itself stops at the wall.
-    translate([0, -half() + t / 2, 0])
-        rotate([90, 0, 0])
-            cylinder(h = w, d = EL180_BARREL, center = true);
+    // Lens face. The Ø60 barrel runs past the wall and into the frame.
+    translate([0, -half() - 1, 0])
+        rotate([-90, 0, 0])
+            cylinder(h = lens_window_h(), d = EL180_BARREL);
     translate([half() - t / 2, cam_axis("R", sh).y, 0])
         rotate([0, 90, 0])
             cylinder(h = w, d = d, center = true);
@@ -288,6 +291,9 @@ module fxp_cartridge(show_glass = true, sh, tag = "fxp_tray") {
                 cartridge_posts();
             }
             chassis_fastener_relief(sh);
+            translate([0, -half() - 1, 0])
+                rotate([-90, 0, 0])
+                    cylinder(h = lens_window_h(), d = EL180_BARREL);
         }
         translate([0, 0, floor_z() + (wall_top() - floor_z()) / 2])
             cube([inner(), inner(), wall_top() - floor_z() + 0.2],
