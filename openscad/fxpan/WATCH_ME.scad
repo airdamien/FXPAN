@@ -870,8 +870,33 @@ module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
             translate([0, 0, -patch_t() - 2])
                 cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
         tube_flash_waste(mark, out_len);
-        translate([0, 0, mark == "" ? 0 : cam_face_cap()])
-            port_clamp_screws(mark) port_csk_cut();
+        // Printed-F cookies are cam_face_cap thicker, and the inner edge is
+        // a 45° face. The old cut started above the back and left a web.
+        if (printed_f())
+            port_clamp_screws(mark) cam_csk_cut();
+        else
+            translate([0, 0, mark == "" ? 0 : cam_face_cap()])
+                port_clamp_screws(mark) port_csk_cut();
+    }
+}
+
+// 45° face along the inner long edge, on the chassis side of the cookie.
+// The outer face keeps the full outline. Lay this face on the bed.
+module cookie_print_flat(mark) {
+    H = patch_t() + cam_face_cap();
+    ax = cam_axis(mark);
+    half_v = port_patch_v(mark) / 2;
+    span = port_patch_u() + 30;
+    if (mark == "R") {
+        translate([ax.x, ax.y + half_v, H])
+            rotate([45, 0, 0])
+                translate([-span / 2, -40, -40])
+                    cube([span, 40, 40]);
+    } else {
+        translate([ax.x - half_v, ax.y, H])
+            rotate([0, 45, 0])
+                translate([0, -span / 2, -40])
+                    cube([40, span, 40]);
     }
 }
 
@@ -908,6 +933,8 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
             fxp_port_stamp(fxp_arm_tag(mark), mark);
         }
         tube_flash_waste(mark, out_len);
+        if (printed_f())
+            cookie_print_flat(mark);
     }
         translate([-p, -p, 0])
             cube([p * 2, p * 2,
