@@ -178,7 +178,11 @@ FX_FMOUNT_EXTRA = 5.0;
 // rather than picked. BOX_XY then takes whatever the path budget has left.
 // D800_PROUD is the customizer knob in WATCH_ME.scad; measure yours.
 function d800_proud() = is_undef(D800_PROUD) ? 13.0 : D800_PROUD;
-MOUNT_CLEAR = 3.0;    // what the 16 mm standoff used to leave in front of a D800
+MOUNT_CLEAR = 3.0;    // twist room on the EL-Nikkor's 16 mm standoff
+// The Nikkor-W register is 20.3 mm longer. The helicoid already stops on the
+// inner wall, so 8 mm of that can go into the W arms (arm_*_w) and still
+// leave a Copal board on the nose. The EL arms stay at ARM_TUBE.
+W_ARM_EXTRA = 8.0;
 // Spent on the register. The arm tube stays F_REV_LEN; the cookies sit this
 // much deeper, so the body clears the skin by MOUNT_CLEAR − CAM_RECESS.
 CAM_RECESS = 2.5;

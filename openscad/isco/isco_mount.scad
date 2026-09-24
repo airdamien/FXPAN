@@ -96,11 +96,14 @@ module isco_clamp(tone = "DimGray") {
     }
 }
 
-// Collar for the Nikkor-W. z = 0 seats in the 1.1 mm groove, on the Ø73
-// land. The bore stays Ø74 until the front rim, then the same ISCO pocket
-// as the M62 clamp: Ø67 thread nests, Ø70.6 face stops, collar grips it.
-// Two slots, so each barrel closes on its own.
+// Collar for the Nikkor-W. z = 0 is the front wall of the 1.1 mm groove.
+// A lip hangs back into that groove (Ø71) so the collar cannot slide
+// along the Ø73 land. The bore stays 73.4 until the front rim, then the
+// same ISCO pocket as the M62 clamp: Ø67 thread nests, Ø70.6 face stops,
+// collar grips it. Two slots, so each barrel closes on its own.
 NW_GRIP_ID = 73.4;
+NW_LIP_ID  = 71.4;    // groove is Ø71
+NW_LIP     = 0.9;     // under the 1.1 mm groove
 NW_GRIP_W  = 18;
 NW_GRIP_OD = NW_GRIP_ID + 2 * CLAMP_T;
 
@@ -109,6 +112,8 @@ module isco_clamp_nw(tone = "DimGray") {
     color(tone)
     difference() {
         union() {
+            translate([0, 0, -NW_LIP])
+                cylinder(h = NW_LIP + 0.2, d = NW_GRIP_OD, $fn = 128);
             cylinder(h = NW_GRIP_W, d = NW_GRIP_OD, $fn = 128);
             translate([0, 0, NW_GRIP_W - 0.2])
                 cylinder(h = rim - NW_GRIP_W + FLANGE_T + 0.2, d = FLANGE_OD, $fn = 96);
@@ -123,7 +128,9 @@ module isco_clamp_nw(tone = "DimGray") {
                         cube([EAR_T + 8, EAR_W, CLAMP_W]);
             }
         }
-        translate([0, 0, -0.2])
+        translate([0, 0, -NW_LIP - 0.2])
+            cylinder(h = NW_LIP + 0.4, d = NW_LIP_ID, $fn = 96);
+        translate([0, 0, -0.05])
             cylinder(h = rim + 0.4, d = NW_GRIP_ID, $fn = 96);
         translate([0, 0, rim + FLANGE_T - 0.1])
             cylinder(h = THREAD_POCKET + 0.2, d = STOP_BORE, $fn = 72);
@@ -132,9 +139,9 @@ module isco_clamp_nw(tone = "DimGray") {
         translate([0, 0, rim + FLANGE_T + THREAD_POCKET - 0.1])
             cylinder(h = CLAMP_W + 1, d = CLAMP_ID, $fn = 96);
         for (side = [-1, 1]) {
-            translate([side * (NW_GRIP_ID / 2 - 1), -SLOT_W / 2, -0.1])
+            translate([side * (NW_LIP_ID / 2 - 1), -SLOT_W / 2, -NW_LIP - 0.1])
                 mirror([side < 0 ? 1 : 0, 0, 0])
-                    cube([NW_GRIP_OD, SLOT_W, NW_GRIP_W + 0.2]);
+                    cube([NW_GRIP_OD, SLOT_W, NW_GRIP_W + NW_LIP + 0.2]);
             translate([side * (CLAMP_ID / 2 - 1), -SLOT_W / 2,
                        rim + FLANGE_T + THREAD_POCKET - 0.1])
                 mirror([side < 0 ? 1 : 0, 0, 0])

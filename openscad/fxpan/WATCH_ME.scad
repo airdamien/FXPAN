@@ -19,7 +19,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -88,18 +88,27 @@ ex = EXPLODED ? 55 : 0;
 // tags — every part in this body is fxp_*
 // -----------------------------------------------------------------------------
 function fxp_tag(name) = str("fxp_", name);
+function w_arm_part() =
+    PART == "arm_r_w" || PART == "arm_t_w"
+    || PART == "arm_r_fw" || PART == "arm_t_fw"
+    || PART == "arm_r_hw" || PART == "arm_t_hw";
+function arm_extra() = (nw_stem() || w_arm_part()) ? W_ARM_EXTRA : 0;
 function fxp_arm_tag(mark) =
-    str("fxp_arm_", mark == "T" ? "t" : "r", printed_f() ? "f" : "");
+    str("fxp_arm_", mark == "T" ? "t" : "r",
+        printed_f() ? "f" : "",
+        arm_extra() > 0 ? "w" : "");
 
 function printed_f() =
-    (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f";
+    (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
+    || PART == "arm_r_fw" || PART == "arm_t_fw";
 function heli_cam() =
     ARM_MOUNT == 2 || PART == "arm_r_h" || PART == "arm_t_h"
+    || PART == "arm_r_hw" || PART == "arm_t_hw"
     || PART == "fmount_h_r" || PART == "fmount_h_t";
 // Infinity register in the arm's own frame (cookie back at z = 0). Same
 // station as the fixed arms. T is shorter by the glass path.
 function cam_heli_register_z(mark) =
-    patch_t() + mount_standoff() + CAM_RECESS
+    patch_t() + mount_standoff() + arm_extra() + CAM_RECESS
     - (mark == "T" ? bs_t_comp() : 0);
 // Shoulder the male bottoms on. The mesh register is F_FMOUNT_STACK
 // further out.
@@ -139,7 +148,7 @@ function mouth_fstop() = _mouth_fstop(1, 64, 40);
 // reverse ring (8 mm). CAM_RECESS moves the whole arm in; it does not
 // shorten the tube, because the tube is the M52 thread.
 function reflect_tube_len()  =
-    ARM_TUBE + F_REV_STACK - mount_stack();
+    ARM_TUBE + arm_extra() + F_REV_STACK - mount_stack();
 // The transmit leg crosses 1 mm of glass at 45°, which pushes its focus
 // back by bs_t_comp(). Shorten the tube by the same amount.
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
@@ -1143,6 +1152,16 @@ module stem_cookie_cuts(tag) {
     }
 }
 
+// 45° on the inner −Y edge. That face sits on the bed so the cookie
+// prints on-angle and the layers run through the plate.
+module stem_bed_chamfer() {
+    t = patch_t();
+    translate([0, -stem_plate_w() / 2, 0])
+        rotate([0, -90, 0])
+            linear_extrude(stem_plate_w() + 2, center = true)
+                polygon([[0, 0], [0, t], [t, 0]]);
+}
+
 module stem_thread_liner(z0) {
     translate([0, 0, z0 - 0.2])
         cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
@@ -1168,14 +1187,41 @@ module part_stem() {
                         cylinder(h = z_top - z_bot, d = od, $fn = 128);
                 }
             stem_cookie_cuts(fxp_tag("stem"));
-            // 45° on the inner bottom edge. That edge goes on the bed.
-            translate([-stem_plate_w() / 2 - 1, -stem_plate_w() / 2, -stem_drop()])
-                rotate([45, 0, 0])
-                    translate([0, -patch_t(), -patch_t()])
-                        cube([stem_plate_w() + 2, patch_t(), patch_t()]);
+            translate([0, 0, -stem_drop()])
+                stem_bed_chamfer();
             translate([0, 0, z_top - 0.05])
                 cylinder(h = heli_flange_z(EL180_HELI_MIN) - z_top + 4,
                          d = heli_pass_d());
+            translate([0, 0, z_bot])
+                cylinder(h = 1.3, d = EL180_BARREL);
+        }
+        stem_thread_liner(z_bot);
+    }
+}
+
+// Nikkor-W cookie. Outer face is the chassis skin. The only cut in that
+// face is the clearance around the helicoid, from the end of the 8 mm
+// thread out through the skin. The thread stops on the inner face.
+module part_stem_w() {
+    od = HELI_NUT_OD;
+    z_bot = -WALL;
+    z_top = z_bot + EL180_M62_LEN;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_bot])
+                union() {
+                    port_flange("");
+                    translate([0, 0, z_bot])
+                        cylinder(h = patch_t() - z_bot, d = od, $fn = 128);
+                }
+            port_clamp_screws("") port_csk_cut();
+            fxp_port_stamp(fxp_tag("stem_w"), "");
+            stem_bed_chamfer();
+            translate([0, 0, z_top - 0.05])
+                cylinder(h = patch_t() - z_top + 2, d = heli_pass_d());
             translate([0, 0, z_bot])
                 cylinder(h = 1.3, d = EL180_BARREL);
         }
@@ -1230,7 +1276,7 @@ NW_BOARD = 3.0;
 NW_HOLE  = 41.8;    // Copal 1 barrel is 41.6
 NW_CLEAR = 56;      // Ø54 cell and the retaining ring
 NW_NOSE_OD = 72;
-function nw_flange_z() = flange_z(NW_FFD);
+function nw_flange_z() = flange_z(NW_FFD) - W_ARM_EXTRA;
 // Helicoid front when it is at the infinity mark, threaded into the wall.
 function nw_heli_z() = -WALL + heli_at_infinity();
 function nw_rise() = nw_flange_z() - nw_heli_z();
@@ -1701,7 +1747,7 @@ module ghost_body_at(mark = "") {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
             along_cam(0, 0, mark)
-                translate([0, 0, mount_standoff() - d800_proud()
+                translate([0, 0, mount_standoff() + arm_extra() - d800_proud()
                                  + BODY_D / 2 + ex])
                     cube([BODY_W, BODY_H, BODY_D], center = true);
 }
@@ -1778,7 +1824,9 @@ module assembly() {
         section_cut("SlateGray")
             at_stem()
                 translate([0, 0, EXPLODED ? ex : 0])
-                    if (inf_stem())
+                    if (nw_stem())
+                        part_stem_w();
+                    else if (inf_stem())
                         part_stem_el180_inf();
                     else
                         part_stem();
@@ -2003,15 +2051,21 @@ module export_part() {
         part_stem();
     else if (PART == "stem_el180_inf")
         part_stem_el180_inf();
+    else if (PART == "stem_w")
+        part_stem_w();
     else if (PART == "stem_nw180")
         part_stem_nw180();
     else if (PART == "arm_r" || PART == "arm_r_f")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t" || PART == "arm_t_f")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
-    else if (PART == "arm_r_h")
+    else if (PART == "arm_r_w" || PART == "arm_r_fw")
+        part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    else if (PART == "arm_t_w" || PART == "arm_t_fw")
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    else if (PART == "arm_r_h" || PART == "arm_r_hw")
         part_cam_heli_arm("R");
-    else if (PART == "arm_t_h")
+    else if (PART == "arm_t_h" || PART == "arm_t_hw")
         part_cam_heli_arm("T");
     else if (PART == "fmount_h_r")
         part_cam_heli_mount("R");
