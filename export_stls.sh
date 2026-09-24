@@ -56,7 +56,7 @@ elif [[ "${1:-}" == "--fxpan" ]]; then
     shift
     scad=$root/openscad/fxpan/WATCH_ME.scad
     out=$root/stls/fxpan
-    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_outline chassis_logo_mp chassis_logo_rule chassis_logo_spec chassis_logo_ana_mp chassis_logo_ana_rule chassis_logo_ana chassis_logo_stripe stem stem_inner stem_outer stem_el180_inf stem_el180_inf_inner stem_el180_inf_outer stem_nw180 arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer arm_r_h arm_r_h_inner arm_r_h_outer arm_t_h arm_t_h_inner arm_t_h_outer fmount_h_r fmount_h_t cam_helicoid lid lid_inner lid_outer display_mount fxp_tray base cradle_r cradle_t baffle ringgauge shims el180_adapter)
+    default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_outline chassis_logo_mp chassis_logo_rule chassis_logo_spec chassis_logo_ana_mp chassis_logo_ana_rule chassis_logo_ana chassis_logo_stripe stem stem_inner stem_outer stem_el180_inf stem_el180_inf_inner stem_el180_inf_outer stem_w stem_w_inner stem_w_outer stem_nw180 arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer arm_r_w arm_r_w_inner arm_r_w_outer arm_t_w arm_t_w_inner arm_t_w_outer arm_r_fw arm_r_fw_inner arm_r_fw_outer arm_t_fw arm_t_fw_inner arm_t_fw_outer arm_r_h arm_r_h_inner arm_r_h_outer arm_t_h arm_t_h_inner arm_t_h_outer arm_r_hw arm_r_hw_inner arm_r_hw_outer arm_t_hw arm_t_hw_inner arm_t_hw_outer fmount_h_r fmount_h_t cam_helicoid lid lid_inner lid_outer display_mount fxp_tray base cradle_r cradle_t baffle ringgauge shims el180_adapter)
     tail_note="FXPAN 65: print ringgauge FIRST and set F_REV_CLEAR from it — the M52 mouth is the one fit this body cannot recover from. Then chassis floor-down; arms flange-on-bed (camera mouth up); lid outer face down; tray floor-down; base and cradles flat (inserts and screw heads from the bed); baffles and gauge flat. *_inner = PETG lining, *_outer = PCTG shell; chassis_logo_* drop into the chassis pocket as separate filaments."
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
@@ -82,7 +82,7 @@ elif [[ "${1:-}" == "--isco" ]]; then
     shift
     scad=$root/openscad/isco/WATCH_ME.scad
     out=$root/stls/isco
-    default_parts=(el_nikkor_180n isco_ultrastar isco_clamp isco_stand)
+    default_parts=(el_nikkor_180n isco_ultrastar isco_clamp isco_clamp_nw isco_stand)
     tail_note="ISCO: envelope STLs for clearance only — measure L_* on the attachment and update isco_ultrastar_attachment.scad before trusting fit."
 elif [[ "${1:-}" == "--tools" ]]; then
     shift
@@ -248,6 +248,9 @@ for req in "${parts[@]}"; do
             ;;
         isco_clamp)
             scad_part=clamp
+            ;;
+        isco_clamp_nw)
+            scad_part=nw_clamp
             ;;
         isco_stand)
             scad_part=stand
