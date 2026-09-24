@@ -19,7 +19,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -33,6 +33,7 @@ use <../monitor/monitor.scad>
 include <../isco/el_nikkor_180n.scad>
 include <../isco/isco_ultrastar_attachment.scad>
 include <../isco/isco_mount.scad>
+include <../isco/nikkor_w_180.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
@@ -70,7 +71,7 @@ LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:6
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:printed F, 2:helicoid F]
 F_MOUNT_CLOCK = 0;
-STEM = 1; // [0:EL 180 helicoid, 1:EL 180 infinity]
+STEM = 1; // [0:EL 180 helicoid, 1:EL 180 infinity, 2:Nikkor-W 180 helicoid]
 EL180_M62_PITCH = 1.0; // [0.75, 1.0]
 
 /* [Optics check] */
@@ -111,7 +112,9 @@ function cam_heli_front_z() = cam_heli_seat_z() + cam_heli_proud();
 function cam_heli_shoulder(mark) =
     cam_heli_register_z(mark) - F_FMOUNT_STACK - cam_heli_front_z();
 function inf_stem() =
-    STEM || PART == "stem_el180_inf";
+    STEM == 1 || PART == "stem_el180_inf";
+function nw_stem() =
+    STEM == 2 || PART == "stem_nw180";
 function show_isco() = PART == "isco" || PART == "isco_cut";
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
 // Narrowest thing in the light path at the flange. The metal reverse ring
@@ -1145,13 +1148,13 @@ module stem_thread_liner(z0) {
         cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
 }
 
-// Bought M62 helicoid. Female is heli_bottom_z() .. heli_boss_z(). The body
-// has to pass through heli_pass_d(). Collapsed, the lens flange is flush
-// with the cookie face.
+// Bought M62 helicoid. The female stays in the wall and stops on the inner
+// face, so nothing printed crosses into the chamber and the tray can drop
+// in from the top. Screw the helicoid in after the tray is in.
 module part_stem() {
     od = HELI_NUT_OD;
-    z_bot = heli_bottom_z();
-    z_top = heli_boss_z();
+    z_bot = -WALL;
+    z_top = -WALL + EL180_M62_LEN;
     z_cookie = heli_flange_z(EL180_HELI_MIN) - patch_t();
     color("SlateGray")
     mm_split() {
@@ -1161,14 +1164,19 @@ module part_stem() {
                       position = [0, 0, z_bot])
                 union() {
                     stem_cookie();
-                    translate([0, 0, z_bot - 1])
-                        cylinder(h = z_cookie - (z_bot - 1), d = od);
+                    translate([0, 0, z_bot])
+                        cylinder(h = z_top - z_bot, d = od, $fn = 128);
                 }
             stem_cookie_cuts(fxp_tag("stem"));
+            // 45° on the inner bottom edge. That edge goes on the bed.
+            translate([-stem_plate_w() / 2 - 1, -stem_plate_w() / 2, -stem_drop()])
+                rotate([45, 0, 0])
+                    translate([0, -patch_t(), -patch_t()])
+                        cube([stem_plate_w() + 2, patch_t(), patch_t()]);
             translate([0, 0, z_top - 0.05])
                 cylinder(h = heli_flange_z(EL180_HELI_MIN) - z_top + 4,
                          d = heli_pass_d());
-            translate([0, 0, z_bot - 1.2])
+            translate([0, 0, z_bot])
                 cylinder(h = 1.3, d = EL180_BARREL);
         }
         stem_thread_liner(z_bot);
@@ -1213,13 +1221,45 @@ module part_stem_el180_inf() {
     }
 }
 
+// Nikkor-W nose. Screws into the same M62 helicoid as the EL-Nikkor.
+// z = 0 seats on the helicoid's front face. The Copal flange stops on the
+// far end, NW_FFD − EL_FFD ahead of that, so infinity is the helicoid's
+// infinity mark. The lens drops in from the front. Its own M39 ring comes
+// in through the bore from the rear.
+NW_BOARD = 3.0;
+NW_HOLE  = 41.8;    // Copal 1 barrel is 41.6
+NW_CLEAR = 56;      // Ø54 cell and the retaining ring
+NW_NOSE_OD = 72;
+function nw_flange_z() = flange_z(NW_FFD);
+// Helicoid front when it is at the infinity mark, threaded into the wall.
+function nw_heli_z() = -WALL + heli_at_infinity();
+function nw_rise() = nw_flange_z() - nw_heli_z();
+
+module part_stem_nw180() {
+    rise = nw_rise();
+    color("SteelBlue")
+    difference() {
+        union() {
+            translate([0, 0, -EL180_M62_LEN])
+                ScrewThread(EL180_M62_MAJOR, EL180_M62_LEN,
+                            pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL);
+            cylinder(h = rise, d = NW_NOSE_OD, $fn = 128);
+        }
+        translate([0, 0, rise - NW_BOARD])
+            cylinder(h = NW_BOARD + 1, d = NW_HOLE, $fn = 96);
+        translate([0, 0, -EL180_M62_LEN - 0.2])
+            cylinder(h = rise - NW_BOARD + EL180_M62_LEN + 0.2,
+                     d = NW_CLEAR, $fn = 96);
+    }
+}
+
 // Printed stand-in for the bought M62 helicoid: a fixed spacer whose length
 // is solved for infinity, so it has no travel at all. el180_spacer_add() is
 // derived from the chassis, so it tracks any change to BOX_XY or the plate.
 // Print a second at +0.5 mm if the first lands long; the shims only add.
 function el180_adapter_h() = EL180_HELI_MALE + el180_spacer_add();
 
-module part_el180_adapter() {
+module part_el180_adapter(tone = "SlateGray") {
     hm = EL180_HELI_MALE;               // male into the stem boss
     hb = el180_spacer_add();            // what it adds past the boss face
     hf = EL180_M62_LEN;                 // female for the lens
@@ -1227,18 +1267,17 @@ module part_el180_adapter() {
     hex_od = heli_pass_d() - 0.8;       // has to pass the recessed nut
     shank_d = EL180_M62_MAJOR - 1.6;
     hex_h = hb + overlap;
-    color("SlateGray")
+    color(tone)
     difference() {
         union() {
             ScrewThread(EL180_M62_MAJOR, hm, pitch = EL180_M62_PITCH,
                         tolerance = EL180_M62_TOL);
             cylinder(h = hm + overlap, d = shank_d);
             translate([0, 0, hm - overlap])
-                rotate([0, 0, 30])
-                    ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
-                              tolerance = EL180_M62_TOL,
-                              position = [0, 0, hex_h - hf])
-                        cylinder(h = hex_h, d = hex_od, $fn = 6);
+                ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                          tolerance = EL180_M62_TOL,
+                          position = [0, 0, hex_h - hf])
+                    cylinder(h = hex_h, d = hex_od, $fn = 128);
         }
         // Through-bore at the M62 minor; the hex behind the female stays
         // EL180_BARREL so the 60 mm lens barrel drops in.
@@ -1246,12 +1285,12 @@ module part_el180_adapter() {
             cylinder(h = hex_h - hf + 0.4, d = EL180_BARREL);
         translate([0, 0, -0.2])
             cylinder(h = hm + hex_h + 0.4, d = EL180_BORE);
-        translate([0, -hex_od / 2 * cos(30) - 0.05,
+        translate([0, -hex_od / 2 - 0.05,
                    hm + hb * 0.5])
             rotate([90, 0, 0])
                 part_stamp_stack_cut(fxp_tag("el180"), size = 2.2);
     }
-    if ($preview && !SHOW_LENS)
+    if ($preview && !SHOW_LENS && !nw_stem())
         color("DimGray", 0.45)
             translate([0, 0, hm + hb])
                 el180_ghost();
@@ -1267,7 +1306,7 @@ module el180_ghost() {
 module isco_on_body() {
     seat = inf_stem()
         ? inf_seat_z()
-        : heli_flange_z(heli_at_infinity());
+        : -WALL + heli_at_infinity();
     lift = EXPLODED ? ex * 1.4 : 0;
     at_stem()
         translate([0, 0, seat + lift]) {
@@ -1670,12 +1709,16 @@ module ghost_body_at(mark = "") {
 module taking_lens_at() {
     if (show_isco())
         isco_on_body();
+    else if (nw_stem() || (SHOW_LENS && STEM == 2))
+        at_stem()
+            translate([0, 0, nw_flange_z() + (EXPLODED ? ex * 1.6 : 0)])
+                nw180(show_glass = SHOW_LENS_MARKS);
     else if (SHOW_LENS)
         color("DimGray", 0.92)
             at_stem()
                 translate([0, 0, (inf_stem()
                                     ? inf_seat_z()
-                                    : heli_flange_z(heli_at_infinity()))
+                                    : -WALL + heli_at_infinity())
                                  + (EXPLODED ? ex * 1.4 : 0)])
                     el180_ghost();
 }
@@ -1703,29 +1746,53 @@ module optical_axis_guides() {
     }
 }
 
+// One cut per part. A single difference() around the whole assembly
+// throws the colors away, and the section becomes one green mass.
+// color() has to wrap the boolean. A color inside a difference() is thrown
+// away and the preview paints the cut green.
+module section_cut(tone = "Silver") {
+    if (PART == "section")
+        color(tone)
+            difference() {
+                children();
+                translate([0.02, -600, -200])
+                    cube([700, 1200, 600]);
+            }
+    else
+        children();
+}
+
 // -----------------------------------------------------------------------------
 module assembly() {
-    if (SHELL == "logo")
-        chassis_body();
-    else
-        part_chassis();
+    section_cut("SlateGray")
+        if (SHELL == "logo")
+            chassis_body();
+        else
+            part_chassis();
     // Pockets stay empty in the chassis STL. Here the plugs sit back in
     // them so the wall reads as printed. LOGO_LAYER picks one colour.
     if (SHELL != "inner" && SHELL != "outer")
         logo_fills();
 
     if (SHOW_PANELS) {
-        at_stem()
-            translate([0, 0, EXPLODED ? ex : 0])
-                if (inf_stem())
-                    part_stem_el180_inf();
-                else
-                    part_stem();
-        if (!inf_stem())
+        section_cut("SlateGray")
             at_stem()
-                translate([0, 0, heli_bottom_z()
-                                 + (EXPLODED ? ex * 1.4 : 0)])
-                    part_el180_adapter();
+                translate([0, 0, EXPLODED ? ex : 0])
+                    if (inf_stem())
+                        part_stem_el180_inf();
+                    else
+                        part_stem();
+        if (!inf_stem())
+            section_cut(nw_stem() ? "DarkGoldenrod" : "SlateGray")
+                at_stem()
+                    translate([0, 0, -WALL
+                                     + (EXPLODED ? ex * 1.4 : 0)])
+                        part_el180_adapter(nw_stem() ? "DarkGoldenrod" : "SlateGray");
+        if (nw_stem())
+            section_cut("SteelBlue")
+                at_stem()
+                    translate([0, 0, nw_heli_z() + (EXPLODED ? ex * 1.5 : 0)])
+                        part_stem_nw180();
         at_reflect()
             translate([0, 0, (EXPLODED ? ex : 0) - CAM_RECESS])
                 if (heli_cam()) {
@@ -1773,7 +1840,8 @@ module assembly() {
         camera_body_at(transmit_tube_len(), ry = -field_toe(),
                        roll = body_roll_t(), mark = "T");
     }
-    taking_lens_at();
+    section_cut("Silver")
+        taking_lens_at();
     optical_axis_guides();
     diagnostics();
 }
@@ -1935,6 +2003,8 @@ module export_part() {
         part_stem();
     else if (PART == "stem_el180_inf")
         part_stem_el180_inf();
+    else if (PART == "stem_nw180")
+        part_stem_nw180();
     else if (PART == "arm_r" || PART == "arm_r_f")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t" || PART == "arm_t_f")
@@ -1970,6 +2040,8 @@ module export_part() {
         shim_set();
     else if (PART == "el180_adapter")
         part_el180_adapter();
+    else if (PART == "section")
+        assembly();
     else if (PART == "isco_cut")
         difference() {
             assembly();

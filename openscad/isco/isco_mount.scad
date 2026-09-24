@@ -96,6 +96,69 @@ module isco_clamp(tone = "DimGray") {
     }
 }
 
+// Collar for the Nikkor-W. z = 0 seats in the 1.1 mm groove, on the Ø73
+// land. The bore stays Ø74 until the front rim, then the same ISCO pocket
+// as the M62 clamp: Ø67 thread nests, Ø70.6 face stops, collar grips it.
+// Two slots, so each barrel closes on its own.
+NW_GRIP_ID = 73.4;
+NW_GRIP_W  = 18;
+NW_GRIP_OD = NW_GRIP_ID + 2 * CLAMP_T;
+
+module isco_clamp_nw(tone = "DimGray") {
+    rim = NW_FRONT - (NW_SHUTTER + NW_GROOVE);
+    color(tone)
+    difference() {
+        union() {
+            cylinder(h = NW_GRIP_W, d = NW_GRIP_OD, $fn = 128);
+            translate([0, 0, NW_GRIP_W - 0.2])
+                cylinder(h = rim - NW_GRIP_W + FLANGE_T + 0.2, d = FLANGE_OD, $fn = 96);
+            translate([0, 0, rim + FLANGE_T - 0.2])
+                cylinder(h = THREAD_POCKET + CLAMP_W + 0.2, d = CLAMP_OD, $fn = 128);
+            for (side = [-1, 1]) {
+                translate([side * (NW_GRIP_OD / 2 - 1), -EAR_W / 2, 0])
+                    mirror([side < 0 ? 1 : 0, 0, 0])
+                        cube([EAR_T + 8, EAR_W, NW_GRIP_W]);
+                translate([side * (CLAMP_OD / 2 - 1), -EAR_W / 2, rim + FLANGE_T + THREAD_POCKET])
+                    mirror([side < 0 ? 1 : 0, 0, 0])
+                        cube([EAR_T + 8, EAR_W, CLAMP_W]);
+            }
+        }
+        translate([0, 0, -0.2])
+            cylinder(h = rim + 0.4, d = NW_GRIP_ID, $fn = 96);
+        translate([0, 0, rim + FLANGE_T - 0.1])
+            cylinder(h = THREAD_POCKET + 0.2, d = STOP_BORE, $fn = 72);
+        translate([0, 0, rim - 0.1])
+            cylinder(h = FLANGE_T + THREAD_POCKET + 0.2, d = M67_D, $fn = 72);
+        translate([0, 0, rim + FLANGE_T + THREAD_POCKET - 0.1])
+            cylinder(h = CLAMP_W + 1, d = CLAMP_ID, $fn = 96);
+        for (side = [-1, 1]) {
+            translate([side * (NW_GRIP_ID / 2 - 1), -SLOT_W / 2, -0.1])
+                mirror([side < 0 ? 1 : 0, 0, 0])
+                    cube([NW_GRIP_OD, SLOT_W, NW_GRIP_W + 0.2]);
+            translate([side * (CLAMP_ID / 2 - 1), -SLOT_W / 2,
+                       rim + FLANGE_T + THREAD_POCKET - 0.1])
+                mirror([side < 0 ? 1 : 0, 0, 0])
+                    cube([CLAMP_OD, SLOT_W, CLAMP_W + 1]);
+        }
+        for (grip = [0, 1])
+            for (side = [-1, 1], t = [0.32, 0.68]) {
+                z0 = grip == 0 ? 0 : rim + FLANGE_T + THREAD_POCKET;
+                w  = grip == 0 ? NW_GRIP_W : CLAMP_W;
+                od = grip == 0 ? NW_GRIP_OD : CLAMP_OD;
+                translate([side * (od / 2 + EAR_T / 2), 0, z0 + w * t])
+                    rotate([90, 0, 0]) {
+                        translate([0, 0, -EAR_W / 2 - 0.1])
+                            m3_insert_hole();
+                        translate([0, 0, EAR_W / 2 - M3_HEAD_H])
+                            cylinder(h = M3_HEAD_H + 0.2, d = M3_HEAD_D, $fn = 24);
+                        translate([0, 0, SLOT_W / 2])
+                            cylinder(h = EAR_W / 2 - M3_HEAD_H - SLOT_W / 2 + 0.1,
+                                     d = M3_CLEAR, $fn = 24);
+                    }
+            }
+    }
+}
+
 module isco_stand() {
     saddle_z = AXIS_H;
     // Upright is x 15–115, y 30–70. The plate is a 4 mm lip around that.
