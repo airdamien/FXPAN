@@ -9,6 +9,7 @@
 #   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
 #   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
 #   ./export_stls.sh --monitor               easel rails + case back + sunshade → stls/monitor/
+#   ./export_stls.sh --isco [part ...]       EL180 + ISCO attachment → stls/isco/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
 #   focus_sled / focus_anchor → stls/tools/ (also in every chassis default list)
 #   case_back is the Wormfingers bottom with easel + Pi holes.
@@ -77,6 +78,12 @@ elif [[ "${1:-}" == "--ehybrid" ]]; then
     scad=$root/openscad/Ehybrid/WATCH_ME.scad
     out=$root/stls/Ehybrid
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
+elif [[ "${1:-}" == "--isco" ]]; then
+    shift
+    scad=$root/openscad/isco/WATCH_ME.scad
+    out=$root/stls/isco
+    default_parts=(el_nikkor_180n isco_ultrastar isco_clamp isco_stand)
+    tail_note="ISCO: envelope STLs for clearance only — measure L_* on the attachment and update isco_ultrastar_attachment.scad before trusting fit."
 elif [[ "${1:-}" == "--tools" ]]; then
     shift
     scad=$root/openscad/focus_sled.scad
@@ -232,6 +239,18 @@ for req in "${parts[@]}"; do
         arm_r_s|arm_t_s)
             scad_part=${core%_s}
             arms=1
+            ;;
+        el_nikkor_180n)
+            scad_part=lens
+            ;;
+        isco_ultrastar)
+            scad_part=attachment
+            ;;
+        isco_clamp)
+            scad_part=clamp
+            ;;
+        isco_stand)
+            scad_part=stand
             ;;
     esac
     dest=$out/$dest_stem.stl

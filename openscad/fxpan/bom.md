@@ -132,14 +132,15 @@ mm Scope gate, one barrel, does not unscrew into an adapter.
 (the large gold/orange cylinder). Unscrew the red **HD Plus** spherical
 (`f=xx mm`, marked **1.85**) — threads are often glued; tap the joint, do
 **not** undo the ring of six screws. Keep only the front piece. Caliper its
-**rear tube** before you order the clamp: US turret is **70.6 mm**, KuSeRa
-lists **~72 mm** tube / **~68 mm** thread / **~90 mm** front.
+**rear tube** before you order the clamp: this unit is the US turret —
+**70.6 mm** rear tube, **67 mm** rear thread OD (KuSeRa lists **~72 mm**
+tube / **~68 mm** thread for other batches).
 
 | Qty | Item | Why | Link |
 |-----|------|-----|------|
-| 1 | **ISCO Ultra-Star HD Cinemascope attachment** | Owned. 2× afocal, ~70–72 mm rear. 180 mm pupil is 32 mm so coverage is the easy case. Theater focus (often 5–150 m) is fine at 50 m. | (bought) |
-| 1 | **RafCamera 71 mm clamp → M77×0.75 male** | Stock if the rear is **70.6 mm** (clamp ID 70.65, made for Cinelux / US turret). | [71 mm / M77 M](https://rafcamera.com/clamp-71mm-to-m77x0-75m) |
-| *or* 1 | **RafCamera custom: 72 mm clamp → M77×0.75 male** | If the rear tube is **72 mm**. There is no stock 72 → M77 male; do not buy 72 → M75 (that is a diopter mount). | [custom](https://rafcamera.com/custom-adapter) |
+| 1 | **ISCO Ultra-Star HD Cinemascope attachment** | Owned. 2× afocal, **70.6 mm** rear tube / **67 mm** rear thread (US turret). 180 mm pupil is 32 mm so coverage is the easy case. Theater focus (often 5–150 m) is fine at 50 m. | (bought) |
+| 1 | **RafCamera 71 mm clamp → M77×0.75 male** | **This unit.** Clamp ID 70.65, made for Cinelux / US turret. | [71 mm / M77 M](https://rafcamera.com/clamp-71mm-to-m77x0-75m) |
+| *or* 1 | **RafCamera custom: 72 mm clamp → M77×0.75 male** | Only if a different batch measures **72 mm** rear tube. | [custom](https://rafcamera.com/custom-adapter) |
 | 1 | **RafCamera 76 mm clamp → M77×0.75 female** | On the 180. Measure `EL180_LENS_OD` first. Then: 180 → 76 mm clamp → M77 → attachment clamp. | [76 mm / M77 F](https://rafcamera.com/clamp-76mm-to-m77x0-75f-od80mm) |
 | 1 | **1/4-20 support** (15 mm rod from the chassis, or a ~77–90 mm collar) | This one is a kilo. Hang it off the chassis **1/4-20**, not the M62 helicoid. Compact Iscorama brackets (**1101470** / **1103882**) will not fit the 90 mm front. | rail from the box 1/4-20 |
 

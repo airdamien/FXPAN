@@ -7,7 +7,7 @@
 // Sheet dimensions, and where they landed:
 //   62.6   sheet overall. This lens's rear barrel is longer; see L_PAST.
 //   10     front ring
-//    5     of that ring, the M62×1 filter thread
+//    9     external M62×1, the whole recess under the front cover
 //   37.1   main barrel
 //    6     sheet shoulder. On this lens it is the same Ø76 as the barrel,
 //          not the Ø78 / Ø88 lip drawn around the mount thread.
@@ -16,7 +16,7 @@
 //          (the sheet's rear tip was only 9.5 from the flange)
 //   76     barrel OD, straight down to the mount thread
 //   60     rear barrel, the tube that has to clear the stem bore
-//   62×1   mount thread and the front filter thread
+//   62×1   rear mount thread, and the external thread under the front cover
 //   58×0.75  retaining-ring thread, both cells. Internal, not cut here.
 //   65, 4.3, and the 6 radial holes are on the sheet without a station or a
 //          hole diameter, so they are not in the solid.
@@ -35,7 +35,8 @@
 include <../lib/threads.scad>
 
 L_FRONT   = 10;
-L_FILTER  = 5;
+L_EXT      = 9;       // M62×1 male, the whole recess under the front cover
+FRONT_BORE = 57;      // M58 cell, clear of the front element
 L_BARREL  = 37.1;
 L_SHLDR   = 6;
 L_THREAD  = 8;
@@ -65,19 +66,21 @@ rear_vertex_z = -(FFD - BACK_FOC);                // −5.8
 front_vertex_z = rear_vertex_z + VV;              // 51.3
 
 module lens_metal() {
-    union() {
-        // Ø60 barrel: through the thread and 9.2 mm past it.
-        translate([0, 0, rear_z])
-            cylinder(h = L_REAR, d = D_REAR, $fn = 96);
-        translate([0, 0, rear_z + (L_REAR - L_THREAD)])
-            ScrewThread(M62_D, L_THREAD, pitch = M62_P, tolerance = 0);
-        // Body is Ø76 down to the thread. No lip proud of that.
-        cylinder(h = L_SHLDR + L_BARREL, d = D_BARREL, $fn = 128);
-        // Front ring. The M62×1 filter thread is the outer 5 mm.
-        translate([0, 0, L_SHLDR + L_BARREL])
-            ScrewHole(M62_D, L_FILTER, pitch = M62_P, tolerance = 0.2,
-                      position = [0, 0, L_FRONT - L_FILTER])
-                cylinder(h = L_FRONT, d = D_BARREL, $fn = 128);
+    difference() {
+        union() {
+            // Ø60 barrel: through the thread and 9.2 mm past it.
+            translate([0, 0, rear_z])
+                cylinder(h = L_REAR, d = D_REAR, $fn = 96);
+            translate([0, 0, rear_z + (L_REAR - L_THREAD)])
+                ScrewThread(M62_D, L_THREAD, pitch = M62_P, tolerance = 0);
+            // Ø76 ends at the shoulder. The recess in front of it is all thread.
+            cylinder(h = L_SHLDR + L_BARREL + (L_FRONT - L_EXT),
+                     d = D_BARREL, $fn = 128);
+            translate([0, 0, L_SHLDR + L_BARREL + (L_FRONT - L_EXT)])
+                ScrewThread(M62_D, L_EXT, pitch = M62_P, tolerance = 0);
+        }
+        translate([0, 0, front_z - L_EXT])
+            cylinder(h = L_EXT + 0.2, d = FRONT_BORE, $fn = 96);
     }
 }
 
