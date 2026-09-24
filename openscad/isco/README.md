@@ -1,18 +1,20 @@
-# EL-Nikkor 180/5.6N
+# ISCO / EL-Nikkor 180/5.6N
 
-Measured model of the 180 mm f/5.6N on the bench. The section drawing supplied
-the barrel and the optical stations. This copy has no lip around the mount
-thread, and the rear barrel is longer than the sheet.
+Measured models for the taking lens and the ISCO Ultra-Star HD Cinemascope
+attachment used on the FXPAN 65 anamorphic build.
 
-Open [`WATCH_ME.scad`](WATCH_ME.scad). The solid other files should include is
-[`el_nikkor_180n.scad`](el_nikkor_180n.scad). The exported envelope is
-[`../../stls/isco/el_nikkor_180n.stl`](../../stls/isco/el_nikkor_180n.stl).
+Open [`WATCH_ME.scad`](WATCH_ME.scad). Solids to include elsewhere:
+
+- [`el_nikkor_180n.scad`](el_nikkor_180n.scad)
+- [`isco_ultrastar_attachment.scad`](isco_ultrastar_attachment.scad)
+
+Exported envelopes live under [`../../stls/isco/`](../../stls/isco/).
+
+## EL-Nikkor 180/5.6N
 
 Origin is the seating face, the back of the Ø76 body where the M62 thread
 starts. +Z is the front of the lens. −Z runs through the thread toward the
 focal plane.
-
-## Envelope
 
 | | mm | |
 | --- | ---: | --- |
@@ -20,41 +22,47 @@ focal plane.
 | Rear barrel | 60 | continues through the mount thread |
 | Mount thread | M62×1 × 8 | starts at the seating face |
 | Past the thread | 9.2 | this lens, Ø60 |
-| Rear tip | −17.2 | 8 + 9.2 behind the seating face |
-| Front rim | 53.1 | 10 + 37.1 + 6 ahead of the seating face |
-| Overall | 70.3 | front rim to rear tip |
-| Filter thread | M62×1 × 5 | outer end of the 10 mm front ring |
+| Front rim | 53.1 | ahead of the seating face |
 
-The sheet draws an 88 mm flange and a 78 mm shoulder around the mount thread.
-This lens does not have that lip. The Ø76 body ends at the thread, and that
-face is what seats.
+See the existing notes in this file's git history for register and optical
+stations. `SHOW_GLASS` draws pupils and vertices; they are not in the STL.
 
-The sheet's rear tip is 9.5 mm behind that face, which would leave only 1.5 mm
-of barrel past an 8 mm thread. On this lens the Ø60 barrel extends **9.2 mm
-past the threads**. Anything it screws into has to stay at least 60 mm clear
-for that whole 9.2 mm. The FXPAN infinity stem uses a 61.2 mm bore there
-(`EL180_BARREL`).
+## ISCO Ultra-Star HD Cinemascope attachment
 
-M58×0.75 is the retaining-ring thread at both cells. Ø65, a 4.3 mm step, and
-six radial holes are on the sheet with no station and no hole diameter, so
-they are not in the solid.
+2× afocal front adapter (the gold/orange cylinder from the HD Plus turret).
+Origin is the **rear face** — the plane that faces the taking lens / clamp.
++Z is the front, toward the subject.
 
-## Register
+| | mm | source |
+| --- | ---: | --- |
+| Rear thread OD | **67.0** | measured |
+| Rear tube OD | **70.6** | measured — US turret; RafCamera **71 mm** clamp |
+| Front tube OD | 90.0 | KuSeRa / community — **caliper** |
+| Input barrel | **90** | front, light in |
+| Overall | **~165** | barrel rear face to front rim |
+| Thread past the face | **5** | Ø67, measured; pitch not measured |
+| Rear face to first step | **70** | the Ø70.6 clamp land |
 
-The focal length is 180 mm. The flange focal distance on the sheet is
-**158.5 mm**. With the flange seated, the focal plane is at z = −158.5, and
-the rear principal point is 21.5 mm in front of the flange.
+The photos are a stepped barrel, not a cone: black Ø67 rear ring, long
+Ø70.6 gold tube, two focus-scale collars, a knurl, then the front lip.
+Those in-between diameters are read off the photos. Caliper them if a
+clamp or a collar has to land on one.
 
-The stations agree with each other:
+Clamp onto the **70.6 mm rear tube**, not the thread (see
+[`../fxpan/bom.md`](../fxpan/bom.md)).
 
-- Back focus 152.7 puts the rear vertex 5.8 mm behind the flange.
-- Vertex spacing 57.1 puts the front vertex at z = 51.3.
-- The front rim is at 53.1, so the glass starts 1.8 mm behind the rim.
-- Entrance pupil Ø31, 30.1 mm behind the front vertex.
-- Exit pupil Ø32.4, 29.4 mm ahead of the rear vertex.
-- H to H' is 0.3 mm.
+### Still to measure
 
-`SHOW_GLASS` draws those stations. They are not part of the STL.
+The `L_*` stack in `isco_ultrastar_attachment.scad` sums to `L_OAL`.
+Replace a length or a diameter when you caliper that land.
 
-The FXPAN infinity stem seats this flange at 158.5 mm. The helicoid stem is
-0.5 mm shorter at its collapsed stop, so infinity is just off that stop.
+### Stack preview
+
+`PART=stack` puts the attachment rear face at the EL-180 front rim
+(`z = 53.1`). Set `CLAMP_GAP` if a collar sits between them.
+
+Export:
+
+```bash
+./export_stls.sh --isco el_nikkor_180n isco_ultrastar
+```
