@@ -19,7 +19,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -30,7 +30,9 @@ use <shims.scad>
 use <../camera_body.scad>
 use <../monitor/display_mount.scad>
 use <../monitor/monitor.scad>
-use <../isco/el_nikkor_180n.scad>
+include <../isco/el_nikkor_180n.scad>
+include <../isco/isco_ultrastar_attachment.scad>
+include <../isco/isco_mount.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
@@ -110,6 +112,7 @@ function cam_heli_shoulder(mark) =
     cam_heli_register_z(mark) - F_FMOUNT_STACK - cam_heli_front_z();
 function inf_stem() =
     STEM || PART == "stem_el180_inf";
+function show_isco() = PART == "isco" || PART == "isco_cut";
 function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
 // Narrowest thing in the light path at the flange. The metal reverse ring
 // keeps the real 44 mm F throat; the printed bayonet lip is F_STL_THROAT.
@@ -1260,6 +1263,30 @@ module el180_ghost() {
     el180n(show_glass = SHOW_LENS_MARKS);
 }
 
+// Clamp on the external M62, ISCO on the collar, stand under the Ø90.
+module isco_on_body() {
+    seat = inf_stem()
+        ? inf_seat_z()
+        : heli_flange_z(heli_at_infinity());
+    lift = EXPLODED ? ex * 1.4 : 0;
+    at_stem()
+        translate([0, 0, seat + lift]) {
+            color("DimGray", 0.92)
+                el180n(show_glass = SHOW_LENS_MARKS);
+            translate([0, 0, front_z - M62_LEN])
+                isco_clamp("DarkOrange");
+            translate([0, 0, front_z - M62_LEN + shoulder_z()])
+                color("Goldenrod")
+                    isco_ultrastar(show_glass = SHOW_LENS_MARKS);
+        }
+    saddle_y = -BOX_XY / 2
+        - (seat + lift + front_z - M62_LEN + shoulder_z()
+           + z_nose() + L_NOSE / 2);
+    translate([50, saddle_y - 65, base_z()])
+        rotate([0, 0, 90])
+            isco_stand();
+}
+
 // -----------------------------------------------------------------------------
 // lid
 // -----------------------------------------------------------------------------
@@ -1641,7 +1668,9 @@ module ghost_body_at(mark = "") {
 }
 
 module taking_lens_at() {
-    if (SHOW_LENS)
+    if (show_isco())
+        isco_on_body();
+    else if (SHOW_LENS)
         color("DimGray", 0.92)
             at_stem()
                 translate([0, 0, (inf_stem()
@@ -1941,6 +1970,12 @@ module export_part() {
         shim_set();
     else if (PART == "el180_adapter")
         part_el180_adapter();
+    else if (PART == "isco_cut")
+        difference() {
+            assembly();
+            translate([0.02, -600, -200])
+                cube([700, 1200, 600]);
+        }
     else
         assembly();
 }

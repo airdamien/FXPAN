@@ -12,8 +12,6 @@
 
 include <../lib/threads.scad>
 
-M62_D = 62;
-M62_P = 1.0;
 EXT_MALE   = 9;       // male thread, the whole recess on the 180
 M62_ENGAGE = 8.6;     // female, a hair short so it seats on the shoulder
 M62_LEN    = EXT_MALE;
@@ -50,23 +48,26 @@ FOOT_T     = 10;
 TRIPOD_D   = 8.1;
 TRIPOD_L   = 6.4;
 
+// z = 0 is the face the insert is pressed into.
 module m3_insert_hole() {
-    cylinder(h = M3_INSERT_L + 0.4, d = M3_INSERT_D, $fn = 32);
-    translate([0, 0, M3_INSERT_L])
-        cylinder(h = 1.2, d1 = M3_INSERT_D, d2 = M3_INSERT_D + 1.2, $fn = 32);
+    cylinder(h = 1.0, d1 = M3_INSERT_D + 1.2, d2 = M3_INSERT_D, $fn = 32);
+    translate([0, 0, 0.8])
+        cylinder(h = M3_INSERT_L + 0.2, d = M3_INSERT_D, $fn = 32);
 }
 
 module isco_clamp(tone = "DimGray") {
     color(tone)
     difference() {
-        ScrewHole(M62_D, M62_ENGAGE, pitch = M62_P, tolerance = 0.2)
+        ScrewHole(62, M62_ENGAGE, pitch = 1.0, tolerance = 0.2)
         union() {
             translate([0, 0, -0.2])
                 cylinder(h = seat_z() + FLANGE_T + 0.2, d = FLANGE_OD, $fn = 96);
             translate([0, 0, seat_z() + FLANGE_T - 0.2])
                 cylinder(h = THREAD_POCKET + CLAMP_W + 0.2, d = CLAMP_OD, $fn = 128);
-            translate([CLAMP_OD / 2 - 1, -EAR_W / 2, shoulder_z()])
-                cube([EAR_T + 8, EAR_W, CLAMP_W]);
+            for (side = [-1, 1])
+                translate([side * (CLAMP_OD / 2 - 1), -EAR_W / 2, shoulder_z()])
+                    mirror([side < 0 ? 1 : 0, 0, 0])
+                        cube([EAR_T + 8, EAR_W, CLAMP_W]);
         }
         translate([0, 0, -0.2])
             cylinder(h = shoulder_z() + 0.2, d = OPTIC_D, $fn = 64);
@@ -74,38 +75,45 @@ module isco_clamp(tone = "DimGray") {
             cylinder(h = THREAD_POCKET + 0.2, d = STOP_BORE, $fn = 72);
         translate([0, 0, shoulder_z() - 0.1])
             cylinder(h = CLAMP_W + 1, d = CLAMP_ID, $fn = 96);
-        // Slot through the collar only.
-        translate([CLAMP_ID / 2 - 1, -SLOT_W / 2, shoulder_z() - 0.1])
-            cube([CLAMP_OD, SLOT_W, CLAMP_W + 1]);
-        for (z = [shoulder_z() + CLAMP_W * 0.32, shoulder_z() + CLAMP_W * 0.68])
-            translate([CLAMP_OD / 2 + EAR_T / 2, 0, z])
-                rotate([-90, 0, 0]) {
-                    translate([0, 0, -EAR_W / 2 - 0.2])
+        // Slots through the collar only, one each side. The M62 stays whole.
+        for (side = [-1, 1])
+            translate([side * (CLAMP_ID / 2 - 1), -SLOT_W / 2, shoulder_z() - 0.1])
+                mirror([side < 0 ? 1 : 0, 0, 0])
+                    cube([CLAMP_OD, SLOT_W, CLAMP_W + 1]);
+        // +Y is up on the FXPAN. Inserts press in from that face.
+        // Screw heads sit on the lower face.
+        for (side = [-1, 1], z = [shoulder_z() + CLAMP_W * 0.32, shoulder_z() + CLAMP_W * 0.68])
+            translate([side * (CLAMP_OD / 2 + EAR_T / 2), 0, z])
+                rotate([90, 0, 0]) {
+                    translate([0, 0, -EAR_W / 2 - 0.1])
                         m3_insert_hole();
-                    translate([0, 0, -0.1])
-                        cylinder(h = EAR_W / 2 + 0.2, d = M3_CLEAR, $fn = 24);
-                    cylinder(h = M3_HEAD_H, d = M3_HEAD_D, $fn = 24);
+                    translate([0, 0, EAR_W / 2 - M3_HEAD_H])
+                        cylinder(h = M3_HEAD_H + 0.2, d = M3_HEAD_D, $fn = 24);
+                    translate([0, 0, SLOT_W / 2])
+                        cylinder(h = EAR_W / 2 - M3_HEAD_H - SLOT_W / 2 + 0.1,
+                                 d = M3_CLEAR, $fn = 24);
                 }
     }
 }
 
 module isco_stand() {
     saddle_z = AXIS_H;
-    foot_x = 130;
-    foot_y = 100;
+    // Upright is x 15–115, y 30–70. The plate is a 4 mm lip around that.
+    foot = [11, 26, 108, 48];
     color("SteelBlue")
     difference() {
         union() {
-            cube([foot_x, foot_y, FOOT_T]);
+            translate([foot[0], foot[1], 0])
+                cube([foot[2], foot[3], FOOT_T]);
             translate([25, 30, FOOT_T])
                 cube([80, 40, saddle_z - SADDLE_D / 2 - FOOT_T + 8]);
-            translate([15, (foot_y - SADDLE_W) / 2, FOOT_T])
+            translate([15, 50 - SADDLE_W / 2, FOOT_T])
                 cube([100, SADDLE_W, saddle_z + 8]);
         }
-        translate([-1, foot_y / 2, saddle_z])
+        translate([-1, 50, saddle_z])
             rotate([0, 90, 0])
-                cylinder(h = foot_x + 2, d = SADDLE_D, $fn = 96);
-        translate([foot_x / 2, foot_y / 2, -0.2])
+                cylinder(h = 132, d = SADDLE_D, $fn = 96);
+        translate([65, 50, -0.2])
             cylinder(h = TRIPOD_L + 1.2, d = TRIPOD_D, $fn = 48);
     }
 }
