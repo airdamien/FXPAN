@@ -406,6 +406,48 @@ module box_bore() {
     at_stem_face()
         translate([0, 0, -WALL / 2])
             cylinder(h = WALL + 2, d = HELI_NUT_OD + 0.8, center = true);
+
+    floor_hex_cut();
+}
+
+// The plinth under the chamber is a solid slab. A thin lip stays at the
+// walls. The only wide solid patch is under the floor stamp.
+FLOOR_HEX_SKIN = 2.0;
+FLOOR_HEX_RIM  = 1.2;
+FLOOR_HEX_FLAT = 8.0;    // hole, flat to flat
+FLOOR_HEX_WALL = 1.0;    // web between flats
+// box_floor_stamp sits on the −X side of the chamber floor, text along Y.
+// Just the ink: "fxp_chassis" plus the export timestamp.
+FLOOR_LABEL_X = 3.2;
+FLOOR_LABEL_Y = 26;
+
+module floor_hex_cut() {
+    z0 = -BOX_Z / 2 - chassis_plinth() + FLOOR_HEX_SKIN;
+    z1 = -BOX_Z / 2 + WALL + 0.4;
+    span = BOX_XY - 2 * WALL - 2 * FLOOR_HEX_RIM;
+    // Flat-top hexes. Neighbours sit FLAT+WALL apart, measured across the flats.
+    s = FLOOR_HEX_FLAT + FLOOR_HEX_WALL;
+    x_pitch = s * sqrt(3);
+    hole = 2 * FLOOR_HEX_FLAT / sqrt(3);
+    n = ceil(span / s) + 2;
+    hx = hole / 2;
+    hy = FLOOR_HEX_FLAT / 2;
+    lim = span / 2;
+    // Cells the insert reaches keep a solid floor tall enough for it,
+    // with TRIPOD_KEEP of plastic between the hole and the hex.
+    z_fill = -BOX_Z / 2 - chassis_plinth() + tripod_hole_h() + TRIPOD_KEEP;
+    for (j = [-n : n], i = [-n : n]) {
+        x = i * x_pitch + (abs(j) % 2) * x_pitch / 2;
+        y = j * s / 2;
+        label_x = -(BOX_XY / 2 - WALL - 4.2);
+        on_label = abs(x - label_x) < FLOOR_LABEL_X + hx
+                && abs(y) < FLOOR_LABEL_Y + hy;
+        if (abs(x) + hx <= lim && abs(y) + hy <= lim && !on_label) {
+            za = norm([x, y]) < TRIPOD_INSERT_D / 2 + hx ? z_fill : z0;
+            translate([x, y, za - 0.2])
+                cylinder(h = z1 - za + 0.6, d = hole, $fn = 6);
+        }
+    }
 }
 
 // M3 hex in each top corner, fed from a side slot. Roof stays solid so the
@@ -561,7 +603,7 @@ function fx_word_y()      = 9.05;   // mark centre on the wall
 function logo_art_scale() = SPEC_W / LOGO_ART_W;
 function logo_art_h()     = LOGO_ART_H * logo_art_scale();
 function logo_art_bottom()= fx_word_y() - logo_art_h() / 2;
-function fx_mp_y()        = logo_art_bottom() - 7.2;
+function fx_mp_y()        = logo_art_bottom() - 3.8;
 function fx_rule_y()      = fx_mp_y() - 4.8;
 function fx_spec_y()      = fx_mp_y() - 9.2;
 function fx_ana_mp_y()    = fx_mp_y() - 19.1;
@@ -739,16 +781,19 @@ module logo_slab(z0, z1, deep = 0, grow = 0) {
     }
 }
 
-// 45° along the straight part of the top inner edge. The outer face keeps
-// the full outline, and the cut stops at the corner radius so that round
-// stays the chassis corner. That face goes on the bed.
-module logo_bed_chamfer() {
-    t = patch_t();
-    span = chassis_out() - 2 * PORT_BOSS_R;
-    translate([-chassis_out() / 2, 0, logo_cookie_z1()])
+// 45° along the straight part of the bottom inner edge. The outer face
+// keeps the full outline. That face goes on the bed. z_shift lifts the
+// chassis copy so the two faces have a little clearance.
+function logo_chamfer_span() = chassis_out() + 24;
+// 45° through the whole plate. The cut starts outside the outer face and
+// runs past the inner face, so no vertical lip is left behind the angle.
+module logo_bed_chamfer(z_shift = 0) {
+    x0 = -chassis_out() / 2 - 0.6;
+    run = patch_t() + 1.6;
+    translate([x0, 0, logo_cookie_z0() + z_shift])
         rotate([90, 0, 0])
-            linear_extrude(span, center = true)
-                polygon([[0, 0], [t, 0], [t, -t]]);
+            linear_extrude(logo_chamfer_span(), center = true)
+                polygon([[0, -1], [run, -1], [run, run - 0.6], [0, -0.6]]);
 }
 
 module logo_csk() {
@@ -835,9 +880,11 @@ module logo_inner_nuts() {
 
 module at_logo_face_cuts() {
     m = PORT_SLOT_CLEAR / 2;
-    // Clearance on the sides and the bottom. The top is the arris, so
-    // the rebate stops there and the corner radius is not notched.
-    logo_slab(logo_cookie_z0() - m, logo_cookie_z1(), 0.35, m);
+    // Rebate, but leave the mating 45°.
+    difference() {
+        logo_slab(logo_cookie_z0() - m, logo_cookie_z1(), 0.35, m);
+        logo_bed_chamfer(0.2);
+    }
     logo_frame_window();
     logo_inner_nuts();
 }
@@ -850,7 +897,13 @@ module part_logo_cookie() {
         translate([-chassis_out() / 2, 0, 0])
             at_logo_screws()
                 logo_csk();
-        fxpan_inlay("all");
+        // Engraving stops above the bed chamfer. Cut into the 45° and
+        // the pocket floors stand up as a wall behind the angle.
+        intersection() {
+            fxpan_inlay("all");
+            translate([-80, -80, logo_cookie_z0() + patch_t()])
+                cube([160, 160, 120]);
+        }
         translate([-chassis_out() / 2 + patch_t(), 0, 0])
             rotate([0, -90, 0])
                 part_stamp_cut(fxp_tag("logo"), size = 2.4);
@@ -2201,7 +2254,7 @@ module diagnostics() {
              round((logo_cookie_z1() - logo_cookie_z0()) * 10) / 10,
              " mm tall, bottom ", round((logo_cookie_z0()
                  - (stripe_z0() + STRIPE_H)) * 10) / 10,
-             " mm above the stripe, 45° on the inner top edge",
+             " mm above the stripe, 45° on the inner bottom edge",
              "  |  4× M3 at y ±", LOGO_SCREW_Y,
              " above the badge and beside 65MP"));
     echo(str("wall mark: ", round(SPEC_W * LOGO_SCALE * 10) / 10,
