@@ -490,7 +490,9 @@ LID_NUT_DROP = 12;
 TRIPOD_INSERT_D = 8.1;
 TRIPOD_INSERT_L = 6.4;
 TRIPOD_KEEP     = 1.2;
-function tripod_hole_h() = min(WALL - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0);
+// The plinth is much deeper than WALL, so the insert gets its full length
+// plus a millimetre of lead, and TRIPOD_KEEP of plastic stays above it.
+function tripod_hole_h() = TRIPOD_INSERT_L + 1.0;
 // Where the lens axis sits above the camera's own baseplate. This is a
 // property of the body, not of this design, so it is the thing to measure:
 // stand a D800 on a flat surface and measure to the centre of the mount.
