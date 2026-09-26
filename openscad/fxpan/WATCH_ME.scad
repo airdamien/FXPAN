@@ -227,14 +227,18 @@ module port_chassis_clip(mark = "") {
 // chamfer only narrows the last layers and the bed face stays the full plate.
 module port_flange(mark = "") {
     c = min(PORT_EDGE_CHAM, patch_t() - 1.5);
-    intersection() {
-        hull() {
-            linear_extrude(patch_t() - c)
-                port_plate_2d(mark, 0);
-            linear_extrude(patch_t())
-                port_plate_2d(mark, -c);
+    difference() {
+        intersection() {
+            hull() {
+                linear_extrude(patch_t() - c)
+                    port_plate_2d(mark, 0);
+                linear_extrude(patch_t())
+                    port_plate_2d(mark, -c);
+            }
+            port_chassis_clip(mark);
         }
-        port_chassis_clip(mark);
+        // Same slope the chassis rebate keeps, so the plate clears the cap.
+        port_top_seal(mark, patch_t());
     }
 }
 
@@ -245,10 +249,14 @@ module port_flange(mark = "") {
 module cam_cookie(mark) {
     // Straight wall, but the shifted edge runs past the chassis corner and
     // sits proud of it. Clip that edge to the skin; the other three stay.
-    intersection() {
-        linear_extrude(patch_t() + cam_face_cap())
-            port_plate_2d(mark);
-        port_chassis_clip(mark);
+    // The world-up edge is cut back to the rebate slope.
+    difference() {
+        intersection() {
+            linear_extrude(patch_t() + cam_face_cap())
+                port_plate_2d(mark);
+            port_chassis_clip(mark);
+        }
+        port_top_seal(mark, patch_t() + cam_face_cap());
     }
 }
 
@@ -318,12 +326,57 @@ module port_clamp_anchor_cut() {
 // Closing it also captures the cookie on four sides instead of three. The
 // ceiling is a 4.35 mm ledge off the wall behind it, tied at both ends and
 // facing into a pocket a plate then fills — droop there costs nothing.
+// World +Z in this face's plane. The pocket ceiling is that edge, and it
+// is the one the slicer leaves open: a 4 mm ledge with nothing under it.
+function face_up_local(mark) =
+    mark == "R" ? [-1, 0] :
+    mark == "T" ? [0, -1] : [0, 1];
+
+// How far `dir` reaches on the cookie outline, corner radius ignored.
+function port_support(mark, dir) =
+    let (u = port_up(mark),
+         v = [-u.y, u.x],
+         hu = (mark == "" ? stem_plate_w() : port_patch_u()) / 2,
+         hv = (mark == "" ? stem_plate_w() : port_patch_v(mark)) / 2,
+         ax = cam_axis(mark))
+        ax.x * dir.x + ax.y * dir.y
+        + hu * abs(u.x * dir.x + u.y * dir.y)
+        + hv * abs(v.x * dir.x + v.y * dir.y);
+
+// 45° along the world-up edge. Inner layers stay full depth; the outer
+// skin closes on the slope, so the rim is not a line in free air.
+// 1.2 mm stays clear of the countersinks, which sit ~2 mm in from the edge.
+PORT_TOP_SEAL = 1.2;
+
+module port_top_seal(mark, depth) {
+    fu = face_up_local(mark);
+    edge = port_support(mark, fu);
+    ang = atan2(fu.y, fu.x);
+    seal = PORT_TOP_SEAL;
+    rotate([0, 0, ang])
+        translate([0, -120, 0])
+            rotate([90, 0, 0])
+                linear_extrude(240)
+                    polygon([
+                        [edge - seal, depth + 0.3],
+                        [edge + 0.8, depth + 0.3],
+                        [edge + 0.8, depth - seal],
+                        [edge, depth - seal],
+                        [edge - seal, depth]
+                    ]);
+}
+
 module port_slide_slot(mark = "", extra = 0) {
     d = patch_t() + 0.35 + extra;
+    // Outer end of the rebate. extra shifts the whole pocket inward.
+    z_out = d - 0.2 - extra;
     // extra deepens the floor. The mouth stays at the skin.
-    translate([0, 0, d / 2 - 0.2 - extra])
-        linear_extrude(d, center = true)
-            port_plate_2d(mark, PORT_SLOT_CLEAR / 2);
+    difference() {
+        translate([0, 0, d / 2 - 0.2 - extra])
+            linear_extrude(d, center = true)
+                port_plate_2d(mark, PORT_SLOT_CLEAR / 2);
+        port_top_seal(mark, z_out);
+    }
 }
 
 // 3 mm ring into the chassis top shelf. It used to be notched out over each
@@ -448,6 +501,18 @@ module floor_hex_cut() {
                 cylinder(h = z1 - za + 0.6, d = hole, $fn = 6);
         }
     }
+}
+
+// One low fence, on the −X floor only. That is the wall the logo opening
+// removed. The other three walls already stop the tray.
+module floor_tray_lip() {
+    z0 = -BOX_Z / 2 + WALL;
+    h = 1.8;
+    t = 1.6;
+    tray_x = -(BOX_XY - 2 * WALL - 0.8) / 2;
+    x_in = tray_x - 0.35;
+    translate([x_in - t / 2, 0, z0 + h / 2])
+        cube([t, BOX_XY - 2 * WALL - 4, h], center = true);
 }
 
 // M3 hex in each top corner, fed from a side slot. Roof stays solid so the
@@ -599,7 +664,10 @@ LOGO_ART_Y0   = -3.963;
 LOGO_ART_W    = 143.367;
 LOGO_ART_H    = 74.771;
 
-function fx_word_y()      = 9.05;   // mark centre on the wall
+// 7.60, not 9.05: the upper screws follow the badge, and the rebate
+// now stops 1 mm short of the arris so the slicer can cap it. The old
+// centre put the countersinks through that cap.
+function fx_word_y()      = 7.60;   // mark centre on the wall
 function logo_art_scale() = SPEC_W / LOGO_ART_W;
 function logo_art_h()     = LOGO_ART_H * logo_art_scale();
 function logo_art_bottom()= fx_word_y() - logo_art_h() / 2;
@@ -744,9 +812,11 @@ module fxpan_colour(layer = "all", grow = 0, proud = 0.05,
 // rebate. Art Y maps to world Z as art_y * LOGO_SCALE + 2.
 function logo_world_z(art_y) = 2 + art_y * LOGO_SCALE;
 function logo_cookie_z0() = stripe_z0() + STRIPE_H + 1.6;
-// Flush with the top arris. Stopping short left a square step on the
-// rounded corner.
-function logo_cookie_z1() = BOX_Z / 2;
+// The rebate used to run out through the top face. That rim is open air,
+// and the slicer will not put a skin on it. One millimetre of cap is five
+// layers at 0.2 mm, enough for a top shell. The cookie stops under it.
+LOGO_TOP_LIP = 1.0;
+function logo_cookie_z1() = BOX_Z / 2 - LOGO_TOP_LIP;
 LOGO_SCREW_Y = 33;
 // One pair beside 65MP, clear of that short word. The other pair sits in
 // the blank band above the badge: the spec line is full width, so a hole
@@ -796,6 +866,16 @@ module logo_bed_chamfer(z_shift = 0) {
                 polygon([[0, -1], [run, -1], [run, run - 0.6], [0, -0.6]]);
 }
 
+// 45° under the 1 mm cap, outer face only. Printed floor-down the arris
+// steps out a layer at a time instead of a perimeter hung over the pocket.
+module logo_top_chamfer() {
+    x0 = -chassis_out() / 2 - 0.6;
+    translate([x0, 0, BOX_Z / 2])
+        rotate([90, 0, 0])
+            linear_extrude(logo_chamfer_span(), center = true)
+                polygon([[0.4, 0], [0.4, -LOGO_TOP_LIP], [0.4 + LOGO_TOP_LIP + 0.3, -LOGO_TOP_LIP]]);
+}
+
 module logo_csk() {
     rotate([0, 90, 0]) {
         translate([0, 0, -0.8])
@@ -816,12 +896,6 @@ module logo_frame_window() {
     x_nut = logo_inner_x();
     y_span = (BOX_XY - 2 * WALL) - 1;
     z_floor = -BOX_Z / 2 + WALL;
-    // Above the floor the cut reaches the chamber. In the plinth, stop
-    // short of the slab the cartridge sits on.
-    translate([(x_nut - 39.2) / 2, 0, (z_floor + BOX_Z / 2) / 2])
-        cube([-39.2 - x_nut, y_span, BOX_Z / 2 - z_floor + 0.4], center = true);
-    translate([(x_nut - 40.6) / 2, 0, (logo_cookie_z0() + z_floor) / 2])
-        cube([-40.6 - x_nut, y_span, z_floor - logo_cookie_z0()], center = true);
     // The opening runs to the side walls. Each nut is a pad tied to the
     // nearest side edge and the nearer horizontal edge. The ties land
     // at 45°, so the chassis prints floor-down with nothing in mid-air.
@@ -832,7 +906,9 @@ module logo_frame_window() {
     nut_d = PORT_NUT_AF / cos(30);
     module logo_nut_keepers() {
         xa = x0 - 0.4;
-        xb = x_nut + 0.8;
+        // Stop on the chamber face. Past that, the pad caps the mouth
+        // and the nut cannot be put in from inside.
+        xb = x_nut;
         half_y = win_y / 2;
         pad_d = nut_d + 3.2;
         module ax(y, z, d) {
@@ -840,51 +916,99 @@ module logo_frame_window() {
                 rotate([0, 90, 0])
                     cylinder(h = xb - xa, d = d, center = true, $fn = 24);
         }
-        for (s = [-1, 1], sz = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
-            sy = s * LOGO_SCREW_Y;
+        // Upper nuts sit just under the lid rail. A horizontal shelf there
+        // prints in mid-air. Rise at least as far as you travel.
+        module upper_web(s, sy, sz) {
+            rail_z = logo_rail_z();
             ye = s * half_y;
-            gap = max(1.2, abs(ye - sy) - pad_d / 2);
-            zt = (sz > (win_z0 + win_z1) / 2) ? win_z1 : win_z0;
-            y_out = s * min(abs(sy) + 8, half_y);
+            rise = max(0.8, rail_z - sz);
+            y_at = sy + s * min(abs(ye - sy), rise);
             hull() {
                 ax(sy, sz, pad_d);
-                ax(ye, sz - gap, 2.4);
-                ax(ye, sz + gap, 2.4);
+                ax(sy, rail_z, 2.2);
+                ax(y_at, rail_z, 2.2);
+            }
+        }
+        for (s = [-1, 1]) {
+            sy = s * LOGO_SCREW_Y;
+            sz_hi = logo_screw_z_hi();
+            sz_lo = logo_world_z(fx_mp_y());
+            ye = s * half_y;
+            upper_web(s, sy, sz_hi);
+            // Lower pair: the side wall is beside the pad, and the web
+            // down to the opening's lower edge is steeper than 45°.
+            gap = max(1.2, abs(ye - sy) - pad_d / 2);
+            hull() {
+                ax(sy, sz_lo, pad_d);
+                ax(ye, sz_lo - gap, 2.4);
+                ax(ye, sz_lo + gap, 2.4);
             }
             hull() {
-                ax(sy, sz, pad_d);
-                ax(sy - s * 8, zt, 2.4);
-                ax(y_out, zt, 2.4);
+                ax(sy, sz_lo, pad_d);
+                ax(ye, win_z0, 2.4);
             }
         }
     }
     difference() {
-        translate([(x0 + x_nut + 0.4) / 2, 0, (win_z0 + win_z1) / 2])
-            cube([x_nut + 0.4 - x0, win_y, win_z1 - win_z0], center = true);
+        union() {
+            // Thin the wall back to the nut rail, above the floor and in the plinth.
+            translate([(x_nut - 39.2) / 2, 0, (z_floor + BOX_Z / 2) / 2])
+                cube([-39.2 - x_nut, y_span, BOX_Z / 2 - z_floor + 0.4], center = true);
+            translate([(x_nut - 40.6) / 2, 0, (logo_cookie_z0() + z_floor) / 2])
+                cube([-40.6 - x_nut, y_span, z_floor - logo_cookie_z0()], center = true);
+            translate([(x0 + x_nut + 0.4) / 2, 0, (win_z0 + win_z1) / 2])
+                cube([x_nut + 0.4 - x0, win_y, win_z1 - win_z0], center = true);
+        }
         logo_nut_keepers();
+        logo_lid_rim();
     }
+}
+
+// Underside of the lid rail. It has to clear the logo-cookie nuts.
+function logo_rail_z() =
+    logo_screw_z_hi() + (PORT_NUT_AF / cos(30)) / 2 + 1.2;
+
+// The −X lid screws sit in this wall. The rail stays above the logo nuts.
+// The posts are shifted out so they don't bury those pockets.
+module logo_lid_rim() {
+    x0 = -chassis_out() / 2 + patch_t() + 0.2;
+    x1 = -(BOX_XY / 2 - WALL);
+    z_top = BOX_Z / 2 + 0.3;
+    nut_z = BOX_Z / 2 - LID_NUT_DROP;
+    z0 = logo_rail_z();
+    translate([(x0 + x1) / 2, 0, (z0 + z_top) / 2])
+        cube([x1 - x0, BOX_XY - 4, max(1.2, z_top - z0)], center = true);
+    for (sy = [-1, 1])
+        translate([(x0 + x1) / 2,
+                   sy * (BOX_XY / 2 - LID_SCREW + 1.4),
+                   (nut_z - 5 + z_top) / 2])
+            cube([x1 - x0, 8, z_top - (nut_z - 5)], center = true);
 }
 
 module logo_inner_nuts() {
     nut_d = PORT_NUT_AF / cos(30);
+    // Screw comes through the cookie and pulls the nut that way.
+    // The hex opens into the chamber. A 1 mm web on the cookie side
+    // stops the nut, and only the 3.2 mm screw hole goes through it.
     for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
         y = s * LOGO_SCREW_Y;
-        translate([logo_inner_x() + 0.15, y, z])
+        translate([logo_inner_x() + 1.2, y, z])
             rotate([0, -90, 0])
-                cylinder(h = PORT_NUT_T + 0.4, d = nut_d, $fn = 6);
+                cylinder(h = 1.2 + PORT_NUT_T + 0.15, d = nut_d, $fn = 6);
         translate([-chassis_out() / 2 + patch_t() - 0.4, y, z])
             rotate([0, 90, 0])
-                cylinder(h = logo_frame_t() + 0.8, d = PORT_SCREW_D);
+                cylinder(h = logo_frame_t() - PORT_NUT_T + 0.6, d = PORT_SCREW_D);
     }
 }
 
 module at_logo_face_cuts() {
     m = PORT_SLOT_CLEAR / 2;
-    // Rebate, but leave the mating 45°.
+    // Rebate, but leave the mating 45° at the bed and a capped rim on top.
     difference() {
-        logo_slab(logo_cookie_z0() - m, logo_cookie_z1(), 0.35, m);
+        logo_slab(logo_cookie_z0() - m, logo_cookie_z1() + 0.25, 0.35, m);
         logo_bed_chamfer(0.2);
     }
+    logo_top_chamfer();
     logo_frame_window();
     logo_inner_nuts();
 }
@@ -960,6 +1084,7 @@ module logo_fills() {
 module chassis_body() {
     color("SlateGray")
     mm_split() {
+        union() {
         difference() {
             chassis_blank();
             box_bore();
@@ -971,6 +1096,8 @@ module chassis_body() {
             if (SHELL == "full" || SHELL == "logo")
                 fxpan_colour("stripe");
             at_logo_face_cuts();
+        }
+        floor_tray_lip();
         }
         union() {
             box_lining_mask();
