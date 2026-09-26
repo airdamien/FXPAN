@@ -11,7 +11,7 @@ include <isco_ultrastar_attachment.scad>
 include <isco_mount.scad>
 
 /* [Part] */
-PART = "cutaway"; // [stack:180 + attachment, mounted:Full assembly, cutaway:Full assembly section, lens:EL 180 only, attachment:ISCO only, section:ISCO cutaway, clamp:M62 clamp, nw:Nikkor-W + ISCO, nw_clamp:Nikkor-W clamp, stand:Bench stand]
+PART = "cutaway"; // [stack:180 + attachment, mounted:Full assembly, cutaway:Full assembly section, lens:EL 180 only, attachment:ISCO only, section:ISCO cutaway, clamp:M62 clamp, nw:Nikkor-W + ISCO, nw_clamp:Nikkor-W clamp, ef100:EF 100L + ISCO, ef100_clamp:EF 100L clamp, stand:Bench stand]
 
 /* [View] */
 SHOW_GLASS = 1; // [0:hide, 1:show]
@@ -92,6 +92,13 @@ else if (PART == "clamp")
     isco_clamp();
 else if (PART == "nw_clamp")
     isco_clamp_nw();
+else if (PART == "ef100_clamp")
+    isco_clamp_ef100();
+else if (PART == "ef100") {
+    isco_clamp_ef100("DarkOrange");
+    translate([0, 0, FLANGE_T + THREAD_POCKET])
+        part_attachment();
+}
 else if (PART == "nw") {
     nw180(show_glass = SHOW_GLASS);
     translate([0, 0, NW_SHUTTER + NW_GROOVE])

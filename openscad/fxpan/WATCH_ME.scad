@@ -10,8 +10,9 @@
 // Lens −Y. Plate at the origin, 45°, S1 (the 50/50 coating) toward the lens.
 // Reflect leg → +X (camera R), transmit leg → +Y (camera T). Both bores are
 // translated by sensor_shift() in opposite senses; no tube toe, no Scheimpflug.
-// Three ports are blind rebates closed all round, so the chassis keeps an
-// unbroken top rim and the lid sits flush on it.
+// The lens, camera, and logo faces are blind rebates closed all round, so
+// the chassis keeps an unbroken top rim and the lid sits flush on it. The
+// red line around the plinth stays in the chassis.
 //
 // This body does not share parts with hybrid_shift. Every STL is stamped
 // fxp_* and the bore is wider (TUBE_ID 46 / F_BORE 44.0 vs 52 / 40.3) so the
@@ -19,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -695,6 +696,167 @@ module fxpan_colour(layer = "all", grow = 0, proud = 0.05,
         fxpan_stripe(grow, proud, deep);
 }
 
+// Logo face (−X). The skin there is a cookie: same countersunk M3s and
+// trapped nuts as the port plates, so a logo change reprints this panel
+// and not the chassis. The red stripe stays on the chassis, below the
+// rebate. Art Y maps to world Z as art_y * LOGO_SCALE + 2.
+function logo_world_z(art_y) = 2 + art_y * LOGO_SCALE;
+function logo_cookie_z0() = stripe_z0() + STRIPE_H + 1.6;
+// Flush with the top arris. Stopping short left a square step on the
+// rounded corner.
+function logo_cookie_z1() = BOX_Z / 2;
+LOGO_SCREW_Y = 33;
+// One pair beside 65MP, clear of that short word. The other pair sits in
+// the blank band above the badge: the spec line is full width, so a hole
+// above the chamber floor has to go through it.
+function logo_screw_z_hi() =
+    let (art_top = logo_world_z(fx_word_y() + logo_art_h() / 2),
+         r = PORT_CSK_D / 2)
+        art_top + r + 0.6;
+
+module at_logo_screws() {
+    for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())])
+        translate([0, s * LOGO_SCREW_Y, z])
+            children();
+}
+
+// Outer 4 mm of the −X skin, clipped to the chassis corner, between the
+// stripe and a lip under the lid.
+module logo_slab(z0, z1, deep = 0, grow = 0) {
+    out = chassis_out();
+    thick = patch_t() + deep + 0.4;
+    x0 = -out / 2 - 0.2;
+    intersection() {
+        translate([x0 + thick / 2, 0, (z0 + z1) / 2])
+            cube([thick, out + 40, max(0.4, z1 - z0)], center = true);
+        translate([0, 0, -BOX_Z / 2 - chassis_plinth() - 2])
+            linear_extrude(chassis_out_z() + 8)
+                if (grow > 0)
+                    offset(r = grow)
+                        round_rect(out, out, PORT_BOSS_R);
+                else
+                    round_rect(out, out, PORT_BOSS_R);
+    }
+}
+
+// 45° along the straight part of the top inner edge. The outer face keeps
+// the full outline, and the cut stops at the corner radius so that round
+// stays the chassis corner. That face goes on the bed.
+module logo_bed_chamfer() {
+    t = patch_t();
+    span = chassis_out() - 2 * PORT_BOSS_R;
+    translate([-chassis_out() / 2, 0, logo_cookie_z1()])
+        rotate([90, 0, 0])
+            linear_extrude(span, center = true)
+                polygon([[0, 0], [t, 0], [t, -t]]);
+}
+
+module logo_csk() {
+    rotate([0, 90, 0]) {
+        translate([0, 0, -0.8])
+            cylinder(h = 0.7, d = PORT_CSK_D);
+        cylinder(h = PORT_CSK_H + 0.4, d1 = PORT_CSK_D, d2 = PORT_SCREW_D);
+        cylinder(h = patch_t() + 1.2, d = PORT_SCREW_D);
+    }
+}
+
+// Meat behind the cookie: the nut, plus a web the screw passes through.
+// The old 6 mm chamber wall stayed here and read as a thick frame.
+function logo_frame_t() = PORT_NUT_T + 1.0;
+function logo_inner_x() = -chassis_out() / 2 + patch_t() + logo_frame_t();
+
+// Pare the logo wall back to that nut rail, outboard of the cartridge,
+// then open the middle so only the rail is left.
+module logo_frame_window() {
+    x_nut = logo_inner_x();
+    y_span = (BOX_XY - 2 * WALL) - 1;
+    z_floor = -BOX_Z / 2 + WALL;
+    // Above the floor the cut reaches the chamber. In the plinth, stop
+    // short of the slab the cartridge sits on.
+    translate([(x_nut - 39.2) / 2, 0, (z_floor + BOX_Z / 2) / 2])
+        cube([-39.2 - x_nut, y_span, BOX_Z / 2 - z_floor + 0.4], center = true);
+    translate([(x_nut - 40.6) / 2, 0, (logo_cookie_z0() + z_floor) / 2])
+        cube([-40.6 - x_nut, y_span, z_floor - logo_cookie_z0()], center = true);
+    // The opening runs to the side walls. Each nut is a pad tied to the
+    // nearest side edge and the nearer horizontal edge. The ties land
+    // at 45°, so the chassis prints floor-down with nothing in mid-air.
+    x0 = -chassis_out() / 2 + patch_t() - 0.3;
+    win_y = (BOX_XY - 2 * WALL) - 4;
+    win_z0 = logo_cookie_z0() + 3;
+    win_z1 = logo_cookie_z1() - 3;
+    nut_d = PORT_NUT_AF / cos(30);
+    module logo_nut_keepers() {
+        xa = x0 - 0.4;
+        xb = x_nut + 0.8;
+        half_y = win_y / 2;
+        pad_d = nut_d + 3.2;
+        module ax(y, z, d) {
+            translate([(xa + xb) / 2, y, z])
+                rotate([0, 90, 0])
+                    cylinder(h = xb - xa, d = d, center = true, $fn = 24);
+        }
+        for (s = [-1, 1], sz = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
+            sy = s * LOGO_SCREW_Y;
+            ye = s * half_y;
+            gap = max(1.2, abs(ye - sy) - pad_d / 2);
+            zt = (sz > (win_z0 + win_z1) / 2) ? win_z1 : win_z0;
+            y_out = s * min(abs(sy) + 8, half_y);
+            hull() {
+                ax(sy, sz, pad_d);
+                ax(ye, sz - gap, 2.4);
+                ax(ye, sz + gap, 2.4);
+            }
+            hull() {
+                ax(sy, sz, pad_d);
+                ax(sy - s * 8, zt, 2.4);
+                ax(y_out, zt, 2.4);
+            }
+        }
+    }
+    difference() {
+        translate([(x0 + x_nut + 0.4) / 2, 0, (win_z0 + win_z1) / 2])
+            cube([x_nut + 0.4 - x0, win_y, win_z1 - win_z0], center = true);
+        logo_nut_keepers();
+    }
+}
+
+module logo_inner_nuts() {
+    nut_d = PORT_NUT_AF / cos(30);
+    for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
+        y = s * LOGO_SCREW_Y;
+        translate([logo_inner_x() + 0.15, y, z])
+            rotate([0, -90, 0])
+                cylinder(h = PORT_NUT_T + 0.4, d = nut_d, $fn = 6);
+        translate([-chassis_out() / 2 + patch_t() - 0.4, y, z])
+            rotate([0, 90, 0])
+                cylinder(h = logo_frame_t() + 0.8, d = PORT_SCREW_D);
+    }
+}
+
+module at_logo_face_cuts() {
+    m = PORT_SLOT_CLEAR / 2;
+    // Clearance on the sides and the bottom. The top is the arris, so
+    // the rebate stops there and the corner radius is not notched.
+    logo_slab(logo_cookie_z0() - m, logo_cookie_z1(), 0.35, m);
+    logo_frame_window();
+    logo_inner_nuts();
+}
+
+module part_logo_cookie() {
+    color("SlateGray")
+    difference() {
+        logo_slab(logo_cookie_z0(), logo_cookie_z1());
+        logo_bed_chamfer();
+        translate([-chassis_out() / 2, 0, 0])
+            at_logo_screws()
+                logo_csk();
+        fxpan_inlay("all");
+        translate([-chassis_out() / 2 + patch_t(), 0, 0])
+            rotate([0, -90, 0])
+                part_stamp_cut(fxp_tag("logo"), size = 2.4);
+    }
+}
+
 module chassis_blank() {
     dz  = chassis_plinth();
     h   = BOX_Z + dz;
@@ -754,12 +916,13 @@ module chassis_body() {
             translate([0, 0, -(BOX_Z - BOX_XY) / 2])
                 box_floor_stamp(fxp_tag("chassis"), BOX_XY, WALL);
             if (SHELL == "full" || SHELL == "logo")
-                fxpan_colour("all");
+                fxpan_colour("stripe");
+            at_logo_face_cuts();
         }
         union() {
             box_lining_mask();
             if (SHELL == "outer")
-                fxpan_colour("all");
+                fxpan_colour("stripe");
         }
     }
 }
@@ -1822,6 +1985,9 @@ module assembly() {
 
     if (SHOW_PANELS) {
         section_cut("SlateGray")
+            translate([EXPLODED ? -ex : 0, 0, 0])
+                part_logo_cookie();
+        section_cut("SlateGray")
             at_stem()
                 translate([0, 0, EXPLODED ? ex : 0])
                     if (nw_stem())
@@ -2031,6 +2197,13 @@ module diagnostics() {
     echo(str("pro line: ", STRIPE_H, " mm groove ", STRIPE_LIFT,
              " mm above the floor, depth ", MARK_DEPTH,
              "  →  chassis_logo_stripe"));
+    echo(str("logo cookie: −X skin, ",
+             round((logo_cookie_z1() - logo_cookie_z0()) * 10) / 10,
+             " mm tall, bottom ", round((logo_cookie_z0()
+                 - (stripe_z0() + STRIPE_H)) * 10) / 10,
+             " mm above the stripe, 45° on the inner top edge",
+             "  |  4× M3 at y ±", LOGO_SCREW_Y,
+             " above the badge and beside 65MP"));
     echo(str("wall mark: ", round(SPEC_W * LOGO_SCALE * 10) / 10,
              " × ", round(logo_art_h() * LOGO_SCALE * 10) / 10,
              " mm from logos/fxpan_*.stl  →  chassis_logo_fx / _word / _outline"));
@@ -2047,6 +2220,8 @@ module diagnostics() {
 module export_part() {
     if (PART == "chassis")
         part_chassis();
+    else if (PART == "logo_cookie")
+        part_logo_cookie();
     else if (PART == "stem")
         part_stem();
     else if (PART == "stem_el180_inf")
