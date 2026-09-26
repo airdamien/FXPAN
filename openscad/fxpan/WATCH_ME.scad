@@ -916,18 +916,26 @@ module logo_frame_window() {
                 rotate([0, 90, 0])
                     cylinder(h = xb - xa, d = d, center = true, $fn = 24);
         }
-        // Upper nuts sit just under the lid rail. A horizontal shelf there
-        // prints in mid-air. Rise at least as far as you travel.
+        // Upper nuts. A round pad here is a bar in the opening. The
+        // plastic is a wedge: 45° up from the side wall to the nut,
+        // so each layer sits on the one below.
         module upper_web(s, sy, sz) {
-            rail_z = logo_rail_z();
             ye = s * half_y;
-            rise = max(0.8, rail_z - sz);
-            y_at = sy + s * min(abs(ye - sy), rise);
-            hull() {
-                ax(sy, sz, pad_d);
-                ax(sy, rail_z, 2.2);
-                ax(y_at, rail_z, 2.2);
-            }
+            // Past the hex, not through its middle. The old face sat on
+            // the nut centre and cut the hole in half.
+            y_far = sy - s * (nut_d / 2 + 1.0);
+            z_top = max(sz + nut_d / 2 + 1.0, logo_rail_z());
+            z_lo = sz - nut_d / 2 - 0.8;
+            z_foot = z_lo - abs(ye - y_far);
+            translate([xa, 0, 0])
+                rotate([0, 90, 0])
+                    linear_extrude(xb - xa)
+                        polygon([
+                            [-z_top, y_far],
+                            [-z_top, ye],
+                            [-z_foot, ye],
+                            [-z_lo, y_far]
+                        ]);
         }
         for (s = [-1, 1]) {
             sy = s * LOGO_SCREW_Y;
