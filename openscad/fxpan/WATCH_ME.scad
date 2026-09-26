@@ -885,9 +885,18 @@ module logo_csk() {
     }
 }
 
-// Meat behind the cookie: the nut, plus a web the screw passes through.
-// The old 6 mm chamber wall stayed here and read as a thick frame.
-function logo_frame_t() = PORT_NUT_T + 1.0;
+// Meat behind the cookie: the nut, plus the web the screw pulls against.
+// The rebate (logo_slab overshoot + LOGO_REBATE_DEEP) lands 0.75 mm
+// past the 4 mm skin. Measuring the old 1 mm web from the skin left
+// 0.3 mm, which the slicer drops. LOGO_NUT_WEB is from the rebate floor.
+LOGO_REBATE_DEEP = 0.35;
+function logo_rebate_x() =
+    -chassis_out() / 2 - 0.2 + patch_t() + LOGO_REBATE_DEEP + 0.4;
+LOGO_NUT_WEB = 2.0;
+function logo_nut_stop_x() = logo_rebate_x() + LOGO_NUT_WEB;
+function logo_frame_t() =
+    logo_nut_stop_x() + PORT_NUT_T + 0.15
+    - (-chassis_out() / 2 + patch_t());
 function logo_inner_x() = -chassis_out() / 2 + patch_t() + logo_frame_t();
 
 // Pare the logo wall back to that nut rail, outboard of the cartridge,
@@ -996,16 +1005,16 @@ module logo_lid_rim() {
 module logo_inner_nuts() {
     nut_d = PORT_NUT_AF / cos(30);
     // Screw comes through the cookie and pulls the nut that way.
-    // The hex opens into the chamber. A 1 mm web on the cookie side
+    // The hex opens into the chamber. LOGO_NUT_WEB on the cookie side
     // stops the nut, and only the 3.2 mm screw hole goes through it.
     for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
         y = s * LOGO_SCREW_Y;
         translate([logo_inner_x() + 1.2, y, z])
             rotate([0, -90, 0])
                 cylinder(h = 1.2 + PORT_NUT_T + 0.15, d = nut_d, $fn = 6);
-        translate([-chassis_out() / 2 + patch_t() - 0.4, y, z])
+        translate([logo_rebate_x() - 0.4, y, z])
             rotate([0, 90, 0])
-                cylinder(h = logo_frame_t() - PORT_NUT_T + 0.6, d = PORT_SCREW_D);
+                cylinder(h = LOGO_NUT_WEB + 1.0, d = PORT_SCREW_D);
     }
 }
 
@@ -1013,7 +1022,7 @@ module at_logo_face_cuts() {
     m = PORT_SLOT_CLEAR / 2;
     // Rebate, but leave the mating 45° at the bed and a capped rim on top.
     difference() {
-        logo_slab(logo_cookie_z0() - m, logo_cookie_z1() + 0.25, 0.35, m);
+        logo_slab(logo_cookie_z0() - m, logo_cookie_z1() + 0.25, LOGO_REBATE_DEEP, m);
         logo_bed_chamfer(0.2);
     }
     logo_top_chamfer();
@@ -1029,13 +1038,11 @@ module part_logo_cookie() {
         translate([-chassis_out() / 2, 0, 0])
             at_logo_screws()
                 logo_csk();
-        // Engraving stops above the bed chamfer. Cut into the 45° and
-        // the pocket floors stand up as a wall behind the angle.
-        intersection() {
-            fxpan_inlay("all");
-            translate([-80, -80, logo_cookie_z0() + patch_t()])
-                cube([160, 160, 120]);
-        }
+        // Full inlay. The old clip sat patch_t() (4 mm) above the arris
+        // and sheared the ANA line; the 45° only climbs MARK_DEPTH
+        // across the engraving, and logo_bed_chamfer() already takes
+        // the angle. That line clears it.
+        fxpan_inlay("all");
         translate([-chassis_out() / 2 + patch_t(), 0, 0])
             rotate([0, -90, 0])
                 part_stamp_cut(fxp_tag("logo"), size = 2.4);
