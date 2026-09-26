@@ -10,6 +10,9 @@ Open [`WATCH_ME.scad`](WATCH_ME.scad). Solids to include elsewhere:
 
 Exported envelopes live under [`../../stls/isco/`](../../stls/isco/).
 
+**Clamps** that mount the ISCO on the taking lens (EL-Nikkor M62 or
+Nikkor-W Ø73 land): [`clamps.md`](clamps.md) and [`bom.md`](bom.md).
+
 ## EL-Nikkor 180/5.6N
 
 Origin is the seating face, the back of the Ø76 body where the M62 thread
@@ -48,8 +51,9 @@ The photos are a stepped barrel, not a cone: black Ø67 rear ring, long
 Those in-between diameters are read off the photos. Caliper them if a
 clamp or a collar has to land on one.
 
-Clamp onto the **70.6 mm rear tube**, not the thread (see
-[`../fxpan/bom.md`](../fxpan/bom.md)).
+Clamp onto the **70.6 mm rear tube**, not the thread. Printed clamps:
+[`clamps.md`](clamps.md). FXPAN anamorphic options:
+[`../fxpan/bom.md`](../fxpan/bom.md).
 
 ### Still to measure
 
@@ -64,5 +68,5 @@ Replace a length or a diameter when you caliper that land.
 Export:
 
 ```bash
-./export_stls.sh --isco el_nikkor_180n isco_ultrastar
+./export_stls.sh --isco el_nikkor_180n isco_ultrastar isco_clamp isco_clamp_nw isco_stand
 ```

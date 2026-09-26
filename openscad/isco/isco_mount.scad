@@ -13,7 +13,7 @@
 include <../lib/threads.scad>
 
 EXT_MALE   = 9;       // male thread, the whole recess on the 180
-M62_ENGAGE = 8.6;     // female, a hair short so it seats on the shoulder
+M62_ENGAGE = 9.0;     // match L_EXT on the 180
 M62_LEN    = EXT_MALE;
 
 CLAMP_ID   = 71.0;    // 70.6 land + clearance
@@ -23,11 +23,11 @@ CLAMP_OD   = CLAMP_ID + 2 * CLAMP_T;
 STOP_T     = 3.0;     // shoulder the Ø70.6 face sits on
 STOP_BORE  = 68.4;    // Ø67 thread passes; the 70.6 face does not
 THREAD_POCKET = 7;    // deeper than the 5 mm thread
-OPTIC_D    = 57;      // M58 cell; still stops the Ø67 thread
 
-// CNC Kitchen / Ruthex short M3×5.7. Hole is the insert OD.
+// M3 heat-set: 4 mm OD × 5 mm long (also have 6×5 and 8×5 — use 4×5
+// on these 16 mm ears). Through bore plus insert pocket and head relief.
 M3_INSERT_D = 4.0;
-M3_INSERT_L = 5.7;
+M3_INSERT_L = 5.0;
 M3_CLEAR    = 3.4;
 M3_HEAD_D   = 6.0;
 M3_HEAD_H   = 3.2;
@@ -48,11 +48,16 @@ FOOT_T     = 10;
 TRIPOD_D   = 8.1;
 TRIPOD_L   = 6.4;
 
-// z = 0 is the face the insert is pressed into.
-module m3_insert_hole() {
-    cylinder(h = 1.0, d1 = M3_INSERT_D + 1.2, d2 = M3_INSERT_D, $fn = 32);
-    translate([0, 0, 0.8])
-        cylinder(h = M3_INSERT_L + 0.2, d = M3_INSERT_D, $fn = 32);
+// Local +Z runs from the +Y ear face toward −Y (after rotate([90, 0, 0])).
+module m3_clamp_ear_hole() {
+    cylinder(h = EAR_W + 0.4, d = M3_CLEAR, center = true, $fn = 24);
+    translate([0, 0, -EAR_W / 2 - 0.1]) {
+        cylinder(h = 1.0, d1 = M3_INSERT_D + 1.0, d2 = M3_INSERT_D, $fn = 32);
+        translate([0, 0, 0.8])
+            cylinder(h = M3_INSERT_L + 0.2, d = M3_INSERT_D, $fn = 32);
+    }
+    translate([0, 0, EAR_W / 2 - M3_HEAD_H])
+        cylinder(h = M3_HEAD_H + 0.2, d = M3_HEAD_D, $fn = 24);
 }
 
 module isco_clamp(tone = "DimGray") {
@@ -60,7 +65,7 @@ module isco_clamp(tone = "DimGray") {
     difference() {
         ScrewHole(62, M62_ENGAGE, pitch = 1.0, tolerance = 0.2)
         union() {
-            translate([0, 0, -0.2])
+            translate([0, 0, 0])
                 cylinder(h = seat_z() + FLANGE_T + 0.2, d = FLANGE_OD, $fn = 96);
             translate([0, 0, seat_z() + FLANGE_T - 0.2])
                 cylinder(h = THREAD_POCKET + CLAMP_W + 0.2, d = CLAMP_OD, $fn = 128);
@@ -69,8 +74,10 @@ module isco_clamp(tone = "DimGray") {
                     mirror([side < 0 ? 1 : 0, 0, 0])
                         cube([EAR_T + 8, EAR_W, CLAMP_W]);
         }
-        translate([0, 0, -0.2])
-            cylinder(h = shoulder_z() + 0.2, d = OPTIC_D, $fn = 64);
+        // Same Ø as the M62, through the seat flange. A smaller step
+        // here is what the male bottoms on before it is fully threaded.
+        translate([0, 0, -0.05])
+            cylinder(h = seat_z() + FLANGE_T + 0.1, d = 62, $fn = 96);
         translate([0, 0, seat_z() + FLANGE_T - 0.1])
             cylinder(h = THREAD_POCKET + 0.2, d = STOP_BORE, $fn = 72);
         translate([0, 0, shoulder_z() - 0.1])
@@ -80,19 +87,60 @@ module isco_clamp(tone = "DimGray") {
             translate([side * (CLAMP_ID / 2 - 1), -SLOT_W / 2, shoulder_z() - 0.1])
                 mirror([side < 0 ? 1 : 0, 0, 0])
                     cube([CLAMP_OD, SLOT_W, CLAMP_W + 1]);
-        // +Y is up on the FXPAN. Inserts press in from that face.
-        // Screw heads sit on the lower face.
+        // +Y is up on the FXPAN. Inserts press in from that face;
+        // screw heads sit on the −Y face. Bore is through.
         for (side = [-1, 1], z = [shoulder_z() + CLAMP_W * 0.32, shoulder_z() + CLAMP_W * 0.68])
             translate([side * (CLAMP_OD / 2 + EAR_T / 2), 0, z])
-                rotate([90, 0, 0]) {
-                    translate([0, 0, -EAR_W / 2 - 0.1])
-                        m3_insert_hole();
-                    translate([0, 0, EAR_W / 2 - M3_HEAD_H])
-                        cylinder(h = M3_HEAD_H + 0.2, d = M3_HEAD_D, $fn = 24);
-                    translate([0, 0, SLOT_W / 2])
-                        cylinder(h = EAR_W / 2 - M3_HEAD_H - SLOT_W / 2 + 0.1,
-                                 d = M3_CLEAR, $fn = 24);
-                }
+                rotate([90, 0, 0])
+                    m3_clamp_ear_hole();
+    }
+}
+
+// Canon EF 100mm f/2.8L Macro IS USM. The filter thread is female
+// 67×0.75. z = 0 seats on the front rim. The male hangs into the
+// filter well, short of the bottom. The bore through that male and
+// the seat is the same Ø67 as the thread. The ISCO pocket is the
+// same collar as the M62 clamp.
+EF_M67_D   = 67;
+EF_M67_P   = 0.75;
+EF_M67_LEN = 3.5;    // well is deeper; this seats on the rim first
+EF_CORE    = 64;     // barrel under the M67, inside the thread root
+EF_BORE    = 56;     // light hole; pupil is 35.7, this leaves wall
+
+module isco_clamp_ef100(tone = "DimGray") {
+    color(tone)
+    difference() {
+        union() {
+            translate([0, 0, -EF_M67_LEN]) {
+                cylinder(h = EF_M67_LEN + 0.4, d = EF_CORE, $fn = 96);
+                ScrewThread(EF_M67_D, EF_M67_LEN,
+                            pitch = EF_M67_P, tolerance = 0.15);
+            }
+            cylinder(h = FLANGE_T, d = FLANGE_OD, $fn = 96);
+            translate([0, 0, FLANGE_T - 0.2])
+                cylinder(h = THREAD_POCKET + CLAMP_W + 0.2, d = CLAMP_OD, $fn = 128);
+            for (side = [-1, 1])
+                translate([side * (CLAMP_OD / 2 - 1), -EAR_W / 2,
+                           FLANGE_T + THREAD_POCKET])
+                    mirror([side < 0 ? 1 : 0, 0, 0])
+                        cube([EAR_T + 8, EAR_W, CLAMP_W]);
+        }
+        translate([0, 0, -EF_M67_LEN - 0.2])
+            cylinder(h = EF_M67_LEN + FLANGE_T + 0.3, d = EF_BORE, $fn = 72);
+        translate([0, 0, FLANGE_T - 0.1])
+            cylinder(h = THREAD_POCKET + 0.2, d = STOP_BORE, $fn = 72);
+        translate([0, 0, FLANGE_T + THREAD_POCKET - 0.1])
+            cylinder(h = CLAMP_W + 1, d = CLAMP_ID, $fn = 96);
+        for (side = [-1, 1])
+            translate([side * (CLAMP_ID / 2 - 1), -SLOT_W / 2,
+                       FLANGE_T + THREAD_POCKET - 0.1])
+                mirror([side < 0 ? 1 : 0, 0, 0])
+                    cube([CLAMP_OD, SLOT_W, CLAMP_W + 1]);
+        for (side = [-1, 1], t = [0.32, 0.68])
+            translate([side * (CLAMP_OD / 2 + EAR_T / 2), 0,
+                       FLANGE_T + THREAD_POCKET + CLAMP_W * t])
+                rotate([90, 0, 0])
+                    m3_clamp_ear_hole();
     }
 }
 
@@ -153,15 +201,8 @@ module isco_clamp_nw(tone = "DimGray") {
                 w  = grip == 0 ? NW_GRIP_W : CLAMP_W;
                 od = grip == 0 ? NW_GRIP_OD : CLAMP_OD;
                 translate([side * (od / 2 + EAR_T / 2), 0, z0 + w * t])
-                    rotate([90, 0, 0]) {
-                        translate([0, 0, -EAR_W / 2 - 0.1])
-                            m3_insert_hole();
-                        translate([0, 0, EAR_W / 2 - M3_HEAD_H])
-                            cylinder(h = M3_HEAD_H + 0.2, d = M3_HEAD_D, $fn = 24);
-                        translate([0, 0, SLOT_W / 2])
-                            cylinder(h = EAR_W / 2 - M3_HEAD_H - SLOT_W / 2 + 0.1,
-                                     d = M3_CLEAR, $fn = 24);
-                    }
+                    rotate([90, 0, 0])
+                        m3_clamp_ear_hole();
             }
     }
 }
