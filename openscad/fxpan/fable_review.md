@@ -222,27 +222,61 @@ mass too (`base_tripod_xy()` uses the pad positions, so it follows).
 
 ### 3.D — Nikkor-W infinity margin and the Copal ring
 
-- `heli_at_infinity()` = 17.5 mm on a 17–31 helicoid: **0.5 mm** of
-  margin, against a bought part whose collapsed length is a nominal
-  "~17 mm". If it arrives at 17.6 you cannot reach infinity; shims only add.
-  With the fixed nose from §3.B this becomes a print dimension you control
-  (0.1 mm), plus the camera helicoids' 14 mm of travel — which is the right
-  place for the margin.
-- If you keep the lens helicoid: `nw_rise()` is 3.3 mm and `NW_BOARD` is
-  3.0, so the nose is already as thin as the board allows and cannot buy
-  margin. Drop `W_ARM_EXTRA` to 6 and `NW_BOARD` to 2.0–2.5 to land infinity
-  at helicoid ≈ 19 mm (2 mm margin).
-- The Copal 1 neck is 5.1 mm with a 4 mm M39×0.75 thread. A 3.0 mm board
-  leaves **2.1 mm** of neck for a retaining ring that is ~2.5–3 mm thick.
-  Use `NW_BOARD = 2.0`. Also verify the ring OD fits `NW_CLEAR = 56`.
-- The Ø54 rear cell reaches 22.3 mm behind the flange: through the nose,
-  through the helicoid, and 1.5 mm past the stem's inner wall face into the
-  chamber. **Measure the helicoid's clear inside diameter** (needs ≥ 55)
-  and its **body OD** (must pass `heli_pass_d()` = 70 to sit in the
-  `stem_w` recess; M62 17–31 units are commonly 72–78 mm). If the body is
-  wider than 70 it sits on the skin 2 mm further out and infinity is gone.
-  `HELI_NUT_OD` / `heli_pass_d()` are the knobs; the clamp screws cap the
-  pass at ~75.
+`heli_at_infinity()` is **17.5 mm** on a 17–31 helicoid: **0.5 mm** past
+the collapsed stop (`HELI_SHORT`). That number is the EL-Nikkor path. The
+W build inherits it. `nw_flange_z()` subtracts `W_ARM_EXTRA` and the W
+arms add the same 8 mm, so the flange stays at 178.8 mm **at that same
+17.5 mm mark**. A bought helicoid whose collapsed length is 17.6 mm
+cannot reach infinity. Shims only add path.
+
+**Do not drop `W_ARM_EXTRA` to buy margin.** Arms and nose move together:
+
+```
+nw_rise() = flange_z(NW_FFD) − W_ARM_EXTRA − (−WALL + heli_at_infinity())
+          = 11.3 − W_ARM_EXTRA
+```
+
+`W_ARM_EXTRA` 8 → 6 lengthens the nose by 2 mm and shortens the arms by
+2 mm. Path stays 178.8 mm. Infinity stays at helicoid 17.5. `NW_BOARD`
+does not move the flange either: the Copal face is the far end of
+`nw_rise()`, and the board is only how much of that length stays solid.
+
+The nose is the only place left to steal margin, and there is almost
+none. Rise is **3.3 mm** with a **3.0 mm** board. Shorten the nose
+*without* shortening the arms (break the cancel: keep `W_ARM_EXTRA`,
+reduce `nw_rise()` only) and each millimetre moves infinity 1 mm into
+the travel. A 2.0 mm board leaves about 1.3 mm to give, so infinity
+lands near **18.8 mm**, not 19.5. That also pulls the lens 1.3 mm closer
+to the cameras, which is the opposite of §3.B.
+
+The clean margin is the §3.B fixed nose plus the camera helicoids. Then
+infinity is a printed length, and each body has 14 mm of travel.
+
+**Copal ring.** The neck behind the flange is 5.1 mm. The M39×0.75
+thread is the first **4 mm** of that (`NW_THREAD`). The Ø54 cell starts
+at 5.1 mm. Board and ring share that 5.1 mm:
+
+| board | thread left (4 − board) | room for the ring before the Ø54 cell |
+| --- | --- | --- |
+| 3.0 (now) | **1.0 mm** | 2.1 mm |
+| 2.0 | 2.0 mm | 3.1 mm |
+
+A ~2.5 mm ring on a 3 mm board runs into the cell before it clamps, and
+it only has 1 mm of thread. Use `NW_BOARD = 2.0` and confirm the real
+ring is ≤ 3 mm thick and ≤ `NW_CLEAR` 56 mm across. That change is for
+the ring. It does not fix infinity.
+
+**Rear cell and the bought helicoid.** The Ø54 cell reaches 22.3 mm
+behind the flange: through the nose, through the helicoid, and **1.5 mm
+past the stem inner face** (z = −6) into the chamber. Measure before
+printing `stem_w`:
+
+- clear inside diameter ≥ 55 mm, or the cell stops in the helicoid
+- body OD ≤ `heli_pass_d()` = 70 mm, or it cannot sit in the recess and
+  lands on the skin ~2 mm further out, which deletes infinity
+
+M62 17–31 bodies are often 72–78 mm. `HELI_NUT_OD` / `heli_pass_d()` are
+the knobs; the clamp screws cap the pass at about 75 mm.
 
 ---
 
@@ -320,19 +354,36 @@ at f/8 and f/11; look for straight-edged shading on the shifted side.
 
 ### 4.5 Light-tightness of the −X wall
 
-With the logo frame window open, the −X wall is the 4 mm cookie over a
-76 × 89 mm opening. The engraving pockets are 2.5 mm deep, leaving 1.5 mm
-behind each glyph. If the inlays are printed in white/gold filament (both
-translucent), light through the letters has 1.5 mm of body plastic to get
-through. Either print the cookie body in a dark opaque filament and keep
-the inlays as the top 1.2 mm only (`MARK_DEPTH` for the cookie = 1.2, so
-2.8 mm remains), or leave `MARK_DEPTH` and paint the pockets. The tray wall
-behind it shields the plate either way; this is about veiling glare, not a
-hard leak.
+The −X wall over the chamber is the 4 mm cookie (`PORT_PATCH_T`). Behind
+it `logo_frame_window()` removes the old 6 mm wall: about **76 × 89 mm**
+through the nut rail (`win_y` 76, z −50.8 … 38.5), and 79 mm wide from the
+chamber floor up. The tray’s −X wall (3.4 mm, outer face 0.4 mm in from
+the chamber) is what still stands between that opening and the plate.
+This is veiling glare, not a hole onto the glass.
 
-The cookie perimeter gap (0.3 mm/side, `PORT_SLOT_CLEAR`) → frame window →
-0.4 mm tray/chassis slip → over the tray wall top is a real path. A strip
-of black felt on the cookie's inside face over the frame window kills it.
+The pockets are the part that glows. `fxpan_inlay` cuts
+`MARK_DEPTH + 0.10` = **2.5 mm**, so **1.5 mm** of cookie remains behind
+every glyph. `MARK_DEPTH = 2.4` was chosen when this pocket was in a
+10 mm wall (“1.2 mm plugs came out as skins”). That wall is gone. Do not
+set `MARK_DEPTH` to 1.2 to fix the cookie: the plinth stripe uses the
+same number.
+
+Give the cookie its own depth, about **1.0–1.2 mm**, and leave
+`MARK_DEPTH` on the stripe. Paint the pockets, or print the colour as the
+outer layers of a dark cookie in the slicer. Do not export 1.2 mm
+`chassis_logo_*` parts and print them loose — that is the skin-plug
+failure the 2.4 mm depth was meant to avoid. White and gold filament
+will pipe light through 1.5 mm of “black” PETG; a flashlight on the
+finished cookie is the test. Felt on the cookie’s inside face, over the
+window, covers the letter backs.
+
+The 0.3 mm cookie-edge gap is not a path into that window. The rebate is
+the skin plus 0.35 mm (`at_logo_face_cuts`), and the window is inset
+about 3 mm from the cookie’s top and bottom and about 12 mm from each
+side. The rim slot is blind. The open route is through the letter
+plastic into the cavity, then over the tray: the tray wall and the
+window both stop at z = 38.5, so the cavity meets the lid gap. Felt or
+a dark cookie closes that. A perimeter gasket does not.
 
 ### 4.6 Diagnostics do not cover the W build
 
