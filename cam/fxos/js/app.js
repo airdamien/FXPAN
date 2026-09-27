@@ -46,7 +46,8 @@ function topBar() {
   const sim = h("button", { class: "top-sim", type: "button", text: "SIM", hidden: true, on: { click: () => nav.go("sys-sim") } });
   const gear = h("button", { class: "top-gear", type: "button", "aria-label": "System", html: icon("gear"), on: { click: () => nav.go("system") } });
   const el = h("header", { class: "top" },
-    h("img", { class: "brand", src: "/fxpan.svg", alt: "FXPAN" }),
+    h("button", { class: "brand", type: "button", "aria-label": "Home", on: { click: () => nav.home() } },
+      h("img", { src: "/fxpan.svg", alt: "FXPAN" })),
     modeBtn, h("div", { class: "cams" }, R, T), h("span", { class: "grow" }), stitch, storage, sim, gear);
   el.paint = () => {
     const mode = M.activeMode();
@@ -77,26 +78,42 @@ function showStill() {
   loadStills(p);
 }
 
+let liveGen = 0;
+
 export async function toggleLive(want) {
   const on = want === undefined ? !live.pulling : !!want;
   if (on === live.pulling) return;
+  const gen = ++liveGen;
   if (on) {
+    // Flip the button before the cameras answer. The stream starts when
+    // the first JPEG arrives; a failure puts the button back.
+    startPull();
+    M.emit("live");
     try {
       const j = await api.post("/api/live/start");
+      if (gen !== liveGen) return;
       M.ingestLink(j);
-      if (!j.ok) { toast(j.message || "Live view did not start", "err"); return; }
-      startPull();
+      if (!j.ok) {
+        stopPull();
+        M.emit("live");
+        toast(j.message || "Live view did not start", "err");
+      }
     } catch (e) {
+      if (gen !== liveGen) return;
+      stopPull();
+      M.emit("live");
       toast(e.message, "err");
     }
   } else {
     stopPull();
     live.stills = true;
-    api.post("/api/live/stop").then((j) => j.link && M.ingestLink(j.link)).catch(() => {});
+    M.emit("live");
     stillKey = "";
     showStill();
+    api.post("/api/live/stop").then((j) => {
+      if (gen === liveGen && j.link) M.ingestLink(j.link);
+    }).catch(() => {});
   }
-  M.emit("live");
 }
 
 export async function refreshCaptures() {

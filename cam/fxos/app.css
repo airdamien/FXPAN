@@ -65,7 +65,8 @@ input { font: inherit; user-select: text; -webkit-user-select: text; }
   padding: 0 10px 0 16px; border-bottom: 1px solid var(--hair); min-width: 0;
 }
 .top::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 2px 2px 0; background: var(--red); }
-.brand { height: 22px; width: auto; flex: none; opacity: 0.95; }
+.brand { height: 32px; width: auto; flex: none; padding: 0; display: block; opacity: 0.95; }
+.brand img { height: 32px; width: auto; display: block; }
 .mode-btn {
   display: flex; align-items: center; gap: 7px; height: 34px; min-width: 0; max-width: 34vw;
   padding: 0 8px 0 9px; border-radius: 17px; background: var(--s1); border: 1px solid var(--hair);
@@ -199,8 +200,8 @@ body.kbd .ruler:focus { border-color: var(--gold); }
 }
 .shutter i { width: 70px; height: 70px; border-radius: 50%; background: var(--red); transition: transform 0.1s; }
 .shutter:active i { transform: scale(0.9); }
-.shutter.dim { border-color: var(--faint); }
-.shutter.dim i { background: #5a2020; }
+.shutter.offline { border-color: var(--faint); }
+.shutter.offline i { background: #5a2020; }
 .shutter.busy { border-color: var(--red); }
 .shutter.busy i { animation: busy 0.9s ease-in-out infinite; }
 @keyframes busy { 50% { transform: scale(0.78); opacity: 0.7; } }
@@ -237,6 +238,7 @@ body.kbd .ruler:focus { border-color: var(--gold); }
 .dim-list { overflow: auto; padding: 8px 10px 20px 10px; border-right: 1px solid var(--hair); overscroll-behavior: contain; }
 .dim-panel { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 12px 14px 14px; overflow: auto; }
 .page-body { overflow: auto; min-height: 0; padding: 12px 14px 20px; }
+.page-body.drag-scroll { touch-action: none; }
 
 .rows { display: flex; flex-direction: column; gap: 2px; }
 .row { border-radius: 10px; transition: background 0.12s; }
@@ -468,6 +470,10 @@ body.kbd .ruler:focus { border-color: var(--gold); }
 
 /* --- playback ------------------------------------------------------------------------ */
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.wifi-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: auto; }
+.wifi-qr svg { width: min(240px, 100%); height: auto; background: #fff; border-radius: 16px; }
+.wifi-qr b { font-size: 18px; font-weight: 600; letter-spacing: 0.04em; }
+.wifi-qr span { color: var(--dim); font-size: 14px; text-align: center; }
 .day { grid-column: 1 / -1; padding: 8px 2px 0; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
 .shot { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px 6px 8px; border-radius: 12px; border: 1px solid var(--hair); background: var(--s1); text-align: left; }
 .shot-art { display: flex; gap: 2px; width: 100%; aspect-ratio: 2.71; border-radius: 7px; overflow: hidden; background: #000; }

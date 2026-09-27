@@ -1,0 +1,10 @@
+// Let the kiosk user scan, join, and start a hotspot without a polkit prompt.
+// Stock NetworkManager rules only allow settings.modify.system for an active
+// local session, and wifi.share.protected stays "no", so the field UI cannot
+// change Wi-Fi.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") !== 0)
+        return;
+    if (subject.isInGroup("netdev") || subject.isInGroup("sudo"))
+        return polkit.Result.YES;
+});

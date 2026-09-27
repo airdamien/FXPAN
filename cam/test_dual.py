@@ -163,7 +163,7 @@ class Parse(unittest.TestCase):
         self.assertIn("shutterspeed=1/125", joined)
         self.assertNotIn("autoiso", joined)
 
-    def test_apply_locked_two_packs(self):
+    def test_apply_locked_one_pack(self):
         calls = []
 
         def fake(args, port=None, timeout=120):
@@ -177,13 +177,57 @@ class Parse(unittest.TestCase):
             ("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400"),
             ("shutterspeed", "1/125"), ("exposurecompensation", "0.3"),
         ])
+        self.assertEqual(len(calls), 1)
+        joined = " ".join(calls[0])
+        self.assertLess(joined.index("isoauto=Off"), joined.index("iso=400"))
+        self.assertIn("shutterspeed=1/125", joined)
+        self.assertIn("exposurecompensation=0.3", joined)
+
+    def test_status_stays_one_session_when_a_widget_is_missing(self):
+        raw = (
+            "Label: ISO Speed\nCurrent: 400\nEND\n"
+            "Label: Auto ISO\nCurrent: Off\nEND\n"
+            "Label: Shutter Speed\nCurrent: 1/250\nEND\n"
+            "Label: Battery Level\nCurrent: 80%\nEND\n"
+        )
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            return raw
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        vals = dual._status_one({
+            "port": "usb:1", "role": "T", "model": "Nikon DSC D800", "serial": "abc",
+        })
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(vals["iso"], "400")
+        self.assertEqual(vals["autoiso"], "Off")
+        self.assertEqual(vals["shutterspeed"], "1/250")
+        self.assertEqual(vals["batterylevel"], "80%")
+        self.assertFalse(vals.get("isoauto"))
+
+    def test_set_drops_unknown_widget_in_one_retry(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            if any(a.startswith("isoauto=") for a in args):
+                raise dual.CamError("isoauto not found in configuration tree.")
+            return ""
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        notes = dual._set_one("usb:1", [
+            ("isoauto", "Off"), ("iso", "400"), ("shutterspeed", "1/125"),
+        ])
         self.assertEqual(len(calls), 2)
-        first, second = " ".join(calls[0]), " ".join(calls[1])
-        self.assertIn("isoauto=Off", first)
-        self.assertNotIn("iso=", first)
-        self.assertIn("iso=400", second)
-        self.assertIn("shutterspeed=1/125", second)
-        self.assertIn("exposurecompensation=0.3", second)
+        self.assertNotIn("isoauto", " ".join(calls[1]))
+        self.assertIn("iso=400", " ".join(calls[1]))
+        self.assertIn("isoauto unsupported", notes)
 
     def test_capture_one_command(self):
         calls = []
@@ -1603,6 +1647,8 @@ class Wifi(unittest.TestCase):
             return "IP4.ADDRESS:192.0.2.10/24\n"
         if "--active" in args:
             return "Home:wifi:wlan0\n"
+        if "-g" in args and "802-11-wireless.ssid" in args:
+            return "Home\n"
         if "-g" in args:
             return "infrastructure\n"
         if "list" in args:
@@ -1713,18 +1759,18 @@ class Wifi(unittest.TestCase):
             if "DEVICE,TYPE,STATE" in args:
                 return "wlan0:wifi:disconnected\n"
             if "--active" in args:
-                return "D12600-AP:wifi:wlan0\n"
+                return "FXPAN:802-11-wireless:wlan0\n"
             if "-g" in args:
                 return "ap\n"
             if "IP4.ADDRESS" in args:
                 return "IP4.ADDRESS:10.42.0.1/24\n"
             if args[:2] == ["-f", "NAME"]:
-                return "D12600-AP\n"
+                return "FXPAN\n"
             return ""
         wifi._nmcli = fake
         out = wifi.set_ap(True)
         self.assertEqual(out["mode"], "ap")
-        self.assertEqual(out["ap_ssid"], "D12600")
+        self.assertEqual(out["ap_ssid"], "FXPAN")
         self.assertGreaterEqual(len(out["ap_psk"]), 8)
         self.assertIn("10.42.0.1", out["url"])
 

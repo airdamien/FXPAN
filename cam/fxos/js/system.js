@@ -8,6 +8,7 @@ import { bodyCard } from "./dims.js";
 import { panoView } from "./views.js";
 import * as M from "./model.js";
 import * as api from "./api.js";
+import qrcode from "./qrcode.js";
 import { refreshCaptures, loadSim } from "./app.js";
 
 const P = () => M.store.prefs;
@@ -184,12 +185,39 @@ export function storageScreen() {
   return { el: s.el, enter() { paint(); refreshCaptures(); }, refresh: paint };
 }
 
+function wifiPayload(ssid, psk) {
+  const esc = (s) => String(s || "").replace(/([\\;,:"])/g, "\\$1");
+  return `WIFI:T:WPA;S:${esc(ssid)};P:${esc(psk)};;`;
+}
+
+function qrSvg(text) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const cell = 8;
+  const quiet = 4;
+  const size = (n + quiet * 2) * cell;
+  let d = "";
+  for (let r = 0; r < n; r += 1) {
+    for (let c = 0; c < n; c += 1) {
+      if (!qr.isDark(r, c)) continue;
+      const x = (c + quiet) * cell;
+      const y = (r + quiet) * cell;
+      d += `M${x} ${y}h${cell}v${cell}h-${cell}z`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="Join hotspot"><path fill="#111" d="${d}"/></svg>`;
+}
+
 export function wifiScreen() {
   const s = dim({ id: "sys-wifi", title: "Wi-Fi", ic: "wifi", crumb: "System" });
   const stat = fact("Now");
   const nets = h("div", { class: "nets" });
   const apBtn = h("button", { class: "btn", type: "button" });
   const scanBtn = h("button", { class: "btn", type: "button", html: icon("wifi") + "<span>Scan</span>" });
+  const qrBox = h("div", { class: "wifi-qr", hidden: true });
+  const note = h("p", { class: "panel-note", text: "Start the hotspot, then a phone can join by camera. The password is in the code." });
   const paint = () => {
     const w = M.store.wifi || {};
     stat.set(w.message || "—");
@@ -201,6 +229,12 @@ export function wifiScreen() {
     (w.networks || []).forEach((n) => nets.append(h("button", { class: "net" + (n.in_use ? " on" : ""), type: "button",
       on: { click: () => join(n) } },
     h("b", { text: n.ssid }), h("span", { text: `${n.signal ? n.signal + "% · " : ""}${n.security || "open"}${n.in_use ? " · connected" : ""}` }))));
+    const hot = w.mode === "ap" && w.ap_ssid && w.ap_psk;
+    qrBox.hidden = !hot;
+    if (hot) {
+      qrBox.innerHTML = qrSvg(wifiPayload(w.ap_ssid, w.ap_psk))
+        + `<b>${w.ap_ssid}</b><span>${w.ap_psk}${w.url ? " · " + w.url : ""}</span>`;
+    }
   };
   const take = (j) => { if (j) { M.store.wifi = j; paint(); } };
   async function join(n) {
@@ -214,13 +248,12 @@ export function wifiScreen() {
   scanBtn.addEventListener("click", async () => { toast("Scanning…"); take(await run(() => api.post("/api/wifi/scan"), false)); });
   apBtn.addEventListener("click", async () => take(await run(() => api.post("/api/wifi/ap", { on: M.store.wifi?.mode !== "ap" }))));
   s.list.append(h("div", { class: "facts" }, stat), h("div", { class: "acts" }, scanBtn, apBtn), nets);
-  s.panel.append(h("p", { class: "panel-note", text: "The hotspot lets a phone reach the rig in the field. Its password shows here while it is on." }),
-    h("div", { class: "facts" }, fact("Phone", "")));
-  const paintPhone = () => {
-    const w = M.store.wifi || {};
-    s.panel.querySelector(".facts .fact b").textContent = w.mode === "ap" ? `${w.ap_ssid} · ${w.ap_psk || ""} · ${w.url || ""}` : w.url || "—";
+  s.panel.append(note, qrBox);
+  const load = async () => {
+    paint();
+    try { take(await api.get("/api/wifi")); } catch { /* keep the last snapshot */ }
   };
-  return { el: s.el, enter() { paint(); paintPhone(); }, refresh() { paint(); paintPhone(); } };
+  return { el: s.el, enter: load, refresh: paint };
 }
 
 export function piScreen() {

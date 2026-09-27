@@ -256,8 +256,13 @@ class Link:
             key = tuple(ports)
             changed = key != self._topo
             self._topo = key
-            if changed or not self.have():
+            if not self.have():
                 self._scan()
+            elif changed:
+                # A PTP session makes a D800 re-enumerate. The devnum changes
+                # and the body is still the only Nikon on the bus — reading
+                # the serial again just to notice that flashes the LCD.
+                self._retarget(ports)
             else:
                 self._drop_gone(ports)
         self._say_bus()
@@ -300,6 +305,23 @@ class Link:
         if ports is not None:
             self._topo = tuple(ports)
         return have
+
+    def _retarget(self, ports):
+        have = self.have()
+        online = {role: row for role, row in have.items() if row.get("port")}
+        moved = [port for port in ports if port not in {row.get("port") for row in online.values()}]
+        stale = [role for role, row in online.items() if row.get("port") not in ports]
+        if len(moved) != 1 or len(stale) != 1 or len(ports) != len(online):
+            self._scan()
+            return
+        role = stale[0]
+        row = dict(online[role])
+        row["port"] = moved[0]
+        updated = dict(have)
+        updated[role] = row
+        with self._lock:
+            self._have = updated
+        self._msg = f"{role} USB {moved[0]}"
 
     def _say_bus(self):
         pair = dual.load_pair()

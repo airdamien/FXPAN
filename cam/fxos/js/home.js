@@ -145,7 +145,7 @@ export function homeScreen() {
     const ph = M.photo();
     shutNote.textContent = ph.drive.timer ? ph.drive.timer + " s" : "";
     shutter.classList.toggle("busy", shooting());
-    shutter.classList.toggle("dim", !M.onlineRoles().length);
+    shutter.classList.toggle("offline", !M.onlineRoles().length);
     const on = live.pulling;
     liveBtn.innerHTML = icon(on ? "eye" : "eyeoff") + `<span>${on ? "Live" : "Live off"}</span>`;
     liveBtn.classList.toggle("on", on);
