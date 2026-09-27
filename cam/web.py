@@ -300,7 +300,7 @@ def _status_now(rows):
             if val:
                 extra[key] = val
         cameras.append(extra)
-    attach_usb_speed(cameras)
+    dual.attach_usb_speed(cameras)
     return cameras, blocks
 
 

@@ -9,7 +9,9 @@ export GDK_BACKEND=wayland
 STOP="${XDG_RUNTIME_DIR}/duals-kiosk.stop"
 LOCK="${XDG_RUNTIME_DIR}/duals-kiosk.lock"
 PROFILE="${HOME}/.config/duals-kiosk-chromium"
-URL="http://127.0.0.1:8787/?kiosk=1"
+WEB_PORT=8787
+FXOS_PORT=8790
+URL="http://127.0.0.1:${FXOS_PORT}/?kiosk=1"
 LOGDIR="${HOME}/.local/share/duals"
 
 ONCE=0
@@ -61,22 +63,46 @@ else
     exit 1
 fi
 
+web_ok() {
+    curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:${WEB_PORT}/api/health"
+}
+
+fxos_ok() {
+    curl -sf -o /dev/null --connect-timeout 1 "http://127.0.0.1:${FXOS_PORT}/fxos/api/state"
+}
+
 ensure_web() {
-    if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health; then
-        return 0
-    fi
     mkdir -p "$LOGDIR"
-    DUALS_KIOSK=1 "$PY" "$CAM/web.py" >> "$LOGDIR/web.log" 2>&1 9>&- &
-    j=0
-    while [ "$j" -lt 50 ]; do
-        if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health; then
-            return 0
+    if ! web_ok; then
+        DUALS_KIOSK=1 "$PY" "$CAM/web.py" >> "$LOGDIR/web.log" 2>&1 9>&- &
+        j=0
+        while [ "$j" -lt 50 ]; do
+            if web_ok; then
+                break
+            fi
+            j=$((j + 1))
+            sleep 0.2
+        done
+        if ! web_ok; then
+            echo "web.py did not listen on ${WEB_PORT}" >&2
+            return 1
         fi
-        j=$((j + 1))
-        sleep 0.2
-    done
-    echo "web.py did not listen on 8787" >&2
-    return 1
+    fi
+    if ! fxos_ok; then
+        "$PY" "$CAM/fxos/serve.py" --host 0.0.0.0 --proxy "http://127.0.0.1:${WEB_PORT}" \
+            >> "$LOGDIR/fxos.log" 2>&1 9>&- &
+        j=0
+        while [ "$j" -lt 50 ]; do
+            if fxos_ok; then
+                return 0
+            fi
+            j=$((j + 1))
+            sleep 0.2
+        done
+        echo "fxos serve.py did not listen on ${FXOS_PORT}" >&2
+        return 1
+    fi
+    return 0
 }
 
 # Main window only. The Debian chromium wrapper exits while the browser

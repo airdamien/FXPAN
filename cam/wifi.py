@@ -14,8 +14,11 @@ from pathlib import Path
 import dual
 
 PATH = Path(__file__).resolve().parent / "wifi.json"
-AP_SSID = "D12600"
-AP_CON = "D12600-AP"
+AP_SSID = "FXPAN"
+AP_CON = "FXPAN"
+# Previous hotspot name. Migrated the first time creds are read.
+_OLD_AP_SSIDS = {"D12600", "d12600"}
+_WIFI_TYPES = {"wifi", "802-11-wireless"}
 ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
 WATCH_INTERVAL_S = 75
 WATCH_PING_FAILS = 2
@@ -70,14 +73,25 @@ def parse_networks(raw):
     return rows
 
 
-def _nmcli(args, timeout=25):
+def _auth_denied(text):
+    low = (text or "").lower()
+    return (
+        "not authorized" in low
+        or "insufficient privileges" in low
+        or "access denied" in low
+        or "polkit" in low
+    )
+
+
+def _nmcli(args, timeout=25, _sudo=False):
     if not shutil.which("nmcli"):
         raise dual.CamError("nmcli not found — Wi-Fi is on the Pi")
+    cmd = ["sudo", "-n", "nmcli", "-t", *args] if _sudo else ["nmcli", "-t", *args]
     try:
         env = os.environ.copy()
         env["LC_ALL"] = "C"
         proc = subprocess.run(
-            ["nmcli", "-t", *args],
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -86,8 +100,14 @@ def _nmcli(args, timeout=25):
     except subprocess.TimeoutExpired as exc:
         raise dual.CamError("wifi timed out") from exc
     if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "nmcli failed").strip().splitlines()
-        raise dual.CamError(err[-1] if err else "nmcli failed")
+        err = (proc.stderr or proc.stdout or "nmcli failed").strip()
+        # The kiosk session is not the polkit "active" user, so scan, join
+        # and the hotspot come back "not authorized". Root can, and the Pi
+        # user has passwordless sudo.
+        if not _sudo and _auth_denied(err):
+            return _nmcli(args, timeout=timeout, _sudo=True)
+        lines = err.splitlines()
+        raise dual.CamError(lines[-1] if lines else "nmcli failed")
     return proc.stdout
 
 
@@ -116,10 +136,14 @@ def _load_creds():
     if not isinstance(data, dict):
         return out
     ssid = str(data.get("ap_ssid") or "").strip() or AP_SSID
+    if ssid in _OLD_AP_SSIDS:
+        ssid = AP_SSID
     psk = str(data.get("ap_psk") or "").strip()
     out["ap_ssid"] = ssid
     out["ap_psk"] = psk
     out["saved"] = _norm_saved(data.get("saved"))
+    if str(data.get("ap_ssid") or "").strip() in _OLD_AP_SSIDS:
+        _save_creds(out)
     return out
 
 
@@ -183,7 +207,7 @@ def _active_wifi():
         return "", "", ""
     for line in raw.splitlines():
         parts = _fields(line)
-        if len(parts) >= 3 and parts[1] == "wifi":
+        if len(parts) >= 3 and parts[1] in _WIFI_TYPES:
             return parts[0], parts[2], parts[1]
     return "", "", ""
 
@@ -198,7 +222,7 @@ def _con_mode(name):
     return raw.strip()
 
 
-def _url(ip, port=8787):
+def _url(ip, port=8790):
     return f"http://{ip}:{port}/" if ip else ""
 
 
@@ -249,6 +273,63 @@ def _near_saved(nets, saved, min_signal=WATCH_MIN_SIGNAL):
     return rows
 
 
+def _connection_ssid(name):
+    if not name:
+        return ""
+    try:
+        return _nmcli(
+            ["-g", "802-11-wireless.ssid", "connection", "show", name],
+            timeout=8,
+        ).strip()
+    except dual.CamError:
+        return ""
+
+
+def _key_mgmt_missing(exc):
+    return "key-mgmt" in str(exc).lower()
+
+
+def _arm_psk(name, psk):
+    """Set key-mgmt before the passphrase.
+
+    One nmcli modify that sets wifi-sec.psk on a profile that does not
+    already have key-mgmt fails with "key-mgmt: property is missing".
+    """
+    _nmcli(
+        ["connection", "modify", name, "802-11-wireless-security.key-mgmt", "wpa-psk"],
+        timeout=12,
+    )
+    if psk:
+        _nmcli(
+            ["connection", "modify", name, "802-11-wireless-security.psk", psk],
+            timeout=12,
+        )
+
+
+def _connect_station(ssid, psk=""):
+    name = _connection_for_ssid(ssid)
+    if name and psk:
+        try:
+            _arm_psk(name, psk)
+            _nmcli(["connection", "up", name], timeout=35)
+            return
+        except dual.CamError:
+            pass
+    args = ["device", "wifi", "connect", ssid]
+    if psk:
+        args.extend(["password", psk])
+    try:
+        _nmcli(args, timeout=35)
+    except dual.CamError as exc:
+        if not (name and _key_mgmt_missing(exc)):
+            raise
+        try:
+            _nmcli(["connection", "delete", name], timeout=12)
+        except dual.CamError:
+            raise exc
+        _nmcli(args, timeout=35)
+
+
 def _connection_for_ssid(ssid):
     try:
         names = [
@@ -273,21 +354,9 @@ def _connection_for_ssid(ssid):
 
 
 def _reconnect_station(ssid, psk=""):
-    name = _connection_for_ssid(ssid)
-    if name:
-        try:
-            _nmcli(["connection", "up", name], timeout=25)
-            dev = _wifi_device()
-            _powersave_off(dev, name)
-            return
-        except dual.CamError:
-            pass
-    args = ["device", "wifi", "connect", ssid]
-    if psk:
-        args.extend(["password", psk])
-    _nmcli(args, timeout=35)
+    _connect_station(ssid, psk)
     name, dev, _typ = _active_wifi()
-    _powersave_off(dev or _wifi_device(), name)
+    _powersave_off(dev or _wifi_device(), name or _connection_for_ssid(ssid))
 
 
 def _powersave_off(device, con=""):
@@ -360,12 +429,22 @@ def status(networks=None):
             out["ssid"] = used["ssid"]
             out["signal"] = used["signal"]
             out["security"] = used["security"]
-            out["message"] = f"{used['ssid']}  {out['url'] or 'no ip'}"
+            out["message"] = f"Joined {used['ssid']}  {out['url'] or 'no ip'}"
             return _attach_watch(out)
     if name:
+        ssid = _connection_ssid(name) or name
         out["mode"] = "station"
-        out["ssid"] = name
-        out["message"] = f"{name}  {out['url'] or 'no ip'}"
+        out["ssid"] = ssid
+        out["message"] = f"Joined {ssid}  {out['url'] or 'no ip'}"
+        nets = list(out.get("networks") or [])
+        if not any(n.get("ssid") == ssid for n in nets):
+            nets.insert(0, {
+                "ssid": ssid, "signal": 0, "security": "", "in_use": True,
+            })
+        else:
+            for n in nets:
+                n["in_use"] = n.get("ssid") == ssid
+        out["networks"] = nets
         return _attach_watch(out)
     out["message"] = "wifi idle — scan or start AP"
     return _attach_watch(out)
@@ -381,8 +460,18 @@ def scan():
         )
     )
     out = status(nets)
+    joined = [n for n in (out.get("networks") or []) if n.get("in_use")]
+    seen = {n.get("ssid") for n in nets}
+    for n in joined:
+        if n.get("ssid") not in seen:
+            nets.insert(0, n)
+        else:
+            for row in nets:
+                if row.get("ssid") == n.get("ssid"):
+                    row["in_use"] = True
     out["networks"] = nets
-    out["message"] = f"{len(nets)} network(s)"
+    if out.get("mode") != "station":
+        out["message"] = f"{len(nets)} network(s)"
     return out
 
 
@@ -391,10 +480,7 @@ def join(ssid, psk=""):
     if not ssid:
         raise dual.CamError("need an SSID")
     _nmcli(["radio", "wifi", "on"], timeout=8)
-    args = ["device", "wifi", "connect", ssid]
-    if psk:
-        args.extend(["password", psk])
-    _nmcli(args, timeout=35)
+    _connect_station(ssid, psk)
     name, dev, _typ = _active_wifi()
     _powersave_off(dev or _wifi_device(), name)
     remember_network(ssid, psk)
@@ -425,18 +511,28 @@ def set_ap(on):
         if AP_CON not in names:
             _nmcli(
                 ["connection", "add", "type", "wifi", "ifname", device,
-                 "con-name", AP_CON, "autoconnect", "no", "ssid", creds["ap_ssid"]],
+                 "con-name", AP_CON, "autoconnect", "no", "ssid", creds["ap_ssid"],
+                 "802-11-wireless.mode", "ap",
+                 "ipv4.method", "shared",
+                 "wifi-sec.key-mgmt", "wpa-psk",
+                 "wifi-sec.psk", creds["ap_psk"]],
+                timeout=15,
+            )
+        else:
+            _nmcli(
+                ["connection", "modify", AP_CON,
+                 "802-11-wireless.mode", "ap",
+                 "802-11-wireless.band", "bg",
+                 "802-11-wireless.ssid", creds["ap_ssid"],
+                 "ipv4.method", "shared",
+                 "802-11-wireless-security.key-mgmt", "wpa-psk"],
                 timeout=12,
             )
-        _nmcli(
-            ["connection", "modify", AP_CON,
-             "802-11-wireless.mode", "ap",
-             "802-11-wireless.band", "bg",
-             "ipv4.method", "shared",
-             "wifi-sec.key-mgmt", "wpa-psk",
-             "wifi-sec.psk", creds["ap_psk"]],
-            timeout=12,
-        )
+            _nmcli(
+                ["connection", "modify", AP_CON,
+                 "802-11-wireless-security.psk", creds["ap_psk"]],
+                timeout=12,
+            )
         _nmcli(["connection", "up", AP_CON], timeout=25)
         _powersave_off(device, AP_CON)
     except dual.CamError:

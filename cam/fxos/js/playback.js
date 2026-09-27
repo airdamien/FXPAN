@@ -40,10 +40,41 @@ const stitchState = (p) => {
 
 const fmtBytes = (n) => (n >= 1e12 ? (n / 1e12).toFixed(1) + " TB" : n >= 1e9 ? (n / 1e9).toFixed(0) + " GB" : Math.round(n / 1e6) + " MB");
 
+function dragScroll(el) {
+  el.classList.add("drag-scroll");
+  let drag = null;
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button) return;
+    drag = { id: e.pointerId, y: e.clientY, top: el.scrollTop, moved: 0 };
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y;
+    drag.moved = Math.max(drag.moved, Math.abs(dy));
+    if (drag.moved < 8) return;
+    el.scrollTop = drag.top - dy;
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const moved = drag.moved;
+    drag = null;
+    if (moved < 8) return;
+    const swallow = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      el.removeEventListener("click", swallow, true);
+    };
+    el.addEventListener("click", swallow, true);
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+
 export function playbackScreen() {
   const s = page({ id: "playback", title: "Playback", ic: "play" });
   const grid = h("div", { class: "shots" });
   s.body.append(grid);
+  dragScroll(s.body);
   const paint = () => {
     const d = M.store.disk;
     s.noteEl.textContent = d ? `${fmtBytes(d.free)} free · ${(M.store.pairs || []).length} sets` : "";

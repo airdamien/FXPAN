@@ -60,7 +60,9 @@ D7000_DIAL = {
 
 
 class CamError(Exception):
-    pass
+    def __init__(self, message, output=""):
+        super().__init__(message)
+        self.output = output or ""
 
 
 def _kill_ptp():
@@ -192,7 +194,7 @@ def gp(args, port=None, timeout=120, _retried=False):
         if not _retried and _claim_fail(err):
             _free_linux_ptp(force=True)
             return gp(args, port=port, timeout=timeout, _retried=True)
-        raise CamError(_gp_err(err))
+        raise CamError(_gp_err(err), output=proc.stdout or "")
     return proc.stdout
 
 
@@ -204,22 +206,49 @@ def parse_currents(text):
     ]
 
 
-def parse_widget_currents(text):
-    """One Current per Label block. Extra Current: lines cannot shift keys."""
-    vals = []
+def parse_widget_pairs(text):
+    """(label, current) per Label block. A missing widget prints no Label."""
+    pairs = []
+    label = ""
     current = ""
     saw = False
     for line in text.splitlines():
         if line.startswith("Label:"):
             if saw:
-                vals.append(current)
+                pairs.append((label, current))
+            label = line.split(":", 1)[1].strip()
             current = ""
             saw = True
         elif line.startswith("Current:"):
             current = line.split(":", 1)[1].strip()
     if saw:
-        vals.append(current)
-    return vals
+        pairs.append((label, current))
+    return pairs
+
+
+def parse_widget_currents(text):
+    """One Current per Label block. Extra Current: lines cannot shift keys."""
+    return [current for _label, current in parse_widget_pairs(text)]
+
+
+# gphoto Label → config key. D800 has autoiso ("Auto ISO") and no isoauto,
+# so a packed --get-config comes back short and must not be re-read per key.
+LABEL_KEYS = {
+    "serial number": "serialnumber",
+    "iso speed": "iso",
+    "shutter speed": "shutterspeed",
+    "f-number": "f-number",
+    "aperture": "f-number",
+    "image quality": "imagequality",
+    "white balance": "whitebalance",
+    "exposure program": "expprogram",
+    "exposure compensation": "exposurecompensation",
+    "exposure bias compensation": "exposurecompensation",
+    "capture target": "capturetarget",
+    "battery level": "batterylevel",
+    "iso auto": "isoauto",
+    "auto iso": "autoiso",
+}
 
 
 def parse_detect(text):
@@ -604,6 +633,7 @@ def _get_config(port, key):
 
 
 def _status_one(row):
+    """One gphoto2 process for every status widget. Never one session per key."""
     serial = (row.get("serial") or "").strip()
     vals = {
         "role": row.get("role") or "-",
@@ -614,20 +644,22 @@ def _status_one(row):
     args = []
     for key in KEYS:
         args += ["--get-config", key]
+    raw = ""
     try:
         raw = gp(args, port=row["port"])
-        currents = parse_widget_currents(raw)
-        if len(currents) != len(KEYS):
-            currents = parse_currents(raw)
-        if len(currents) == len(KEYS):
-            for key, val in zip(KEYS, currents):
+    except CamError as exc:
+        raw = exc.output or ""
+    currents = parse_widget_currents(raw)
+    if len(currents) != len(KEYS):
+        currents = parse_currents(raw)
+    if len(currents) == len(KEYS):
+        for key, val in zip(KEYS, currents):
+            vals[key] = val
+    else:
+        for label, val in parse_widget_pairs(raw):
+            key = LABEL_KEYS.get(label.lower())
+            if key:
                 vals[key] = val
-        else:
-            for key in KEYS:
-                vals[key] = _get_config(row["port"], key)
-    except CamError:
-        for key in KEYS:
-            vals[key] = _get_config(row["port"], key)
     if not vals.get("focusmode"):
         vals["focusmode"] = vals.get("focusmode2") or ""
     if vals.get("shutterspeed"):
@@ -739,8 +771,17 @@ def shot_config(assignments):
     return [(k, v) for k, v in pack_assignments(assignments) if k in keep]
 
 
+def _unknown_widgets(err):
+    return re.findall(r"(\w+) not found", str(err or ""))
+
+
 def _set_one(port, assignments, timeout=120):
-    """Push every widget in one gphoto2 command. Split only if that fails."""
+    """Push every widget in one gphoto2 command.
+
+    A missing widget (D800 has no isoauto) used to fall through to one PTP
+    session per setting, which flashes the rear LCD. Drop the unknown names
+    and send the rest once.
+    """
     packed = pack_assignments(assignments)
     if not packed:
         return []
@@ -748,7 +789,18 @@ def _set_one(port, assignments, timeout=120):
         gp(config_args(packed), port=port, timeout=timeout)
         return []
     except CamError as exc:
-        return _set_widgets(port, packed, last=exc, timeout=timeout)
+        drop = [key for key in _unknown_widgets(exc) if any(k == key for k, _ in packed)]
+        if not drop:
+            return [str(exc)]
+        again = [(k, v) for k, v in packed if k not in drop]
+        notes = [f"{key} unsupported" for key in drop]
+        if not again:
+            return notes
+        try:
+            gp(config_args(again), port=port, timeout=timeout)
+        except CamError as exc2:
+            notes.append(str(exc2))
+        return notes
 
 
 def _set_widgets(port, assignments, last=None, timeout=120):
@@ -871,16 +923,8 @@ def _iso_num(val):
 
 
 def apply_locked(port, assignments, timeout=20):
-    """Two packed gphoto2 commands: Auto ISO off, then ISO+shutter+EV+WB+quality."""
-    packed = pack_assignments(assignments)
-    auto = [(k, v) for k, v in packed if k in ("isoauto", "autoiso")]
-    rest = [(k, v) for k, v in packed if k not in ("isoauto", "autoiso")]
-    notes = []
-    if auto:
-        notes.extend(_set_one(port, auto, timeout=timeout) or [])
-    if rest:
-        notes.extend(_set_one(port, rest, timeout=timeout) or [])
-    return notes
+    """One gphoto2 command. Auto ISO is listed before the ISO number."""
+    return _set_one(port, assignments, timeout=timeout) or []
 
 
 def freeze_iso(port, iso):
