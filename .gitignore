@@ -27,5 +27,9 @@ cam/cameras.json
 cam/gpio.json
 cam/settings.json
 cam/wifi.json
+cam/fxos/.sim/
+cam/fxos/__pycache__/
+cam/fxos/state.json
+cam/fxos/state.tmp
 captures/
 
