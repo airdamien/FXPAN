@@ -267,7 +267,7 @@ export function shotScreen() {
         } } }));
     dl.innerHTML = "";
     if (!M.store.kiosk) {
-      [["T", p.t_nef || p.t], ["R", p.r_nef || p.r], ["Pano", p.pano], ["Ana", p.pano_ana]].forEach(([label, n]) => {
+      [["T", p.t_nef || p.t], ["R", p.r_nef || p.r], ["Pano", p.pano], ["Ana", p.pano_ana], ["Master TIFF", p.master]].forEach(([label, n]) => {
         if (n) dl.append(h("a", { class: "btn small", href: api.file(n) + "?dl=1", download: n,
           html: icon("download") + `<span>${label}</span>` }));
       });

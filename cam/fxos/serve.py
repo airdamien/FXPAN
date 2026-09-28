@@ -17,6 +17,7 @@ import copy
 import json
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -393,9 +394,21 @@ class Handler(BaseHTTPRequestHandler):
         )
         try:
             with urllib.request.urlopen(req, timeout=240) as resp:
-                body, code = resp.read(), resp.status
                 ctype = resp.headers.get("Content-Type") or "application/octet-stream"
                 disp = resp.headers.get("Content-Disposition") or ""
+                size = resp.headers.get("Content-Length")
+                if size and int(size) > (8 << 20):
+                    # TIFF masters run to hundreds of MB; pass them through.
+                    self.send_response(resp.status)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Cache-Control", "no-store, must-revalidate")
+                    if disp:
+                        self.send_header("Content-Disposition", disp)
+                    self.send_header("Content-Length", size)
+                    self.end_headers()
+                    shutil.copyfileobj(resp, self.wfile, 1 << 20)
+                    return None
+                body, code = resp.read(), resp.status
         except urllib.error.HTTPError as exc:
             body, code = exc.read(), exc.code
             ctype = exc.headers.get("Content-Type") or "application/json"
