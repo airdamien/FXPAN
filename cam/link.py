@@ -190,14 +190,18 @@ class Link:
             self._kick.set()
 
     @contextmanager
-    def gpio_window(self, settle=1.0):
-        """Drop gphoto2 USB so the 10-pin remote can fire."""
-        self.live.stop()
-        dual.free_usb()
-        time.sleep(0.35)
+    def gpio_window(self, settle=0.2):
+        """Drop gphoto2 USB so the 10-pin remote can fire.
+
+        Mark busy first. Otherwise the link loop sees live view wanted and
+        claims USB again during the pause, and the bodies ignore the remote.
+        """
         with self._lock:
             self._busy += 1
         try:
+            self.live.stop()
+            dual.free_usb()
+            time.sleep(0.8)
             yield
         finally:
             time.sleep(settle)

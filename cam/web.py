@@ -179,7 +179,7 @@ def _gpio_shoot(shot_json, prefs, assignments):
             + (
                 ", then USB download → captures/"
                 if prefs["download"]
-                else ", files stay on RAM"
+                else ", files stay on the cards"
             ),
         )
     have = None
@@ -187,15 +187,28 @@ def _gpio_shoot(shot_json, prefs, assignments):
     before = None
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = pano.CAPTURES
+    ram = prefs["download"] and not prefs.get("keep_card")
     with LINK.usb():
         try:
             have = dual.require_online(dual.detect_bodies())
         except dual.CamError:
             have = None
-        if have and prefs["download"]:
-            # Exposure was already written when it changed. Another set here
-            # wakes the rear LCD and can hold USB through the 10-pin pulse.
-            before = dual.list_cards(have)
+        if have and ram:
+            recovered = dual.arm_ram(have, dest, stamp)
+            n_old = sum(len(v) for v in recovered.values())
+            if n_old:
+                copied = f"{n_old} old RAM frame(s) → captures/recovered_ram/"
+        elif have:
+            # Recording Media sticks on the body. Left on SDRAM, 10-pin frames
+            # skip the card and fill the buffer until the body stops releasing.
+            for row in have.values():
+                dual._set_one(
+                    row["port"],
+                    [("viewfinder", "0"), ("recordingmedia", "0")],
+                    timeout=12,
+                )
+            if prefs["download"]:
+                before = dual.list_cards(have)
     # Nikon bodies ignore the 10-pin remote while USB is claimed.
     with LINK.gpio_window(settle=0.2):
         info = gpio.fire()
@@ -205,17 +218,20 @@ def _gpio_shoot(shot_json, prefs, assignments):
             f"shutter {info['shutter']} {info['ms']}ms  {info['backend']}  remote"
             + (f"  {copied}" if copied else ""),
         )
-    if not have or before is None:
+    if not have or (before is None and not ram):
         raise dual.CamError("no cameras")
     with LINK.usb():
         have = dual.require_online(dual.detect_bodies())
         LINK.absorb(have.values())
         try:
-            saved = dual.pull_new(have, before, dest, stamp)
+            if ram:
+                saved = dual.pull_ram(have, dest, stamp)
+            else:
+                saved = dual.pull_new(have, before, dest, stamp)
         except dual.CamError as exc:
             raise dual.CamError(
                 f"{exc}  (10-pin needs USB released — "
-                "check remote wiring / Internal RAM)"
+                "check the remote cable on that body)"
             ) from exc
     bits = "  ".join(f"{role} {','.join(saved[role])}" for role in sorted(saved))
     pano.ensure_pair_jpegs(stamp, dest)
@@ -801,6 +817,7 @@ class Handler(BaseHTTPRequestHandler):
                                     dest,
                                     stamp,
                                     assignments,
+                                    bool(prefs.get("keep_card")),
                                 )
                                 for role in have
                             ]

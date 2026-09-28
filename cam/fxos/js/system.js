@@ -1,6 +1,6 @@
 // System stays separate: rig plumbing that does not compete with
 // photographic decisions. Hidden, but there when it is needed.
-import { h, rowList, chips, ruler, toggle, toast, ask } from "./ui.js";
+import { h, rowList, chips, ruler, toggle, toast, ask, messages, clearMessages } from "./ui.js";
 import { icon } from "./icons.js";
 import { go } from "./nav.js";
 import { dim, fact } from "./kit.js";
@@ -29,8 +29,11 @@ async function run(fn, ok) {
 export function systemScreen() {
   const s = dim({ id: "system", title: "System", ic: "gear" });
   const defs = [
-    { id: "cams", icon: "camera", label: "Cameras", hint: "Pair T and R, USB, batteries",
-      value: () => ["T", "R"].map((r) => r + (roleOk(r) ? " ✓" : " out")).join("  "), go: () => go("sys-cameras") },
+    { id: "cams", icon: "camera", label: "Cameras", hint: "Pair T and R, USB link speed, batteries",
+      value: () => ["T", "R"].map((r) => {
+        const sp = M.store.link?.roles?.[r]?.usb_speed;
+        return r + (roleOk(r) ? " " + (sp || "✓") : " out");
+      }).join("  "), go: () => go("sys-cameras") },
     { id: "rig", icon: "rig", label: "Rig calibration", hint: "Overlap, flop R, balance",
       value: () => `${Math.round((Number(P().overlap) || 0.2) * 100)}%${P().flip_r ? " · flop R" : ""}`, go: () => go("sys-rig") },
     { id: "display", icon: "display", label: "Display", hint: "Brightness, sleep",
@@ -43,6 +46,8 @@ export function systemScreen() {
       go: () => go("sys-wifi") },
     { id: "pi", icon: "power", label: "Pi & kiosk", hint: "GPIO, desktop, classic UI",
       value: () => (M.store.gpio?.pi ? "Pi" : M.store.gpio?.sim ? "GPIO sim" : "Laptop"), go: () => go("sys-pi") },
+    { id: "log", icon: "info", label: "Messages", hint: "Popup history",
+      value: () => { const n = messages().length; return n ? n + " kept" : "Empty"; }, go: () => go("sys-log") },
     { id: "about", icon: "info", label: "About", hint: "Version, keys", value: () => M.store.fx.server?.version || "", go: () => go("sys-about") },
     { id: "sim", icon: "flask", label: "Simulator", hint: "Scenes and failures to review against",
       show: () => M.store.fx.server?.mode === "sim",
@@ -86,7 +91,7 @@ export function camerasScreen() {
     extras.innerHTML = "";
     if (!rows.length) extras.append(h("p", { class: "list-note", text: "None." }));
     rows.forEach((row) => extras.append(h("div", { class: "extra" },
-      h("span", {}, h("b", { text: (row.model || "Nikon").replace(/^Nikon DSC /, "") }), h("small", { text: `#${String(row.serial).slice(-4)} · ${row.port}` })),
+      h("span", {}, h("b", { text: (row.model || "Nikon").replace(/^Nikon DSC /, "") }), h("small", { text: [row.usb_speed, `#${String(row.serial).slice(-4)}`, row.port].filter(Boolean).join(" · ") })),
       ...["T", "R"].map((role) => h("button", { class: "btn small", type: "button", text: "Make " + role, on: { click: async () => {
         const j = await run(() => api.post("/api/pair", role === "T" ? { t: row.serial } : { r: row.serial }));
         if (j?.link) M.ingestLink(j.link);
@@ -289,6 +294,29 @@ const KEYS = [
   ["P", "Playback"],
   ["M", "Modes"],
 ];
+
+export function messagesScreen() {
+  const s = dim({ id: "sys-log", title: "Messages", ic: "info", crumb: "System" });
+  const list = h("div", { class: "msg-log" });
+  const clear = h("button", { class: "btn", type: "button", text: "Clear history", on: { click: () => { clearMessages(); paint(); } } });
+  s.list.append(h("div", { class: "acts" }, clear), list);
+  function paint() {
+    const rows = messages();
+    list.replaceChildren();
+    if (!rows.length) {
+      list.append(h("p", { class: "list-note", text: "No popups yet. Errors and confirmations land here and stay for the last 120." }));
+      return;
+    }
+    rows.forEach((row) => {
+      const when = new Date(row.t);
+      const stamp = when.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      list.append(h("div", { class: "msg " + (row.kind || "info") },
+        h("small", { text: stamp + " · " + (row.kind || "info") }),
+        h("p", { text: row.msg })));
+    });
+  }
+  return { el: s.el, enter: paint, refresh: paint };
+}
 
 export function aboutScreen() {
   const s = dim({ id: "sys-about", title: "About", ic: "info", crumb: "System" });

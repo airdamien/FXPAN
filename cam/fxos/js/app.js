@@ -8,7 +8,7 @@ import { homeScreen } from "./home.js";
 import { frameScreen, lightScreen, lightDualScreen, focusScreen, lookScreen, lookFineScreen, driveScreen, wbScreen } from "./dims.js";
 import { modesScreen } from "./modes.js";
 import { playbackScreen, shotScreen } from "./playback.js";
-import { systemScreen, camerasScreen, rigScreen, displayScreen, storageScreen, wifiScreen, piScreen, aboutScreen, simScreen } from "./system.js";
+import { systemScreen, camerasScreen, rigScreen, displayScreen, storageScreen, wifiScreen, piScreen, messagesScreen, aboutScreen, simScreen } from "./system.js";
 import { fire, cancelOverlay } from "./capture.js";
 
 // --- top bar ------------------------------------------------------------------------
@@ -84,10 +84,6 @@ export async function toggleLive(want) {
   const on = want === undefined ? !live.pulling : !!want;
   if (on === live.pulling) return;
   const gen = ++liveGen;
-  if (on && M.photo().drive.release === "sync") {
-    M.set("drive.release", "usb");
-    toast("Live view uses USB release", "info");
-  }
   if (on) {
     // Flip the button before the cameras answer. The stream starts when
     // the first JPEG arrives; a failure puts the button back.
@@ -114,9 +110,10 @@ export async function toggleLive(want) {
     M.emit("live");
     stillKey = "";
     showStill();
-    api.post("/api/live/stop").then((j) => {
+    try {
+      const j = await api.post("/api/live/stop");
       if (gen === liveGen && j.link) M.ingestLink(j.link);
-    }).catch(() => {});
+    } catch { /* the shot still drops USB before the 10-pin pulse */ }
   }
 }
 
@@ -289,7 +286,7 @@ async function boot() {
     focus: focusScreen, look: lookScreen, "look-fine": lookFineScreen, drive: driveScreen, wb: wbScreen,
     modes: modesScreen, playback: playbackScreen, shot: shotScreen,
     system: systemScreen, "sys-cameras": camerasScreen, "sys-rig": rigScreen, "sys-display": displayScreen,
-    "sys-storage": storageScreen, "sys-wifi": wifiScreen, "sys-pi": piScreen, "sys-about": aboutScreen,
+    "sys-storage": storageScreen, "sys-wifi": wifiScreen, "sys-pi": piScreen, "sys-log": messagesScreen, "sys-about": aboutScreen,
     "sys-sim": simScreen,
   };
   Object.entries(table).forEach(([id, make]) => nav.screen(id, make));
@@ -297,8 +294,6 @@ async function boot() {
   M.on((what, data) => {
     top.paint();
     nav.refreshAll(what);
-    if ((what === "photo" || what === "prefs") && M.photo().drive.release === "sync" && live.pulling)
-      toggleLive(false);
     if (what === "prefs") armIdle();
     if (what === "applied" && data?.message && /\(/.test(data.message)) toast(data.message, "warn", 4200);
   });
