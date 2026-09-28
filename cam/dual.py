@@ -1389,13 +1389,18 @@ def pull_ram_one(role, port, dest, stamp, timeout=12):
     got = _new_files(dest, pattern, before)
     if not got:
         raise CamError("no frame in camera RAM — the 10-pin release did not fire this body")
-    saved = []
+    # JPEG first: a lone NEF under the pair name gets its preview pulled out
+    # as the JPEG by whoever lists captures next. The camera file wins.
+    got.sort(key=lambda p: p.suffix.lower() == ".nef")
+    saved, used = [], set()
     for path in got:
-        out = dest / f"{role}_{stamp}{path.suffix.lower()}"
-        if out.exists():
+        ext = path.suffix.lower()
+        if ext in used:
             saved.append(path.name)
             continue
-        path.rename(out)
+        used.add(ext)
+        out = dest / f"{role}_{stamp}{ext}"
+        path.replace(out)
         saved.append(out.name)
     return saved
 

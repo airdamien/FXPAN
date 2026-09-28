@@ -943,11 +943,16 @@ class Handler(BaseHTTPRequestHandler):
                     squeeze = float(squeeze)
                 except (TypeError, ValueError):
                     raise dual.CamError("bad squeeze")
+                raw = data.get("raw")
+                if raw is None:
+                    raw = prefs.get("stitch_raw", False)
+                if isinstance(raw, str):
+                    raw = raw.lower() not in ("0", "false", "no", "")
                 mode = (data.get("mode") or prefs.get("stitch_mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                     deghost=bool(deghost), balance=bool(balance),
-                    crop_inner=bool(crop_inner), squeeze=squeeze,
+                    crop_inner=bool(crop_inner), squeeze=squeeze, raw=bool(raw),
                 )
                 stat = pano.queue_status()
                 return _json(

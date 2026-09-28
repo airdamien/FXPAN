@@ -406,7 +406,8 @@ function pipeline() {
       { ic: "timer", k: "Timer", v: d.timer ? `${d.timer} s, then release` : "Off", on: !!d.timer },
       { ic: "sync", k: "Release", v: d.release === "sync" ? "10-pin · focus then shutter · live view pauses" : "Over USB · T, then R, ~50 ms apart", on: true },
       { ic: "card", k: "Save", v: saveTo, on: true },
-      { ic: "stitch", k: "Stitch", v: pi && d.auto_stitch ? `${M.engineOf(d.engine).label}, straight after` : pi ? "When you ask, in Playback" : "Not until downloaded", on: pi && d.auto_stitch },
+      { ic: "stitch", k: "Stitch", v: (pi && d.auto_stitch ? `${M.engineOf(d.engine).label}, straight after` : pi ? "When you ask, in Playback" : "Not until downloaded")
+        + (pi && d.source === "raw" ? " · from RAW" : ""), on: pi && d.auto_stitch },
       { ic: "play", k: "Review", v: d.review ? `${d.review} s` : "Off", on: !!d.review && pi },
     ];
     el.innerHTML = steps.map((s2, i) => `<li class="${s2.on ? "on" : ""}"><span class="pipe-n">${i + 1}</span>`
@@ -437,6 +438,9 @@ export function driveScreen() {
         get: () => D().review, set: (v) => M.set("drive.review", Number(v)) }) },
     { id: "auto", label: "Auto-stitch", show: () => M.toPi(D()), value: () => (D().auto_stitch ? "On" : "Off"),
       control: () => toggle({ get: () => D().auto_stitch, set: (v) => M.set("drive.auto_stitch", v) }) },
+    { id: "source", label: "Stitch from", show: () => M.toPi(D()), value: () => M.sourceLabel(D().source),
+      control: () => cards({ options: M.SOURCES.map((o) => ({ v: o.v, label: o.label, sub: o.sub })),
+        get: () => D().source, set: (v) => M.set("drive.source", v) }) },
     { id: "quality", label: "File", more: true, value: () => M.qualityOf(D().quality).label,
       control: () => cards({ options: M.QUALITY.map((q) => ({ v: q.v, label: q.label, sub: q.sub })),
         get: () => D().quality, set: (v) => M.set("drive.quality", v) }) },

@@ -227,6 +227,101 @@ def working_jpeg(role_files, stamp, role, root):
     return extract_nef_jpeg(src, dest)
 
 
+RAW_MAX_GAIN = 8.0
+
+
+def _raw_tone(lin, gain):
+    """Linear 0..1 → display 0..1: gain, then a shoulder instead of a clip.
+
+    Extended Reinhard with the white point at `gain`, so sensor white lands
+    on 1.0 and the highlights the camera JPEG clips roll off instead.
+    """
+    import numpy as np
+
+    x = lin * np.float32(gain)
+    w2 = np.float32(gain * gain)
+    y = x * (1 + x / w2) / (1 + x)
+    return np.power(np.clip(y, 0, 1), np.float32(1 / 2.2))
+
+
+def _raw_gain(t_lin, t_jpeg):
+    """One gain for both bodies: T's develop matches its camera JPEG's mean."""
+    import cv2
+    import numpy as np
+
+    ref = cv2.imread(str(t_jpeg), cv2.IMREAD_REDUCED_GRAYSCALE_4) if t_jpeg else None
+    if ref is None:
+        return 1.0
+    want = float((ref.astype(np.float32) / 255.0).mean())
+    sample = t_lin[::16, ::16].astype(np.float32).mean(axis=2) / 65535.0
+    lo, hi = 0.25, RAW_MAX_GAIN
+    if float(_raw_tone(sample, hi).mean()) <= want:
+        return hi
+    if float(_raw_tone(sample, lo).mean()) >= want:
+        return lo
+    for _ in range(14):
+        mid = (lo * hi) ** 0.5
+        if float(_raw_tone(sample, mid).mean()) < want:
+            lo = mid
+        else:
+            hi = mid
+    return (lo * hi) ** 0.5
+
+
+def develop_pair(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
+    """Develop both NEFs the same way; returns 16-bit BGR (t, r).
+
+    T's as-shot white balance goes on both so the halves meet without a
+    colour step. Linear develop, then one gain for both (matched to T's
+    camera JPEG when given) and a highlight shoulder rather than a clip.
+    size=(w, h) crops to the camera JPEG frame.
+    """
+    try:
+        import rawpy
+    except ImportError as exc:
+        raise dual.CamError("rawpy missing — .venv/bin/pip install rawpy") from exc
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
+
+    with rawpy.imread(str(t_nef)) as raw:
+        wb = [float(v) for v in raw.camera_whitebalance]
+    if not any(wb[:3]):
+        wb = None
+
+    def linear(path):
+        with rawpy.imread(str(path)) as raw:
+            return raw.postprocess(
+                output_bps=16, no_auto_bright=True, gamma=(1, 1),
+                use_camera_wb=wb is None, user_wb=wb,
+                highlight_mode=rawpy.HighlightMode.Blend,
+            )
+
+    def finish(rgb, gain):
+        out = np.empty(rgb.shape, np.uint16)
+        for y in range(0, rgb.shape[0], 512):
+            band = rgb[y:y + 512].astype(np.float32) / 65535.0
+            out[y:y + 512] = (_raw_tone(band, gain) * 65535.0 + 0.5).astype(np.uint16)
+        img = out[:, :, ::-1]
+        if size:
+            tw, th = size
+            h, w = img.shape[:2]
+            if w >= tw and h >= th:
+                x, y = (w - tw) // 2, (h - th) // 2
+                img = img[y:y + th, x:x + tw]
+        return np.ascontiguousarray(img)
+
+    if on_log:
+        on_log("raw  developing T and R NEFs (T white balance on both)")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ft, fr = pool.submit(linear, t_nef), pool.submit(linear, r_nef)
+        t_lin, r_lin = ft.result(), fr.result()
+        gain = _raw_gain(t_lin, t_jpeg)
+        if on_log:
+            on_log(f"raw  ×{gain:.2f} on both, highlight shoulder")
+        ft, fr = pool.submit(finish, t_lin, gain), pool.submit(finish, r_lin, gain)
+        return ft.result(), fr.result()
+
+
 def ensure_pair_jpegs(stamp, root=None):
     """Make sure T/R JPEGs exist for this stamp. NEF originals are left in place."""
     root = Path(root or CAPTURES)
@@ -1217,8 +1312,9 @@ def _compose_pano(dest, r_path, t_path, ol_path, out_w, out_h, x, ty, ry):
 
 def stitch_hugin(
     t_path, r_path, dest, overlap=OVERLAP, flip_r=True, dy=0, on_log=None,
-    balance=False, lift=True, profile="fxpan65", crop_inner=True,
+    balance=False, lift=True, profile="fxpan65", crop_inner=True, images=None,
 ):
+    """images=(t_bgr, r_bgr) skips the JPEG read (16-bit RAW develop)."""
     def log(msg):
         if on_log:
             on_log(msg)
@@ -1233,11 +1329,14 @@ def stitch_hugin(
     found = None
     t_bgr = r_bgr = None
     if cv2 is not None:
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            ft = pool.submit(_imread_bgr, t_path)
-            fr = pool.submit(_imread_bgr, r_path)
-            t_bgr, r_bgr = ft.result(), fr.result()
+        if images is not None:
+            t_bgr, r_bgr = images
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                ft = pool.submit(_imread_bgr, t_path)
+                fr = pool.submit(_imread_bgr, r_path)
+                t_bgr, r_bgr = ft.result(), fr.result()
         h, w = t_bgr.shape[:2]
         prof = hugin_profile(w, h, profile=profile)
         if flip_r is False and prof.get("flip_r"):
@@ -1254,6 +1353,10 @@ def stitch_hugin(
         tmask, rmask, band = _overlap_feature_masks(w, h, overlap)
         log(f"hugin  SIFT similarity in {band}px overlap")
         found = _sift_similarity(r_bgr, t_bgr, rmask, tmask)
+        if not found and images is not None:
+            # The feather fallback reads the JPEG files; stay on the 16-bit frames.
+            log("hugin  SIFT missed — profile overlap, no rotation")
+            found = _profile_similarity(w, overlap, dy)
         if found:
             log(
                 f"hugin  rot={found['rot']:+.2f}° scale={found['scale']:.4f} "
@@ -1813,6 +1916,16 @@ def _sift_similarity(left_path, right_path, left_mask, right_mask, work=2400):
     }
 
 
+def _profile_similarity(w, overlap, dy=0):
+    """Plain shift from the designed overlap, in _sift_similarity's shape."""
+    import numpy as np
+
+    tx = w * (1.0 - float(overlap))
+    M = np.array([[1.0, 0.0, tx], [0.0, 1.0, float(dy)]], np.float64)
+    return {"M": M, "overlap": float(overlap), "rot": 0.0, "scale": 1.0,
+            "tx": tx, "ty": float(dy), "n": 0}
+
+
 def _affine_canvas(M, w, h):
     import cv2
     import numpy as np
@@ -1875,6 +1988,8 @@ def _cv_u8(src):
         return cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
     img = src.get() if hasattr(src, "get") else src
     img = np.asarray(img)
+    if img.dtype == np.uint16:
+        img = (img >> 8).astype(np.uint8)
     if img.ndim == 3:
         code = cv2.COLOR_BGRA2GRAY if img.shape[2] == 4 else cv2.COLOR_BGR2GRAY
         return cv2.cvtColor(img, code)
@@ -1885,17 +2000,18 @@ def _balance_r_bgr(t, r, overlap):
     import numpy as np
 
     h, w = t.shape[:2]
+    top = 65535 if r.dtype == np.uint16 else 255
     ol = max(1, min(w - 1, int(round(w * float(overlap)))))
     t_m = float(t[:, :ol].mean())
     r_m = float(r[:, w - ol:].mean())
-    if r_m <= 5.0 or t_m <= 5.0:
+    if r_m <= 5.0 * top / 255 or t_m <= 5.0 * top / 255:
         return r, ""
     scale = t_m / r_m
     if abs(scale - 1) <= 0.03:
         return r, ""
     if not (0.40 <= scale <= 2.50):
         return r, f"balance skip R ×{scale:.2f} (overlap too different)"
-    out = np.clip(r.astype(np.float32) * scale, 0, 255).astype(np.uint8)
+    out = np.clip(r.astype(np.float32) * scale, 0, top).astype(r.dtype)
     return out, f"balance R ×{scale:.2f} (overlap)"
 
 
@@ -1949,6 +2065,8 @@ def _write_jpeg(path, bgr, quality=92):
     import cv2
 
     path = Path(path)
+    if bgr.dtype != "uint8":
+        bgr = (bgr >> 8).astype("uint8")
     ok = cv2.imwrite(str(path), bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
     if not ok:
         raise dual.CamError(f"cannot write {path}")
@@ -1964,10 +2082,21 @@ def _multiband_write(r_rgba, t_rgba, dest):
     blender = cv2.detail.MultiBandBlender()
     blender.setNumBands(5)
     blender.prepare((0, 0, w, h))
-    blender.feed(r_bgr.astype(np.int16), rm, (0, 0))
-    blender.feed(t_bgr.astype(np.int16), tm, (0, 0))
+    # The blender works in int16 and its pyramid overshoots at hard edges;
+    # 16-bit input keeps 14 bits so a near-white edge cannot wrap negative.
+    deep = r_bgr.dtype == np.uint16
+    shift = 2
+    if deep:
+        blender.feed(np.right_shift(r_bgr, shift).view(np.int16), rm, (0, 0))
+        blender.feed(np.right_shift(t_bgr, shift).view(np.int16), tm, (0, 0))
+    else:
+        blender.feed(r_bgr.astype(np.int16), rm, (0, 0))
+        blender.feed(t_bgr.astype(np.int16), tm, (0, 0))
     dst, dm = blender.blend(None, None)
-    dst = np.clip(dst, 0, 255).astype(np.uint8)
+    if deep:
+        dst = np.clip(np.asarray(dst, np.int32) << shift, 0, 65535).astype(np.uint16)
+    else:
+        dst = np.clip(dst, 0, 255).astype(np.uint8)
     if dm is not None:
         dst[np.asarray(dm) == 0] = 0
     _write_jpeg(dest, dst)
@@ -2045,7 +2174,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
-    deghost=False, balance=True, crop_inner=True, squeeze=1.0,
+    deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -2053,6 +2182,19 @@ def stitch_stamp(
     mode = (mode or "blend").strip().lower()
     if mode not in MODES:
         raise dual.CamError("mode is match, blend, cut, open, or hugin")
+    images = None
+    if raw:
+        files = _scan_pairs(root).get(stamp) or {}
+        t_nef = (files.get("T") or {}).get("nef")
+        r_nef = (files.get("R") or {}).get("nef")
+        if t_nef and r_nef:
+            # Only the multiband engine takes 16-bit arrays.
+            images = develop_pair(
+                root / t_nef, root / r_nef, size=_size(t_path), on_log=on_log, t_jpeg=t_path,
+            )
+            mode = "hugin"
+        elif on_log:
+            on_log("raw  no NEF pair for this shot — stitching the camera JPEGs")
     requested = mode
     found = None
     ghost = {}
@@ -2077,8 +2219,11 @@ def stitch_stamp(
                     t_path, r_path, dest,
                     overlap=overlap, flip_r=flip_r, dy=0, on_log=on_log,
                     balance=balance, lift=False, crop_inner=crop_inner,
-                    profile=prof.get("profile", "fxpan65"),
+                    profile=prof.get("profile", "fxpan65"), images=images,
                 )
+                if images is not None and info.get("engine") == "multiband":
+                    info["source"] = "raw"
+                images = None
             except dual.CamError as exc:
                 if on_log:
                     on_log(f"hugin failed: {exc} — match blend")
@@ -2105,7 +2250,8 @@ def stitch_stamp(
                 )
             else:
                 info["message"] = (
-                    f"hugin  {info.get('engine', 'feather')}  "
+                    ("raw 16-bit  " if info.get("source") == "raw" else "")
+                    + f"hugin  {info.get('engine', 'feather')}  "
                     f"ol={info.get('overlap_frac', overlap):.0%}  "
                     + (
                         f"rot={info['rot']:+.2f}°  "
@@ -2263,6 +2409,7 @@ def _run_item(item):
             balance=item.get("balance", True),
             crop_inner=item.get("crop_inner", True),
             squeeze=item.get("squeeze", 1.0),
+            raw=item.get("raw", False),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -2295,7 +2442,7 @@ def _kick_queue():
 
 
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
-                 deghost=False, balance=True, crop_inner=True, squeeze=1.0):
+                 deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
@@ -2311,7 +2458,7 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
     item = {
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
         "root": root, "deghost": bool(deghost), "balance": bool(balance),
-        "crop_inner": bool(crop_inner), "squeeze": squeeze,
+        "crop_inner": bool(crop_inner), "squeeze": squeeze, "raw": bool(raw),
     }
     with _queue_lock:
         live = job_get(stamp)
