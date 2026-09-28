@@ -63,9 +63,8 @@ export async function fire() {
   if (ph.drive.timer && !(await countdown(ph.drive.timer))) return;
   shooting = true;
   M.emit("shoot");
-  const gpio = ph.drive.release === "sync";
-  const wasLive = live.pulling && !gpio;
-  if (gpio || wasLive) await toggleLive(false);
+  const wasLive = live.pulling;
+  if (wasLive) await toggleLive(false);
   try {
     await M.flushNow();
     const j = await api.post("/api/shoot", M.exposureBody());
@@ -91,7 +90,7 @@ export async function fire() {
   } finally {
     shooting = false;
     M.emit("shoot");
-    if (wasLive && M.photo().drive.release !== "sync") toggleLive(true);
+    if (wasLive) toggleLive(true);
   }
 }
 

@@ -427,6 +427,7 @@ body.kbd .ruler:focus { border-color: var(--gold); }
 .body-card.r .bc-head b { color: var(--r); }
 .bc-head span { color: var(--dim); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
 .bc-head em { margin-left: auto; font-style: normal; font-size: 13px; color: var(--ink2); }
+.bc-usb { grid-column: 1 / -1; margin: 0 0 4px; font-size: 13px; color: var(--ink2); }
 .bc-cell span { display: block; font-size: 11px; color: var(--faint); letter-spacing: 0.1em; text-transform: uppercase; }
 .bc-cell b { font-size: 15px; font-weight: 500; }
 .bc-cell.differs b { color: var(--warn); }
@@ -539,6 +540,13 @@ body.kbd .ruler:focus { border-color: var(--gold); }
 .toast.ok { border-color: rgba(95, 207, 128, 0.6); color: #bdf0cb; }
 .toast.warn { border-color: var(--warn); color: #ffd79a; }
 .toast.out { opacity: 0; }
+.msg-log { display: flex; flex-direction: column; gap: 6px; margin: 8px 10px 20px; }
+.msg { padding: 8px 10px; border-radius: 10px; background: var(--s1); border: 1px solid var(--hair2); }
+.msg small { color: var(--dim); font-size: 11px; letter-spacing: 0.02em; }
+.msg p { margin: 4px 0 0; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.msg.err { border-color: var(--err); }
+.msg.ok { border-color: rgba(95, 207, 128, 0.6); }
+.msg.warn { border-color: var(--warn); }
 .osk { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; padding: 8px 8px max(10px, env(safe-area-inset-bottom)); background: #0d0f12; border-top: 1px solid var(--hair2); display: flex; flex-direction: column; gap: 5px; }
 .keyrow { display: flex; justify-content: center; gap: 5px; }
 .key { flex: 1 1 0; max-width: 78px; min-height: 44px; border-radius: 8px; background: var(--s2); border: 1px solid var(--hair); font-size: 17px; }

@@ -145,7 +145,10 @@ export function bodyCard(role) {
   const el = h("div", { class: "body-card " + role.toLowerCase() });
   el.paint = () => {
     const b = M.store.link?.status?.[role];
-    const on = !!M.store.link?.roles?.[role]?.online;
+    const roleRow = M.store.link?.roles?.[role] || {};
+    const on = !!roleRow.online;
+    const speed = roleRow.usb_speed || "";
+    const port = roleRow.port || "";
     el.classList.toggle("off", !on);
     const other = M.store.link?.status?.[role === "T" ? "R" : "T"];
     const cell = (k, label, v) => {
@@ -154,6 +157,7 @@ export function bodyCard(role) {
     };
     el.innerHTML = `<div class="bc-head"><b>${role}</b><span>${role === "T" ? "Transmit" : "Reflect"}</span>`
       + `<em>${on ? (b?.batterylevel || "") : "off USB"}</em></div>`
+      + `<p class="bc-usb">${on ? (speed || "USB speed unknown") + (port ? " · " + port : "") : "Not on the bus"}</p>`
       + (b ? cell("expprogram", "Mode", b.expprogram) + cell("iso", "ISO", b.iso)
         + cell("shutterspeed", "Shutter", b.shutterspeed) + cell("f-number", "f", b["f-number"])
         + cell("whitebalance", "WB", M.wbOf(b.whitebalance).label) + cell("imagequality", "File", M.qualityOf(b.imagequality).label)
@@ -395,11 +399,13 @@ function pipeline() {
   const el = h("ol", { class: "pipe" });
   el.paint = () => {
     const d = D();
-    const pi = d.save === "pi";
+    const pi = M.toPi(d);
+    const saveTo = d.save === "both" ? `Both cards, then the Pi · ${M.qualityOf(d.quality).label}`
+      : d.save === "pi" ? `Camera RAM → Pi · ${M.qualityOf(d.quality).label}` : "Stays on the cards";
     const steps = [
       { ic: "timer", k: "Timer", v: d.timer ? `${d.timer} s, then release` : "Off", on: !!d.timer },
-      { ic: "sync", k: "Release", v: d.release === "sync" ? "10-pin · focus then shutter · live view off" : "Over USB · T, then R, ~50 ms apart", on: true },
-      { ic: "card", k: "Save", v: pi ? `Pi and both cards · ${M.qualityOf(d.quality).label}` : "Stays on the cards", on: true },
+      { ic: "sync", k: "Release", v: d.release === "sync" ? "10-pin · focus then shutter · live view pauses" : "Over USB · T, then R, ~50 ms apart", on: true },
+      { ic: "card", k: "Save", v: saveTo, on: true },
       { ic: "stitch", k: "Stitch", v: pi && d.auto_stitch ? `${M.engineOf(d.engine).label}, straight after` : pi ? "When you ask, in Playback" : "Not until downloaded", on: pi && d.auto_stitch },
       { ic: "play", k: "Review", v: d.review ? `${d.review} s` : "Off", on: !!d.review && pi },
     ];
@@ -417,11 +423,11 @@ export function driveScreen() {
   const rows = rowList([
     { id: "release", label: "Release", value: () => (D().release === "sync" ? "GPIO" : "USB"),
       control: () => cards({ options: [
-        { v: "sync", label: "GPIO", name: "10-pin, both at once", sub: "Focus then shutter. Live view turns off" },
+        { v: "sync", label: "GPIO", name: "10-pin, both at once", sub: "Live view steps aside for the shot, then returns" },
         { v: "usb", label: "USB", name: "One body, then the other", sub: "Static scenes. Live view can stay on" },
       ], get: () => D().release, set: (v) => M.set("drive.release", v) }) },
-    { id: "save", label: "Save to", value: () => (D().save === "pi" ? "Pi + cards" : "Cards only"),
-      control: () => chips({ options: [{ v: "pi", label: "Pi + cards" }, { v: "cards", label: "Cards only" }],
+    { id: "save", label: "Save to", value: () => M.saveLabel(D().save),
+      control: () => cards({ options: M.SAVES.map((o) => ({ v: o.v, label: o.label, sub: o.sub })),
         get: () => D().save, set: (v) => M.set("drive.save", v) }) },
     { id: "timer", label: "Self-timer", value: () => (D().timer ? D().timer + " s" : "Off"),
       control: () => chips({ options: M.TIMERS.map((t) => ({ v: t, label: t ? t + " s" : "Off" })),
@@ -429,7 +435,7 @@ export function driveScreen() {
     { id: "review", label: "Review", value: () => (D().review ? D().review + " s" : "Off"),
       control: () => chips({ options: M.REVIEWS.map((t) => ({ v: t, label: t ? t + " s" : "Off" })),
         get: () => D().review, set: (v) => M.set("drive.review", Number(v)) }) },
-    { id: "auto", label: "Auto-stitch", show: () => D().save === "pi", value: () => (D().auto_stitch ? "On" : "Off"),
+    { id: "auto", label: "Auto-stitch", show: () => M.toPi(D()), value: () => (D().auto_stitch ? "On" : "Off"),
       control: () => toggle({ get: () => D().auto_stitch, set: (v) => M.set("drive.auto_stitch", v) }) },
     { id: "quality", label: "File", more: true, value: () => M.qualityOf(D().quality).label,
       control: () => cards({ options: M.QUALITY.map((q) => ({ v: q.v, label: q.label, sub: q.sub })),

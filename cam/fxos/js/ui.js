@@ -26,9 +26,31 @@ export function h(tag, props = {}, ...kids) {
 export const touchy = () => store.kiosk || matchMedia("(pointer: coarse)").matches;
 
 // --- toast ------------------------------------------------------------------
+const POPUP_MAX = 120;
+const POPUP_KEY = "fxos-popup-log";
+let popupLog = [];
+try {
+  const saved = JSON.parse(localStorage.getItem(POPUP_KEY) || "[]");
+  if (Array.isArray(saved)) popupLog = saved.slice(0, POPUP_MAX);
+} catch { /* ignore a bad store */ }
+
+export function messages() { return popupLog.slice(); }
+
+export function clearMessages() {
+  popupLog = [];
+  try { localStorage.removeItem(POPUP_KEY); } catch { /* private mode */ }
+}
+
+function rememberPopup(msg, kind) {
+  popupLog.unshift({ t: Date.now(), kind: kind || "info", msg: String(msg) });
+  if (popupLog.length > POPUP_MAX) popupLog.length = POPUP_MAX;
+  try { localStorage.setItem(POPUP_KEY, JSON.stringify(popupLog)); } catch { /* quota */ }
+}
+
 let toastBox = null;
 export function toast(msg, kind = "info", ms = 2800) {
   if (!msg) return;
+  rememberPopup(msg, kind);
   if (!toastBox) toastBox = document.body.appendChild(h("div", { class: "toasts", "aria-live": "polite" }));
   const el = h("div", { class: "toast " + kind, text: String(msg) });
   toastBox.append(el);

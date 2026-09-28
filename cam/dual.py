@@ -1129,9 +1129,18 @@ def cmd_set(args):
         print(note)
 
 
-def _capture_args(card, filename=None):
+def _capture_args(card, filename=None, keep_card=False):
     if card:
         return ["--set-config", "capturetarget=1", "--capture-image"]
+    if keep_card:
+        return [
+            "--set-config",
+            "capturetarget=1",
+            "--capture-image-and-download",
+            "--keep",
+            "--force-overwrite",
+            f"--filename={filename}",
+        ]
     return [
         "--set-config",
         "capturetarget=0",
@@ -1161,11 +1170,11 @@ def _gp_capture(port, capture, assignments, timeout):
         raise last
 
 
-def _shoot_one(role, port, dest, stamp, assignments=None):
+def _shoot_one(role, port, dest, stamp, assignments=None, keep_card=False):
     dest.mkdir(parents=True, exist_ok=True)
     filename = str(dest / f"{role}_{stamp}.%C")
     t0 = time.perf_counter()
-    _gp_capture(port, _capture_args(False, filename), assignments, 180)
+    _gp_capture(port, _capture_args(False, filename, keep_card), assignments, 180)
     return role, time.perf_counter() - t0
 
 
@@ -1175,21 +1184,49 @@ def _shoot_card(role, port, assignments=None):
     return role, time.perf_counter() - t0
 
 
-LIST_FILE = re.compile(r"^#(\d+)\s+(\S+)")
+LIST_FILE = re.compile(
+    r"^#(\d+)\s+(\S+)(?:\s+\S+\s+([\d.]+)\s*(KB|MB|GB))?",
+    re.IGNORECASE,
+)
 LIST_FOLDER = re.compile(r"folder '([^']+)'")
 
 
+def _list_size(num, unit):
+    if not num:
+        return 0
+    n = float(num)
+    unit = (unit or "KB").upper()
+    if unit == "GB":
+        n *= 1024 * 1024
+    elif unit == "MB":
+        n *= 1024
+    return int(n)
+
+
 def parse_list_files(text):
+    """File number for --get-file is 1..count inside that folder.
+
+    gphoto2's printed # keeps climbing across folders. Passing that number
+    with --folder makes it say bad file number once a folder is not the first.
+    """
     files = []
     folder = ""
+    n_in_folder = 0
     for line in text.splitlines():
         fold = LIST_FOLDER.search(line)
         if fold:
             folder = fold.group(1)
+            n_in_folder = 0
             continue
         hit = LIST_FILE.match(line.strip())
         if hit and folder:
-            files.append({"folder": folder, "name": hit.group(2), "n": int(hit.group(1))})
+            n_in_folder += 1
+            files.append({
+                "folder": folder,
+                "name": hit.group(2),
+                "n": n_in_folder,
+                "size": _list_size(hit.group(3), hit.group(4)),
+            })
     return files
 
 
@@ -1204,7 +1241,9 @@ def list_cards(have):
 
 
 def _file_key(row):
-    return (row["folder"], row["name"])
+    # Name alone misses a reshoot when File Number Sequence is off and the
+    # camera overwrites DSC_0001. Size changes on that overwrite.
+    return (row["folder"], row["name"], int(row.get("size") or 0))
 
 
 def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None, settle=0.6):
@@ -1233,18 +1272,30 @@ def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None, settl
     if last:
         raise last
     raise CamError(
-        "no new file on the card — the 10-pin release did not fire this body. "
-        "Internal RAM cannot be polled this way"
+        "no new file on the card or in camera RAM — the 10-pin release did "
+        "not fire this body"
     )
 
 
 def _download_one(port, row, dest_path):
+    """Re-list by name so --get-file uses the index gphoto has right now."""
+    name = row["name"]
+    folder = row["folder"]
+    number = row["n"]
+    try:
+        fresh = list_images(port)
+    except CamError:
+        fresh = []
+    for item in fresh:
+        if item["folder"] == folder and item["name"] == name:
+            number = item["n"]
+            break
     gp(
         [
             "--folder",
-            row["folder"],
+            folder,
             "--get-file",
-            str(row["n"]),
+            str(number),
             "--force-overwrite",
             f"--filename={dest_path}",
         ],
@@ -1253,8 +1304,149 @@ def _download_one(port, row, dest_path):
     )
 
 
+def drain_sdram(port, dest, role, stamp, wait_s=4):
+    """Download frames parked in camera RAM (Recording Media = SDRAM).
+
+    A full buffer (Maximum Shots) makes the body refuse every release,
+    10-pin and USB alike, until the host takes the frames.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    before = {p.name for p in dest.glob(f"{role}_{stamp}*")}
+    gp(
+        [
+            f"--wait-event-and-download={wait_s}s",
+            "--force-overwrite",
+            f"--filename={dest}/{role}_{stamp}_ram%n.%C",
+        ],
+        port=port,
+        timeout=wait_s + 60,
+    )
+    return sorted(p.name for p in dest.glob(f"{role}_{stamp}*") if p.name not in before)
+
+
+def _ram_session(port, pairs, waits, filename, timeout):
+    """One gphoto2 process: set widgets, then wait on / download camera RAM."""
+    packed = [(k, v) for k, v in pack_assignments(pairs) if k not in _missing_widgets]
+    tail = [f"--wait-event-and-download={w}" for w in waits]
+    tail += ["--force-overwrite", f"--filename={filename}"]
+    try:
+        gp(config_args(packed) + tail, port=port, timeout=timeout)
+    except CamError as exc:
+        drop = [key for key in _unknown_widgets(exc) if any(k == key for k, _ in packed)]
+        if not drop:
+            raise
+        _missing_widgets.update(drop)
+        gp(config_args([(k, v) for k, v in packed if k not in drop]) + tail, port=port, timeout=timeout)
+
+
+def _new_files(folder, pattern, before):
+    return sorted(
+        (p for p in folder.glob(pattern) if p.name not in before),
+        key=lambda p: p.stat().st_mtime,
+    )
+
+
+def arm_ram_one(role, port, dest, stamp, rounds=6):
+    """Point 10-pin frames at camera RAM and empty what is parked there.
+
+    The body hands back RAM frames oldest first, so a leftover would be
+    taken for the new shot. Leftovers go to captures/recovered_ram/.
+    """
+    spill = dest / "recovered_ram"
+    spill.mkdir(parents=True, exist_ok=True)
+    pattern = f"{role}_{stamp}_old*"
+    pairs = [("viewfinder", "0"), ("recordingmedia", "1")]
+    kept = []
+    for _ in range(rounds):
+        before = {p.name for p in spill.glob(pattern)}
+        _ram_session(
+            port, pairs, ["500ms"],
+            f"{spill}/{role}_{stamp}_old{len(kept):02d}_%n.%C", timeout=60,
+        )
+        got = _new_files(spill, pattern, before)
+        if not got:
+            break
+        kept += [p.name for p in got]
+        pairs = []
+    return kept
+
+
+def pull_ram_one(role, port, dest, stamp, timeout=12):
+    """Download the frame the 10-pin just put in camera RAM (+ its NEF/JPEG twin)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    pattern = f"{role}_{stamp}_ram*"
+    before = {p.name for p in dest.glob(pattern)}
+    try:
+        _ram_session(
+            port, [], ["FILEADDED", "700ms"],
+            f"{dest}/{role}_{stamp}_ram%n.%C", timeout=timeout,
+        )
+    except CamError as exc:
+        if not _new_files(dest, pattern, before):
+            raise CamError(
+                "no frame in camera RAM — the 10-pin release did not fire this body"
+            ) from exc
+    got = _new_files(dest, pattern, before)
+    if not got:
+        raise CamError("no frame in camera RAM — the 10-pin release did not fire this body")
+    saved = []
+    for path in got:
+        out = dest / f"{role}_{stamp}{path.suffix.lower()}"
+        if out.exists():
+            saved.append(path.name)
+            continue
+        path.rename(out)
+        saved.append(out.name)
+    return saved
+
+
+def _each_role(have, fn, *args):
+    with ThreadPoolExecutor(max_workers=len(have) or 1) as pool:
+        futs = {role: pool.submit(fn, role, have[role]["port"], *args) for role in have}
+        done, missed = {}, []
+        for role, fut in futs.items():
+            try:
+                done[role] = fut.result()
+            except CamError as exc:
+                missed.append(f"{role}: {exc}")
+    return done, missed
+
+
+def arm_ram(have, dest, stamp):
+    done, missed = _each_role(have, arm_ram_one, dest, stamp)
+    if missed:
+        raise CamError("; ".join(missed))
+    return done
+
+
+def pull_ram(have, dest, stamp):
+    saved, missed = _each_role(have, pull_ram_one, dest, stamp)
+    if missed:
+        got = "  ".join(
+            f"{role} {','.join(names)}" for role, names in sorted(saved.items()) if names
+        )
+        raise CamError("; ".join(missed) + (f"  saved {got}" if got else ""))
+    return saved
+
+
 def pull_role(role, port, before, dest, stamp, list_fn=None):
-    new = wait_new_images(port, before, list_fn=list_fn)
+    try:
+        new = wait_new_images(port, before, list_fn=list_fn)
+    except CamError as exc:
+        if list_fn is not None:
+            raise
+        try:
+            got = drain_sdram(port, dest, role, stamp)
+        except CamError:
+            got = []
+        if not got:
+            raise
+        newest = dest / got[-1]
+        out = dest / f"{role}_{stamp}{newest.suffix.lower()}"
+        if not out.exists():
+            newest.rename(out)
+            got[-1] = out.name
+        return got
     dest.mkdir(parents=True, exist_ok=True)
     saved = []
     for row in sorted(new, key=lambda item: (item["folder"], -item["n"])):

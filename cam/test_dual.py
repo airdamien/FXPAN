@@ -657,6 +657,12 @@ class CardPull(unittest.TestCase):
             [(r["n"], r["name"]) for r in rows],
             [(1, "DSC_0001.JPG"), (2, "DSC_0002.NEF")],
         )
+        later = dual.parse_list_files(
+            "There are 2 files in folder '/a':\n"
+            "#10    OLD.JPG               rd  1 KB\n"
+            "#11    NEW.JPG               rd  2 KB\n"
+        )
+        self.assertEqual([(r["n"], r["name"]) for r in later], [(1, "OLD.JPG"), (2, "NEW.JPG")])
         self.assertEqual(rows[0]["folder"], "/store_00010001/DCIM/100D7000")
 
     def test_wait_new_images(self):
@@ -712,6 +718,50 @@ class CardPull(unittest.TestCase):
         )
         names = {row["name"] for row in new}
         self.assertEqual(names, {"B.JPG", "B.NEF"})
+
+    def _fake_ram(self, files):
+        seen = []
+
+        def fake(args, port=None, timeout=120):
+            seen.append(list(args))
+            name = next(a for a in args if a.startswith("--filename=")).split("=", 1)[1]
+            for i, ext in enumerate(files.pop(0) if files else [], 1):
+                Path(name.replace("%n", str(i)).replace("%C", ext)).write_bytes(b"x")
+            return ""
+
+        return fake, seen
+
+    def test_pull_ram_names_like_card_pull(self):
+        dest = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dest)
+        fake, seen = self._fake_ram([["jpg", "nef"]])
+        with patch.object(dual, "gp", fake):
+            saved = dual.pull_ram_one("T", "usb:1", dest, "20260928_170000")
+        self.assertEqual(sorted(saved), ["T_20260928_170000.jpg", "T_20260928_170000.nef"])
+        self.assertIn("--wait-event-and-download=FILEADDED", seen[0])
+
+    def test_pull_ram_nothing_fired(self):
+        dest = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dest)
+
+        def fake(args, port=None, timeout=120):
+            raise dual.CamError("gphoto2 timed out")
+
+        with patch.object(dual, "gp", fake):
+            with self.assertRaisesRegex(dual.CamError, "did not fire"):
+                dual.pull_ram_one("R", "usb:1", dest, "20260928_170000")
+
+    def test_arm_ram_spills_backlog_then_stops(self):
+        dest = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dest)
+        fake, seen = self._fake_ram([["jpg", "jpg"], []])
+        with patch.object(dual, "gp", fake):
+            kept = dual.arm_ram_one("R", "usb:1", dest, "20260928_170000")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("recordingmedia=1", seen[0])
+        self.assertNotIn("recordingmedia=1", seen[1])
+        self.assertTrue(kept)
+        self.assertEqual(list(dest.glob("R_*")), [])
 
 
 class Pano(unittest.TestCase):
@@ -1490,6 +1540,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
+                "keep_card": False,
             },
         )
 
@@ -1501,6 +1552,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "open", "crop_inner": True, "ana_squeeze": 1.0,
+                "keep_card": False,
             },
         )
 
@@ -1516,6 +1568,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
+                "keep_card": False,
             },
         )
         settings.save({"download": True}, pi=True)

@@ -126,7 +126,7 @@ export function photo() {
     },
     drive: {
       release: p.gpio ? "sync" : "usb",
-      save: p.download ? "pi" : "cards",
+      save: !p.download ? "cards" : p.keep_card ? "both" : "pi",
       quality: p.quality || "NEF+Fine",
       timer: num(c.drive?.timer, 0),
       review: num(p.preview_s, 10),
@@ -150,7 +150,7 @@ const TO_PREFS = {
   "light.sync": (v) => ({ sync: !!v }),
   "light.follow_cam": (v) => ({ follow_cam: !!v }),
   "drive.release": (v) => ({ gpio: v === "sync" }),
-  "drive.save": (v) => ({ download: v === "pi" }),
+  "drive.save": (v) => savePrefs(v),
   "drive.quality": (v) => ({ quality: v }),
   "drive.review": (v) => ({ preview_s: v }),
   "drive.engine": (v) => ({ stitch_mode: v }),
@@ -289,11 +289,21 @@ export const SET_MB = { "NEF+Fine": 58, "JPEG Fine": 18, "JPEG Normal": 9, "NEF 
 export const setMB = () => 2 * (SET_MB[store.prefs.quality] || 40);
 export const setsLeft = () => (store.disk ? Math.floor(store.disk.free / (setMB() * 1e6)) : null);
 
+// "pi" goes through camera RAM and never touches the cards.
+export const SAVES = [
+  { v: "pi", label: "Pi", sub: "Through camera RAM. Fastest; nothing is written to the cards" },
+  { v: "both", label: "Pi + cards", sub: "Written to both cards, then copied to the Pi" },
+  { v: "cards", label: "Cards only", sub: "Stays on the cards until you download" },
+];
+export const saveLabel = (v) => (SAVES.find((s) => s.v === v) || SAVES[0]).label;
+export const savePrefs = (v) => ({ download: v !== "cards", keep_card: v === "both" });
+export const toPi = (d) => d.save !== "cards";
+
 export const driveLabel = (d) => (d.release === "sync" ? "GPIO" : "USB");
 export function driveSub(d) {
-  const bits = [d.save === "pi" ? "Pi + cards" : "Cards only"];
+  const bits = [saveLabel(d.save)];
   if (d.timer) bits.push(d.timer + " s timer");
-  if (d.auto_stitch && d.save === "pi") bits.push("auto-stitch");
+  if (d.auto_stitch && toPi(d)) bits.push("auto-stitch");
   return bits.join(" · ");
 }
 
@@ -340,6 +350,7 @@ export function describe(key, v) {
   if (key === "light.shutter") return fmtShut(v);
   if (key === "wb") return wbOf(v).label;
   if (key === "drive.release") return v === "sync" ? "GPIO" : "USB";
+  if (key === "drive.save") return saveLabel(v);
   if (key === "drive.quality") return qualityOf(v).label;
   if (key === "drive.engine") return engineOf(v).label;
   if (key === "drive.timer" || key === "drive.review") return num(v, 0) ? v + " s" : "Off";
@@ -381,7 +392,7 @@ export async function recall(mode) {
   for (const k of ["program", "iso", "shutter", "fstop", "master"]) if (k in L) patch[k] = L[k];
   for (const k of ["lock_t", "sync", "follow_cam"]) if (k in L) patch[k] = !!L[k];
   if ("release" in d) patch.gpio = d.release === "sync";
-  if ("save" in d) patch.download = d.save === "pi";
+  if ("save" in d) Object.assign(patch, savePrefs(d.save));
   if ("quality" in d) patch.quality = d.quality;
   if ("review" in d) patch.preview_s = d.review;
   if ("engine" in d) patch.stitch_mode = d.engine;
