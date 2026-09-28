@@ -1065,26 +1065,85 @@ class Pano(unittest.TestCase):
         cv2.imwrite(str(self.root / "T_20260101_120000.jpg"), t8)
         (self.root / "R_20260101_120000.nef").write_bytes(b"NEF")
         (self.root / "T_20260101_120000.nef").write_bytes(b"NEF")
-        deep = (t8.astype(np.uint16) * 257, r8.astype(np.uint16) * 257)
+        def lin(img8):
+            return ((img8.astype(np.float32) / 255.0) ** 2.2 * 65535).astype(np.uint16)
+
         seen = {}
 
-        def fake_develop(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
+        def fake_develop(t_nef, r_nef, size=None, on_log=None, t_jpeg=None, look=True):
             seen["size"] = size
             seen["t_jpeg"] = Path(t_jpeg).name
-            return deep
+            seen["look"] = look
+            return {"t": lin(t8), "r": lin(r8), "gain": 1.0}
 
         with patch.object(pano, "develop_pair", fake_develop):
             info = pano.stitch_stamp(
                 "20260101_120000", overlap=0.20, flip_r=True, mode="open",
-                root=self.root, balance=False, raw=True,
+                root=self.root, balance=False, raw=True, look=False,
             )
         self.assertEqual(seen["size"], (500, 240))
         self.assertEqual(seen["t_jpeg"], "T_20260101_120000.jpg")
+        self.assertFalse(seen["look"])
         self.assertEqual(info["engine"], "multiband")
         self.assertEqual(info.get("source"), "raw")
-        self.assertIn("raw 16-bit", info["message"])
+        self.assertIn("raw 16-bit neutral", info["message"])
         out = cv2.imread(str(self.root / "P_20260101_120000.jpg"))
         self.assertGreater(float(out.mean()), 60)
+        master = self.root / "P_20260101_120000_master.tif"
+        self.assertEqual(info.get("master"), master.name)
+        tif = cv2.imread(str(master), cv2.IMREAD_UNCHANGED)
+        self.assertEqual(tif.dtype, np.uint16)
+        self.assertEqual(tif.shape[:2], out.shape[:2])
+        rows = pano.list_pairs(self.root)
+        self.assertEqual(rows[0]["master"], master.name)
+        pano.delete_stamp("20260101_120000", sides=["P"], root=self.root)
+        self.assertFalse(master.exists())
+
+    def test_master_tiff_keeps_every_14bit_level(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        levels = np.arange(0, 65536, 4, dtype=np.uint16)
+        lin = np.repeat(levels.reshape(128, 128, 1), 3, axis=2)
+        path = pano.write_master_tiff(self.root / "m.tif", lin)
+        back = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+        self.assertEqual(back.dtype, np.uint16)
+        self.assertEqual(len(np.unique(back[:, :, 0])), len(levels))
+        self.assertGreaterEqual(int(back.max()), 65530)
+
+    def test_balance_linear_never_scales_up(self):
+        pano._venv_site()
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        t = np.full((10, 100, 3), 40000, np.uint16)
+        r = np.full((10, 100, 3), 30000, np.uint16)
+        t2, r2, msg = pano._balance_linear(t, r, 0.2)
+        self.assertIn("T ×", msg)
+        self.assertEqual(int(r2.max()), 30000)
+        self.assertLessEqual(int(t2.max()), 30001)
+        t3, r3, msg = pano._balance_linear(r, t, 0.2)
+        self.assertIn("R ×", msg)
+        self.assertEqual(int(t3.max()), 30000)
+
+    def test_nikon_look_adds_contrast_and_colour(self):
+        pano._venv_site()
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        grey = np.array([[[0.2, 0.2, 0.2], [0.8, 0.8, 0.8]]], np.float32)
+        out = pano._nikon_look(grey)
+        self.assertLess(float(out[0, 0, 0]), 0.2)
+        self.assertGreater(float(out[0, 1, 0]), 0.8)
+        self.assertAlmostEqual(float(out[0, 0, 0]), float(out[0, 0, 2]), places=5)
+        tint = np.array([[[0.3, 0.4, 0.6]]], np.float32)
+        spread = lambda a: float(a.max() - a.min())
+        self.assertGreater(spread(pano._nikon_look(tint)), spread(tint))
 
     def test_multiband_16bit_white_edge_does_not_wrap(self):
         pano._venv_site()
@@ -1128,9 +1187,11 @@ class Pano(unittest.TestCase):
         ref = self.root / "ref.jpg"
         cv2.imwrite(str(ref), np.full((64, 64), 118, np.uint8))
         lin = np.full((64, 64, 3), int(0.05 * 65535), np.uint16)
-        gain = pano._raw_gain(lin, ref)
-        got = float(pano._raw_tone(np.float32(0.05), gain))
-        self.assertAlmostEqual(got, 118 / 255, delta=0.02)
+        px = np.full((1, 1, 3), 0.05, np.float32)
+        for look in (True, False):
+            gain = pano._raw_gain(lin, ref, look)
+            got = float(pano._raw_display(px, gain, look).mean())
+            self.assertAlmostEqual(got, 118 / 255, delta=0.02)
         self.assertEqual(pano._raw_gain(lin, None), 1.0)
 
     def test_stitch_raw_sift_miss_stays_16bit(self):
@@ -1146,7 +1207,8 @@ class Pano(unittest.TestCase):
         (self.root / "R_20260101_120000.nef").write_bytes(b"NEF")
         (self.root / "T_20260101_120000.nef").write_bytes(b"NEF")
         deep = np.full((240, 500, 3), 90 * 257, np.uint16)
-        with patch.object(pano, "develop_pair", lambda *a, **k: (deep, deep.copy())):
+        with patch.object(pano, "develop_pair",
+                          lambda *a, **k: {"t": deep, "r": deep.copy(), "gain": 1.0}):
             info = pano.stitch_stamp(
                 "20260101_120000", overlap=0.20, flip_r=True, mode="hugin",
                 root=self.root, balance=False, raw=True,
@@ -1665,7 +1727,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False, "stitch_raw": False,
+                "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
         )
 
@@ -1677,7 +1739,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "open", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False, "stitch_raw": False,
+                "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
         )
 
@@ -1693,7 +1755,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False, "stitch_raw": False,
+                "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
         )
         settings.save({"download": True}, pi=True)

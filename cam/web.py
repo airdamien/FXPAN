@@ -12,6 +12,7 @@ import atexit
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -375,16 +376,17 @@ def _assignments(data):
 
 
 def _send_path(handler, path, ctype, download=None):
-    body = Path(path).read_bytes()
-    name = download or Path(path).name
+    path = Path(path)
+    name = download or path.name
     handler.send_response(200)
     handler.send_header("Content-Type", ctype)
     handler.send_header("Cache-Control", "no-store")
     if download:
         handler.send_header("Content-Disposition", f'attachment; filename="{name}"')
-    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Content-Length", str(path.stat().st_size))
     handler.end_headers()
-    handler.wfile.write(body)
+    with path.open("rb") as fh:
+        shutil.copyfileobj(fh, handler.wfile, 1 << 20)
 
 
 def _send_jpeg(handler, payload):
@@ -948,11 +950,17 @@ class Handler(BaseHTTPRequestHandler):
                     raw = prefs.get("stitch_raw", False)
                 if isinstance(raw, str):
                     raw = raw.lower() not in ("0", "false", "no", "")
+                look = data.get("look")
+                if look is None:
+                    look = prefs.get("raw_look", True)
+                if isinstance(look, str):
+                    look = look.lower() not in ("0", "false", "no", "neutral", "")
                 mode = (data.get("mode") or prefs.get("stitch_mode") or "open").strip().lower()
                 job = pano.start_stitch(
                     stamp, overlap=overlap, flip_r=bool(flip_r), mode=mode,
                     deghost=bool(deghost), balance=bool(balance),
                     crop_inner=bool(crop_inner), squeeze=squeeze, raw=bool(raw),
+                    look=bool(look),
                 )
                 stat = pano.queue_status()
                 return _json(

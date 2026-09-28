@@ -133,6 +133,7 @@ export function photo() {
       auto_stitch: c.drive?.auto_stitch !== false,
       engine: p.stitch_mode || "hugin",
       source: p.stitch_raw ? "raw" : "jpeg",
+      raw_look: p.raw_look === false ? "neutral" : "nikon",
     },
     wb: p.wb || "Auto",
   };
@@ -156,6 +157,7 @@ const TO_PREFS = {
   "drive.review": (v) => ({ preview_s: v }),
   "drive.engine": (v) => ({ stitch_mode: v }),
   "drive.source": (v) => ({ stitch_raw: v === "raw" }),
+  "drive.raw_look": (v) => ({ raw_look: v !== "neutral" }),
   "wb": (v) => ({ wb: v }),
 };
 const EXPOSURE = new Set(["light.program", "light.iso", "light.shutter", "light.fstop", "drive.quality", "wb"]);
@@ -302,9 +304,14 @@ export const savePrefs = (v) => ({ download: v !== "cards", keep_card: v === "bo
 export const toPi = (d) => d.save !== "cards";
 export const SOURCES = [
   { v: "jpeg", label: "Camera JPEG", sub: "Nikon's own tone and colour. Fastest" },
-  { v: "raw", label: "RAW (NEF)", sub: "Both NEFs developed the same way, stitched in 16-bit. More highlight room; about 7 s longer. Needs NEF + JPEG or NEF" },
+  { v: "raw", label: "RAW (NEF)", sub: "Both NEFs developed the same way and stitched in 16-bit, plus a lossless 16-bit TIFF master. Needs NEF + JPEG or NEF" },
 ];
 export const sourceLabel = (v) => (SOURCES.find((s) => s.v === v) || SOURCES[0]).label;
+export const RAW_LOOKS = [
+  { v: "nikon", label: "Nikon-like", sub: "S-curve and colour close to Standard Picture Control" },
+  { v: "neutral", label: "Neutral", sub: "Flat and faithful; for grading later" },
+];
+export const rawLookLabel = (v) => (RAW_LOOKS.find((s) => s.v === v) || RAW_LOOKS[0]).label;
 
 export const driveLabel = (d) => (d.release === "sync" ? "GPIO" : "USB");
 export function driveSub(d) {
@@ -341,7 +348,7 @@ const LABELS = {
   "look.grain": "Grain", "look.filter": "Filter",
   "drive.release": "Release", "drive.save": "Save", "drive.quality": "File", "drive.timer": "Timer",
   "drive.review": "Review", "drive.auto_stitch": "Auto-stitch", "drive.engine": "Stitch engine",
-  "drive.source": "Stitch from",
+  "drive.source": "Stitch from", "drive.raw_look": "RAW look",
   "wb": "White balance",
 };
 
@@ -360,6 +367,7 @@ export function describe(key, v) {
   if (key === "drive.release") return v === "sync" ? "GPIO" : "USB";
   if (key === "drive.save") return saveLabel(v);
   if (key === "drive.source") return sourceLabel(v);
+  if (key === "drive.raw_look") return rawLookLabel(v);
   if (key === "drive.quality") return qualityOf(v).label;
   if (key === "drive.engine") return engineOf(v).label;
   if (key === "drive.timer" || key === "drive.review") return num(v, 0) ? v + " s" : "Off";
@@ -406,6 +414,7 @@ export async function recall(mode) {
   if ("review" in d) patch.preview_s = d.review;
   if ("engine" in d) patch.stitch_mode = d.engine;
   if ("source" in d) patch.stitch_raw = d.source === "raw";
+  if ("raw_look" in d) patch.raw_look = d.raw_look !== "neutral";
   if ("wb" in mode) patch.wb = mode.wb;
   clearTimeout(prefsTimer);
   prefsPatch = {};

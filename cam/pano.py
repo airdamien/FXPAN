@@ -52,6 +52,7 @@ OVERLAP = 0.20
 PAIR_RE = re.compile(r"^(T|R)_(.+)\.(jpe?g|nef)$", re.I)
 PANO_RE = re.compile(r"^P_(.+)\.(jpe?g)$", re.I)
 PANO_ANA_RE = re.compile(r"^P_(.+)_ana\.(jpe?g)$", re.I)
+MASTER_RE = re.compile(r"^P_(.+)_master\.(tiff?)$", re.I)
 JPEG_EXTS = {".jpg", ".jpeg"}
 RAW_EXTS = {".nef"}
 SAFE = re.compile(r"^[\w.-]+$")
@@ -154,6 +155,23 @@ def _scan_pairs(root):
     return sides
 
 
+def master_path(root, stamp):
+    return Path(root) / f"P_{stamp}_master.tif"
+
+
+def _stamp_of(name):
+    """Stamp a capture file belongs to, or None."""
+    for rx in (PANO_ANA_RE, MASTER_RE):
+        m = rx.match(name)
+        if m:
+            return m.group(1)
+    m = PAIR_RE.match(name)
+    if m:
+        return m.group(2)
+    m = PANO_RE.match(name)
+    return m.group(1) if m else None
+
+
 def _scan_panos(root):
     """Return (native, ana) maps stamp → filename. ANA names are not native."""
     native, ana = {}, {}
@@ -244,8 +262,34 @@ def _raw_tone(lin, gain):
     return np.power(np.clip(y, 0, 1), np.float32(1 / 2.2))
 
 
-def _raw_gain(t_lin, t_jpeg):
-    """One gain for both bodies: T's develop matches its camera JPEG's mean."""
+# Nikon Standard Picture Control, roughly: an S-curve about mid-grey and
+# more colour. Display only; the TIFF master never gets it.
+LOOK_CONTRAST = 0.35
+LOOK_SATURATION = 1.20
+
+
+def _nikon_look(y):
+    """Display-referred BGR 0..1 → contrast + saturation, still 0..1."""
+    import numpy as np
+
+    s = y * y * (3 - 2 * y)
+    y = y + np.float32(LOOK_CONTRAST) * (s - y)
+    luma = (
+        np.float32(0.0722) * y[..., 0]
+        + np.float32(0.7152) * y[..., 1]
+        + np.float32(0.2126) * y[..., 2]
+    )[..., None]
+    return np.clip(luma + np.float32(LOOK_SATURATION) * (y - luma), 0, 1)
+
+
+def _raw_display(lin, gain, look):
+    """Linear BGR 0..1 → display BGR 0..1 (gain, shoulder, optional look)."""
+    y = _raw_tone(lin, gain)
+    return _nikon_look(y) if look else y
+
+
+def _raw_gain(t_lin, t_jpeg, look=True):
+    """One gain for both bodies: T's display render matches its camera JPEG's mean."""
     import cv2
     import numpy as np
 
@@ -253,27 +297,32 @@ def _raw_gain(t_lin, t_jpeg):
     if ref is None:
         return 1.0
     want = float((ref.astype(np.float32) / 255.0).mean())
-    sample = t_lin[::16, ::16].astype(np.float32).mean(axis=2) / 65535.0
+    sample = t_lin[::16, ::16].astype(np.float32) / 65535.0
+
+    def mean(g):
+        return float(_raw_display(sample, g, look).mean())
+
     lo, hi = 0.25, RAW_MAX_GAIN
-    if float(_raw_tone(sample, hi).mean()) <= want:
+    if mean(hi) <= want:
         return hi
-    if float(_raw_tone(sample, lo).mean()) >= want:
+    if mean(lo) >= want:
         return lo
     for _ in range(14):
         mid = (lo * hi) ** 0.5
-        if float(_raw_tone(sample, mid).mean()) < want:
+        if mean(mid) < want:
             lo = mid
         else:
             hi = mid
     return (lo * hi) ** 0.5
 
 
-def develop_pair(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
-    """Develop both NEFs the same way; returns 16-bit BGR (t, r).
+def develop_pair(t_nef, r_nef, size=None, on_log=None, t_jpeg=None, look=True):
+    """Develop both NEFs the same way, linear 16-bit BGR.
 
-    T's as-shot white balance goes on both so the halves meet without a
-    colour step. Linear develop, then one gain for both (matched to T's
-    camera JPEG when given) and a highlight shoulder rather than a clip.
+    Returns {"t", "r", "gain"}. T's as-shot white balance goes on both so
+    the halves meet without a colour step. The pixels stay linear and
+    ungained so the TIFF master keeps every level of the 14-bit NEF; `gain`
+    (matched to T's camera JPEG when given) is for the display JPEG only.
     size=(w, h) crops to the camera JPEG frame.
     """
     try:
@@ -296,12 +345,8 @@ def develop_pair(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
                 highlight_mode=rawpy.HighlightMode.Blend,
             )
 
-    def finish(rgb, gain):
-        out = np.empty(rgb.shape, np.uint16)
-        for y in range(0, rgb.shape[0], 512):
-            band = rgb[y:y + 512].astype(np.float32) / 65535.0
-            out[y:y + 512] = (_raw_tone(band, gain) * 65535.0 + 0.5).astype(np.uint16)
-        img = out[:, :, ::-1]
+    def crop(rgb):
+        img = rgb[:, :, ::-1]
         if size:
             tw, th = size
             h, w = img.shape[:2]
@@ -313,13 +358,72 @@ def develop_pair(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
     if on_log:
         on_log("raw  developing T and R NEFs (T white balance on both)")
     with ThreadPoolExecutor(max_workers=2) as pool:
-        ft, fr = pool.submit(linear, t_nef), pool.submit(linear, r_nef)
+        ft = pool.submit(lambda: crop(linear(t_nef)))
+        fr = pool.submit(lambda: crop(linear(r_nef)))
         t_lin, r_lin = ft.result(), fr.result()
-        gain = _raw_gain(t_lin, t_jpeg)
-        if on_log:
-            on_log(f"raw  ×{gain:.2f} on both, highlight shoulder")
-        ft, fr = pool.submit(finish, t_lin, gain), pool.submit(finish, r_lin, gain)
-        return ft.result(), fr.result()
+    gain = _raw_gain(t_lin, t_jpeg, look)
+    if on_log:
+        on_log(f"raw  display ×{gain:.2f}, highlight shoulder"
+               + (", Nikon-like look" if look else ", neutral"))
+    return {"t": t_lin, "r": r_lin, "gain": gain}
+
+
+def _srgb_lut16():
+    """Linear 16-bit code → sRGB-encoded 16-bit code.
+
+    Distinct on every 4th level (the blend keeps 14 bits), so no NEF level
+    merges with its neighbour, even at the top where sRGB is flattest.
+    """
+    import numpy as np
+
+    x = np.arange(65536, dtype=np.float64) / 65535.0
+    y = np.where(x <= 0.0031308, x * 12.92, 1.055 * np.power(x, 1 / 2.4) - 0.055)
+    return np.round(y * 65535.0).astype(np.uint16)
+
+
+def write_master_tiff(path, lin):
+    """16-bit sRGB TIFF, Deflate + horizontal predictor (lossless)."""
+    import cv2
+    import numpy as np
+
+    path = Path(path)
+    out = np.take(_srgb_lut16(), lin)
+    params = []
+    for key, val in (
+        ("IMWRITE_TIFF_COMPRESSION", "IMWRITE_TIFF_COMPRESSION_ADOBE_DEFLATE"),
+        ("IMWRITE_TIFF_PREDICTOR", "IMWRITE_TIFF_PREDICTOR_HORIZONTAL"),
+    ):
+        if hasattr(cv2, key) and hasattr(cv2, val):
+            params += [int(getattr(cv2, key)), int(getattr(cv2, val))]
+    tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.tif")
+    try:
+        if not cv2.imwrite(str(tmp), out, params):
+            raise dual.CamError(f"cannot write {path.name}")
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+    return path
+
+
+def write_raw_display(path, lin, gain, look):
+    """Display JPEG from the linear blend, in row bands to keep memory flat."""
+    import numpy as np
+
+    out = np.empty(lin.shape, np.uint8)
+    for y in range(0, lin.shape[0], 256):
+        band = lin[y:y + 256].astype(np.float32) / np.float32(65535.0)
+        out[y:y + 256] = (_raw_display(band, gain, look) * 255.0 + 0.5).astype(np.uint8)
+    _write_jpeg(path, out)
+
+
+def _raw_view_u8(lin, gain):
+    """8-bit gamma view of linear 16-bit for SIFT (it cannot see linear shadows)."""
+    import numpy as np
+
+    lut = (np.clip(_raw_tone(np.arange(65536, dtype=np.float32) / 65535.0, gain), 0, 1)
+           * 255.0 + 0.5).astype(np.uint8)
+    return np.take(lut, lin)
 
 
 def ensure_pair_jpegs(stamp, root=None):
@@ -406,7 +510,7 @@ def _write_sidecar(root, stamp, info):
             "mode", "overlap", "overlap_frac", "dy", "flip_r", "rmse",
             "width", "height", "file", "message", "phase", "error",
             "deghost", "sec", "engine", "squeeze", "pano_ana",
-            "ana_width", "ana_height",
+            "ana_width", "ana_height", "source", "look", "master",
         )
         if k in info
     }
@@ -667,6 +771,9 @@ def list_pairs(root=None):
                 "r_nef": r_nef,
                 "pano": panos.get(stamp),
                 "pano_ana": panos_ana.get(stamp),
+                "master": (
+                    master_path(root, stamp).name if master_path(root, stamp).is_file() else None
+                ),
                 "pano_mtime": _mtime(root / panos[stamp]) if panos.get(stamp) else 0,
                 "pano_ana_mtime": (
                     _mtime(root / panos_ana[stamp]) if panos_ana.get(stamp) else 0
@@ -690,16 +797,11 @@ def disk_stats(root=None):
     if root.is_dir():
         by_stamp = {}
         for path in root.iterdir():
-            if not path.is_file() or path.suffix.lower() not in (".jpg", ".jpeg", ".nef"):
+            if not path.is_file() or path.suffix.lower() not in (".jpg", ".jpeg", ".nef", ".tif"):
                 continue
-            m = PANO_ANA_RE.match(path.name)
-            if m:
-                stamp = m.group(1)
-            else:
-                m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
-                if not m:
-                    continue
-                stamp = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
+            stamp = _stamp_of(path.name)
+            if not stamp:
+                continue
             by_stamp.setdefault(stamp, 0)
             try:
                 by_stamp[stamp] += path.stat().st_size
@@ -757,20 +859,9 @@ def set_protected(stamp, on, root=None):
 
 
 def _prune_protected(root, stamp):
-    left = False
-    if Path(root).is_dir():
-        for path in Path(root).iterdir():
-            m = PANO_ANA_RE.match(path.name)
-            if m and m.group(1) == stamp:
-                left = True
-                break
-            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
-            if not m:
-                continue
-            got = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
-            if got == stamp:
-                left = True
-                break
+    left = Path(root).is_dir() and any(
+        _stamp_of(path.name) == stamp for path in Path(root).iterdir()
+    )
     if not left:
         set_protected(stamp, False, root)
 
@@ -793,6 +884,8 @@ def content_type(path):
         return "image/png"
     if ext == ".nef":
         return "application/octet-stream"
+    if ext in (".tif", ".tiff"):
+        return "image/tiff"
     raise dual.CamError("not an image")
 
 
@@ -1330,7 +1423,7 @@ def stitch_hugin(
     t_bgr = r_bgr = None
     if cv2 is not None:
         if images is not None:
-            t_bgr, r_bgr = images
+            t_bgr, r_bgr = images.pop("t"), images.pop("r")
         else:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=2) as pool:
@@ -1346,13 +1439,23 @@ def stitch_hugin(
         rh, rw = r_bgr.shape[:2]
         if (rh, rw) != (h, w):
             r_bgr = cv2.resize(r_bgr, (w, h), interpolation=cv2.INTER_AREA)
-        if balance:
+        if balance and images is not None:
+            t_bgr, r_bgr, msg = _balance_linear(t_bgr, r_bgr, overlap)
+            if msg:
+                log(msg)
+        elif balance:
             r_bgr, msg = _balance_r_bgr(t_bgr, r_bgr, overlap)
             if msg:
                 log(msg)
         tmask, rmask, band = _overlap_feature_masks(w, h, overlap)
         log(f"hugin  SIFT similarity in {band}px overlap")
-        found = _sift_similarity(r_bgr, t_bgr, rmask, tmask)
+        if images is not None:
+            found = _sift_similarity(
+                _raw_view_u8(r_bgr, images["gain"]), _raw_view_u8(t_bgr, images["gain"]),
+                rmask, tmask,
+            )
+        else:
+            found = _sift_similarity(r_bgr, t_bgr, rmask, tmask)
         if not found and images is not None:
             # The feather fallback reads the JPEG files; stay on the 16-bit frames.
             log("hugin  SIFT missed — profile overlap, no rotation")
@@ -1371,8 +1474,25 @@ def stitch_hugin(
                 t_rgba = t_rgba[y0:y1, x0:x1]
                 log(f"hugin  clip inner  {x1 - x0}×{y1 - y0}")
             log("hugin  overlap + multiband")
-            ow, oh = _multiband_write(r_rgba, t_rgba, dest)
+            extra = {}
+            if images is not None:
+                t_bgr = r_bgr = None
+                lin = _multiband_blend(r_rgba, t_rgba)
+                del r_rgba, t_rgba
+                oh, ow = lin.shape[:2]
+                master = images.get("master")
+                if master:
+                    log(f"raw  16-bit master  {Path(master).name}")
+                    write_master_tiff(master, lin)
+                    extra["master"] = Path(master).name
+                write_raw_display(dest, lin, images["gain"], images.get("look", True))
+                extra["source"] = "raw"
+                extra["look"] = "nikon" if images.get("look", True) else "neutral"
+                del lin
+            else:
+                ow, oh = _multiband_write(r_rgba, t_rgba, dest)
             return {
+                **extra,
                 "file": dest.name,
                 "width": ow,
                 "height": oh,
@@ -1568,26 +1688,14 @@ def delete_stamp(stamp, root=None, sides=None):
         if "P" in want:
             add(row.get("pano"))
             add(row.get("pano_ana"))
+            add(row.get("master"))
         break
     else:
         raise dual.CamError("missing pair")
     count = 0
     for name in names:
         count += _unlink_named(root, name)
-    left = False
-    if root.is_dir():
-        for path in root.iterdir():
-            m = PANO_ANA_RE.match(path.name)
-            if m and m.group(1) == stamp:
-                left = True
-                break
-            m = PAIR_RE.match(path.name) or PANO_RE.match(path.name)
-            if not m:
-                continue
-            got = m.group(2) if PAIR_RE.match(path.name) else m.group(1)
-            if got == stamp:
-                left = True
-                break
+    left = root.is_dir() and any(_stamp_of(path.name) == stamp for path in root.iterdir())
     if not left:
         extra = _exif_cache_path(root, stamp)
         if extra.is_file():
@@ -2015,6 +2123,30 @@ def _balance_r_bgr(t, r, overlap):
     return out, f"balance R ×{scale:.2f} (overlap)"
 
 
+def _balance_linear(t, r, overlap):
+    """Match the bodies on linear 16-bit by scaling the brighter one down.
+
+    Scaling up would clip the sensor's top levels out of the master.
+    """
+    import cv2
+
+    h, w = t.shape[:2]
+    ol = max(1, min(w - 1, int(round(w * float(overlap)))))
+    t_m = float(t[:, :ol].mean())
+    r_m = float(r[:, w - ol:].mean())
+    if r_m < 16 or t_m < 16:
+        return t, r, ""
+    scale = t_m / r_m
+    if abs(scale - 1) <= 0.03:
+        return t, r, ""
+    if not (0.40 <= scale <= 2.50):
+        return t, r, f"balance skip ×{scale:.2f} (overlap too different)"
+    if scale < 1:
+        return t, cv2.multiply(r, (scale, scale, scale, 0)), f"balance R ×{scale:.2f} (overlap)"
+    inv = 1.0 / scale
+    return cv2.multiply(t, (inv, inv, inv, 0)), r, f"balance T ×{inv:.2f} (overlap)"
+
+
 def _warp_bgr(img, M, out_w, out_h):
     import cv2
     import numpy as np
@@ -2073,6 +2205,12 @@ def _write_jpeg(path, bgr, quality=92):
 
 
 def _multiband_write(r_rgba, t_rgba, dest):
+    dst = _multiband_blend(r_rgba, t_rgba)
+    _write_jpeg(dest, dst)
+    return dst.shape[1], dst.shape[0]
+
+
+def _multiband_blend(r_rgba, t_rgba):
     import cv2
     import numpy as np
 
@@ -2099,8 +2237,7 @@ def _multiband_write(r_rgba, t_rgba, dest):
         dst = np.clip(dst, 0, 255).astype(np.uint8)
     if dm is not None:
         dst[np.asarray(dm) == 0] = 0
-    _write_jpeg(dest, dst)
-    return w, h
+    return dst
 
 
 def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
@@ -2174,7 +2311,7 @@ def stitch_open(t_path, r_path, dest, flip_r=False, try_both=True, on_log=None,
 
 def stitch_stamp(
     stamp, overlap=OVERLAP, flip_r=False, mode="blend", dy=0, root=None, on_log=None,
-    deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False,
+    deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False, look=True,
 ):
     root = Path(root or CAPTURES)
     t_path, r_path = find_pair(stamp, root)
@@ -2190,8 +2327,11 @@ def stitch_stamp(
         if t_nef and r_nef:
             # Only the multiband engine takes 16-bit arrays.
             images = develop_pair(
-                root / t_nef, root / r_nef, size=_size(t_path), on_log=on_log, t_jpeg=t_path,
+                root / t_nef, root / r_nef, size=_size(t_path), on_log=on_log,
+                t_jpeg=t_path, look=look,
             )
+            images["look"] = bool(look)
+            images["master"] = master_path(root, stamp)
             mode = "hugin"
         elif on_log:
             on_log("raw  no NEF pair for this shot — stitching the camera JPEGs")
@@ -2221,8 +2361,6 @@ def stitch_stamp(
                     balance=balance, lift=False, crop_inner=crop_inner,
                     profile=prof.get("profile", "fxpan65"), images=images,
                 )
-                if images is not None and info.get("engine") == "multiband":
-                    info["source"] = "raw"
                 images = None
             except dual.CamError as exc:
                 if on_log:
@@ -2250,7 +2388,7 @@ def stitch_stamp(
                 )
             else:
                 info["message"] = (
-                    ("raw 16-bit  " if info.get("source") == "raw" else "")
+                    (f"raw 16-bit {info.get('look')}  " if info.get("source") == "raw" else "")
                     + f"hugin  {info.get('engine', 'feather')}  "
                     f"ol={info.get('overlap_frac', overlap):.0%}  "
                     + (
@@ -2410,6 +2548,7 @@ def _run_item(item):
             crop_inner=item.get("crop_inner", True),
             squeeze=item.get("squeeze", 1.0),
             raw=item.get("raw", False),
+            look=item.get("look", True),
         )
         job_put(
             stamp, running=False, phase="done", error="",
@@ -2442,7 +2581,8 @@ def _kick_queue():
 
 
 def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
-                 deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False):
+                 deghost=False, balance=True, crop_inner=True, squeeze=1.0, raw=False,
+                 look=True):
     stamp = (stamp or "").strip()
     if not stamp or "/" in stamp or ".." in stamp:
         raise dual.CamError("bad stamp")
@@ -2459,6 +2599,7 @@ def start_stitch(stamp, overlap=OVERLAP, flip_r=False, mode="match", root=None,
         "stamp": stamp, "overlap": overlap, "flip_r": flip_r, "mode": mode,
         "root": root, "deghost": bool(deghost), "balance": bool(balance),
         "crop_inner": bool(crop_inner), "squeeze": squeeze, "raw": bool(raw),
+        "look": bool(look),
     }
     with _queue_lock:
         live = job_get(stamp)
