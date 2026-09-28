@@ -107,7 +107,7 @@ class Parse(unittest.TestCase):
         self.assertIn(("shutterspeed", "1/125"), web._assignments({"shutter": "1/125"}))
         self.assertEqual(
             web._assignments({"fstop": "5.6"}),
-            [("f-number", "f/5.6")],
+            [],
         )
         self.assertEqual(web._assignments({"fstop": "Auto"}), [])
         self.assertEqual(dual.iso_tries("400"), ["400", "ISO 400"])

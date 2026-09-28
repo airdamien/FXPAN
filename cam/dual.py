@@ -1233,8 +1233,8 @@ def wait_new_images(port, before, timeout=25, interval=0.45, list_fn=None, settl
     if last:
         raise last
     raise CamError(
-        "GPIO fired but no new file appeared — card polling only works with a "
-        "memory card; Internal RAM needs the event download path"
+        "no new file on the card — the 10-pin release did not fire this body. "
+        "Internal RAM cannot be polled this way"
     )
 
 
@@ -1285,7 +1285,20 @@ def pull_new(have, before, dest, stamp):
             )
             for role in have
         }
-        return {role: fut.result() for role, fut in futs.items()}
+        saved = {}
+        missed = []
+        for role, fut in futs.items():
+            try:
+                saved[role] = fut.result()
+            except CamError as exc:
+                missed.append(f"{role}: {exc}")
+        if missed:
+            got = "  ".join(
+                f"{role} {','.join(names)}" for role, names in sorted(saved.items()) if names
+            )
+            tail = f"  saved {got}" if got else ""
+            raise CamError("; ".join(missed) + tail)
+        return saved
 
 
 def cmd_shoot(args):
