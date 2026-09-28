@@ -21,7 +21,7 @@ export function includes(mode) {
     ["Light", L.follow_cam ? "Camera decides" : `${M.fmtIso(L.iso)} · ${M.fmtShut(L.shutter)} · ${M.fmtF(L.fstop)} · ${L.program}`],
     ["Focus", aid.v === "off" ? "Off" : `${aid.label} · ${fo.color || "red"}`],
     ["Look", [lookName(mode.look, M.store.fx.looks), ...tweaks(mode.look)].join(" · ")],
-    ["Drive", [d.release === "sync" ? "Sync" : "USB", d.save === "pi" ? "Pi" : "cards",
+    ["Drive", [d.release === "sync" ? "GPIO" : "USB", d.save === "pi" ? "Pi" : "cards",
       d.timer ? `${d.timer} s timer` : "", d.auto_stitch && d.save === "pi" ? `auto ${M.engineOf(d.engine).label}` : ""]
       .filter(Boolean).join(" · ")],
     ["WB", M.wbOf(mode.wb).label],

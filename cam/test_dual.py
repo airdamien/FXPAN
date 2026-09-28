@@ -620,14 +620,17 @@ class Gpio(unittest.TestCase):
     def test_fire_mock_drive(self):
         seen = []
 
-        def drive(pin, pulse_s):
-            seen.append((pin, pulse_s))
+        def sequence(focus_s, shutter_s):
+            seen.append((focus_s, shutter_s))
             return "mock"
 
-        info = gpio.fire(drive=drive)
-        self.assertEqual(seen, [(21, 0.3)])
+        info = gpio.fire(sequence=sequence)
+        self.assertEqual(seen, [(0.1, 0.3)])
         self.assertEqual(info["pin"], 21)
+        self.assertEqual(info["focus"], [20, 26])
+        self.assertEqual(info["shutter"], [21, 19])
         self.assertEqual(info["ms"], 300)
+        self.assertEqual(info["focus_ms"], 100)
         self.assertEqual(info["backend"], "mock")
 
 
