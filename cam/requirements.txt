@@ -1,1 +1,2 @@
 stitching-headless>=0.7
+rawpy>=0.19

@@ -740,6 +740,17 @@ class CardPull(unittest.TestCase):
         self.assertEqual(sorted(saved), ["T_20260928_170000.jpg", "T_20260928_170000.nef"])
         self.assertIn("--wait-event-and-download=FILEADDED", seen[0])
 
+    def test_pull_ram_camera_jpeg_beats_extracted_preview(self):
+        dest = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dest)
+        (dest / "T_20260928_170000.jpg").write_bytes(b"preview")
+        fake, _ = self._fake_ram([["nef", "jpg"]])
+        with patch.object(dual, "gp", fake):
+            saved = dual.pull_ram_one("T", "usb:1", dest, "20260928_170000")
+        self.assertEqual(saved[0], "T_20260928_170000.jpg")
+        self.assertEqual((dest / "T_20260928_170000.jpg").read_bytes(), b"x")
+        self.assertEqual(list(dest.glob("*_ram*")), [])
+
     def test_pull_ram_nothing_fired(self):
         dest = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, dest)
@@ -1039,6 +1050,120 @@ class Pano(unittest.TestCase):
         self.assertGreater(info["width"], 700)
         self.assertRegex(info["message"], r"\d+\.\d+s")
         self.assertTrue((self.root / "P_20260101_120000.jpg").is_file())
+
+    def test_stitch_raw_runs_16bit_multiband(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        rng = np.random.default_rng(3)
+        full = rng.integers(32, 224, (240, 900, 3), dtype=np.uint8)
+        r8, t8 = cv2.flip(full[:, :500], 1), full[:, 400:]
+        cv2.imwrite(str(self.root / "R_20260101_120000.jpg"), r8)
+        cv2.imwrite(str(self.root / "T_20260101_120000.jpg"), t8)
+        (self.root / "R_20260101_120000.nef").write_bytes(b"NEF")
+        (self.root / "T_20260101_120000.nef").write_bytes(b"NEF")
+        deep = (t8.astype(np.uint16) * 257, r8.astype(np.uint16) * 257)
+        seen = {}
+
+        def fake_develop(t_nef, r_nef, size=None, on_log=None, t_jpeg=None):
+            seen["size"] = size
+            seen["t_jpeg"] = Path(t_jpeg).name
+            return deep
+
+        with patch.object(pano, "develop_pair", fake_develop):
+            info = pano.stitch_stamp(
+                "20260101_120000", overlap=0.20, flip_r=True, mode="open",
+                root=self.root, balance=False, raw=True,
+            )
+        self.assertEqual(seen["size"], (500, 240))
+        self.assertEqual(seen["t_jpeg"], "T_20260101_120000.jpg")
+        self.assertEqual(info["engine"], "multiband")
+        self.assertEqual(info.get("source"), "raw")
+        self.assertIn("raw 16-bit", info["message"])
+        out = cv2.imread(str(self.root / "P_20260101_120000.jpg"))
+        self.assertGreater(float(out.mean()), 60)
+
+    def test_multiband_16bit_white_edge_does_not_wrap(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        h, w = 64, 200
+        img = np.full((h, w, 3), 65000, np.uint16)
+        img[:, 96:104] = 0
+        r = np.zeros((h, w, 4), np.uint16)
+        t = np.zeros((h, w, 4), np.uint16)
+        r[:, :130, :3], r[:, :130, 3] = img[:, :130], 65535
+        t[:, 70:, :3], t[:, 70:, 3] = img[:, 70:], 65535
+        dest = self.root / "wrap.jpg"
+        pano._multiband_write(r, t, dest)
+        out = cv2.imread(str(dest))
+        outside = np.concatenate([out[:, :88], out[:, 112:]], axis=1)
+        self.assertGreater(int(outside.min()), 180)
+
+    def test_raw_tone_rolls_off_to_white(self):
+        pano._venv_site()
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed")
+        x = np.linspace(0, 1, 101, dtype=np.float32)
+        y = pano._raw_tone(x, 4.0)
+        self.assertAlmostEqual(float(y[-1]), 1.0, places=4)
+        self.assertTrue(bool(np.all(np.diff(y) > 0)))
+        self.assertLess(float(y[50]), 1.0)
+
+    def test_raw_gain_matches_camera_jpeg(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        ref = self.root / "ref.jpg"
+        cv2.imwrite(str(ref), np.full((64, 64), 118, np.uint8))
+        lin = np.full((64, 64, 3), int(0.05 * 65535), np.uint16)
+        gain = pano._raw_gain(lin, ref)
+        got = float(pano._raw_tone(np.float32(0.05), gain))
+        self.assertAlmostEqual(got, 118 / 255, delta=0.02)
+        self.assertEqual(pano._raw_gain(lin, None), 1.0)
+
+    def test_stitch_raw_sift_miss_stays_16bit(self):
+        pano._venv_site()
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            self.skipTest("cv2 not installed")
+        flat = np.full((240, 500, 3), 90, np.uint8)
+        cv2.imwrite(str(self.root / "R_20260101_120000.jpg"), flat)
+        cv2.imwrite(str(self.root / "T_20260101_120000.jpg"), flat)
+        (self.root / "R_20260101_120000.nef").write_bytes(b"NEF")
+        (self.root / "T_20260101_120000.nef").write_bytes(b"NEF")
+        deep = np.full((240, 500, 3), 90 * 257, np.uint16)
+        with patch.object(pano, "develop_pair", lambda *a, **k: (deep, deep.copy())):
+            info = pano.stitch_stamp(
+                "20260101_120000", overlap=0.20, flip_r=True, mode="hugin",
+                root=self.root, balance=False, raw=True,
+            )
+        self.assertEqual(info["engine"], "multiband")
+        self.assertEqual(info.get("source"), "raw")
+
+    def test_stitch_raw_without_nef_uses_jpeg(self):
+        self._jpeg("T_20260101_120000.jpg", "red")
+        self._jpeg("R_20260101_120000.jpg", "blue")
+        logs = []
+        info = pano.stitch_stamp(
+            "20260101_120000", overlap=0.25, flip_r=False, mode="blend",
+            root=self.root, raw=True, on_log=logs.append,
+        )
+        self.assertNotEqual(info.get("source"), "raw")
+        self.assertTrue(any("no NEF pair" in m for m in logs))
 
     def test_stitch_width(self):
         self._jpeg("T_20260101_120000.jpg", "red")
@@ -1540,7 +1665,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False,
+                "keep_card": False, "stitch_raw": False,
             },
         )
 
@@ -1552,7 +1677,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "open", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False,
+                "keep_card": False, "stitch_raw": False,
             },
         )
 
@@ -1568,7 +1693,7 @@ class Settings(unittest.TestCase):
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
                 "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
-                "keep_card": False,
+                "keep_card": False, "stitch_raw": False,
             },
         )
         settings.save({"download": True}, pi=True)
