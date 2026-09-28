@@ -84,6 +84,10 @@ export async function toggleLive(want) {
   const on = want === undefined ? !live.pulling : !!want;
   if (on === live.pulling) return;
   const gen = ++liveGen;
+  if (on && M.photo().drive.release === "sync") {
+    M.set("drive.release", "usb");
+    toast("Live view uses USB release", "info");
+  }
   if (on) {
     // Flip the button before the cameras answer. The stream starts when
     // the first JPEG arrives; a failure puts the button back.
@@ -293,6 +297,8 @@ async function boot() {
   M.on((what, data) => {
     top.paint();
     nav.refreshAll(what);
+    if ((what === "photo" || what === "prefs") && M.photo().drive.release === "sync" && live.pulling)
+      toggleLive(false);
     if (what === "prefs") armIdle();
     if (what === "applied" && data?.message && /\(/.test(data.message)) toast(data.message, "warn", 4200);
   });

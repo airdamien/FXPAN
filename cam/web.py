@@ -174,8 +174,8 @@ def _gpio_shoot(shot_json, prefs, assignments):
     if not snap["pi"]:
         info = gpio.fire()
         return shot_json(
-            f"gpio sim  BCM {info['pin']}  (no pulse)  "
-            "on a Pi: Y-lead fire"
+            f"gpio sim  focus {info['focus']} {info['focus_ms']}ms  "
+            f"shutter {info['shutter']} {info['ms']}ms  (no pulse)"
             + (
                 ", then USB download → captures/"
                 if prefs["download"]
@@ -205,7 +205,8 @@ def _gpio_shoot(shot_json, prefs, assignments):
         info = gpio.fire()
     if not prefs["download"]:
         return shot_json(
-            f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}  remote"
+            f"gpio focus {info['focus']} {info['focus_ms']}ms  "
+            f"shutter {info['shutter']} {info['ms']}ms  {info['backend']}  remote"
             + (f"  {copied}" if copied else ""),
         )
     if not have or before is None:
@@ -224,7 +225,8 @@ def _gpio_shoot(shot_json, prefs, assignments):
     pano.ensure_pair_jpegs(stamp, dest)
     pano.refresh_exif(dest, stamp)
     return shot_json(
-        f"gpio {info['pin']}  {info['ms']}ms  {info['backend']}  → {bits}"
+        f"gpio focus {info['focus']} {info['focus_ms']}ms  "
+        f"shutter {info['shutter']} {info['ms']}ms  {info['backend']}  → {bits}"
         + (f"  {copied}" if copied else ""),
         _shot_files(dest=dest, stamp=stamp),
         stamp,
@@ -961,7 +963,11 @@ def main():
     print("field (iPhone)  " + "  ".join(u for u in urls_for(port) if "/lab" not in u))
     print(f"lab  (laptop)   http://127.0.0.1:{port}/lab")
     if gpio.on_pi():
-        print(f"gpio           BCM {gpio.PIN} high {int(gpio.PULSE_S * 1000)}ms then USB download")
+        print(
+            f"gpio           focus {list(gpio.FOCUS_PINS)} "
+            f"{int(gpio.FOCUS_LEAD_S * 1000)}ms  shutter {list(gpio.SHUTTER_PINS)} "
+            f"{int(gpio.PULSE_S * 1000)}ms then USB download"
+        )
     elif gpio.sim_on():
         print("gpio           sim (USB tab) — no pulse on this Mac")
     print("ptpcamerad held down (python3 cam/dual.py ptp-on to restore Photos)")

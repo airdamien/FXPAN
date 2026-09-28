@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Corona Designs SLR clip: BCM 21 high for 300 ms, then low.
+"""10-pin release: focus held, then shutter, on both camera jacks.
 
-The clip sits on header pins 39 (GND) and 40 (GPIO 21). Its 3.5 mm jack
-goes through a 3.5→2.5 TRS adapter into the FlashZebra Y-lead so one
-pulse fires both D7000s. Do not drive MC-DC2 from a raw GPIO pin.
+BCM 20 and 26 are focus (J1, and J2 when JP1 is bridged 2–3).
+BCM 21 and 19 are shutter the same way. Live view has to be down
+first: a D800 ignores the 10-pin remote while USB is claimed.
 """
 
 from __future__ import annotations
@@ -17,6 +17,11 @@ import dual
 
 PIN = 21
 PULSE_S = 0.3
+FOCUS_LEAD_S = 0.1
+# J1 is always 20/21. J2 follows those while the solder jumpers are
+# bridged 1–2, and these when they are cut and bridged 2–3.
+FOCUS_PINS = (20, 26)
+SHUTTER_PINS = (21, 19)
 CONSUMER = "nikonduals"
 SIM_PATH = Path(__file__).resolve().parent / "gpio.json"
 
@@ -61,6 +66,9 @@ def snapshot():
         "pi": pi,
         "pin": PIN,
         "pulse_ms": int(round(PULSE_S * 1000)),
+        "focus_ms": int(round(FOCUS_LEAD_S * 1000)),
+        "focus": list(FOCUS_PINS),
+        "shutter": list(SHUTTER_PINS),
     }
 
 
@@ -184,6 +192,93 @@ def _drive_cli(pin, pulse_s):
     raise OSError(err or "gpioset failed")
 
 
+def _hold(set_many, focus_s, shutter_s):
+    set_many(SHUTTER_PINS, False)
+    set_many(FOCUS_PINS, True)
+    time.sleep(focus_s)
+    set_many(SHUTTER_PINS, True)
+    try:
+        time.sleep(shutter_s)
+    finally:
+        set_many(SHUTTER_PINS, False)
+        set_many(FOCUS_PINS, False)
+
+
+def _sequence_gpiod(focus_s, shutter_s):
+    import gpiod
+    from gpiod.line import Direction, Value
+
+    pins = tuple(dict.fromkeys((*FOCUS_PINS, *SHUTTER_PINS)))
+    inactive = {
+        pin: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE)
+        for pin in pins
+    }
+    with gpiod.request_lines(find_chip(), consumer=CONSUMER, config=inactive) as req:
+        def set_many(group, high):
+            val = Value.ACTIVE if high else Value.INACTIVE
+            req.set_values({pin: val for pin in group})
+
+        _hold(set_many, focus_s, shutter_s)
+    return "gpiod"
+
+
+def _sequence_lgpio(focus_s, shutter_s):
+    import lgpio
+
+    chip = find_chip()
+    num = int(Path(chip).name.replace("gpiochip", "") or "0")
+    handle = lgpio.gpiochip_open(num)
+    pins = tuple(dict.fromkeys((*FOCUS_PINS, *SHUTTER_PINS)))
+    try:
+        for pin in pins:
+            lgpio.gpio_claim_output(handle, pin, 0)
+
+        def set_many(group, high):
+            level = 1 if high else 0
+            for pin in group:
+                lgpio.gpio_write(handle, pin, level)
+
+        _hold(set_many, focus_s, shutter_s)
+    finally:
+        lgpio.gpiochip_close(handle)
+    return "lgpio"
+
+
+def _sequence_rpi(focus_s, shutter_s):
+    import RPi.GPIO as GPIO
+
+    pins = tuple(dict.fromkeys((*FOCUS_PINS, *SHUTTER_PINS)))
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    for pin in pins:
+        GPIO.setup(pin, GPIO.OUT, initial=GPIO.LOW)
+
+    def set_many(group, high):
+        level = GPIO.HIGH if high else GPIO.LOW
+        for pin in group:
+            GPIO.output(pin, level)
+
+    _hold(set_many, focus_s, shutter_s)
+    return "RPi.GPIO"
+
+
+def _sequence(focus_s, shutter_s):
+    errors = []
+    for fn in (_sequence_gpiod, _sequence_lgpio, _sequence_rpi):
+        try:
+            return fn(focus_s, shutter_s)
+        except ImportError:
+            continue
+        except (FileNotFoundError, OSError, ValueError, PermissionError) as exc:
+            errors.append(str(exc))
+    hint = "; ".join(errors[:2])
+    raise dual.CamError(
+        "cannot drive GPIO shutter"
+        " — install python3-libgpiod or python3-rpi-lgpio, join the gpio group"
+        + (f" ({hint})" if hint else "")
+    )
+
+
 def _drive(pin, pulse_s):
     errors = []
     for fn in (_drive_gpiod, _drive_lgpio, _drive_rpi, _drive_cli):
@@ -202,28 +297,32 @@ def _drive(pin, pulse_s):
     )
 
 
-def fire(pulse_s=None, pin=None, drive=None):
+def _result(pulse_s, focus_s, backend, elapsed):
+    return {
+        "pin": PIN,
+        "focus": list(FOCUS_PINS),
+        "shutter": list(SHUTTER_PINS),
+        "ms": int(round(pulse_s * 1000)),
+        "focus_ms": int(round(focus_s * 1000)),
+        "backend": backend or "gpio",
+        "elapsed": elapsed,
+    }
+
+
+def fire(pulse_s=None, pin=None, drive=None, focus_s=None, sequence=None):
     pulse_s = PULSE_S if pulse_s is None else float(pulse_s)
-    pin = PIN if pin is None else int(pin)
-    if pulse_s <= 0:
+    focus_s = FOCUS_LEAD_S if focus_s is None else float(focus_s)
+    if pulse_s <= 0 or focus_s < 0:
         raise dual.CamError("GPIO pulse must be > 0")
-    if drive is None:
-        if on_pi():
-            drive = _drive
+    if sequence is None:
+        if drive is not None:
+            sequence = lambda fs, ss: drive(PIN if pin is None else int(pin), ss)
+        elif on_pi():
+            sequence = _sequence
         elif sim_on():
-            return {
-                "pin": pin,
-                "ms": int(round(pulse_s * 1000)),
-                "backend": "sim",
-                "elapsed": 0.0,
-            }
+            return _result(pulse_s, focus_s, "sim", 0.0)
         else:
             raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
     t0 = time.perf_counter()
-    backend = drive(pin, pulse_s)
-    return {
-        "pin": pin,
-        "ms": int(round(pulse_s * 1000)),
-        "backend": backend or "gpio",
-        "elapsed": time.perf_counter() - t0,
-    }
+    backend = sequence(focus_s, pulse_s)
+    return _result(pulse_s, focus_s, backend, time.perf_counter() - t0)

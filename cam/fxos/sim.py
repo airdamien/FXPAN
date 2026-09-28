@@ -647,7 +647,7 @@ class Rig:
         files = sorted(names)
         if target == "gpio":
             bits = "  ".join(f"{n[0]} {n}" for n in files)
-            msg = f"gpio 21  300ms  sim  → {bits}"
+            msg = f"gpio focus [20, 26] 100ms  shutter [21, 19] 300ms  sim  → {bits}"
         else:
             times = "  ".join(f"{r} {1.1 + 0.07 * i:.2f}s" for i, r in enumerate(sorted(have)))
             msg = f"shot {stamp}  {times}  → captures/"
@@ -856,7 +856,8 @@ class Rig:
 
     def gpio(self):
         return {"available": self.gpio_sim, "sim": self.gpio_sim, "pi": False,
-                "pin": 21, "pulse_ms": 300}
+                "pin": 21, "pulse_ms": 300, "focus_ms": 100,
+                "focus": [20, 26], "shutter": [21, 19]}
 
     def brightness(self):
         return {"available": True, "value": self.bright, "max": 100, "bus": 1}

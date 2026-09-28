@@ -289,7 +289,7 @@ export const SET_MB = { "NEF+Fine": 58, "JPEG Fine": 18, "JPEG Normal": 9, "NEF 
 export const setMB = () => 2 * (SET_MB[store.prefs.quality] || 40);
 export const setsLeft = () => (store.disk ? Math.floor(store.disk.free / (setMB() * 1e6)) : null);
 
-export const driveLabel = (d) => (d.release === "sync" ? "Sync" : "USB");
+export const driveLabel = (d) => (d.release === "sync" ? "GPIO" : "USB");
 export function driveSub(d) {
   const bits = [d.save === "pi" ? "Pi + cards" : "Cards only"];
   if (d.timer) bits.push(d.timer + " s timer");
@@ -339,6 +339,7 @@ export function describe(key, v) {
   if (key === "light.fstop") return fmtF(v);
   if (key === "light.shutter") return fmtShut(v);
   if (key === "wb") return wbOf(v).label;
+  if (key === "drive.release") return v === "sync" ? "GPIO" : "USB";
   if (key === "drive.quality") return qualityOf(v).label;
   if (key === "drive.engine") return engineOf(v).label;
   if (key === "drive.timer" || key === "drive.review") return num(v, 0) ? v + " s" : "Off";

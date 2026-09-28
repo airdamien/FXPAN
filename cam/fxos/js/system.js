@@ -259,8 +259,10 @@ export function wifiScreen() {
 export function piScreen() {
   const s = dim({ id: "sys-pi", title: "Pi & kiosk", ic: "power", crumb: "System" });
   const rows = rowList([
-    { id: "gpio", label: "GPIO shutter", hint: "Off a Pi, simulate the 10-pin release",
-      value: () => (M.store.gpio?.pi ? "Pi GPIO " + M.store.gpio.pin : M.store.gpio?.sim ? "Simulated" : "Off"),
+    { id: "gpio", label: "GPIO shutter", hint: "Focus 20/26, shutter 21/19. Live view has to be off",
+      value: () => (M.store.gpio?.pi
+        ? "Focus " + (M.store.gpio.focus || [20, 26]).join(" ") + " · shutter " + (M.store.gpio.shutter || [21, 19]).join(" ")
+        : M.store.gpio?.sim ? "Simulated" : "Off"),
       control: () => toggle({ get: () => !!M.store.gpio?.sim, on: "Simulate", off: "Off",
         set: async (v) => { const j = await run(() => api.post("/api/gpio", { sim: v })); if (j) { M.store.gpio = j; rows.refresh(); } } }) },
   ], { open: "gpio" });

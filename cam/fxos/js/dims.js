@@ -398,7 +398,7 @@ function pipeline() {
     const pi = d.save === "pi";
     const steps = [
       { ic: "timer", k: "Timer", v: d.timer ? `${d.timer} s, then release` : "Off", on: !!d.timer },
-      { ic: "sync", k: "Release", v: d.release === "sync" ? "T and R together · 10-pin" : "Over USB · T, then R, ~50 ms apart", on: true },
+      { ic: "sync", k: "Release", v: d.release === "sync" ? "10-pin · focus then shutter · live view off" : "Over USB · T, then R, ~50 ms apart", on: true },
       { ic: "card", k: "Save", v: pi ? `Pi and both cards · ${M.qualityOf(d.quality).label}` : "Stays on the cards", on: true },
       { ic: "stitch", k: "Stitch", v: pi && d.auto_stitch ? `${M.engineOf(d.engine).label}, straight after` : pi ? "When you ask, in Playback" : "Not until downloaded", on: pi && d.auto_stitch },
       { ic: "play", k: "Review", v: d.review ? `${d.review} s` : "Off", on: !!d.review && pi },
@@ -415,10 +415,10 @@ export function driveScreen() {
   const per = fact("Per set");
   const left = fact("Room for");
   const rows = rowList([
-    { id: "release", label: "Release", value: () => (D().release === "sync" ? "Sync" : "USB"),
+    { id: "release", label: "Release", value: () => (D().release === "sync" ? "GPIO" : "USB"),
       control: () => cards({ options: [
-        { v: "sync", label: "Sync", name: "10-pin, both at once", sub: "For anything that moves" },
-        { v: "usb", label: "USB", name: "One body, then the other", sub: "Static scenes, no cable" },
+        { v: "sync", label: "GPIO", name: "10-pin, both at once", sub: "Focus then shutter. Live view turns off" },
+        { v: "usb", label: "USB", name: "One body, then the other", sub: "Static scenes. Live view can stay on" },
       ], get: () => D().release, set: (v) => M.set("drive.release", v) }) },
     { id: "save", label: "Save to", value: () => (D().save === "pi" ? "Pi + cards" : "Cards only"),
       control: () => chips({ options: [{ v: "pi", label: "Pi + cards" }, { v: "cards", label: "Cards only" }],
