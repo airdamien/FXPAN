@@ -775,14 +775,19 @@ def _unknown_widgets(err):
     return re.findall(r"(\w+) not found", str(err or ""))
 
 
+# Widgets a body rejected. The next set skips them so the LCD is not woken
+# by a command that is going to fail.
+_missing_widgets = set()
+
+
 def _set_one(port, assignments, timeout=120):
     """Push every widget in one gphoto2 command.
 
     A missing widget (D800 has no isoauto) used to fall through to one PTP
     session per setting, which flashes the rear LCD. Drop the unknown names
-    and send the rest once.
+    and send the rest once. Remember them so the next shot does not try again.
     """
-    packed = pack_assignments(assignments)
+    packed = [(k, v) for k, v in pack_assignments(assignments) if k not in _missing_widgets]
     if not packed:
         return []
     try:
@@ -792,6 +797,7 @@ def _set_one(port, assignments, timeout=120):
         drop = [key for key in _unknown_widgets(exc) if any(k == key for k, _ in packed)]
         if not drop:
             return [str(exc)]
+        _missing_widgets.update(drop)
         again = [(k, v) for k, v in packed if k not in drop]
         notes = [f"{key} unsupported" for key in drop]
         if not again:

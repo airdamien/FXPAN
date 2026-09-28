@@ -1,0 +1,24 @@
+---
+description: Pack Nikon PTP reads and writes into one gphoto2 session
+globs: cam/**/*.py
+alwaysApply: false
+---
+
+# Packed camera I/O
+
+A D800 wakes its rear LCD for every gphoto2 process. One setting per process looks like a flicker and makes a shot slow.
+
+- Read status with one `gphoto2 --get-config` list, then parse by widget label. Do not fall back to one process per key.
+- Write settings with one `gphoto2` command and several `--set-config` arguments (`dual.config_args` / `dual._set_one`). Do not call `_set_widgets` or loop `--set-config` per key.
+- If a widget is missing (D800 has no `isoauto`), drop that name, remember it, and send the rest once. Do not retry the whole set one key at a time.
+- Do not open a second session to verify a write, sync the clock, or pulse autofocus on the shutter path unless the caller asked for that.
+- GPIO release already drops USB around the 10-pin pulse. Do not add more gphoto2 calls on that path.
+
+```python
+# Bad: two processes, LCD wakes twice
+gp(["--set-config", "iso=400"], port=port)
+gp(["--set-config", "shutterspeed=1/125"], port=port)
+
+# Good: one process
+gp(["--set-config", "iso=400", "--set-config", "shutterspeed=1/125"], port=port)
+```

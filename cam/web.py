@@ -193,15 +193,16 @@ def _gpio_shoot(shot_json, prefs, assignments):
         except dual.CamError:
             have = None
         if have:
-            try:
-                dual.sync_clocks(have)
-            except dual.CamError:
-                pass
-            assignments, copied = _align_for_shot(have, prefs, assignments)
+            # One packed set per body. Do not re-meter or sync clocks here:
+            # each extra gphoto2 session wakes the rear LCD.
+            if assignments:
+                _apply_exposure(have, assignments, fast=True)
+                packed = dual.pack_assignments(assignments)
+                copied = " ".join(f"{k}={v}" for k, v in packed)
             if prefs["download"]:
                 before = dual.list_cards(have)
     # Nikon bodies ignore the 10-pin remote while USB is claimed.
-    with LINK.gpio_window():
+    with LINK.gpio_window(settle=0.2):
         info = gpio.fire()
     if not prefs["download"]:
         return shot_json(
@@ -274,7 +275,7 @@ def _apply_exposure(have, assignments, fast=False):
         return notes
     from concurrent.futures import ThreadPoolExecutor
 
-    timeout = 45
+    timeout = 12 if fast else 45
     with ThreadPoolExecutor(max_workers=len(have)) as pool:
         futs = [
             pool.submit(dual._set_one, row["port"], assignments, timeout)
