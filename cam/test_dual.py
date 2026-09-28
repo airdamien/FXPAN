@@ -220,7 +220,9 @@ class Parse(unittest.TestCase):
 
         old = dual.gp
         dual.gp = fake
+        dual._missing_widgets.clear()
         self.addCleanup(lambda: setattr(dual, "gp", old))
+        self.addCleanup(dual._missing_widgets.clear)
         notes = dual._set_one("usb:1", [
             ("isoauto", "Off"), ("iso", "400"), ("shutterspeed", "1/125"),
         ])
@@ -228,6 +230,12 @@ class Parse(unittest.TestCase):
         self.assertNotIn("isoauto", " ".join(calls[1]))
         self.assertIn("iso=400", " ".join(calls[1]))
         self.assertIn("isoauto unsupported", notes)
+        calls.clear()
+        dual._set_one("usb:1", [
+            ("isoauto", "Off"), ("iso", "400"), ("shutterspeed", "1/125"),
+        ])
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("isoauto", " ".join(calls[0]))
 
     def test_capture_one_command(self):
         calls = []

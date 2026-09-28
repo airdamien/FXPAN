@@ -23,13 +23,12 @@ SSH_OPTS=(
 )
 
 t0=$SECONDS
-echo "==> wait for web.py :8787 and FXPAN OS :8790"
+echo "==> wait for FXPAN OS :8790"
 ssh "${SSH_OPTS[@]}" "$TARGET" '
   ok=0
   i=0
   while [ "$i" -lt 40 ]; do
-    if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health \
-        && curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8790/fxos/api/state; then
+    if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8790/fxos/api/state; then
       ok=1
       break
     fi
@@ -37,14 +36,14 @@ ssh "${SSH_OPTS[@]}" "$TARGET" '
     sleep 0.25
   done
   if [ "$ok" -ne 1 ]; then
-    echo "kiosk stack did not come back (8787/8790)" >&2
+    echo "FXPAN OS did not come back on 8790" >&2
     exit 1
   fi
-  curl -sS http://127.0.0.1:8787/api/meta | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(\"kiosk\", d.get(\"kiosk\"), \"gpio\", (d.get(\"gpio\") or {}).get(\"available\"))
-"
+  if curl -sf -o /dev/null --connect-timeout 1 http://127.0.0.1:8787/api/health; then
+    echo "web.py is listening on 8787" >&2
+  else
+    echo "web.py is not running"
+  fi
   curl -sS http://127.0.0.1:8790/fxos/api/state | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
