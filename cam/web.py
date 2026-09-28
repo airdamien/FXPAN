@@ -192,15 +192,10 @@ def _gpio_shoot(shot_json, prefs, assignments):
             have = dual.require_online(dual.detect_bodies())
         except dual.CamError:
             have = None
-        if have:
-            # One packed set per body. Do not re-meter or sync clocks here:
-            # each extra gphoto2 session wakes the rear LCD.
-            if assignments:
-                _apply_exposure(have, assignments, fast=True)
-                packed = dual.pack_assignments(assignments)
-                copied = " ".join(f"{k}={v}" for k, v in packed)
-            if prefs["download"]:
-                before = dual.list_cards(have)
+        if have and prefs["download"]:
+            # Exposure was already written when it changed. Another set here
+            # wakes the rear LCD and can hold USB through the 10-pin pulse.
+            before = dual.list_cards(have)
     # Nikon bodies ignore the 10-pin remote while USB is claimed.
     with LINK.gpio_window(settle=0.2):
         info = gpio.fire()
@@ -355,9 +350,9 @@ def _assignments(data):
             out.append((key, dual.format_shutter(val)))
             continue
         if key == "f-number":
-            if val.lower() == "auto":
-                continue
-            out.append((key, dual.format_aperture(val)))
+            # The iris is the taking lens, not a CPU lens on the body.
+            # Writing f-number makes a D800 chase the aperture on its LCD
+            # and ignore the 10-pin release while that is happening.
             continue
         out.append((key, val))
     return out
