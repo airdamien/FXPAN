@@ -490,7 +490,7 @@
       "plot": "",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "gpio_trigger2.stl",
       "svg": "",
       "vrml": ""
     },
@@ -597,6 +597,14 @@
       "version": 1
     },
     "net_format_name": "",
+    "ngspice": {
+      "fix_include_paths": true,
+      "meta": {
+        "version": 0
+      },
+      "model_mode": 4,
+      "workbook_filename": "gpio_trigger.wbk"
+    },
     "page_layout_descr_file": "",
     "plot_directory": "",
     "space_save_all_events": true,
@@ -605,7 +613,7 @@
     "spice_model_current_sheet_as_root": true,
     "spice_save_all_currents": false,
     "spice_save_all_dissipations": false,
-    "spice_save_all_voltages": false,
+    "spice_save_all_voltages": true,
     "subpart_first_id": 65,
     "subpart_id_separator": 0
   },

@@ -1,0 +1,11 @@
+* 4N35 for the KiCad schematic simulator.
+* Pin order matches Sim.Pins on Isolator:4N25: anode, cathode, emitter, collector.
+* CTR is 100% (0.005 × Bf 200). Base and the second collector stay open.
+.subckt 4N35 A K E C
+Dled A N D4N35
+Vs N K 0
+Fctr E B Vs 0.005
+Qpt C B E Q4N35
+.model D4N35 D(Is=1e-20 N=1.8 Rs=2)
+.model Q4N35 NPN(Bf=200 Is=1e-14 Cjc=10p Cje=10p)
+.ends
