@@ -332,6 +332,8 @@ def _build_lib_symbols() -> str:
         ("Isolator", "4N25"),
         ("Connector_Audio", "AudioJack3"),
         ("Connector", "Raspberry_Pi_4"),
+        ("Simulation_SPICE", "VPWL"),
+        ("Simulation_SPICE", "VDC"),
     ]
     blocks: list[str] = []
     sym_dir = KICAD_ROOT / "symbols"
@@ -339,6 +341,34 @@ def _build_lib_symbols() -> str:
         raw = (sym_dir / f"{lib}.kicad_sym").read_text()
         body = _extract_symbol_block(raw, name)
         body = body.replace(f'(symbol "{name}"', f'(symbol "{lib}:{name}"', 1)
+        if name == "VPWL":
+            body = body.replace(
+                '(property "Sim.Params" "pwl=\\"0 -1 50n -1 51n 0 97n 1 171n -1 200n -1\\""',
+                '(property "Sim.Params" ""',
+                1,
+            )
+        if name == "4N25":
+            body = body.replace(
+                '\t\t(symbol "4N25_0_1"',
+                "\t\t(property \"Sim.Device\" \"SUBCKT\"\n"
+                "\t\t\t(at 0 0 0)\n"
+                "\t\t\t(effects (font (size 1.27 1.27)) (hide yes))\n"
+                "\t\t)\n"
+                "\t\t(property \"Sim.Pins\" \"1=A 2=K 4=E 5=C\"\n"
+                "\t\t\t(at 0 0 0)\n"
+                "\t\t\t(effects (font (size 1.27 1.27)) (hide yes))\n"
+                "\t\t)\n"
+                "\t\t(property \"Sim.Library\" \"${KIPRJMOD}/4n35.lib\"\n"
+                "\t\t\t(at 0 0 0)\n"
+                "\t\t\t(effects (font (size 1.27 1.27)) (hide yes))\n"
+                "\t\t)\n"
+                "\t\t(property \"Sim.Name\" \"4N35\"\n"
+                "\t\t\t(at 0 0 0)\n"
+                "\t\t\t(effects (font (size 1.27 1.27)) (hide yes))\n"
+                "\t\t)\n"
+                '\t\t(symbol "4N25_0_1"',
+                1,
+            )
         blocks.append(_indent(body, 2))
     return "(lib_symbols\n" + "\n".join(blocks) + "\n)"
 
@@ -354,18 +384,33 @@ def _sch_symbol(
     pins: list[str] | None = None,
     hide_ref: bool = False,
     dnp: bool = False,
+    sim: bool = True,
+    board: bool = True,
+    bom: bool = True,
+    extra: list[tuple[str, str]] | None = None,
 ) -> str:
     pin_uuids = {p: uid() for p in (pins or [])}
     pin_lines = "\n".join(f'    (pin "{p}" (uuid {pin_uuids[p]}))' for p in pin_uuids)
     ref_effects = "(hide yes)" if hide_ref else ""
     dnp_flag = "yes" if dnp else "no"
+    sim_flag = "no" if sim else "yes"
+    board_flag = "yes" if board else "no"
+    bom_flag = "yes" if bom else "no"
+    extra_lines = ""
+    for key, val in extra or []:
+        extra_lines += (
+            f'\n    (property "{key}" "{val}"\n'
+            f'      (at {x} {y} {angle})\n'
+            f'      (effects (font (size 1.27 1.27)) (hide yes))\n'
+            f'    )'
+        )
     return f"""  (symbol
     (lib_id "{lib_id}")
     (at {x} {y} {angle})
     (unit 1)
-    (exclude_from_sim no)
-    (in_bom yes)
-    (on_board yes)
+    (exclude_from_sim {sim_flag})
+    (in_bom {bom_flag})
+    (on_board {board_flag})
     (dnp {dnp_flag})
     (uuid {uid()})
     (property "Reference" "{ref}"
@@ -383,7 +428,7 @@ def _sch_symbol(
     (property "Datasheet" "~"
       (at {x} {y} {angle})
       (effects (font (size 1.27 1.27)) (hide yes))
-    )
+    ){extra_lines}
 {pin_lines}
     (instances
       (project "{PROJECT_NAME}"
@@ -629,6 +674,7 @@ def _write_kicad_schematic(path: Path) -> None:
             pi_y,
             footprint="Connector_PinSocket_2.54mm:PinSocket_2x20_P2.54mm_Vertical",
             pins=list(dict.fromkeys(n for n, _, _ in pi_pins)),
+            sim=False,
         ),
     ]
     used = {
@@ -668,6 +714,12 @@ def _write_kicad_schematic(path: Path) -> None:
                 y,
                 footprint="Package_DIP:DIP-6_W7.62mm",
                 pins=["1", "2", "3", "4", "5", "6"],
+                extra=[
+                    ("Sim.Device", "SUBCKT"),
+                    ("Sim.Pins", "1=A 2=K 4=E 5=C"),
+                    ("Sim.Library", "${KIPRJMOD}/4n35.lib"),
+                    ("Sim.Name", "4N35"),
+                ],
             )
         )
         parts.append(_glabel(bus, rx, y - 3.81))
@@ -689,6 +741,7 @@ def _write_kicad_schematic(path: Path) -> None:
                 jy,
                 footprint="Connector_Audio:Jack_3.5mm_CUI_SJ1-3535NG_Horizontal",
                 pins=["T", "R", "S"],
+                sim=False,
             )
         )
         parts.append(_glabel(f"{jname}_TIP", jx + jack_pin["T"][0], jy - jack_pin["T"][1]))
@@ -712,6 +765,7 @@ def _write_kicad_schematic(path: Path) -> None:
                 y,
                 footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_Pad1.0x1.5mm",
                 pins=["1", "2", "3"],
+                sim=False,
             )
         )
         parts.append(_glabel(common, jx + jumper_pins["1"][0], y + jumper_pins["1"][1]))
@@ -737,6 +791,7 @@ def _write_kicad_schematic(path: Path) -> None:
                 footprint="Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical",
                 pins=["1", "2"],
                 dnp=True,
+                sim=False,
             )
         )
         parts.append(
@@ -749,12 +804,84 @@ def _write_kicad_schematic(path: Path) -> None:
                 footprint="LED_THT:LED_D5.0mm",
                 pins=["1", "2"],
                 dnp=True,
+                sim=False,
             )
         )
         parts.append(_glabel(bus, rx, y - 3.81))
         parts.append(_glabel(mid, rx, y + 3.81))
         parts.append(_glabel(mid, dx + 3.81, y))
         parts.append(_glabel("GND", dx - 3.81, y))
+
+    # Simulator only. Not on the board. JP1/JP2 are the copper bridges;
+    # the 0.01 Ω resistors stand in for pads 1–2 joined.
+    focus_pwl = 'pwl=\\"0 0 1m 0 1.1m 3.3 401m 3.3 401.1m 0\\"'
+    shut_pwl = 'pwl=\\"0 0 101m 0 101.1m 3.3 401m 3.3 401.1m 0\\"'
+    sim_off = dict(board=False, bom=False, footprint="")
+    parts.append(
+        _sch_symbol(
+            "Simulation_SPICE:VPWL", "V1", "0", 40, 220,
+            pins=["1", "2"],
+            extra=[
+                ("Sim.Device", "V"),
+                ("Sim.Type", "PWL"),
+                ("Sim.Pins", "1=+ 2=-"),
+                ("Sim.Params", focus_pwl),
+            ],
+            **sim_off,
+        )
+    )
+    parts.append(_glabel("FOCUS", 40, 220 - 5.08))
+    parts.append(_glabel("GND", 40, 220 + 5.08))
+    parts.append(
+        _sch_symbol(
+            "Simulation_SPICE:VPWL", "V2", "0", 40, 245,
+            pins=["1", "2"],
+            extra=[
+                ("Sim.Device", "V"),
+                ("Sim.Type", "PWL"),
+                ("Sim.Pins", "1=+ 2=-"),
+                ("Sim.Params", shut_pwl),
+            ],
+            **sim_off,
+        )
+    )
+    parts.append(_glabel("SHUTTER", 40, 245 - 5.08))
+    parts.append(_glabel("GND", 40, 245 + 5.08))
+    for ref, y, hi, lo in (
+        ("RSIM1", 220, "FOCUS", "J2_FOCUS"),
+        ("RSIM2", 245, "SHUTTER", "J2_SHUTTER"),
+    ):
+        parts.append(
+            _sch_symbol("Device:R", ref, "0.01", 70, y, pins=["1", "2"], **sim_off)
+        )
+        parts.append(_glabel(hi, 70, y - 3.81))
+        parts.append(_glabel(lo, 70, y + 3.81))
+    for ref, y, plus, minus in (
+        ("V3", 220, "CAM_A", "J1_SLEEVE"),
+        ("V4", 245, "CAM_B", "J2_SLEEVE"),
+    ):
+        parts.append(
+            _sch_symbol(
+                "Simulation_SPICE:VDC", ref, "3.3", 100, y,
+                pins=["1", "2"], **sim_off,
+            )
+        )
+        parts.append(_glabel(plus, 100, y - 5.08))
+        parts.append(_glabel(minus, 100, y + 5.08))
+    for ref, y, hi, lo in (
+        ("R9", 210, "CAM_A", "J1_RING"),
+        ("R10", 225, "CAM_A", "J1_TIP"),
+        ("R11", 240, "CAM_B", "J2_RING"),
+        ("R12", 255, "CAM_B", "J2_TIP"),
+        ("R13", 270, "J1_SLEEVE", "GND"),
+        ("R14", 285, "J2_SLEEVE", "GND"),
+    ):
+        val = "100Meg" if ref in ("R13", "R14") else "4.7k"
+        parts.append(
+            _sch_symbol("Device:R", ref, val, 130, y, pins=["1", "2"], **sim_off)
+        )
+        parts.append(_glabel(hi, 130, y - 3.81))
+        parts.append(_glabel(lo, 130, y + 3.81))
     parts.append(")")
     path.write_text("\n".join(parts) + "\n")
 

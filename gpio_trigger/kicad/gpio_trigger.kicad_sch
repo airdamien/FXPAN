@@ -651,6 +651,22 @@
    				(hide yes)
    			)
    		)
+   		(property "Sim.Device" "SUBCKT"
+   			(at 0 0 0)
+   			(effects (font (size 1.27 1.27)) (hide yes))
+   		)
+   		(property "Sim.Pins" "1=A 2=K 4=E 5=C"
+   			(at 0 0 0)
+   			(effects (font (size 1.27 1.27)) (hide yes))
+   		)
+   		(property "Sim.Library" "${KIPRJMOD}/4n35.lib"
+   			(at 0 0 0)
+   			(effects (font (size 1.27 1.27)) (hide yes))
+   		)
+   		(property "Sim.Name" "4N35"
+   			(at 0 0 0)
+   			(effects (font (size 1.27 1.27)) (hide yes))
+   		)
    		(symbol "4N25_0_1"
    			(rectangle
    				(start -5.08 3.81)
@@ -1920,16 +1936,395 @@
    		)
    		(embedded_fonts no)
    	)
+   (symbol "Simulation_SPICE:VPWL"
+   		(pin_numbers
+   			(hide yes)
+   		)
+   		(pin_names
+   			(offset 0.0254)
+   		)
+   		(exclude_from_sim no)
+   		(in_bom yes)
+   		(on_board yes)
+   		(property "Reference" "V"
+   			(at 2.54 2.54 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   			)
+   		)
+   		(property "Value" "VPWL"
+   			(at 2.54 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   			)
+   		)
+   		(property "Footprint" ""
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Description" "Voltage source, piece-wise linear"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Pins" "1=+ 2=-"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Device" "V"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Params" ""
+   			(at 2.54 -2.54 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   			)
+   		)
+   		(property "Sim.Type" "PWL"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "ki_keywords" "simulation"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(symbol "VPWL_0_0"
+   			(polyline
+   				(pts
+   					(xy -1.778 -1.016) (xy -0.762 1.016) (xy -0.254 0) (xy 0.762 0) (xy 1.27 1.27)
+   				)
+   				(stroke
+   					(width 0)
+   					(type default)
+   				)
+   				(fill
+   					(type none)
+   				)
+   			)
+   			(text "+"
+   				(at 0 1.905 0)
+   				(effects
+   					(font
+   						(size 1.27 1.27)
+   					)
+   				)
+   			)
+   		)
+   		(symbol "VPWL_0_1"
+   			(circle
+   				(center 0 0)
+   				(radius 2.54)
+   				(stroke
+   					(width 0.254)
+   					(type default)
+   				)
+   				(fill
+   					(type background)
+   				)
+   			)
+   		)
+   		(symbol "VPWL_1_1"
+   			(pin passive line
+   				(at 0 5.08 270)
+   				(length 2.54)
+   				(name "~"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   				(number "1"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   			)
+   			(pin passive line
+   				(at 0 -5.08 90)
+   				(length 2.54)
+   				(name "~"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   				(number "2"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   			)
+   		)
+   		(embedded_fonts no)
+   	)
+   (symbol "Simulation_SPICE:VDC"
+   		(pin_numbers
+   			(hide yes)
+   		)
+   		(pin_names
+   			(offset 0.0254)
+   		)
+   		(exclude_from_sim no)
+   		(in_bom yes)
+   		(on_board yes)
+   		(property "Reference" "V"
+   			(at 2.54 2.54 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   			)
+   		)
+   		(property "Value" "1"
+   			(at 2.54 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   			)
+   		)
+   		(property "Footprint" ""
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Description" "Voltage source, DC"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Pins" "1=+ 2=-"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Type" "DC"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(property "Sim.Device" "V"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(justify left)
+   				(hide yes)
+   			)
+   		)
+   		(property "ki_keywords" "simulation"
+   			(at 0 0 0)
+   			(effects
+   				(font
+   					(size 1.27 1.27)
+   				)
+   				(hide yes)
+   			)
+   		)
+   		(symbol "VDC_0_0"
+   			(polyline
+   				(pts
+   					(xy -1.27 0.254) (xy 1.27 0.254)
+   				)
+   				(stroke
+   					(width 0)
+   					(type default)
+   				)
+   				(fill
+   					(type none)
+   				)
+   			)
+   			(polyline
+   				(pts
+   					(xy -0.762 -0.254) (xy -1.27 -0.254)
+   				)
+   				(stroke
+   					(width 0)
+   					(type default)
+   				)
+   				(fill
+   					(type none)
+   				)
+   			)
+   			(polyline
+   				(pts
+   					(xy 0.254 -0.254) (xy -0.254 -0.254)
+   				)
+   				(stroke
+   					(width 0)
+   					(type default)
+   				)
+   				(fill
+   					(type none)
+   				)
+   			)
+   			(polyline
+   				(pts
+   					(xy 1.27 -0.254) (xy 0.762 -0.254)
+   				)
+   				(stroke
+   					(width 0)
+   					(type default)
+   				)
+   				(fill
+   					(type none)
+   				)
+   			)
+   			(text "+"
+   				(at 0 1.905 0)
+   				(effects
+   					(font
+   						(size 1.27 1.27)
+   					)
+   				)
+   			)
+   		)
+   		(symbol "VDC_0_1"
+   			(circle
+   				(center 0 0)
+   				(radius 2.54)
+   				(stroke
+   					(width 0.254)
+   					(type default)
+   				)
+   				(fill
+   					(type background)
+   				)
+   			)
+   		)
+   		(symbol "VDC_1_1"
+   			(pin passive line
+   				(at 0 5.08 270)
+   				(length 2.54)
+   				(name "~"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   				(number "1"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   			)
+   			(pin passive line
+   				(at 0 -5.08 90)
+   				(length 2.54)
+   				(name "~"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   				(number "2"
+   					(effects
+   						(font
+   							(size 1.27 1.27)
+   						)
+   					)
+   				)
+   			)
+   		)
+   		(embedded_fonts no)
+   	)
  )
   (symbol
     (lib_id "Connector:Raspberry_Pi_4")
     (at 55.88 127.0 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 8448a965-820d-4eed-a3e8-603a0068cef7)
+    (uuid 3a2e2bcb-a146-4f87-891f-a853644129b6)
     (property "Reference" "J3"
       (at 55.88 121.92 0)
       (effects (font (size 1.27 1.27)) )
@@ -1946,46 +2341,46 @@
       (at 55.88 127.0 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "32" (uuid 89efc089-5677-4d86-a748-09fb6af05260))
-    (pin "33" (uuid 4923a4ec-5e20-47ec-bd2a-61d4cf8443ab))
-    (pin "8" (uuid 5307aade-2292-4508-930c-080e278a2c85))
-    (pin "10" (uuid c50b2e1c-45c7-4c7f-b532-5b2b424951bb))
-    (pin "36" (uuid 666528c1-82ce-4909-8e19-4b91336613fe))
-    (pin "11" (uuid e48aa1ba-f89b-46af-817f-d9ac4c513038))
-    (pin "12" (uuid 486465a0-bf9d-4ec4-b40a-e51bb650a0d7))
-    (pin "35" (uuid aeb9cb4b-e64a-46c3-bf57-d975b34d4075))
-    (pin "38" (uuid 4d8678e9-6930-4b92-ae36-055a2cdb1604))
-    (pin "40" (uuid 3e911e4c-d470-4df4-9080-12c847d0a980))
-    (pin "15" (uuid 96d97f49-bd76-4896-abcd-93ad5f28ef4a))
-    (pin "16" (uuid e9b4dffd-4889-4b1b-9af6-2fcf33ebc35c))
-    (pin "18" (uuid 00c6b728-36d1-48eb-b1ae-a34aebc401bf))
-    (pin "22" (uuid 3953c929-1e75-492f-88e9-bc18120a8022))
-    (pin "37" (uuid 6057df18-e3a9-42c2-b7bc-3668c26a4b78))
-    (pin "13" (uuid f1769f98-d68a-45ea-b05e-8563330b2207))
-    (pin "14" (uuid 73d02527-f3b6-4db1-a6c9-247d7d03d308))
-    (pin "20" (uuid 429c875d-e9d6-45ed-898c-646c80261c8e))
-    (pin "25" (uuid d1dbebc0-6d2a-49b2-948b-be87f56b21e9))
-    (pin "30" (uuid e15498fb-81dc-4012-ab70-718229688516))
-    (pin "34" (uuid ff675044-dc2a-4037-9116-450d9e1b6993))
-    (pin "39" (uuid 2b113eab-9c58-4045-9da7-34731df23071))
-    (pin "6" (uuid 0e3a24b9-1cb3-461c-b0ad-68c2e778b387))
-    (pin "9" (uuid 8430ac2c-8cb3-4344-8c02-0cf624933d73))
-    (pin "2" (uuid cb16a1d4-fa33-444b-96a6-dd382662b8bc))
-    (pin "4" (uuid a3c4fb74-6bc3-4257-9e2c-bcafb56e4c15))
-    (pin "1" (uuid 48ee2c58-8fbe-4467-b7bd-76e0dfc7d4ce))
-    (pin "17" (uuid 10458b43-a9e6-40e0-98f4-e037c80841a0))
-    (pin "27" (uuid 1711d028-561c-4bb5-a6a1-57ddf1f577d0))
-    (pin "28" (uuid d48129cc-6aaa-4ec0-9051-b6a92f7d9458))
-    (pin "3" (uuid 67cbcb4f-510d-47c6-be89-0489bed004d7))
-    (pin "5" (uuid 3219704d-20c2-42aa-ac78-8cfe51f07f7a))
-    (pin "7" (uuid abf05600-f89e-487d-bb5a-75cfdb025d29))
-    (pin "29" (uuid 846667ea-1bb1-4ebb-9d33-6cc9d6296e03))
-    (pin "31" (uuid 303a8378-10c5-4062-bbec-1d496fc0e3fc))
-    (pin "26" (uuid e914d406-080c-43d2-ba8d-4b3acb3084d9))
-    (pin "24" (uuid e6c2bf9e-e015-4755-ad20-766d201a4fe2))
-    (pin "21" (uuid 3dea6a16-97f8-4f39-be91-7733efd1629e))
-    (pin "19" (uuid ce4081dc-02cf-49bf-9299-73bab45d7eb2))
-    (pin "23" (uuid 7eeefa73-d40c-4f7c-9fbc-18e26478b540))
+    (pin "32" (uuid 7d38f324-de76-47ab-8b15-c6e31238ce99))
+    (pin "33" (uuid 51627efd-3c96-470b-9c5c-deeb354bf2ed))
+    (pin "8" (uuid c0dc0e9a-f05d-46fe-82bd-7a108441efd4))
+    (pin "10" (uuid 80fd1ab6-13cd-464a-93c9-ddfe4535a9cd))
+    (pin "36" (uuid 0ea7b057-94a7-4983-b99d-04749db01b32))
+    (pin "11" (uuid 16102aa3-d0f0-4cd2-b275-61d3c044ed72))
+    (pin "12" (uuid 0f163689-2572-45a5-9cee-148d13e45783))
+    (pin "35" (uuid bf3673d1-ec71-4ced-a470-1183e6f4e33a))
+    (pin "38" (uuid d6291964-a881-4e8a-ae78-4f57dafdcced))
+    (pin "40" (uuid 9121561e-300a-47fa-9247-e3114754cce0))
+    (pin "15" (uuid 43d25aae-4b91-4dc9-b666-e327eeaa4482))
+    (pin "16" (uuid d463b859-1036-4a16-9990-a6408348c708))
+    (pin "18" (uuid 42406ad6-27b3-4db5-ae37-ec444b593c93))
+    (pin "22" (uuid 12e608a7-bdfd-4132-b4ef-4b2f9da622f1))
+    (pin "37" (uuid b5983197-f0e1-4b4b-8d61-c1080699b998))
+    (pin "13" (uuid 65823a28-e9d9-4c50-87bc-68e3ab5ef1af))
+    (pin "14" (uuid 46776ec0-a4b0-4094-b128-64d559ed4954))
+    (pin "20" (uuid 3af682b4-ed85-449a-a34e-b6391dd910c3))
+    (pin "25" (uuid 109aa7d0-bb3a-4f7e-b0ee-bf0233c3efbf))
+    (pin "30" (uuid e15bd8be-a1af-44be-a01d-ca5de1bd0ae2))
+    (pin "34" (uuid 88a2d7a0-ff7e-455f-99d5-117524845e4f))
+    (pin "39" (uuid eda63287-3ccf-42f4-9039-12e0ef5a0d47))
+    (pin "6" (uuid 7ca5b022-67dc-45e3-b55a-afa357e82205))
+    (pin "9" (uuid db168c47-c2df-4eeb-abe9-64374b04cd27))
+    (pin "2" (uuid 7846004b-8cbc-4176-8f0c-815c89e93c6c))
+    (pin "4" (uuid 74a97af2-27fb-4f2e-b503-1ad93189a46e))
+    (pin "1" (uuid ed26f9d8-2f1b-498f-ac88-3ab7ea40d670))
+    (pin "17" (uuid 35cb7d97-8ff1-4581-917a-62b7c95473ce))
+    (pin "27" (uuid dfe34bac-346b-4696-b14a-3d10e8829d77))
+    (pin "28" (uuid 56b304bd-f59f-426b-be77-1ce2872c3493))
+    (pin "3" (uuid a83648c4-eaa7-419f-b456-fa06ddbecc80))
+    (pin "5" (uuid a56272a2-6438-4665-8deb-be07fb7095dd))
+    (pin "7" (uuid 21750d87-6df9-4621-aee1-337fe08d2fd4))
+    (pin "29" (uuid 5525c1e7-a6e4-4893-8416-2637172e98e1))
+    (pin "31" (uuid 2d510f69-b2c3-472d-9bd6-5289eaef01e0))
+    (pin "26" (uuid ccc8b577-2955-4f80-9e8a-38cbcc82526d))
+    (pin "24" (uuid 0f7b959a-92d2-4cef-a58b-011a685bb199))
+    (pin "21" (uuid 1db995b8-549b-45ce-ab9e-5874faf630e5))
+    (pin "19" (uuid d479e0e4-3ecb-4447-8aba-f34ffb209685))
+    (pin "23" (uuid bdd3639b-52d5-4012-bf8f-002b5a6eed98))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -1995,71 +2390,71 @@
       )
     )
   )
-  (no_connect (at 22.86 104.14) (uuid f80a3df6-3936-4da9-9039-e6727d93879c))
-  (no_connect (at 22.86 106.68) (uuid 98e69c94-35a4-4a52-b56a-b907b2e619c9))
-  (no_connect (at 22.86 111.76) (uuid 0cfa0fe5-ea2a-4912-9e77-af0a8f5b7d68))
-  (no_connect (at 22.86 114.3) (uuid 204b0360-2eef-4915-a8e2-7ea24881e0e7))
-  (no_connect (at 22.86 119.38) (uuid d5ef6886-4659-462a-a216-d521651bbcab))
-  (no_connect (at 22.86 121.92) (uuid 93cb75a2-8e70-443f-a763-e4b28adfbfca))
-  (no_connect (at 22.86 124.46) (uuid 039dc3c9-f216-4e0b-8153-c8c442588de5))
+  (no_connect (at 22.86 104.14) (uuid 4c2de26b-9a6a-43d6-942d-7c7cb8fbae9b))
+  (no_connect (at 22.86 106.68) (uuid eb6113d5-c12e-4ffe-98ac-88f1f4e3ff32))
+  (no_connect (at 22.86 111.76) (uuid e913ed3a-f920-4bf0-b2e1-2beb4b343045))
+  (no_connect (at 22.86 114.3) (uuid 1cf11c86-b29d-4add-b309-b5e9cb0c929f))
+  (no_connect (at 22.86 119.38) (uuid 0043d883-fb5b-4fa3-bcd7-b707d802a170))
+  (no_connect (at 22.86 121.92) (uuid 1c1a0ffd-fc51-4ab3-ab78-70590f85eabc))
+  (no_connect (at 22.86 124.46) (uuid 5cdf73cb-128e-4a70-96c6-f49a26706b9e))
   (global_label "B_SHUTTER"
     (shape bidirectional)
     (at 22.86 127 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 6ff919ef-fb3c-42b7-94f4-927dc94b60a9)
+    (uuid 7f9acbcd-0e29-472f-add4-5619eefc4270)
   )
   (global_label "FOCUS"
     (shape bidirectional)
     (at 22.86 129.54 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid b47681a5-b518-498a-b4a8-7413445fbed5)
+    (uuid 25f6b87d-3e84-4664-bb46-e38742b126e4)
   )
   (global_label "SHUTTER"
     (shape bidirectional)
     (at 22.86 132.08 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e9fa59b0-5c40-4487-a6d8-bcf5c5d7a461)
+    (uuid d70ede10-5702-4581-8a40-75491cf403e5)
   )
-  (no_connect (at 22.86 137.16) (uuid 84feec81-2315-4ca7-af31-32dfe4f518f6))
-  (no_connect (at 22.86 139.7) (uuid 4c4d0898-0237-44cf-9af8-350525610ba9))
-  (no_connect (at 22.86 142.24) (uuid 36c19a08-877b-465c-98e1-504364ffe2e4))
-  (no_connect (at 22.86 144.78) (uuid c6df7c78-7578-4aa1-81fe-05bc9cdedbfd))
+  (no_connect (at 22.86 137.16) (uuid 8bdeb837-54d5-4444-90f3-7fb5c4d6cc87))
+  (no_connect (at 22.86 139.7) (uuid d3bd1b5d-f492-41a7-bfb4-1aff5d1f4825))
+  (no_connect (at 22.86 142.24) (uuid 57515f33-4447-4843-a4b9-1d38e20130bd))
+  (no_connect (at 22.86 144.78) (uuid 0ff1ef05-52cc-4e6e-80ae-8b83c1bf6c4d))
   (global_label "B_FOCUS"
     (shape bidirectional)
     (at 22.86 147.32 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 880cd594-1f54-40e7-9982-c04add4d4b30)
+    (uuid 657da21b-118f-4422-b688-70e7ec587449)
   )
-  (no_connect (at 22.86 149.86) (uuid 22c6725a-0a02-471a-865f-55a44edad862))
-  (no_connect (at 55.88 154.94) (uuid abfc38bc-c218-48c6-b04f-dd29da95fc27))
-  (no_connect (at 55.88 154.94) (uuid 56a0bfe4-6e76-4811-970f-01fe68e69dcd))
-  (no_connect (at 55.88 154.94) (uuid c86183a1-a3e1-4c2f-8d64-0c5553e3b929))
-  (no_connect (at 55.88 154.94) (uuid bbf1f0b5-2e56-41e3-b4ab-658b6c3404fc))
-  (no_connect (at 55.88 154.94) (uuid f5327334-b20a-40b3-ad61-cf8f2f961b05))
+  (no_connect (at 22.86 149.86) (uuid f5c2a63a-9756-4cd9-bf40-bc3c53d44624))
+  (no_connect (at 55.88 154.94) (uuid d0f34262-b447-462e-8a95-d4eb70cb00f9))
+  (no_connect (at 55.88 154.94) (uuid e1c953be-77ea-4dc7-99c9-0536fa62877e))
+  (no_connect (at 55.88 154.94) (uuid 5317d7e7-63d2-479b-865e-e6382d74f79b))
+  (no_connect (at 55.88 154.94) (uuid f4131d14-5f7c-4853-b2cc-201bd03b1252))
+  (no_connect (at 55.88 154.94) (uuid 971f6884-573d-4867-b5b9-f85672d4bcdd))
   (global_label "GND"
     (shape bidirectional)
     (at 55.88 154.94 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 75aa8f28-4e34-4f03-9b77-14c2ea6a8276)
+    (uuid 6e3fe394-b58b-48f2-aede-65e70058cfc6)
   )
-  (no_connect (at 55.88 154.94) (uuid 578c2229-84c9-4f43-8a3a-36a385e6dc76))
-  (no_connect (at 55.88 154.94) (uuid 416e7f54-46c3-49f6-befb-3adb9934f5ef))
-  (no_connect (at 88.9 104.14) (uuid 6ca61256-b4d4-475a-9097-47b2cae943f4))
-  (no_connect (at 88.9 104.14) (uuid 6745ff5b-e0de-46ed-889a-1cd0eccf270b))
-  (no_connect (at 88.9 106.68) (uuid 0e018d8d-54a9-41ad-9c48-38a216bb82e6))
-  (no_connect (at 88.9 106.68) (uuid b0d03508-76ac-45fc-9497-f6f62f7677af))
-  (no_connect (at 88.9 111.76) (uuid 496a05e1-c013-4598-b88a-65ffb5edd77b))
-  (no_connect (at 88.9 114.3) (uuid 7ef4677e-34cb-4149-a32d-a0da7138ea6e))
-  (no_connect (at 88.9 119.38) (uuid 68af84d2-1649-4104-aad6-ac7f22dc5949))
-  (no_connect (at 88.9 121.92) (uuid a7828c94-11c0-4107-8054-1146f35b141b))
-  (no_connect (at 88.9 127) (uuid 2e2913f8-84e5-4bc7-9c4d-d1dec4d965ea))
-  (no_connect (at 88.9 129.54) (uuid 77743a76-ec68-4d1b-9503-d12162ca92e2))
-  (no_connect (at 88.9 132.08) (uuid 70da7c0a-70ae-41be-82e2-343973b7216d))
-  (no_connect (at 88.9 137.16) (uuid 766ca7c9-07e9-4baa-8759-b8c70837b1e7))
-  (no_connect (at 88.9 139.7) (uuid 291248b3-2ba8-49a2-ad22-19996a4bd78b))
-  (no_connect (at 88.9 142.24) (uuid c0e70482-48e3-4930-8878-0bfb04e59078))
-  (no_connect (at 88.9 144.78) (uuid 79d7551a-e148-4eda-8d53-a84782ede52a))
-  (no_connect (at 88.9 147.32) (uuid f21d4f75-4b5b-4d7f-9eb5-c5e4d2c84956))
+  (no_connect (at 55.88 154.94) (uuid 5d8a6565-254d-4278-8b9b-d4c58891e514))
+  (no_connect (at 55.88 154.94) (uuid 8356da3d-181c-4d62-be64-dd194321e347))
+  (no_connect (at 88.9 104.14) (uuid 4928d756-28c0-4c1f-9040-6f5119d06413))
+  (no_connect (at 88.9 104.14) (uuid 7a5282e7-f2e4-4ea9-9ec2-303cecc4d47c))
+  (no_connect (at 88.9 106.68) (uuid ff56141d-f0a1-4e33-ad60-9369c1b0be48))
+  (no_connect (at 88.9 106.68) (uuid 5d4ac1ce-0c22-4724-9b9f-a58afce6f3fe))
+  (no_connect (at 88.9 111.76) (uuid c42f4d08-ab5b-48d4-93a0-cc7306b9b685))
+  (no_connect (at 88.9 114.3) (uuid 96a8639c-df65-424a-94e2-654a0e663c72))
+  (no_connect (at 88.9 119.38) (uuid 41c80aba-ef29-4055-8d94-7e5cb6b03260))
+  (no_connect (at 88.9 121.92) (uuid 7959a919-5b81-482e-a040-caa8c3ba75aa))
+  (no_connect (at 88.9 127) (uuid dd827235-347d-4117-9cb9-c1df6f9364c1))
+  (no_connect (at 88.9 129.54) (uuid 54a10e1c-45ae-41ad-b6ca-2765bf9190b1))
+  (no_connect (at 88.9 132.08) (uuid aa643af8-da70-4975-bb00-c201bb963ea5))
+  (no_connect (at 88.9 137.16) (uuid 805d85d8-6f11-45f9-9757-927fd8a9a024))
+  (no_connect (at 88.9 139.7) (uuid 00e228ab-38dc-4b02-99fb-5d6e59d13c99))
+  (no_connect (at 88.9 142.24) (uuid fe107101-5a5c-4021-94bf-d6051f5d27e8))
+  (no_connect (at 88.9 144.78) (uuid d7695530-ebbf-4b9c-8754-959d1845370e))
+  (no_connect (at 88.9 147.32) (uuid 2c37257e-6dde-4c19-930d-94ff47136341))
   (symbol
     (lib_id "Device:R")
     (at 139.7 35.56 0)
@@ -2068,7 +2463,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 8cba3973-7231-4182-8b2a-02d0166b94c9)
+    (uuid 0d49fa6f-3382-44d8-9d93-8a3c5536e14d)
     (property "Reference" "R1"
       (at 139.7 30.480000000000004 0)
       (effects (font (size 1.27 1.27)) )
@@ -2085,8 +2480,8 @@
       (at 139.7 35.56 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 96deac23-77be-466a-8a1a-4b7dc44cf487))
-    (pin "2" (uuid d4e94a96-289a-4dcf-bcb7-9bbf2eebc6fb))
+    (pin "1" (uuid 58800812-9231-43a7-9948-a7d70d7a9890))
+    (pin "2" (uuid 6da4e426-63cc-4139-a1b7-f9cf4556ab18))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2104,7 +2499,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 76b3aedf-118e-4a4b-9815-4c972eba0f79)
+    (uuid 7a7d6c49-2921-4f39-9a23-ece639490f13)
     (property "Reference" "U1"
       (at 170.18 30.480000000000004 0)
       (effects (font (size 1.27 1.27)) )
@@ -2121,12 +2516,28 @@
       (at 170.18 35.56 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid c6d18331-afae-465d-9906-20deb97d3074))
-    (pin "2" (uuid 4282a939-6c90-4f31-90d5-83de4f4f2f1e))
-    (pin "3" (uuid e405019f-4859-4d52-82cd-30058f88bb49))
-    (pin "4" (uuid 45463657-3176-4715-b8e8-9dc680ef7a2e))
-    (pin "5" (uuid d532fe61-9b8c-40f8-8464-15cc02663f30))
-    (pin "6" (uuid 33bdc558-6f83-4bd4-b22c-c65e49c892e1))
+    (property "Sim.Device" "SUBCKT"
+      (at 170.18 35.56 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=A 2=K 4=E 5=C"
+      (at 170.18 35.56 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Library" "${KIPRJMOD}/4n35.lib"
+      (at 170.18 35.56 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Name" "4N35"
+      (at 170.18 35.56 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid c9a38bc9-2b64-4515-aa82-41f368791596))
+    (pin "2" (uuid 47c42442-dd4f-4709-a0e7-ecf23821d0a7))
+    (pin "3" (uuid 078b43f0-c785-4659-97a7-53161f3e88c3))
+    (pin "4" (uuid fa65fb4c-ecda-460c-81c7-f19c624a67e8))
+    (pin "5" (uuid 2402f43a-a81e-47af-92f7-58f2f96a827e))
+    (pin "6" (uuid 5aa9c915-bb2d-4855-8d74-c28b54ed6b89))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2140,40 +2551,40 @@
     (shape bidirectional)
     (at 139.7 31.75 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 25329b09-5610-454e-a2e2-5b241b71ccd1)
+    (uuid 9f86fef7-176c-4140-b00e-d53c8bd6c1d4)
   )
   (global_label "R1_LED"
     (shape bidirectional)
     (at 139.7 39.37 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 2abd81b4-450e-401e-824e-a5ac8073350f)
+    (uuid 9ad0a4c1-d77c-4b8b-aead-204708550ce4)
   )
   (global_label "R1_LED"
     (shape bidirectional)
     (at 162.56 33.02 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid ed969c37-90f6-4774-bb47-b0d95a534fbe)
+    (uuid f791f367-25b9-4598-9aef-430f2ee01e92)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 162.56 38.1 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 8134e11a-668d-4189-a5cb-a14ecef292ff)
+    (uuid 67749328-30fd-43e8-8a20-f699a4a5721a)
   )
-  (no_connect (at 165.1 35.56) (uuid 1877fb1b-7ba6-4bb1-acf0-a728550637cf))
+  (no_connect (at 165.1 35.56) (uuid b5ae03a0-e74d-468c-86e1-4e7726aa6329))
   (global_label "J1_SLEEVE"
     (shape bidirectional)
     (at 177.8 38.1 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid deebab5c-53b9-48e5-8541-f576efa47c5d)
+    (uuid 9f02766d-afab-4a09-9f0a-6d6bcc4c2dad)
   )
   (global_label "J1_RING"
     (shape bidirectional)
     (at 177.8 35.56 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid c7a7ea17-602c-4f0b-a1ad-10eddef4619c)
+    (uuid 6ef72050-2e14-43be-9d1a-ecb343df5971)
   )
-  (no_connect (at 177.8 33.02) (uuid 64f899d9-4225-4a91-8b3f-41454736639f))
+  (no_connect (at 177.8 33.02) (uuid 8f2b1862-27dc-4a68-bd68-88e44667339f))
   (symbol
     (lib_id "Device:R")
     (at 139.7 60.96 0)
@@ -2182,7 +2593,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid bba9afac-74aa-41bd-b8e6-f64f246b0f5f)
+    (uuid 0b95b66d-347e-4b71-ae95-a2abed6fba34)
     (property "Reference" "R2"
       (at 139.7 55.88 0)
       (effects (font (size 1.27 1.27)) )
@@ -2199,8 +2610,8 @@
       (at 139.7 60.96 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 93108ad6-a5d8-4a25-bfdc-38a7f7bd6852))
-    (pin "2" (uuid d031a1d5-a885-498d-9658-8140cde34d63))
+    (pin "1" (uuid 3792b96c-ec18-499c-ac34-85c8b87a3b02))
+    (pin "2" (uuid d39a7ad5-94f2-4d90-a8aa-b89cfc68338c))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2218,7 +2629,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid a09318c9-ff35-43f6-aa47-1819f7a627ee)
+    (uuid 65c0239b-5b20-4b11-8289-d054ff39fc44)
     (property "Reference" "U2"
       (at 170.18 55.88 0)
       (effects (font (size 1.27 1.27)) )
@@ -2235,12 +2646,28 @@
       (at 170.18 60.96 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 6b01ce52-3653-4565-847c-eca8354495f8))
-    (pin "2" (uuid c9505e6d-b6ab-4855-9cc7-4204d5f30913))
-    (pin "3" (uuid f4db3355-8a00-475a-8616-7c633c87bf7f))
-    (pin "4" (uuid e7bd2b56-1aee-4c8b-8ebd-102d12cbc7ff))
-    (pin "5" (uuid 883cfc8c-3d63-4103-9b6d-db780badf9d9))
-    (pin "6" (uuid b05e6e7a-a36b-43c9-b8b3-18192f2c4193))
+    (property "Sim.Device" "SUBCKT"
+      (at 170.18 60.96 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=A 2=K 4=E 5=C"
+      (at 170.18 60.96 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Library" "${KIPRJMOD}/4n35.lib"
+      (at 170.18 60.96 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Name" "4N35"
+      (at 170.18 60.96 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 2535a4c8-42c9-440c-b3ec-9a0d01c090c7))
+    (pin "2" (uuid 49fde87c-10be-4552-b708-3c4e75ec62c9))
+    (pin "3" (uuid 264f681c-9297-45ca-84c8-e3bee0da42fe))
+    (pin "4" (uuid c667cea3-f1e2-4ca5-874d-2843e97d72a4))
+    (pin "5" (uuid 44a87e2c-c26c-4ff9-bc40-85e7677a81b5))
+    (pin "6" (uuid 08f9a91c-1f55-4d9f-be6e-dc240864525f))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2254,40 +2681,40 @@
     (shape bidirectional)
     (at 139.7 57.15 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 27309ab9-b020-4431-b597-b45d180f287d)
+    (uuid da4a890a-119d-4d55-ba01-2dd39aad8bdf)
   )
   (global_label "R2_LED"
     (shape bidirectional)
     (at 139.7 64.77 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 655a08f4-8337-4a14-9d27-2787e1af133d)
+    (uuid 0ec53a93-dda3-47df-b507-4ce7b44b14b3)
   )
   (global_label "R2_LED"
     (shape bidirectional)
     (at 162.56 58.42 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 0a1dc2cb-06fc-4ad2-a0b7-6f4a132f24d4)
+    (uuid bf446bdc-06fd-484f-af00-89a8f0f0c5dd)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 162.56 63.5 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e16c28c2-ff99-4232-8517-7c050b47a347)
+    (uuid e8b0bf33-5292-4e31-8fcf-2188b40dcbc4)
   )
-  (no_connect (at 165.1 60.96) (uuid 8dbe8290-76f4-44d8-8337-1ae28a83676c))
+  (no_connect (at 165.1 60.96) (uuid 1bd74b01-ea79-4676-a6b9-6a19bb43671d))
   (global_label "J1_SLEEVE"
     (shape bidirectional)
     (at 177.8 63.5 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e48ef8c3-64da-4fe0-a884-0dfc6249fb6c)
+    (uuid 9aafcd2b-ae85-4f69-80fc-8ba95a639d1a)
   )
   (global_label "J1_TIP"
     (shape bidirectional)
     (at 177.8 60.96 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e2a1adc2-7628-46f4-a0d4-807b78babebe)
+    (uuid 1b8c7868-7fc5-4465-a523-f3e6fe3caed9)
   )
-  (no_connect (at 177.8 58.42) (uuid 301c61d1-c519-4ba3-944c-4b77aa55a692))
+  (no_connect (at 177.8 58.42) (uuid a5437edd-9d35-47a3-9edf-616a75b71571))
   (symbol
     (lib_id "Device:R")
     (at 139.7 86.36 0)
@@ -2296,7 +2723,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid fc1e7226-d4b4-4b70-8df0-ae29bd8b2d7c)
+    (uuid 10a9293a-40db-40f1-87cc-9df8b43c5298)
     (property "Reference" "R3"
       (at 139.7 81.28 0)
       (effects (font (size 1.27 1.27)) )
@@ -2313,8 +2740,8 @@
       (at 139.7 86.36 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 0cda9510-0051-43c4-b835-28d845b6aaba))
-    (pin "2" (uuid 029000d5-39ba-4411-81eb-43559638cd65))
+    (pin "1" (uuid 45542149-acee-4608-88d2-15eae5f02510))
+    (pin "2" (uuid 9618fc54-da07-4162-a0ec-0aa044c50523))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2332,7 +2759,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 47cfe3df-4c34-4f2a-a3aa-df5c43c4b17c)
+    (uuid 36929daf-76b3-4fd2-84df-fb868c982a0f)
     (property "Reference" "U3"
       (at 170.18 81.28 0)
       (effects (font (size 1.27 1.27)) )
@@ -2349,12 +2776,28 @@
       (at 170.18 86.36 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 26365034-b48b-45c3-a40e-8b3e0c2a6896))
-    (pin "2" (uuid 31f32fc6-1315-4de5-ba35-2b9cbf671b06))
-    (pin "3" (uuid 74cad78b-6aa9-4d87-8df2-ff8793837909))
-    (pin "4" (uuid 47f1ca0c-30dd-402d-a56b-138e919a8533))
-    (pin "5" (uuid 7df32381-2091-409b-be0a-bda56fa7cb6c))
-    (pin "6" (uuid 7b42a287-6d8a-46da-989d-c3d34ee05e5a))
+    (property "Sim.Device" "SUBCKT"
+      (at 170.18 86.36 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=A 2=K 4=E 5=C"
+      (at 170.18 86.36 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Library" "${KIPRJMOD}/4n35.lib"
+      (at 170.18 86.36 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Name" "4N35"
+      (at 170.18 86.36 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid c71bead8-1ea2-42bf-990d-f8b73b8200f3))
+    (pin "2" (uuid f4c2e783-bc01-43ab-ba46-6542c6aa1d36))
+    (pin "3" (uuid 57c325ff-8652-4902-8eab-e2c83705c9be))
+    (pin "4" (uuid 3d26fc5d-81e4-4fb1-9eaf-662e6a0d83e1))
+    (pin "5" (uuid 19e056d1-f633-453f-b298-12ceae6a084d))
+    (pin "6" (uuid 69c52b50-f0b5-4e21-9d0d-79d30181331c))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2368,40 +2811,40 @@
     (shape bidirectional)
     (at 139.7 82.55 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 3a62399a-6f84-41a6-9863-1550575ac5da)
+    (uuid b8bc1cb2-d8ab-402a-a0ea-2efa5665973c)
   )
   (global_label "R3_LED"
     (shape bidirectional)
     (at 139.7 90.17 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 300d936a-c638-41e6-a39b-307af00ea33e)
+    (uuid b27a672a-d394-45f2-85a1-2fe9b2154f68)
   )
   (global_label "R3_LED"
     (shape bidirectional)
     (at 162.56 83.82 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 1a305c13-fc5f-4de4-85ec-cfcbcd3f2156)
+    (uuid ee951491-c6cc-41ae-9f1d-5c4303955c7a)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 162.56 88.9 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid aea82287-c26a-454c-a3d0-d31bd8105736)
+    (uuid 06b5c37b-b767-4636-9c23-ce9da0429924)
   )
-  (no_connect (at 165.1 86.36) (uuid 227b1323-b2b0-458c-8e96-fa93144800e4))
+  (no_connect (at 165.1 86.36) (uuid 0457418a-1bad-4784-bc97-99aa42fbfafb))
   (global_label "J2_SLEEVE"
     (shape bidirectional)
     (at 177.8 88.9 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 76ecf544-a10b-489b-a125-cbaca5b74477)
+    (uuid 2c2d1131-ed11-4e9f-a986-ea6efd7d269c)
   )
   (global_label "J2_RING"
     (shape bidirectional)
     (at 177.8 86.36 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid d52bbfe4-af86-4dd9-a7d5-4b4fff7bf8a0)
+    (uuid 1b5a3fa0-37c9-488e-933a-d9b0f594325c)
   )
-  (no_connect (at 177.8 83.82) (uuid 52428259-63be-494b-8321-dd190cbc0041))
+  (no_connect (at 177.8 83.82) (uuid 88ea1407-de6a-4a4d-8bed-96c41d5980af))
   (symbol
     (lib_id "Device:R")
     (at 139.7 111.76 0)
@@ -2410,7 +2853,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 45de2695-b5da-4c38-aecd-6c8684eda0e6)
+    (uuid 56785cb3-1795-4a5e-a988-08f0844d2e00)
     (property "Reference" "R4"
       (at 139.7 106.68 0)
       (effects (font (size 1.27 1.27)) )
@@ -2427,8 +2870,8 @@
       (at 139.7 111.76 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid e1bb591f-5c1c-40d7-b6ee-c00753b878df))
-    (pin "2" (uuid a98d864d-98b9-4567-a694-3f2a5777f4c5))
+    (pin "1" (uuid 85e07838-1967-48ce-a069-8f80871c1e6b))
+    (pin "2" (uuid 94d06abf-d1e9-4102-be21-7ea6ca51fdd5))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2446,7 +2889,7 @@
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 56de1703-aafe-4a58-a7d2-83a01620ab62)
+    (uuid d2df9c94-3a36-4549-874a-83fe0da9122e)
     (property "Reference" "U4"
       (at 170.18 106.68 0)
       (effects (font (size 1.27 1.27)) )
@@ -2463,12 +2906,28 @@
       (at 170.18 111.76 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 6898bb21-7573-4598-971d-d249578fa90a))
-    (pin "2" (uuid 9f1be632-dac1-43e9-a5b7-dbaadfe4ca1b))
-    (pin "3" (uuid 5270cf0c-f408-4654-82dd-866a5592a407))
-    (pin "4" (uuid 027e94e3-0071-4873-9e01-15c9c1d37588))
-    (pin "5" (uuid ef63d639-7264-4fa4-9dbe-61734a40779a))
-    (pin "6" (uuid 7acd6fc2-7fe6-4652-9cd8-e9e9a5cf7541))
+    (property "Sim.Device" "SUBCKT"
+      (at 170.18 111.76 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=A 2=K 4=E 5=C"
+      (at 170.18 111.76 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Library" "${KIPRJMOD}/4n35.lib"
+      (at 170.18 111.76 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Name" "4N35"
+      (at 170.18 111.76 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 9693dc19-1ec6-4949-a15b-533701c84e35))
+    (pin "2" (uuid a1106d5d-7136-441b-9573-fcb1c40f61e2))
+    (pin "3" (uuid cec83b68-7d84-4c66-afc6-1556c5b89340))
+    (pin "4" (uuid 4d4647f6-2b8a-4594-93a0-a56d705135b8))
+    (pin "5" (uuid 5e85f89c-7fd4-4e0d-9a74-8e48ca040a04))
+    (pin "6" (uuid 552a4962-ff7b-4508-9cb0-0cdd91e41b39))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2482,49 +2941,49 @@
     (shape bidirectional)
     (at 139.7 107.95 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid cd22eef0-9025-4996-9059-964e3f2cc412)
+    (uuid 2f216b67-17d0-46f2-b5ce-0bacf9ddd034)
   )
   (global_label "R4_LED"
     (shape bidirectional)
     (at 139.7 115.57 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 07e1422e-8c6b-4543-a347-74b3c6e43b8c)
+    (uuid 77c62b09-cda3-49c8-879a-b16e54287538)
   )
   (global_label "R4_LED"
     (shape bidirectional)
     (at 162.56 109.22 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e33c243b-7d5f-43fd-8f86-876e349c3a07)
+    (uuid 771d2868-57da-4164-9c36-ab05a76a9221)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 162.56 114.3 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 8bbfb2dd-2a4e-477c-8be6-c5d6a1dc2208)
+    (uuid f4df9f26-03aa-4459-a177-97aa2c85d2d2)
   )
-  (no_connect (at 165.1 111.76) (uuid 430bbbb5-be60-41e4-92ec-2e088a06960f))
+  (no_connect (at 165.1 111.76) (uuid f088e6d6-5fd7-4c97-8483-3598d9e22574))
   (global_label "J2_SLEEVE"
     (shape bidirectional)
     (at 177.8 114.3 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 5fc66f3c-2c8c-4caa-8ffe-c49955763809)
+    (uuid 0debeed4-9f26-4324-8bdc-1b55bb15a8dc)
   )
   (global_label "J2_TIP"
     (shape bidirectional)
     (at 177.8 111.76 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid f3d16290-a7e1-4e19-a32a-d014235b43cf)
+    (uuid 2ff935af-61c0-4032-8556-dd0d3ea33300)
   )
-  (no_connect (at 177.8 109.22) (uuid be88332a-36cc-40f1-8f02-f408dc0b92c2))
+  (no_connect (at 177.8 109.22) (uuid 04078896-8a00-4d42-966e-2671b7d08891))
   (symbol
     (lib_id "Connector_Audio:AudioJack3")
     (at 228.6 48.26 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 2c3ac9f6-a3af-4135-b5a3-24392e34828c)
+    (uuid e6830243-04ef-495a-8938-41e75dc58a72)
     (property "Reference" "J1"
       (at 228.6 43.18 0)
       (effects (font (size 1.27 1.27)) )
@@ -2541,9 +3000,9 @@
       (at 228.6 48.26 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "T" (uuid ca49d3fd-7558-44e3-9b94-89a0b846d03a))
-    (pin "R" (uuid 4f6945ee-0dec-45a2-911f-3de71fbec331))
-    (pin "S" (uuid 87d11ff1-7e8d-4785-a789-ad98b50f5d92))
+    (pin "T" (uuid 64753d82-678c-4ddf-841d-4357fab480a1))
+    (pin "R" (uuid 764ce872-3efd-4846-a8e1-019ccc22dd06))
+    (pin "S" (uuid 130b3921-a495-405c-b174-22fa215dcc9d))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2557,29 +3016,29 @@
     (shape bidirectional)
     (at 233.68 50.8 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid d76d37a9-ae86-4f10-9943-7ef50f483757)
+    (uuid ad8f2d79-64d1-4db1-a302-b55b4df34e91)
   )
   (global_label "J1_RING"
     (shape bidirectional)
     (at 233.68 48.26 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 07a13d21-b480-4c8c-a1c3-cb0e6497bc22)
+    (uuid 2534f092-a395-4d3c-86e7-1c245c4f1681)
   )
   (global_label "J1_SLEEVE"
     (shape bidirectional)
     (at 233.68 45.72 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 43119cc8-8a10-46d9-8ba2-40f6837ac4c9)
+    (uuid 4c2432e2-e5fc-4ff7-89b9-acd1a804e711)
   )
   (symbol
     (lib_id "Connector_Audio:AudioJack3")
     (at 228.6 99.06 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 5a56e4a5-35fc-4fc0-9008-c51208a8680f)
+    (uuid 92e8edaa-19c6-4f15-9b64-0168fce46d3f)
     (property "Reference" "J2"
       (at 228.6 93.98 0)
       (effects (font (size 1.27 1.27)) )
@@ -2596,9 +3055,9 @@
       (at 228.6 99.06 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "T" (uuid f99350f8-026c-4039-8544-a7fa66f218ee))
-    (pin "R" (uuid 3922d635-4b4b-4708-9e9e-8acfbbd607eb))
-    (pin "S" (uuid 8d94da8f-e814-4022-a0f2-25fad9a8c1f5))
+    (pin "T" (uuid 8f5d5b84-14e1-4466-b9cf-90ece34b347c))
+    (pin "R" (uuid a6c7c91c-077e-4b53-95b9-2fce67b729f8))
+    (pin "S" (uuid 67b0cb66-74f2-4a61-966d-d16096cc0930))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2612,29 +3071,29 @@
     (shape bidirectional)
     (at 233.68 101.6 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e56c98c3-90cc-432f-9b4b-9857fadf0bd9)
+    (uuid 74cedb62-4f08-48d5-b232-f3ccd4c59ec4)
   )
   (global_label "J2_RING"
     (shape bidirectional)
     (at 233.68 99.06 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 35fd3f05-a317-4353-875a-b338e14cfbe6)
+    (uuid 591ca3db-3dc5-4970-92b9-f3613379368c)
   )
   (global_label "J2_SLEEVE"
     (shape bidirectional)
     (at 233.68 96.52 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 3ffa95de-4c30-48b4-803d-cdf12de788e6)
+    (uuid 7cc10248-6120-4127-9c12-73843f89b284)
   )
   (symbol
     (lib_id "Jumper:SolderJumper_3_Bridged12")
     (at 105.0 86.36 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 35da6a5a-9f9c-459b-9932-c9e94a6ab9f6)
+    (uuid 7b24cca2-bfad-47f9-83f1-d7aa512f8978)
     (property "Reference" "JP1"
       (at 105.0 81.28 0)
       (effects (font (size 1.27 1.27)) )
@@ -2651,9 +3110,9 @@
       (at 105.0 86.36 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 4c9e7bb3-02c1-421c-a990-df06db2ce558))
-    (pin "2" (uuid ca768d30-eb95-40ff-b9cd-a431e26751d7))
-    (pin "3" (uuid 0010a0c9-c8c2-46ac-b78b-e06a0636cc24))
+    (pin "1" (uuid bbd86415-12a9-4026-8915-21355c8c3c4f))
+    (pin "2" (uuid e82721f2-5bf0-424d-983e-232a60b8efcb))
+    (pin "3" (uuid 3c85ab52-fa4a-4137-a54a-87bbad6c03ab))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2667,29 +3126,29 @@
     (shape bidirectional)
     (at 99.92 86.36 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid fc63864c-1e6c-4a9f-82b1-99480ac806eb)
+    (uuid 4a565090-0ae3-466d-b4eb-807e4bcbf0e3)
   )
   (global_label "J2_FOCUS"
     (shape bidirectional)
     (at 105 82.55 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 8d7b0c27-c473-4171-b41b-7c30ad38604e)
+    (uuid fb170b4a-7ed0-4c6d-a220-84b5299dd57d)
   )
   (global_label "B_FOCUS"
     (shape bidirectional)
     (at 110.08 86.36 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 2f5f99f6-48ba-4e0b-ad2a-132aec5a2b43)
+    (uuid 62f46b70-909d-4f52-8c78-6e935601901c)
   )
   (symbol
     (lib_id "Jumper:SolderJumper_3_Bridged12")
     (at 105.0 111.76 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp no)
-    (uuid 0aed53f4-91e1-48c2-83ba-d190e5deaa82)
+    (uuid cfb8cc59-7af3-4ebc-95ef-4ea9f222d6a2)
     (property "Reference" "JP2"
       (at 105.0 106.68 0)
       (effects (font (size 1.27 1.27)) )
@@ -2706,9 +3165,9 @@
       (at 105.0 111.76 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 8f299ed4-fb54-42fa-aa2d-9824309de6df))
-    (pin "2" (uuid 5f8a8281-ae00-4ba6-b84c-8a006d2096c7))
-    (pin "3" (uuid 3907667f-859b-49d2-af4a-03716e5303fa))
+    (pin "1" (uuid 10356033-f284-4eeb-9e3e-157173cbd1f7))
+    (pin "2" (uuid 6d34f7c6-eca0-4ee1-a856-b0056b8543df))
+    (pin "3" (uuid 92782a1a-e952-41bc-851c-191b6ef0dd2f))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2722,29 +3181,29 @@
     (shape bidirectional)
     (at 99.92 111.76 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 2e036eef-6992-490c-b0f9-bfdd223b6b5b)
+    (uuid 09ed2be0-75be-486f-9ac8-0e50489b97bf)
   )
   (global_label "J2_SHUTTER"
     (shape bidirectional)
     (at 105 107.95 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 7ab735b2-df78-49e9-a8d3-ff84f521cca6)
+    (uuid 93bd6f8a-c8ea-4366-8eef-402970171f12)
   )
   (global_label "B_SHUTTER"
     (shape bidirectional)
     (at 110.08 111.76 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 494018b0-77e1-4cc1-9742-b62720d1412b)
+    (uuid 73e44b5a-2ffc-4ed3-a55d-65f0e12724ac)
   )
   (symbol
     (lib_id "Device:R")
     (at 200.66 142.24 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid c69be6fc-d44b-46bd-b589-8c28c3bfcc95)
+    (uuid 818e9549-d89d-4e64-8054-ddba4170991e)
     (property "Reference" "R5"
       (at 200.66 137.16 0)
       (effects (font (size 1.27 1.27)) )
@@ -2761,8 +3220,8 @@
       (at 200.66 142.24 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 37948f62-20ee-4c62-83ec-1f43112a36aa))
-    (pin "2" (uuid 9a83d92a-2833-42f9-aa92-da71c7e4f078))
+    (pin "1" (uuid efcd008b-bd78-4d25-b705-028729180023))
+    (pin "2" (uuid 07781ec3-1df0-485b-9338-3976c7241002))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2776,11 +3235,11 @@
     (lib_id "Device:LED")
     (at 220.98 142.24 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid f8c43ebd-da25-40e2-9904-d1a98cf694f6)
+    (uuid 6885010e-8947-4633-9815-695158fc48aa)
     (property "Reference" "D1"
       (at 220.98 137.16 0)
       (effects (font (size 1.27 1.27)) )
@@ -2797,8 +3256,8 @@
       (at 220.98 142.24 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 34399679-b7a1-469f-ac6b-cd64b19075be))
-    (pin "2" (uuid f4f1ddde-fad1-4652-b209-a93d9e66f457))
+    (pin "1" (uuid 27f888fd-90e7-47c9-84c3-9030cf6d9163))
+    (pin "2" (uuid fe44bf33-cb40-4a56-8e40-4699d7231ca2))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2812,35 +3271,35 @@
     (shape bidirectional)
     (at 200.66 138.43 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid ff7820da-ad9c-4b66-a99c-36945e36ce59)
+    (uuid 4e943d08-37d6-4b7c-9aac-7ff8982e9a47)
   )
   (global_label "D1_A"
     (shape bidirectional)
     (at 200.66 146.05 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid e725946b-8880-4e1f-a17b-31ee00429488)
+    (uuid 9f8bff55-bac6-44d2-a3a3-e4e24c52ac9f)
   )
   (global_label "D1_A"
     (shape bidirectional)
     (at 224.79 142.24 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 99f5bab5-26f9-49d8-adcc-76f3413338b9)
+    (uuid 2b442cbd-3654-4fde-8095-1a89701326f0)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 217.17 142.24 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid f5c93748-f04e-46e6-b991-5e89751df54d)
+    (uuid 469bf6c2-00e0-46fd-ac28-9b31a0e9c6ee)
   )
   (symbol
     (lib_id "Device:R")
     (at 200.66 157.48 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid dac37514-ce33-42b3-b938-566cc53cc9d6)
+    (uuid 48a008f2-072a-4ad8-87a7-51a8d898b89a)
     (property "Reference" "R6"
       (at 200.66 152.39999999999998 0)
       (effects (font (size 1.27 1.27)) )
@@ -2857,8 +3316,8 @@
       (at 200.66 157.48 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 3dbf4b21-f282-411b-a81e-a1763e30478b))
-    (pin "2" (uuid b5a16428-ca32-4541-a6aa-15564ae31001))
+    (pin "1" (uuid 60641e22-a81f-403c-b00b-2d7cbe4edb56))
+    (pin "2" (uuid ea3f37aa-10ef-4b9b-9dbb-4877763edfa1))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2872,11 +3331,11 @@
     (lib_id "Device:LED")
     (at 220.98 157.48 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid 10f8a925-9b62-49d1-a45e-b3cddbb1db38)
+    (uuid 65000e95-f577-4ec6-8ba3-258a3bff3e93)
     (property "Reference" "D2"
       (at 220.98 152.39999999999998 0)
       (effects (font (size 1.27 1.27)) )
@@ -2893,8 +3352,8 @@
       (at 220.98 157.48 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid 126ea56d-3620-4bd8-9d4e-a1750bafc89e))
-    (pin "2" (uuid 1776bfa3-cdd8-4cd2-99e7-8a08b6835699))
+    (pin "1" (uuid 85b8965d-48a4-4922-8c73-76d9d5dfbf33))
+    (pin "2" (uuid e3becaed-4b14-4a82-9922-016249d34edf))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2908,35 +3367,35 @@
     (shape bidirectional)
     (at 200.66 153.67 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 75dff705-6e59-4858-bcc3-2d6ed0cc1d9a)
+    (uuid 516d2204-e6db-4fd2-b476-bbe81fcce2d9)
   )
   (global_label "D2_A"
     (shape bidirectional)
     (at 200.66 161.29 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid c7e7c104-468a-4af0-9b77-79b706eae399)
+    (uuid 35977a76-94a5-4b64-8eab-be77aace129d)
   )
   (global_label "D2_A"
     (shape bidirectional)
     (at 224.79 157.48 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 0ca6ee67-d72f-469b-b82c-b0fac50b098b)
+    (uuid cd95182d-593d-4d16-bb85-4cc0e94d2aa3)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 217.17 157.48 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 61a41ff6-a81d-4ec0-96c0-bbb99339ff3d)
+    (uuid dc291848-bbed-452d-b999-0489700ae143)
   )
   (symbol
     (lib_id "Device:R")
     (at 200.66 172.72 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid 3b411c0e-895e-4740-a7e7-bb4dcc8a3e7e)
+    (uuid 80236727-2497-475e-954d-40e1cf37dc4a)
     (property "Reference" "R7"
       (at 200.66 167.64 0)
       (effects (font (size 1.27 1.27)) )
@@ -2953,8 +3412,8 @@
       (at 200.66 172.72 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid e5473b20-d45b-4d77-995d-f19e5824f40a))
-    (pin "2" (uuid df62288a-6261-4003-b646-44cdf835a1ff))
+    (pin "1" (uuid 4bec1ac2-1d8c-4386-ab6b-8e8d70907c12))
+    (pin "2" (uuid 5c339b62-c6e5-4d09-b6f8-cd24ae10587a))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -2968,11 +3427,11 @@
     (lib_id "Device:LED")
     (at 220.98 172.72 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid 2755ea75-190c-48da-80b2-7b3a4dde6397)
+    (uuid 66fe3091-bf3d-4191-a6ab-e74ea288e3d8)
     (property "Reference" "D3"
       (at 220.98 167.64 0)
       (effects (font (size 1.27 1.27)) )
@@ -2989,8 +3448,8 @@
       (at 220.98 172.72 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid e7979af5-092a-44e0-b8c6-12fd87285a3c))
-    (pin "2" (uuid f49052fc-20a7-4415-965f-9f64e2846c76))
+    (pin "1" (uuid 337ce8e3-091d-4443-981b-673881ae2bfd))
+    (pin "2" (uuid 571a1eba-252a-4a60-8621-50c6359b26b8))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -3004,35 +3463,35 @@
     (shape bidirectional)
     (at 200.66 168.91 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid f707afb0-923a-4977-8b12-5b3bdddb242d)
+    (uuid bc201e37-4314-4e5d-b4e1-87d71a819100)
   )
   (global_label "D3_A"
     (shape bidirectional)
     (at 200.66 176.53 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 9239c425-0ff3-4aa3-a690-d08e77f2e377)
+    (uuid e1183ad4-e2ff-4712-b73e-8edd2ce8fc95)
   )
   (global_label "D3_A"
     (shape bidirectional)
     (at 224.79 172.72 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 2560d621-5a00-48c6-b215-c5c279e1168f)
+    (uuid 8bd3efa7-6d4f-4b17-8aca-df91de7ecd88)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 217.17 172.72 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 8553e34d-8c60-4fce-934d-a21ab8c2f303)
+    (uuid dfdc7658-a831-4c77-8bf3-e6adceb68664)
   )
   (symbol
     (lib_id "Device:R")
     (at 200.66 187.96 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid 61a93d00-137a-4d8f-857f-e6de5eefaa17)
+    (uuid b1ac9f96-0081-4ebb-a77a-15ecea84aeb5)
     (property "Reference" "R8"
       (at 200.66 182.88 0)
       (effects (font (size 1.27 1.27)) )
@@ -3049,8 +3508,8 @@
       (at 200.66 187.96 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid c778b660-148a-4916-9bb7-c0d107ca222c))
-    (pin "2" (uuid 6e9901c5-805f-4743-b369-5d336269f62c))
+    (pin "1" (uuid 57a418dd-0b8e-4191-9821-99436dd01cba))
+    (pin "2" (uuid ef53f8ef-731a-4163-bd2a-f28ac4046ac0))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -3064,11 +3523,11 @@
     (lib_id "Device:LED")
     (at 220.98 187.96 0)
     (unit 1)
-    (exclude_from_sim no)
+    (exclude_from_sim yes)
     (in_bom yes)
     (on_board yes)
     (dnp yes)
-    (uuid 035a2111-cdae-4edf-bea1-9053dfae93cc)
+    (uuid 6ea2a150-21a5-4d65-b6de-73a01eaf2a7f)
     (property "Reference" "D4"
       (at 220.98 182.88 0)
       (effects (font (size 1.27 1.27)) )
@@ -3085,8 +3544,8 @@
       (at 220.98 187.96 0)
       (effects (font (size 1.27 1.27)) (hide yes))
     )
-    (pin "1" (uuid bb19809a-e9a8-4137-9080-4a77436b2f02))
-    (pin "2" (uuid 5ceeff4c-0d0c-449f-9188-b452f61d8d44))
+    (pin "1" (uuid 8d6351d1-3b46-473b-be3d-c06b999ee0af))
+    (pin "2" (uuid 31dacf7b-9e9c-4b22-8d9d-17b9eb0978d5))
     (instances
       (project "gpio_trigger"
         (path "/60b82a67-605d-4edc-a527-425f55d0316b"
@@ -3100,24 +3559,632 @@
     (shape bidirectional)
     (at 200.66 184.15 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 5d17fbc4-aebd-4ce3-a7ae-9d3a44cbacb1)
+    (uuid 804ecbc1-1b28-46b7-9907-00d4e583c1ec)
   )
   (global_label "D4_A"
     (shape bidirectional)
     (at 200.66 191.77 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 1bb6ce60-32b6-40ee-b01b-da9baf6def85)
+    (uuid acc6b1ca-4ee8-4d7a-9cff-7c827a5f81ac)
   )
   (global_label "D4_A"
     (shape bidirectional)
     (at 224.79 187.96 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 695f0868-d631-4a66-99bd-edb530eb8fab)
+    (uuid edc91eaa-8b9f-422a-9f67-2ab5faa24f0e)
   )
   (global_label "GND"
     (shape bidirectional)
     (at 217.17 187.96 0)
     (effects (font (size 1.27 1.27)) (justify left))
-    (uuid 20791565-75b9-4dee-aab4-c0ea346b2ca2)
+    (uuid d777d418-05d1-46c6-b004-2e4841a34603)
+  )
+  (symbol
+    (lib_id "Simulation_SPICE:VPWL")
+    (at 40 220 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 2be2fa9a-c359-4b7a-8d7e-f4aa2cae3aca)
+    (property "Reference" "V1"
+      (at 40 214.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "0"
+      (at 40 225.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Device" "V"
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Type" "PWL"
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Params" "pwl=\"0 0 1m 0 1.1m 3.3 401m 3.3 401.1m 0\""
+      (at 40 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 2e5775ed-c08d-4a4c-aa50-ce178a28cf4b))
+    (pin "2" (uuid 0357c6fe-e8cf-454d-bd21-8e77ef2425dd))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "V1")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "FOCUS"
+    (shape bidirectional)
+    (at 40 214.92 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 48fa36e0-d24d-430e-8c6c-0950e850b946)
+  )
+  (global_label "GND"
+    (shape bidirectional)
+    (at 40 225.08 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 9e5355e9-2bd1-4d17-bc1e-84822e6e538c)
+  )
+  (symbol
+    (lib_id "Simulation_SPICE:VPWL")
+    (at 40 245 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 835bc54b-65a7-41e3-9aff-ca2f6b45f461)
+    (property "Reference" "V2"
+      (at 40 239.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "0"
+      (at 40 250.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Device" "V"
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Type" "PWL"
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Sim.Params" "pwl=\"0 0 101m 0 101.1m 3.3 401m 3.3 401.1m 0\""
+      (at 40 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid bd57c98a-17b7-4e17-895a-166bc1c34de7))
+    (pin "2" (uuid b8abb9a9-ca1b-4591-8222-6045d8f09155))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "V2")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "SHUTTER"
+    (shape bidirectional)
+    (at 40 239.92 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid cfc43d03-c897-4d6c-9413-5a9907031130)
+  )
+  (global_label "GND"
+    (shape bidirectional)
+    (at 40 250.08 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 7ba8a3d1-e17d-4a69-94d3-66cab0008947)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 70 220 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid d8eecceb-0aed-4577-872e-da277e8a9329)
+    (property "Reference" "RSIM1"
+      (at 70 214.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "0.01"
+      (at 70 225.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 70 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 70 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid d99addb8-e91b-41a6-828c-3d7e4b848e3e))
+    (pin "2" (uuid 796afcf8-02ef-4b68-a904-10daae58e236))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "RSIM1")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "FOCUS"
+    (shape bidirectional)
+    (at 70 216.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid b2a7d28b-cc8e-4e2d-bbad-1f93405e3de8)
+  )
+  (global_label "J2_FOCUS"
+    (shape bidirectional)
+    (at 70 223.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid aa36b672-e92e-482f-811e-ffb33e0b4b94)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 70 245 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 98747a75-8bf7-4b45-8351-833d7da47948)
+    (property "Reference" "RSIM2"
+      (at 70 239.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "0.01"
+      (at 70 250.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 70 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 70 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid a66bcdb8-9391-4666-b938-09a36af9a868))
+    (pin "2" (uuid 857c6b13-d723-4f9d-9abc-6e43d9f0c06d))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "RSIM2")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "SHUTTER"
+    (shape bidirectional)
+    (at 70 241.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 40621c1a-6e60-4c30-89fb-493308e700d7)
+  )
+  (global_label "J2_SHUTTER"
+    (shape bidirectional)
+    (at 70 248.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 97a3ee3f-6779-45ce-905b-8783bbbc0db4)
+  )
+  (symbol
+    (lib_id "Simulation_SPICE:VDC")
+    (at 100 220 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 8986c857-655a-49d2-bc4e-b8c30140295b)
+    (property "Reference" "V3"
+      (at 100 214.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "3.3"
+      (at 100 225.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 100 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 100 220 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid d858cd7d-b78e-47e8-a7f9-1bae3ec7f472))
+    (pin "2" (uuid dd927c96-87e0-456a-a753-4ace1bfc729d))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "V3")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_A"
+    (shape bidirectional)
+    (at 100 214.92 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid d95a9865-9042-44c3-85a9-69139fa043b0)
+  )
+  (global_label "J1_SLEEVE"
+    (shape bidirectional)
+    (at 100 225.08 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid beff79ef-c01f-4cdf-ac28-b86cbfa1cab9)
+  )
+  (symbol
+    (lib_id "Simulation_SPICE:VDC")
+    (at 100 245 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 2cb8a22c-1992-4383-b8d0-218d9a755ae2)
+    (property "Reference" "V4"
+      (at 100 239.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "3.3"
+      (at 100 250.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 100 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 100 245 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid ac1f9789-6110-4342-9e04-a73d7edb88b6))
+    (pin "2" (uuid 26ce4932-3df5-4ea9-941a-1cb70b62c7f2))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "V4")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_B"
+    (shape bidirectional)
+    (at 100 239.92 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 23c00a25-dd77-4853-81fe-f0dd57f89edf)
+  )
+  (global_label "J2_SLEEVE"
+    (shape bidirectional)
+    (at 100 250.08 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid a7ff5268-86fc-4a14-80e3-e7761bd90459)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 210 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 91900c9d-fac6-4a39-9d38-e189631d0a12)
+    (property "Reference" "R9"
+      (at 130 204.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "4.7k"
+      (at 130 215.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 210 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 210 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 4283d54f-7377-41aa-bc24-fdd512dc1348))
+    (pin "2" (uuid d67630a0-283b-4708-bfac-c06ba5b2e82c))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R9")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_A"
+    (shape bidirectional)
+    (at 130 206.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 0c092664-7e9e-418b-8a52-1178b2172e8d)
+  )
+  (global_label "J1_RING"
+    (shape bidirectional)
+    (at 130 213.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 4bbbefe2-a372-4d2b-8a9d-8126ebd1db48)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 225 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 40e63b2d-7b2a-4b73-821b-c0e6f4e61595)
+    (property "Reference" "R10"
+      (at 130 219.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "4.7k"
+      (at 130 230.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 225 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 225 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid d30c8ecf-f8a1-4a3b-abf5-0efb2318fea7))
+    (pin "2" (uuid 2e065cba-d8a8-4b1c-ae40-d6bba6e8daef))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R10")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_A"
+    (shape bidirectional)
+    (at 130 221.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 9e832d90-454b-4107-b314-9d383865786f)
+  )
+  (global_label "J1_TIP"
+    (shape bidirectional)
+    (at 130 228.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 51040330-cbbc-44a0-b871-b16834fcfee7)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 240 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 71099722-1c25-4d97-9f3d-feb0de24a351)
+    (property "Reference" "R11"
+      (at 130 234.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "4.7k"
+      (at 130 245.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 240 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 240 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid abd7eed6-9c85-4f92-a88f-f3e1ce408838))
+    (pin "2" (uuid 66a3e4a5-cf37-403c-8b8f-dc5fe9c7c60c))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R11")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_B"
+    (shape bidirectional)
+    (at 130 236.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 567d1a30-bc8c-4b35-941d-c037fa6b44c8)
+  )
+  (global_label "J2_RING"
+    (shape bidirectional)
+    (at 130 243.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid b8119cd0-6baf-428a-8861-4ff3a4c69cc8)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 255 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid ae4db23e-1dfc-453c-a4b1-274573c539b4)
+    (property "Reference" "R12"
+      (at 130 249.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "4.7k"
+      (at 130 260.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 255 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 255 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 6258418a-25e0-4489-9b25-71b117280668))
+    (pin "2" (uuid f9fc36ca-c00b-42da-a46a-0c66a381da1b))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R12")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "CAM_B"
+    (shape bidirectional)
+    (at 130 251.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 7a2d3312-13e4-4117-a439-39e2628161cd)
+  )
+  (global_label "J2_TIP"
+    (shape bidirectional)
+    (at 130 258.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 60f0829a-925d-43e8-9d45-1592a562e231)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 270 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 055e2dad-06fe-4105-acad-6e4de1aaa56c)
+    (property "Reference" "R13"
+      (at 130 264.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "100Meg"
+      (at 130 275.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 270 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 270 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid 2ee34f43-59ee-4cfa-ab08-30a172e11a6e))
+    (pin "2" (uuid 2f51d327-a978-4e42-8a67-ffdf4eeaba42))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R13")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "J1_SLEEVE"
+    (shape bidirectional)
+    (at 130 266.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 7410b2d6-64e2-42f0-89c9-562aefbc0bb5)
+  )
+  (global_label "GND"
+    (shape bidirectional)
+    (at 130 273.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 5f54ecd3-e62c-4275-b949-ff75fe284f8e)
+  )
+  (symbol
+    (lib_id "Device:R")
+    (at 130 285 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid 2e1d1859-a3dd-4cfc-94b4-52ccc203e382)
+    (property "Reference" "R14"
+      (at 130 279.92 0)
+      (effects (font (size 1.27 1.27)) )
+    )
+    (property "Value" "100Meg"
+      (at 130 290.08 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 130 285 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (property "Datasheet" "~"
+      (at 130 285 0)
+      (effects (font (size 1.27 1.27)) (hide yes))
+    )
+    (pin "1" (uuid d8429f79-516b-4ba9-9ed1-c11659a8c968))
+    (pin "2" (uuid 572a904a-fb4e-4b2f-954e-6ff74095b0c5))
+    (instances
+      (project "gpio_trigger"
+        (path "/60b82a67-605d-4edc-a527-425f55d0316b"
+          (reference "R14")
+          (unit 1)
+        )
+      )
+    )
+  )
+  (global_label "J2_SLEEVE"
+    (shape bidirectional)
+    (at 130 281.19 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 4bb2591e-d300-4566-9e9b-4988a7b4b199)
+  )
+  (global_label "GND"
+    (shape bidirectional)
+    (at 130 288.81 0)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid 5b1e179a-29d5-429a-915c-e7d8c18feeed)
   )
 )
