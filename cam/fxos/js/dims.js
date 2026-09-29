@@ -98,9 +98,22 @@ export function lightScreen() {
       value: () => (M.isAuto(L().iso) ? "Auto" : L().iso),
       control: () => ruler({ values: M.ISO, get: () => L().iso, set: (v) => M.set("light.iso", v) }) },
     { id: "shutter", label: "Shutter",
-      hint: () => (/^(A|P)$/.test(L().program) ? "Camera sets it in " + L().program : "Both bodies"),
+      hint: () => (L().bulb
+        ? "How long GPIO holds the 10-pin. The bodies stay in bulb"
+        : /^(A|P)$/.test(L().program) ? "Camera sets it in " + L().program : "Both bodies"),
       value: () => M.fmtShut(L().shutter),
       control: () => ruler({ values: M.SHUT, get: () => L().shutter, set: (v) => M.set("light.shutter", v), format: M.fmtShut }) },
+    { id: "bulb", label: "Shutter timing",
+      hint: () => (L().bulb ? "Mode dial on M. A short press is not the exposure" : "The body times the frame"),
+      value: () => (L().bulb ? "Bulb" : "Timed"),
+      control: () => chips({
+        options: [
+          { v: "timed", label: "Timed", sub: "Body" },
+          { v: "bulb", label: "Bulb", sub: "GPIO hold" },
+        ],
+        get: () => (L().bulb ? "bulb" : "timed"),
+        set: (v) => M.set("light.bulb", v === "bulb"),
+      }) },
     { id: "fstop", label: "Aperture", hint: "Taking-lens iris",
       value: () => M.fmtF(L().fstop),
       control: () => ruler({ values: M.FSTOP, get: () => L().fstop, set: (v) => M.set("light.fstop", v),

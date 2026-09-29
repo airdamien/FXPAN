@@ -271,11 +271,63 @@ def parse_current(text):
     return ""
 
 
+def bulb_hold(s):
+    """Seconds from a legacy B8 mark, or None for a normal shutter string."""
+    t = (s or "").strip().lower().replace(" ", "")
+    m = re.fullmatch(r"b(\d+(?:\.\d+)?)s?", t)
+    if not m:
+        return None
+    sec = float(m.group(1))
+    return sec if sec > 0 else None
+
+
+def shutter_seconds(s):
+    """The time the UI is showing, in seconds. 8 → 8, 1/125 → 0.008."""
+    held = bulb_hold(s)
+    if held is not None:
+        return held
+    t = (s or "").strip().lower().replace(" ", "")
+    if not t or t in ("auto", "bulb", "b"):
+        return None
+    if t.endswith("s") and "/" not in t:
+        t = t[:-1]
+    if "/" in t:
+        try:
+            num, den = t.split("/", 1)
+            sec = float(num) / float(den)
+        except ValueError:
+            return None
+        return sec if sec > 0 else None
+    try:
+        sec = float(t)
+    except ValueError:
+        return None
+    return sec if sec > 0 else None
+
+
+def gpio_hold(prefs):
+    """Bulb: hold the 10-pin for the shutter time on screen. Timed: short press."""
+    prefs = prefs or {}
+    shutter = prefs.get("shutter")
+    if not prefs.get("bulb") and bulb_hold(shutter) is None:
+        return None
+    return shutter_seconds(shutter)
+
+
+def shutter_config(s):
+    """gphoto shutterspeed. Bulb holds are the word bulb, not the B8 mark."""
+    if bulb_hold(s) is not None or (s or "").strip().lower() in ("bulb", "b"):
+        return "bulb"
+    return format_shutter(s)
+
+
 def format_shutter(s):
     raw = (s or "").strip()
     if not raw:
         return raw
     t = raw.lower().replace(" ", "")
+    if t in ("bulb", "b"):
+        return "bulb"
     if t.endswith("s") and "/" not in t:
         t = t[:-1]
     try:
@@ -796,6 +848,15 @@ def _set_one(port, assignments, timeout=120):
     except CamError as exc:
         drop = [key for key in _unknown_widgets(exc) if any(k == key for k, _ in packed)]
         if not drop:
+            # A mode-dial or WB rejection used to abort the whole command,
+            # so ISO and shutter never landed and the kiosk only warned.
+            core_keys = ("isoauto", "autoiso", "iso", "shutterspeed")
+            core = [(k, v) for k, v in packed if k in core_keys]
+            if core and len(core) < len(packed):
+                try:
+                    gp(config_args(core), port=port, timeout=timeout)
+                except CamError as exc2:
+                    return [str(exc2)]
             return [str(exc)]
         _missing_widgets.update(drop)
         again = [(k, v) for k, v in packed if k not in drop]
@@ -805,6 +866,13 @@ def _set_one(port, assignments, timeout=120):
         try:
             gp(config_args(again), port=port, timeout=timeout)
         except CamError as exc2:
+            core = [(k, v) for k, v in again if k in ("isoauto", "autoiso", "iso", "shutterspeed")]
+            if core and len(core) < len(again):
+                try:
+                    gp(config_args(core), port=port, timeout=timeout)
+                except CamError as exc3:
+                    notes.append(str(exc3))
+                    return notes
             notes.append(str(exc2))
         return notes
 

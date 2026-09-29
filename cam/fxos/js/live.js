@@ -8,6 +8,9 @@ const PULL_MS = 125;
 export const live = {
   pulling: false,
   stills: false,
+  // A shot is in flight and the new files are not on screen yet. Home must
+  // not fall back to the previous panorama during that wait.
+  capturing: false,
   frames: { T: null, R: null },
   comp: document.createElement("canvas"),
   seq: 0,

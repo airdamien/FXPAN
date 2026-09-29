@@ -108,7 +108,8 @@ export function photo() {
     light: {
       program: p.program || "M",
       iso: String(p.iso || "400"),
-      shutter: String(p.shutter || "1/250"),
+      shutter: String(p.shutter || "1/250").replace(/^b(\d+(?:\.\d+)?)$/i, "$1"),
+      bulb: !!p.bulb || /^b\d/i.test(String(p.shutter || "")),
       fstop: String(p.fstop || "8").replace(/^f\/?/i, ""),
       master: p.master === "R" ? "R" : "T",
       lock_t: p.lock_t !== false,
@@ -147,6 +148,7 @@ const TO_PREFS = {
   "light.iso": (v) => ({ iso: v }),
   "light.shutter": (v) => ({ shutter: v }),
   "light.fstop": (v) => ({ fstop: v }),
+  "light.bulb": (v) => ({ bulb: !!v }),
   "light.master": (v) => ({ master: v }),
   "light.lock_t": (v) => ({ lock_t: !!v }),
   "light.sync": (v) => ({ sync: !!v }),
@@ -160,7 +162,7 @@ const TO_PREFS = {
   "drive.raw_look": (v) => ({ raw_look: v !== "neutral" }),
   "wb": (v) => ({ wb: v }),
 };
-const EXPOSURE = new Set(["light.program", "light.iso", "light.shutter", "light.fstop", "drive.quality", "wb"]);
+const EXPOSURE = new Set(["light.program", "light.iso", "light.shutter", "light.fstop", "light.bulb", "drive.quality", "wb"]);
 
 let prefsPatch = {};
 let prefsTimer = 0;
@@ -227,8 +229,8 @@ async function flushFx() {
 
 export function exposureBody() {
   const L = photo().light;
-  const body = { iso: L.iso, shutter: L.shutter, program: L.program, wb: store.prefs.wb || "Auto",
-    quality: store.prefs.quality || "NEF+Fine" };
+  const body = { iso: L.iso, shutter: L.shutter, program: L.program, bulb: !!L.bulb,
+    wb: store.prefs.wb || "Auto", quality: store.prefs.quality || "NEF+Fine" };
   if (!/^auto$/i.test(L.fstop) && /^(M|A)$/.test(L.program)) body.fstop = L.fstop;
   return body;
 }
@@ -340,7 +342,7 @@ export function modeFromPhoto(ph = photo()) {
 
 const LABELS = {
   "frame.squeeze": "Format", "frame.guide": "Guide", "frame.clip": "Edges",
-  "light.program": "Mode", "light.iso": "ISO", "light.shutter": "Shutter", "light.fstop": "Aperture",
+  "light.program": "Mode", "light.iso": "ISO", "light.shutter": "Shutter", "light.bulb": "Bulb", "light.fstop": "Aperture",
   "light.master": "Metering body", "light.lock_t": "Lock at fire", "light.sync": "Copy to slave",
   "light.follow_cam": "Camera decides",
   "focus.aid": "Focus aid", "focus.color": "Peaking colour", "focus.level": "Peaking level",
@@ -363,6 +365,7 @@ export function describe(key, v) {
   if (key === "light.iso") return isAuto(v) ? "Auto" : v;
   if (key === "light.fstop") return fmtF(v);
   if (key === "light.shutter") return fmtShut(v);
+  if (key === "light.bulb") return v ? "Bulb" : "Timed";
   if (key === "wb") return wbOf(v).label;
   if (key === "drive.release") return v === "sync" ? "GPIO" : "USB";
   if (key === "drive.save") return saveLabel(v);
@@ -407,7 +410,7 @@ export async function recall(mode) {
   if ("squeeze" in f) patch.ana_squeeze = f.squeeze;
   if ("clip" in f) patch.crop_inner = !!f.clip;
   for (const k of ["program", "iso", "shutter", "fstop", "master"]) if (k in L) patch[k] = L[k];
-  for (const k of ["lock_t", "sync", "follow_cam"]) if (k in L) patch[k] = !!L[k];
+  for (const k of ["lock_t", "sync", "follow_cam", "bulb"]) if (k in L) patch[k] = !!L[k];
   if ("release" in d) patch.gpio = d.release === "sync";
   if ("save" in d) Object.assign(patch, savePrefs(d.save));
   if ("quality" in d) patch.quality = d.quality;

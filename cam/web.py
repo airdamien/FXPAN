@@ -173,7 +173,7 @@ def _gpio_shoot(shot_json, prefs, assignments):
     if not snap["available"]:
         raise dual.CamError("GPIO shutter is only on a Raspberry Pi")
     if not snap["pi"]:
-        info = gpio.fire()
+        info = gpio.fire(dual.gpio_hold(prefs))
         return shot_json(
             f"gpio sim  focus {info['focus']} {info['focus_ms']}ms  "
             f"shutter {info['shutter']} {info['ms']}ms  (no pulse)"
@@ -210,9 +210,11 @@ def _gpio_shoot(shot_json, prefs, assignments):
                 )
             if prefs["download"]:
                 before = dual.list_cards(have)
+        if have and assignments:
+            _apply_exposure(have, assignments)
     # Nikon bodies ignore the 10-pin remote while USB is claimed.
     with LINK.gpio_window(settle=0.2):
-        info = gpio.fire()
+        info = gpio.fire(dual.gpio_hold(prefs))
     if not prefs["download"]:
         return shot_json(
             f"gpio focus {info['focus']} {info['focus_ms']}ms  "
@@ -278,6 +280,10 @@ def _merge_exposure(data, prefs):
         val = str(val).strip() if val is not None else ""
         if val:
             out[key] = val
+    if "bulb" in data:
+        out["bulb"] = bool(data.get("bulb"))
+    elif prefs.get("bulb"):
+        out["bulb"] = True
     return out
 
 
@@ -362,9 +368,12 @@ def _assignments(data):
                 out.append(("iso", iso or val))
             continue
         if key == "shutterspeed":
+            if data.get("bulb") or dual.bulb_hold(val) is not None:
+                out.append((key, "bulb"))
+                continue
             if val.lower() == "auto":
                 continue
-            out.append((key, dual.format_shutter(val)))
+            out.append((key, dual.shutter_config(val)))
             continue
         if key == "f-number":
             # The iris is the taking lens, not a CPU lens on the body.

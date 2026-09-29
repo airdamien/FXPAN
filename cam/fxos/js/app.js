@@ -70,7 +70,7 @@ function topBar() {
 let stillKey = "";
 
 function showStill() {
-  if (live.pulling) return;
+  if (live.pulling || live.capturing) return;
   const p = (M.store.pairs || []).find((x) => x.ready);
   const key = p ? p.stamp + ":" + (p.pano_mtime || 0) : "";
   if (!p || key === stillKey) return;
@@ -115,6 +115,19 @@ export async function toggleLive(want) {
       if (gen === liveGen && j.link) M.ingestLink(j.link);
     } catch { /* the shot still drops USB before the 10-pin pulse */ }
   }
+}
+
+// Pairs are already refreshed. Load that set, then let the view leave
+// the downloading hold. Doing it in this order keeps the previous
+// panorama from painting in the gap before the new JPEGs decode.
+export async function presentDownloaded() {
+  const p = (M.store.pairs || []).find((x) => x.ready && x.t && x.r);
+  if (p) {
+    stillKey = p.stamp + ":" + (p.pano_mtime || 0);
+    await loadStills(p);
+  }
+  live.capturing = false;
+  M.emit("captures");
 }
 
 export async function refreshCaptures() {

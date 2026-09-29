@@ -6,7 +6,7 @@ import * as M from "./model.js";
 import * as api from "./api.js";
 import { live, stopPull, compose, bitmap } from "./live.js";
 import { ensureFilter, lookName, tweaks } from "./look.js";
-import { toggleLive, refreshCaptures } from "./app.js";
+import { toggleLive, refreshCaptures, presentDownloaded } from "./app.js";
 import { go } from "./nav.js";
 
 let shooting = false;
@@ -62,6 +62,10 @@ export async function fire() {
   const ph = M.photo();
   if (ph.drive.timer && !(await countdown(ph.drive.timer))) return;
   shooting = true;
+  // Hold the previous picture off the screen before live view stops.
+  // toggleLive(false) would otherwise paint the last panorama for the
+  // whole GPIO release and RAM download.
+  live.capturing = true;
   M.emit("shoot");
   const wasLive = live.pulling;
   if (wasLive) await toggleLive(false);
@@ -81,6 +85,7 @@ export async function fire() {
       api.post("/api/pano", stitchBody(j.stamp, ph.look)).catch((e) => toast(e.message, "err"));
     }
     await refreshCaptures();
+    await presentDownloaded();
     shooting = false;
     M.emit("shoot");
     const secs = Number(j.preview_s ?? ph.drive.review);
@@ -88,6 +93,7 @@ export async function fire() {
   } catch (e) {
     toast(e.message, "err");
   } finally {
+    live.capturing = false;
     shooting = false;
     M.emit("shoot");
     if (wasLive) toggleLive(true);
