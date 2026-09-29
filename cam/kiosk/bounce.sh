@@ -1,6 +1,5 @@
 #!/bin/sh
-# Stop web.py, FXPAN OS, and Chromium. The kiosk loop brings FXPAN OS back.
-# It does not start web.py.
+# Stop web.py, FXPAN OS, and Chromium. The kiosk loop brings both back.
 CAM="$(cd "$(dirname "$0")/.." && pwd)"
 pkill -f -- "$CAM/web.py" || true
 pkill -f -- "$CAM/fxos/serve.py" || true
