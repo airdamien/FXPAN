@@ -73,10 +73,22 @@ fxos_ok() {
 
 ensure_web() {
     mkdir -p "$LOGDIR"
-    # web.py on 8787 is the camera API. The kiosk does not start it.
-    # Start it by hand when the rig should talk to the bodies.
+    # web.py on 8787 is the camera API. Start it with the kiosk so a boot
+    # is a usable rig, not just the UI.
     if ! web_ok; then
-        echo "web.py is not listening on ${WEB_PORT}" >&2
+        DUALS_KIOSK=1 "$PY" "$CAM/web.py" >> "$LOGDIR/web.log" 2>&1 9>&- &
+        j=0
+        while [ "$j" -lt 50 ]; do
+            if web_ok; then
+                break
+            fi
+            j=$((j + 1))
+            sleep 0.2
+        done
+        if ! web_ok; then
+            echo "web.py did not listen on ${WEB_PORT}" >&2
+            return 1
+        fi
     fi
     if ! fxos_ok; then
         "$PY" "$CAM/fxos/serve.py" --host 0.0.0.0 --proxy "http://127.0.0.1:${WEB_PORT}" \
