@@ -90,7 +90,10 @@ instead.
 | `lid` | 1 | outer face down |
 | `display_mount` | 1 pair | rails on their flat face |
 | `fxp_tray` | 1 | floor down |
-| `stem` | 1 (with the helicoid) | cookie flange on the bed, M62 boss up |
+| `stem` | 1 (with an M62 helicoid) | cookie flange on the bed, boss up |
+| `stem_m65` | 1 (with the M65 helicoid) | cookie flange on the bed, boss up |
+| `m65_ring` | 1, until the flangeless metal ring arrives. EL-Nikkor only | lens seat up, male down on a raft |
+| `stem_nw_m65` | 1, Nikkor-W on the M65 helicoid | Copal board up, male down on a raft |
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
 | `base` | 1 | flat; tripod insert and screw heads enter from the bed |

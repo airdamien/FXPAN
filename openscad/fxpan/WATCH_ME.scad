@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -1520,15 +1520,15 @@ module stem_bed_chamfer() {
                 polygon([[0, 0], [0, t], [t, 0]]);
 }
 
-module stem_thread_liner(z0) {
+module stem_thread_liner(z0, major = EL180_M62_MAJOR) {
     translate([0, 0, z0 - 0.2])
-        cylinder(h = EL180_M62_LEN + 0.4, d = EL180_M62_MAJOR + 8);
+        cylinder(h = EL180_M62_LEN + 0.4, d = major + 8);
 }
 
 // Bought M62 helicoid. The female stays in the wall and stops on the inner
 // face, so nothing printed crosses into the chamber and the tray can drop
 // in from the top. Screw the helicoid in after the tray is in.
-module part_stem() {
+module part_stem(major = EL180_M62_MAJOR, tag = "stem") {
     od = HELI_NUT_OD;
     z_bot = -WALL;
     z_top = -WALL + EL180_M62_LEN;
@@ -1536,7 +1536,7 @@ module part_stem() {
     color("SlateGray")
     mm_split() {
         difference() {
-            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+            ScrewHole(major, EL180_M62_LEN,
                       pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
                       position = [0, 0, z_bot])
                 union() {
@@ -1544,7 +1544,7 @@ module part_stem() {
                     translate([0, 0, z_bot])
                         cylinder(h = z_top - z_bot, d = od, $fn = 128);
                 }
-            stem_cookie_cuts(fxp_tag("stem"));
+            stem_cookie_cuts(fxp_tag(tag));
             translate([0, 0, -stem_drop()])
                 stem_bed_chamfer();
             translate([0, 0, z_top - 0.05])
@@ -1553,7 +1553,7 @@ module part_stem() {
             translate([0, 0, z_bot])
                 cylinder(h = 1.3, d = EL180_BARREL);
         }
-        stem_thread_liner(z_bot);
+        stem_thread_liner(z_bot, major);
     }
 }
 
@@ -1639,21 +1639,26 @@ function nw_flange_z() = flange_z(NW_FFD) - W_ARM_EXTRA;
 function nw_heli_z() = -WALL + heli_at_infinity();
 function nw_rise() = nw_flange_z() - nw_heli_z();
 
-module part_stem_nw180() {
+module part_stem_nw180(major = EL180_M62_MAJOR, male = EL180_M62_LEN, tag = "nw180") {
     rise = nw_rise();
+    echo(str(tag, "  rise ", rise, " mm from the helicoid face, male M",
+              major, " × ", male, " mm. Adds 0 mm."));
     color("SteelBlue")
     difference() {
         union() {
-            translate([0, 0, -EL180_M62_LEN])
-                ScrewThread(EL180_M62_MAJOR, EL180_M62_LEN,
-                            pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL);
+            translate([0, 0, -male])
+                ScrewThread(major, male, pitch = EL180_M62_PITCH,
+                            tolerance = EL180_M62_TOL);
             cylinder(h = rise, d = NW_NOSE_OD, $fn = 128);
         }
         translate([0, 0, rise - NW_BOARD])
             cylinder(h = NW_BOARD + 1, d = NW_HOLE, $fn = 96);
-        translate([0, 0, -EL180_M62_LEN - 0.2])
-            cylinder(h = rise - NW_BOARD + EL180_M62_LEN + 0.2,
+        translate([0, 0, -male - 0.2])
+            cylinder(h = rise - NW_BOARD + male + 0.2,
                      d = NW_CLEAR, $fn = 96);
+        translate([0, -NW_NOSE_OD / 2 - 0.02, rise / 2])
+            rotate([-90, 0, 0])
+                part_stamp_stack_cut(fxp_tag(tag), size = 2.0);
     }
 }
 
@@ -1698,6 +1703,34 @@ module part_el180_adapter(tone = "SlateGray") {
         color("DimGray", 0.45)
             translate([0, 0, hm + hb])
                 el180_ghost();
+}
+
+// Stand-in for the machined flangeless ring. z = 0 is the shoulder that
+// stops on the helicoid face. +z is the M62 female, 8 mm, which is how far
+// the lens flange moves out. −z is 6 mm of M65 male. The Ø60 rear barrel
+// passes back through that male into the helicoid.
+module part_m65_ring() {
+    male = M65_RING_MALE;
+    add = M65_RING_ADD;
+    echo(str("m65_ring adds ", add,
+              " mm. Collapsed focus is about 4.5 m, not infinity.",
+              " Face the male shorter if the shoulder does not seat."));
+    color("SlateGray")
+    difference() {
+        union() {
+            translate([0, 0, -male])
+                ScrewThread(M65_MAJOR, male, pitch = EL180_M62_PITCH,
+                            tolerance = EL180_M62_TOL);
+            ScrewHole(EL180_M62_MAJOR, add, pitch = EL180_M62_PITCH,
+                      tolerance = EL180_M62_TOL)
+                cylinder(h = add, d = M65_RING_OD, $fn = 128);
+        }
+        translate([0, 0, -male - 0.2])
+            cylinder(h = male + 0.2, d = EL180_BARREL, $fn = 96);
+        translate([0, -M65_RING_OD / 2 - 0.02, add / 2])
+            rotate([-90, 0, 0])
+                part_stamp_stack_cut(fxp_tag("m65"), size = 2.2);
+    }
 }
 
 module el180_ghost() {
@@ -2425,6 +2458,8 @@ module export_part() {
         part_stem_w();
     else if (PART == "stem_nw180")
         part_stem_nw180();
+    else if (PART == "stem_nw_m65")
+        part_stem_nw180(M65_MAJOR, M65_RING_MALE, "nw65");
     else if (PART == "arm_r" || PART == "arm_r_f")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
     else if (PART == "arm_t" || PART == "arm_t_f")
@@ -2464,6 +2499,10 @@ module export_part() {
         shim_set();
     else if (PART == "el180_adapter")
         part_el180_adapter();
+    else if (PART == "m65_ring")
+        part_m65_ring();
+    else if (PART == "stem_m65")
+        part_stem(M65_MAJOR, "stem65");
     else if (PART == "section")
         assembly();
     else if (PART == "isco_cut")

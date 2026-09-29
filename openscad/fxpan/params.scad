@@ -220,6 +220,16 @@ EL180_M62_WALL  = 4;
 function el180_stem_od() =
     min(EL180_M62_MAJOR + 2 * EL180_M62_WALL,
         2 * (norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2 - 1.0));
+// Printed stand-in for the flangeless M65×1 male → M62×1 female ring.
+// The two threads have no radial wall between them (M65 core ≈ 63.3 mm,
+// M62 female groove ≈ 63.3 mm), so plastic cannot be flangeless. The female
+// sits in a collar in front of a shoulder. That collar is the added length,
+// and infinity only had 0.5 mm of spare, so this ring focuses near, not at
+// infinity. Take it off when the machined ring arrives — do not move the stem.
+M65_MAJOR       = 65;
+M65_RING_MALE   = 6;     // into the helicoid. Face it shorter if it bottoms early.
+M65_RING_ADD    = 8;     // M62 female, equal to the lens thread. This is the stack.
+M65_RING_OD     = 72;    // under the Ø76 barrel, proud of the M65 so it can stop
 EL180_LENS_OD   = 76;
 EL180_LENS_L    = 62.6;
 EL180_SNOUT_D   = 40;
