@@ -1631,7 +1631,18 @@ module part_stem_el180_inf() {
 // infinity mark. The lens drops in from the front. Its own M39 ring comes
 // in through the bore from the rear.
 NW_BOARD = 3.0;
-NW_HOLE  = 41.8;    // Copal 1 barrel is 41.6
+// The ring clamps the thread, and that thread is what has to center the
+// lens. Measured across it: 38.5. The old 41.8 hole (a Copal 1 barrel)
+// left 1.6 mm of radial play. 39.2 is the slip fit — the hole prints
+// small, and it still has to start over the crests.
+NW_THREAD = 38.5;
+NW_HOLE   = 39.2;
+// A screw stands proud of the flange, 2–4 mm outside the thread, 1.05 tall.
+// Full circle, so the shutter can sit at any angle. Deep enough that the
+// screw does not hold the flange off the face.
+NW_PIN_H   = 1.4;
+NW_PIN_IN  = 1.6;
+NW_PIN_OUT = 5.0;
 NW_CLEAR = 56;      // Ø54 cell and the retaining ring
 NW_NOSE_OD = 72;
 function nw_flange_z() = flange_z(NW_FFD) - W_ARM_EXTRA;
@@ -1653,6 +1664,15 @@ module part_stem_nw180(major = EL180_M62_MAJOR, male = EL180_M62_LEN, tag = "nw1
         }
         translate([0, 0, rise - NW_BOARD])
             cylinder(h = NW_BOARD + 1, d = NW_HOLE, $fn = 96);
+        // Annulus in the flange face for the locating screw.
+        translate([0, 0, rise - NW_PIN_H])
+            difference() {
+                cylinder(h = NW_PIN_H + 0.02,
+                         d = NW_THREAD + 2 * NW_PIN_OUT, $fn = 96);
+                translate([0, 0, -0.02])
+                    cylinder(h = NW_PIN_H + 0.06,
+                             d = NW_THREAD + 2 * NW_PIN_IN, $fn = 96);
+            }
         translate([0, 0, -male - 0.2])
             cylinder(h = rise - NW_BOARD + male + 0.2,
                      d = NW_CLEAR, $fn = 96);
