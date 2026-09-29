@@ -35,7 +35,7 @@ export function panoView({ look = false, guide = true, peak = false, filterId = 
     stage.style.width = Math.round(w) + "px";
     stage.style.height = Math.round(h2) + "px";
     const g = guideOf(photo().frame.guide);
-    guideEl.hidden = !opts.guide || !g.r;
+    guideEl.hidden = live.capturing || !opts.guide || !g.r;
     if (g.r) {
       let gw = w;
       let gh = w / g.r;
@@ -65,6 +65,18 @@ export function panoView({ look = false, guide = true, peak = false, filterId = 
   const draw = () => {
     const ph = photo();
     const sq = ph.frame.squeeze;
+    if (live.capturing) {
+      img.hidden = true;
+      cv.hidden = true;
+      peakCv.hidden = true;
+      guideEl.hidden = true;
+      fileName = "";
+      badge.textContent = "Downloading";
+      badge.className = "pano-badge";
+      empty.hidden = false;
+      empty.textContent = "Downloading";
+      return;
+    }
     const fromLive = live.pulling;
     const lastPano = files && !fromLive ? latestPano() : "";
     if (lastPano) {

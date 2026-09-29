@@ -11,7 +11,7 @@ PATH = Path(__file__).resolve().parent / "settings.json"
 STITCH_MODES = ("match", "blend", "cut", "open", "hugin")
 BOOLS = (
     "download", "gpio", "flip_r", "sync", "lock_t", "deghost", "balance",
-    "follow_cam", "crop_inner", "keep_card", "stitch_raw", "raw_look",
+    "follow_cam", "crop_inner", "keep_card", "stitch_raw", "raw_look", "bulb",
 )
 EXPOSURE = ("iso", "shutter", "fstop", "wb", "quality", "program")
 OVERLAP = 0.20
@@ -135,6 +135,7 @@ def defaults(pi=None):
         "download": on, "gpio": on, "flip_r": False, "overlap": OVERLAP,
         "sync": True, "lock_t": True, "master": "T", "preview_s": PREVIEW_S,
         "idle_min": IDLE_MIN, "deghost": False, "balance": True, "follow_cam": False,
+        "bulb": False,
         "stitch_mode": "hugin" if on else "open",
         "crop_inner": True, "keep_card": False, "stitch_raw": False, "raw_look": True,
         "ana_squeeze": 1.0,

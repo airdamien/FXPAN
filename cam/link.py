@@ -542,8 +542,10 @@ def _from_prefs():
         out.append(("isoauto", "Off"))
         out.append(("iso", n or iso))
     shut = str(prefs.get("shutter") or "").strip()
-    if shut and shut.lower() != "auto":
-        out.append(("shutterspeed", dual.format_shutter(shut)))
+    if prefs.get("bulb") or dual.bulb_hold(shut) is not None:
+        out.append(("shutterspeed", "bulb"))
+    elif shut and shut.lower() != "auto":
+        out.append(("shutterspeed", dual.shutter_config(shut)))
     for src, key in (
         ("wb", "whitebalance"),
         ("quality", "imagequality"),

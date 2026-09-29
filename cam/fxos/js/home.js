@@ -104,13 +104,25 @@ export function homeScreen() {
     h("aside", { class: "rail" }, playBtn, shutter, liveBtn));
 
   let thumbName = "";
-  const paintStrip = () => {
+  let driftBusy = "";
+  let driftGaveUp = "";
+  const normIso = (v) => String(v ?? "").replace(/iso/ig, "").replace(/\s+/g, "").toLowerCase();
+  const normShut = (v) => String(v ?? "").replace(/\s+/g, "").toLowerCase();
+  const driftBits = (t, r) => {
+    if (!t || !r) return [];
+    const bits = [];
+    if (normIso(t.iso) !== normIso(r.iso)) bits.push(`ISO T ${t.iso} R ${r.iso}`);
+    if (normShut(t.shutterspeed) !== normShut(r.shutterspeed)) bits.push(`T ${t.shutterspeed} R ${r.shutterspeed}`);
+    return bits;
+  };
+  function paintStrip() {
     const ph = M.photo();
     const L = ph.light;
     const st = M.store.link?.status || {};
     const cells = L.follow_cam
       ? [["Camera decides", ""]]
-      : [[L.program, "mode"], [M.fmtIso(L.iso), "iso"], [M.fmtShut(L.shutter), "shut"], [M.fmtF(L.fstop), "f"]];
+      : [[L.program, "mode"], [M.fmtIso(L.iso), "iso"],
+        [M.fmtShut(L.shutter) + (L.bulb ? " bulb" : ""), "shut"], [M.fmtF(L.fstop), "f"]];
     strip.innerHTML = "";
     cells.forEach(([text, k]) => strip.append(h("span", { class: "strip-c " + k, text })));
     const f = M.formatOf(ph.frame.squeeze);
@@ -121,13 +133,32 @@ export function homeScreen() {
     const r = st.R;
     let msg = "";
     let kind = "";
+    const bits = driftBits(t, r);
+    const drift = bits.join(" · ");
+    if (!drift) { driftBusy = ""; driftGaveUp = ""; }
     if (out.length === 2) { msg = "No bodies on USB"; kind = "err"; }
     else if (out.length) { msg = out[0] + " off USB"; kind = "err"; }
-    else if (t && r && (String(t.iso) !== String(r.iso) || String(t.shutterspeed) !== String(r.shutterspeed))) {
-      const bits = [];
-      if (String(t.iso) !== String(r.iso)) bits.push(`ISO T ${t.iso} R ${r.iso}`);
-      if (String(t.shutterspeed) !== String(r.shutterspeed)) bits.push(`T ${t.shutterspeed} R ${r.shutterspeed}`);
-      msg = "Bodies differ · " + bits.join(" · ");
+    else if (drift && !L.follow_cam && !live.capturing && !shooting()) {
+      if (driftGaveUp === drift) {
+        msg = "Bodies differ · " + drift;
+        kind = "warn";
+      } else if (driftBusy !== drift) {
+        driftBusy = drift;
+        msg = "Setting cameras";
+        M.applyExposure().then((j) => {
+          if (driftBusy !== drift) return;
+          const st = (j && j.link && j.link.status) || {};
+          const still = driftBits(st.T, st.R).join(" · ");
+          if (!j || still === drift) driftGaveUp = drift;
+          else if (!still) { driftGaveUp = ""; driftBusy = ""; }
+          else driftBusy = "";
+          paintStrip();
+        });
+      } else {
+        msg = "Setting cameras";
+      }
+    } else if (drift) {
+      msg = "Bodies differ · " + drift;
       kind = "warn";
     }
     warn.hidden = !msg;

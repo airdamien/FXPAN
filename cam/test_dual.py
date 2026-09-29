@@ -65,6 +65,13 @@ class Parse(unittest.TestCase):
         self.assertEqual(dual.format_shutter("1/125"), "1/125")
         self.assertEqual(dual.format_shutter("4s"), "4")
         self.assertEqual(dual.format_shutter("4"), "4")
+        self.assertEqual(dual.format_shutter("Bulb"), "bulb")
+        self.assertIsNone(dual.bulb_hold("8"))
+        self.assertEqual(dual.bulb_hold("B8"), 8)
+        self.assertEqual(dual.shutter_seconds("8"), 8)
+        self.assertAlmostEqual(dual.shutter_seconds("1/125"), 0.008)
+        self.assertEqual(dual.gpio_hold({"bulb": True, "shutter": "8"}), 8)
+        self.assertIsNone(dual.gpio_hold({"bulb": False, "shutter": "8"}))
         self.assertEqual(dual.format_aperture("5.6"), "f/5.6")
         self.assertEqual(dual.format_aperture("f/8"), "f/8")
         self.assertEqual(dual.fstop_tries("5.6")[0], "f/5.6")
@@ -105,6 +112,8 @@ class Parse(unittest.TestCase):
             [("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400")],
         )
         self.assertIn(("shutterspeed", "1/125"), web._assignments({"shutter": "1/125"}))
+        self.assertIn(("shutterspeed", "bulb"), web._assignments({"shutter": "8", "bulb": True}))
+        self.assertNotIn(("shutterspeed", "8"), web._assignments({"shutter": "8", "bulb": True}))
         self.assertEqual(
             web._assignments({"fstop": "5.6"}),
             [],
@@ -162,6 +171,57 @@ class Parse(unittest.TestCase):
         self.assertIn("iso=400", joined)
         self.assertIn("shutterspeed=1/125", joined)
         self.assertNotIn("autoiso", joined)
+
+    def test_set_one_retries_exposure_after_batch_failure(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            if len(calls) == 1:
+                raise dual.CamError("could not set expprogram")
+            return ""
+
+        old = dual.gp
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        notes = dual._set_one("usb:1", [
+            ("expprogram", "M"),
+            ("isoauto", "Off"), ("autoiso", "Off"), ("iso", "400"),
+            ("shutterspeed", "1/125"),
+            ("whitebalance", "Auto"),
+        ])
+        self.assertEqual(len(calls), 2)
+        retry = " ".join(calls[1])
+        self.assertIn("iso=400", retry)
+        self.assertIn("shutterspeed=1/125", retry)
+        self.assertNotIn("expprogram", retry)
+        self.assertNotIn("whitebalance", retry)
+        self.assertTrue(any("expprogram" in n for n in notes))
+
+    def test_set_one_keeps_exposure_when_isoauto_missing(self):
+        calls = []
+
+        def fake(args, port=None, timeout=120):
+            calls.append(list(args))
+            if any("isoauto=" in a for a in args):
+                raise dual.CamError("isoauto not found")
+            if any(a.startswith("expprogram=") for a in args):
+                raise dual.CamError("could not set expprogram")
+            return ""
+
+        old = dual.gp
+        dual._missing_widgets.clear()
+        dual.gp = fake
+        self.addCleanup(lambda: setattr(dual, "gp", old))
+        self.addCleanup(dual._missing_widgets.clear)
+        notes = dual._set_one("usb:1", [
+            ("expprogram", "M"),
+            ("isoauto", "Off"), ("iso", "400"),
+            ("shutterspeed", "1/125"),
+        ])
+        sent = [" ".join(c) for c in calls]
+        self.assertTrue(any("iso=400" in s and "shutterspeed=1/125" in s and "expprogram" not in s for s in sent))
+        self.assertTrue(any("unsupported" in n for n in notes))
 
     def test_apply_locked_one_pack(self):
         calls = []
@@ -1725,7 +1785,7 @@ class Settings(unittest.TestCase):
             {
                 "download": True, "gpio": True, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
-                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False, "bulb": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
                 "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
@@ -1737,7 +1797,7 @@ class Settings(unittest.TestCase):
             {
                 "download": False, "gpio": False, "flip_r": False, "overlap": 0.20,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
-                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False, "bulb": False,
                 "stitch_mode": "open", "crop_inner": True, "ana_squeeze": 1.0,
                 "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
@@ -1753,7 +1813,7 @@ class Settings(unittest.TestCase):
             {
                 "download": False, "gpio": True, "flip_r": True, "overlap": 0.25,
                 "sync": True, "lock_t": True, "master": "T", "preview_s": 10,
-                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False,
+                "idle_min": 10, "deghost": False, "balance": True, "follow_cam": False, "bulb": False,
                 "stitch_mode": "hugin", "crop_inner": True, "ana_squeeze": 1.0,
                 "keep_card": False, "stitch_raw": False, "raw_look": True,
             },
