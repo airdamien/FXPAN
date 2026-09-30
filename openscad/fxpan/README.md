@@ -96,6 +96,7 @@ instead.
 | `stem_nw_m65` | 1, Nikkor-W on the M65 helicoid | Copal board up, male down on a raft |
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
+| `arm_r_focus` | 1, Nikkor-W, instead of `arm_r_fw` or the R helicoid | cookie flange on the bed, F bayonet up. Stamped `fxp_rw_focus`. The W 8 mm is in the tube, then the register is 0.77 mm closer than `arm_r_fw`, so it focuses with `arm_t_fw` |
 | `base` | 1 | flat; tripod insert and screw heads enter from the bed |
 | `cradle_r`, `cradle_t` | 1 each | flat, either way up |
 | `baffle` | 2 sheets — one arm's worth per sheet (4 rings at the f/11 default) | flat |
