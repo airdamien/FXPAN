@@ -98,6 +98,16 @@ function bs_in_plane() = BS_W / sqrt(2);
 function bs_t_comp() =
     let (ti = 45, tt = asin(sin(ti) / BS_N))
         BS_THICK * (BS_N / cos(tt) - 1 / cos(ti));   // 0.303 mm
+// Where a ray through this plate actually focuses. S1 toward the lens,
+// n = 1.52, 45°. Both foci land further from the plate than the reflect
+// image: sagittal 0.336 mm, tangential 0.605 mm. The midpoint is the
+// circle of least confusion. bs_t_comp() is the optical-path difference,
+// not this shift, and the T tube is shortened by it, so a T that has been
+// focused has pulled the reflect image this far inside the design R register.
+BS_FOCUS_SAG = 0.336;
+BS_FOCUS_TAN = 0.605;
+function bs_focus_mid() = (BS_FOCUS_SAG + BS_FOCUS_TAN) / 2;   // 0.470 mm
+function r_focus_pull() = bs_t_comp() + bs_focus_mid();        // 0.773 mm
 
 // --- camera mouth ----------------------------------------------------------
 F_REV_MAJOR    = 52.0;    // M52×0.75, Fotodiox 52 mm F reverse ring

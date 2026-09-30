@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -92,7 +92,8 @@ function fxp_tag(name) = str("fxp_", name);
 function w_arm_part() =
     PART == "arm_r_w" || PART == "arm_t_w"
     || PART == "arm_r_fw" || PART == "arm_t_fw"
-    || PART == "arm_r_hw" || PART == "arm_t_hw";
+    || PART == "arm_r_hw" || PART == "arm_t_hw"
+    || PART == "arm_r_focus";
 function arm_extra() = (nw_stem() || w_arm_part()) ? W_ARM_EXTRA : 0;
 function fxp_arm_tag(mark) =
     str("fxp_arm_", mark == "T" ? "t" : "r",
@@ -101,6 +102,7 @@ function fxp_arm_tag(mark) =
 
 function printed_f() =
     (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
+    || PART == "arm_r_focus"
     || PART == "arm_r_fw" || PART == "arm_t_fw";
 function heli_cam() =
     ARM_MOUNT == 2 || PART == "arm_r_h" || PART == "arm_t_h"
@@ -153,6 +155,11 @@ function reflect_tube_len()  =
 // The transmit leg crosses 1 mm of glass at 45°, which pushes its focus
 // back by bs_t_comp(). Shorten the tube by the same amount.
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
+// Printed-F R tube for the Nikkor-W. Same cookie and bayonet as arm_r_fw,
+// the W 8 mm included, then pulled in by r_focus_pull() so it focuses
+// with arm_t_fw.
+function reflect_focus_tube_len() =
+    ARM_TUBE + W_ARM_EXTRA + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull();
 function patch_t()           = PORT_PATCH_T;
 
 module mm_split() {
@@ -1273,7 +1280,7 @@ module cookie_print_flat(mark) {
     }
 }
 
-module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
+module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
     p = max(port_patch_u(), port_patch_v(mark)) + 2 * sensor_shift();
     color("SlateGray")
     mm_split() {
@@ -1303,7 +1310,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
             }
         translate([0, 0, cam_face_cap()]) {
             flange_marks(mark);
-            fxp_port_stamp(fxp_arm_tag(mark), mark);
+            fxp_port_stamp(tag == "" ? fxp_arm_tag(mark) : tag, mark);
         }
         tube_flash_waste(mark, out_len);
         if (printed_f())
@@ -2411,7 +2418,13 @@ module diagnostics() {
                ? "" : "  *** T arm too short for the nut slot ***"));
     echo(str("transmit leg crosses ", BS_THICK,
              " mm of n=", BS_N, " glass at 45°: tube shortened by ",
-             round(bs_t_comp() * 1000) / 1000, " mm"));
+             round(bs_t_comp() * 1000) / 1000, " mm",
+             "  |  plate focus sits ", round(bs_focus_mid() * 1000) / 1000,
+             " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")"));
+    echo(str("arm_r_focus: Nikkor-W printed F, tube ",
+             round(reflect_focus_tube_len() * 1000) / 1000,
+             " mm, ", round(r_focus_pull() * 1000) / 1000,
+             " mm shorter than arm_r_fw, stamp fxp_rw_focus"));
     head_r = norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2;
     echo(str("cookie ", round(port_patch_u() * 10) / 10, "×",
              round(port_patch_v("R") * 10) / 10, " arm, ",
@@ -2482,6 +2495,9 @@ module export_part() {
         part_stem_nw180(M65_MAJOR, M65_RING_MALE, "nw65");
     else if (PART == "arm_r" || PART == "arm_r_f")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    else if (PART == "arm_r_focus")
+        part_camera_tube(reflect_focus_tube_len(), rx = -field_toe(),
+                         mark = "R", tag = "fxp_rw_focus");
     else if (PART == "arm_t" || PART == "arm_t_f")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "arm_r_w" || PART == "arm_r_fw")
