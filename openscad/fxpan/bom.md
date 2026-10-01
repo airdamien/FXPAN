@@ -190,6 +190,7 @@ build.
 | `el180_adapter` | the M62 helicoid, keeping short `stem` | Two-piece stand-in: printed male into the 8 mm boss. Prefer `stem_el180_inf`. |
 | `arm_r_f` / `arm_t_f` (`ARM_MOUNT = 1`) | the 52 mm reverse rings | Archive-663 male F. The lip is the mesh as shipped (40 mm). Plastic lugs still should not carry a D800 — the cradles take the weight. Dry-fit clocking with `F_MOUNT_CLOCK`. |
 | `arm_r_focus` | `arm_r_fw`, and the R helicoid on the Nikkor-W | Same printed F and the same R cookie as `arm_r_fw`, including the W 8 mm, then 0.77 mm shorter so the bayonet is in focus when `arm_t_fw` is. Stamped `fxp_rw_focus`. |
+| `plate_key` | the plate rocking in the slot | One card, 75 × 50 × 0.40 mm, window in the middle. Two layers. Glass out, card against the cheek away from the lens, glass back in on the lens side. |
 | `arm_r_h` / `arm_t_h` + `fmount_h_*` | shims between the arm and the body | Needs the **M52-female / M42-male 17–31 helicoid** above, two of them. Cookie is the M42 female; the printed bayonet is an M52 male into the helicoid's front. |
 
 ## Export

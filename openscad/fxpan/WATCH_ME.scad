@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, plate_key:Plate keeper, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -2521,6 +2521,8 @@ module export_part() {
     else if (PART == "fxp_tray" || PART == "tray")
         fxp_cartridge(show_glass = false, sh = sensor_shift(),
                       tag = fxp_tag("tray"));
+    else if (PART == "plate_key")
+        part_plate_key();
     else if (PART == "base")
         part_base();
     else if (PART == "cradle_r")

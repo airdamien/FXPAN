@@ -75,29 +75,57 @@ export function playbackScreen() {
   const grid = h("div", { class: "shots" });
   s.body.append(grid);
   dragScroll(s.body);
-  const paint = () => {
-    const d = M.store.disk;
-    s.noteEl.textContent = d ? `${fmtBytes(d.free)} free · ${(M.store.pairs || []).length} sets` : "";
-    grid.innerHTML = "";
-    let day = "";
-    for (const p of M.store.pairs || []) {
-      const w = when(p.stamp);
-      const label = dayLabel(w.date);
-      if (label !== day) { day = label; grid.append(h("div", { class: "day", text: label })); }
-      const note = M.store.fx.shots[p.stamp] || {};
-      const [kind, text] = stitchState(p);
-      const art = p.pano
-        ? h("span", { class: "shot-art", html: `<img alt="" loading="lazy" src="${api.file(p.pano, 640)}&t=${p.pano_mtime || 0}">` })
-        : h("span", { class: "shot-art pair", html: [p.r, p.t].filter(Boolean).map((n) => `<img alt="" loading="lazy" src="${api.file(n, 320)}">`).join("") });
-      grid.append(h("button", { class: "shot " + kind, type: "button", on: { click: () => go("shot", { stamp: p.stamp }) } },
-        art,
-        h("span", { class: "shot-meta" },
-          h("b", { text: w.time }),
-          h("span", { text: [note.mode_name, note.look ? lookName(note.look, M.store.fx.looks) : ""].filter(Boolean).join(" · ") })),
-        p.protected ? h("i", { class: "shot-lock", html: icon("lock") }) : null,
-        text ? h("em", { class: "shot-state " + kind, text }) : null));
+  const shotOf = (p, prev) => {
+    const note = M.store.fx.shots[p.stamp] || {};
+    const [kind, text] = stitchState(p);
+    const w = when(p.stamp);
+    const artKey = p.pano
+      ? "pano:" + api.file(p.pano, 640) + "&t=" + (p.pano_mtime || 0)
+      : "pair:" + [p.r, p.t].filter(Boolean).map((n) => api.file(n, 320)).join("|");
+    const btn = prev || h("button", { class: "shot", type: "button", dataset: { stamp: p.stamp },
+      on: { click: () => go("shot", { stamp: p.stamp }) } },
+    h("span", { class: "shot-art" }),
+    h("span", { class: "shot-meta" }, h("b"), h("span")));
+    btn.className = "shot " + kind;
+    const art = btn.querySelector(".shot-art");
+    if (btn.dataset.art !== artKey) {
+      btn.dataset.art = artKey;
+      art.className = "shot-art" + (p.pano ? "" : " pair");
+      art.innerHTML = p.pano
+        ? `<img alt="" loading="lazy" src="${api.file(p.pano, 640)}&t=${p.pano_mtime || 0}">`
+        : [p.r, p.t].filter(Boolean).map((n) => `<img alt="" loading="lazy" src="${api.file(n, 320)}">`).join("");
     }
-    if (!(M.store.pairs || []).length) grid.append(h("p", { class: "list-note", text: "Nothing yet. Every release lands here as a set: T, R and the stitched pano." }));
+    const meta = btn.querySelectorAll(".shot-meta > *");
+    meta[0].textContent = w.time;
+    meta[1].textContent = [note.mode_name, note.look ? lookName(note.look, M.store.fx.looks) : ""].filter(Boolean).join(" · ");
+    let lock = btn.querySelector(".shot-lock");
+    if (p.protected && !lock) btn.append(h("i", { class: "shot-lock", html: icon("lock") }));
+    else if (!p.protected && lock) lock.remove();
+    let state = btn.querySelector(".shot-state");
+    if (text) {
+      if (!state) { state = h("em", { class: "shot-state" }); btn.append(state); }
+      state.className = "shot-state " + kind;
+      state.textContent = text;
+    } else if (state) state.remove();
+    return btn;
+  };
+
+  const paint = () => {
+    const pairs = M.store.pairs || [];
+    const d = M.store.disk;
+    s.noteEl.textContent = d ? `${fmtBytes(d.free)} free · ${pairs.length} sets` : "";
+    const kept = new Map([...grid.querySelectorAll(".shot")].map((b) => [b.dataset.stamp, b]));
+    grid.replaceChildren();
+    if (!pairs.length) {
+      grid.append(h("p", { class: "list-note", text: "Nothing yet. Every release lands here as a set: T, R and the stitched pano." }));
+      return;
+    }
+    let day = "";
+    for (const p of pairs) {
+      const label = dayLabel(when(p.stamp).date);
+      if (label !== day) { day = label; grid.append(h("div", { class: "day", text: label })); }
+      grid.append(shotOf(p, kept.get(p.stamp)));
+    }
   };
   return { el: s.el, enter() { paint(); refreshCaptures(); }, refresh(what) { if (what !== "link") paint(); } };
 }
@@ -203,8 +231,21 @@ export function shotScreen() {
     const name = { pano: p.pano, ana: p.pano_ana, r: p.r, t: p.t }[view];
     const mtime = view === "pano" ? p.pano_mtime : view === "ana" ? p.pano_ana_mtime : 0;
     const src = name ? api.file(name, 2000) + "&t=" + (mtime || 0) : "";
-    if (img.dataset.src !== src) { img.dataset.src = src; img.src = src; }
-    img.classList.toggle("flop", view === "r" && !!M.store.prefs.flip_r);
+    const flop = view === "r" && !!M.store.prefs.flip_r;
+    // Flop only the frame that actually loaded. Applying it first mirrors
+    // whatever is still on screen — T, until R's file arrives.
+    if (img.dataset.src !== src) {
+      img.dataset.src = src;
+      img.dataset.flop = flop ? "1" : "";
+      img.classList.remove("flop");
+      img.hidden = !!src;
+      img.onload = () => {
+        if (img.dataset.src !== src) return;
+        img.classList.toggle("flop", img.dataset.flop === "1");
+        img.hidden = false;
+      };
+      img.src = src;
+    } else img.classList.toggle("flop", flop);
     const e = p.exif || {};
     const st = p.stitch || {};
     info.innerHTML = "";

@@ -329,6 +329,7 @@ def _shot_files(saved=None, dest=None, stamp=None):
     names = []
     if dest and stamp:
         pano.ensure_pair_jpegs(stamp, dest)
+        pano.warm_views(stamp, dest)
         for path in sorted(Path(dest).glob(f"*_{stamp}.*")):
             if path.suffix.lower() in (".jpg", ".jpeg", ".png"):
                 names.append(path.name)
