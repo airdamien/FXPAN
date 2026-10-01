@@ -375,3 +375,21 @@ module fxp_pair(show_glass = true, explode_z = 0, sh, tag = "fxp_tray") {
     translate([0, 0, explode_z])
         fxp_cartridge(show_glass = show_glass, sh = sh, tag = tag);
 }
+
+// -----------------------------------------------------------------------------
+// Plate keeper. One card, the full 75 × 50 of the glass, 0.40 mm thick.
+// The window is the tray's beam opening, so the border sits on the cheeks
+// and does not vignette. Two 0.20 mm layers. Glass out, card against the
+// cheek away from the lens, glass back in on the lens side.
+// -----------------------------------------------------------------------------
+KEY_SHEET = 0.40;
+
+module part_plate_key() {
+    wy = plate_w() - 6 + 0.8;   // just past the tray window
+    wz = plate_h() - 6 + 0.8;
+    difference() {
+        cube([BS_W, BS_H, KEY_SHEET]);
+        translate([(BS_W - wy) / 2, (BS_H - wz) / 2, -0.1])
+            cube([wy, wz, KEY_SHEET + 0.2]);
+    }
+}

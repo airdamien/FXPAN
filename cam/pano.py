@@ -896,6 +896,34 @@ def _mtime(path):
         return 0
 
 
+def _thumb_fresh(path, src):
+    try:
+        return path.is_file() and path.stat().st_mtime >= src.stat().st_mtime
+    except OSError:
+        return False
+
+
+def _cached_thumb(dest_dir, src):
+    """Any ready thumb of this file. Used while a stitch owns ImageMagick."""
+    if not dest_dir.is_dir():
+        return None
+    suffix = "_" + src.name
+    best = None
+    best_m = -1.0
+    for path in dest_dir.iterdir():
+        if path.name.startswith(".") or not path.name.endswith(suffix):
+            continue
+        if not _thumb_fresh(path, src):
+            continue
+        try:
+            m = path.stat().st_mtime
+        except OSError:
+            continue
+        if m >= best_m:
+            best, best_m = path, m
+    return best
+
+
 def thumb(name, width, root=None):
     root = Path(root or CAPTURES)
     src = resolve(name, root)
@@ -903,8 +931,13 @@ def thumb(name, width, root=None):
     dest_dir = root / ".thumbs"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{width}_{src.name}"
-    if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
+    if _thumb_fresh(dest, src):
         return dest
+    # A stitch's magick holds the CPU until it finishes. Starting another
+    # one here leaves the R chip showing the previous frame (T, flopped)
+    # for the whole job. Serve a thumb we already have, or the file itself.
+    if _work_running():
+        return _cached_thumb(dest_dir, src) or src
     tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
     try:
         # Width cap only. A square box plus CSS object-fit:cover was
@@ -915,6 +948,19 @@ def thumb(name, width, root=None):
         if tmp.exists():
             tmp.unlink(missing_ok=True)
     return dest
+
+
+VIEW_W = 2000
+
+
+def warm_views(stamp, root=None):
+    """Playback-size T and R, before a stitch starts and takes magick."""
+    root = Path(root or CAPTURES)
+    for path in ensure_pair_jpegs(stamp, root).values():
+        try:
+            thumb(path.name, VIEW_W, root)
+        except dual.CamError:
+            pass
 
 
 def serve(name, width=None, root=None):

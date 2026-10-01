@@ -90,6 +90,7 @@ instead.
 | `lid` | 1 | outer face down |
 | `display_mount` | 1 pair | rails on their flat face |
 | `fxp_tray` | 1 | floor down |
+| `plate_key` | 1 | flat on the bed, 0.40 mm thick. Two 0.20 mm layers |
 | `stem` | 1 (with an M62 helicoid) | cookie flange on the bed, boss up |
 | `stem_m65` | 1 (with the M65 helicoid) | cookie flange on the bed, boss up |
 | `m65_ring` | 1, until the flangeless metal ring arrives. EL-Nikkor only | lens seat up, male down on a raft |
@@ -172,7 +173,24 @@ plate and print time than the 90 mm squares they replace.
    plate frame, one on each cheek and inboard of the glass ends, take
    **1.75 mm filament**. Each bore drops in and then crosses the slot just
    above the glass. Lid off, push a scrap into each hole so the plate cannot
-   lift out of the slot.
+   lift out of the slot. The pins stop the plate jumping out. They do not
+   stop it leaning in the slot, and that lean rolls the reflected image.
+   Fit `plate_key` before the lid goes on.
+
+**Plate keeper.** Print `plate_key` once, PETG, **0.20 mm layers, two layers,
+0.4 mm nozzle.** It is one card, 75 × 50 × 0.40 mm, with a window. Largest
+face on the bed. If the slicer stands it on edge, lay it back down.
+
+Lid off, pins out, glass out. Tip the tray so the cheek **away from the
+lens** is down. Lay the card in the slot, 75 mm across and 50 mm up, the
+same way the glass goes, window over the opening. Slide the glass in on
+top of it, black dot toward the lens. Stand the tray up and put the lid on.
+If the glass will not go, the card printed thick — reprint it at two layers.
+
+Shoot the overlap again. The roll should fall to a few tenths of a degree.
+A little vertical offset can remain; this clip sets the lean across the slot,
+not the plate's 45°.
+
 5. **Tray into the chassis**, floor down. One retention post stands on the
    plate frame in the dead corner between the cameras; the other stands on
    the inactive beam under the −X wall, so the lid forks are not in the cup

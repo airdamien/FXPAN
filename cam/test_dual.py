@@ -990,6 +990,26 @@ class Pano(unittest.TestCase):
         dest = pano.thumb(wide.name, 80, self.root)
         self.assertEqual(pano._size(dest), (80, 20))
 
+    def test_thumb_serves_file_while_stitching(self):
+        src = self._jpeg("R_20260101_120000.jpg", "blue", w=80, h=40)
+        pano._jobs["x"] = {"running": True, "phase": "work", "stamp": "x"}
+        try:
+            got = pano.thumb(src.name, 40, self.root)
+            self.assertEqual(got, src.resolve())
+            self.assertFalse((self.root / ".thumbs" / f"40_{src.name}").exists())
+        finally:
+            pano._jobs.clear()
+
+    def test_thumb_reuses_cache_while_stitching(self):
+        src = self._jpeg("R_20260101_120000.jpg", "blue", w=80, h=40)
+        ready = pano.thumb(src.name, 60, self.root)
+        pano._jobs["x"] = {"running": True, "phase": "work", "stamp": "x"}
+        try:
+            self.assertEqual(pano.thumb(src.name, 40, self.root), ready)
+            self.assertFalse((self.root / ".thumbs" / f"40_{src.name}").exists())
+        finally:
+            pano._jobs.clear()
+
     def test_hugin_profile_fxpan(self):
         prof = pano.hugin_profile(7360, 4912)
         self.assertTrue(prof["flip_r"])
