@@ -120,9 +120,20 @@ function cam_heli_face_z() = patch_t() + cam_face_cap();
 function cam_heli_seat_z() = cam_heli_face_z() - CAM_HELI_RECESS;
 // Front face of the helicoid, collapsed. The printed mount's shoulder
 // lands on it. T's mount is shorter; the helicoid itself is the same.
-function cam_heli_front_z() = cam_heli_seat_z() + cam_heli_proud();
+function cam_heli_front_z() = cam_heli_body_z() + cam_heli_proud();
+// Body's rear face, floated off the seat by the lip under the male's tip.
+function cam_heli_body_z() = cam_heli_seat_z() + CAM_HELI_FLOAT;
+function cam_heli_lip_z() = cam_heli_body_z() - CAM_HELI_MALE;
 function cam_heli_shoulder(mark) =
     cam_heli_register_z(mark) - F_FMOUNT_STACK - cam_heli_front_z();
+// Best focus the fixed W arms found: T by the glass path (arm_t_fw), R by
+// r_focus_pull() (arm_r_focus, plate centred).
+function cam_heli_focus_z(mark) =
+    cam_heli_register_z(mark) - (mark == "T" ? 0 : r_focus_pull());
+// Register on the metal F ring, helicoid collapsed.
+function cam_heli_ring_z() = cam_heli_front_z() + CAM_F_RING;
+// Extension that brings that body to focus. It only extends.
+function cam_heli_dial(mark) = cam_heli_focus_z(mark) - cam_heli_ring_z();
 function inf_stem() =
     STEM == 1 || PART == "stem_el180_inf";
 function nw_stem() =
@@ -1363,10 +1374,15 @@ module cam_csk_cut() {
 module part_cam_heli_arm(mark) {
     ax = cam_axis(mark);
     z_seat = cam_heli_seat_z();
+    assert(cam_heli_dial(mark) >= 0,
+           str("camera helicoid ", mark, " collapses ", -cam_heli_dial(mark),
+               " mm past focus on a ", CAM_F_RING, " mm F ring"));
     color("SlateGray")
     mm_split() {
+        union() {
         ScrewHole(CAM_HELI_REAR, z_seat + 0.2,
                   position = [ax.x, ax.y, 0],
+                  rotation = [0, 0, mark == "T" ? CAM_HELI_CLOCK_T : CAM_HELI_CLOCK_R],
                   pitch = CAM_HELI_PITCH,
                   tolerance = CAM_HELI_TOL,
                   tooth_height = CAM_HELI_TOOTH)
@@ -1375,9 +1391,10 @@ module part_cam_heli_arm(mark) {
                 // Pocket the helicoid body. The male bottoms on the floor.
                 // The thread itself is the bore; a clearance cylinder here
                 // would wipe it out.
-                translate([ax.x, ax.y, z_seat])
-                    cylinder(h = cam_heli_face_z() - z_seat + 0.02,
-                             d = CAM_HELI_OD + 0.8);
+                if (CAM_HELI_RECESS > 0)
+                    translate([ax.x, ax.y, z_seat])
+                        cylinder(h = cam_heli_face_z() - z_seat + 0.02,
+                                 d = CAM_HELI_OD + 0.8);
                 port_clamp_screws(mark) cam_csk_cut();
                 translate([0, 0, cam_face_cap()]) {
                     flange_marks(mark);
@@ -1385,6 +1402,14 @@ module part_cam_heli_arm(mark) {
                                    mark);
                 }
             }
+        // Stop for the male's tip. On the bed.
+        translate([ax.x, ax.y, 0])
+            difference() {
+                cylinder(h = cam_heli_lip_z(), d = CAM_HELI_REAR + 1);
+                translate([0, 0, -0.1])
+                    cylinder(h = cam_heli_lip_z() + 0.2, d = CAM_HELI_LIP_ID);
+            }
+        }
         translate([ax.x, ax.y, -0.2])
             cylinder(h = z_seat + 0.5,
                      d = CAM_HELI_REAR + 2 * INNER_LINING + 1.2);
@@ -1488,11 +1513,18 @@ module cam_helicoid_gauge() {
 // lift > 0 is the helicoid extended, camera on the far side of infinity.
 module cam_heli_mount_at(mark, lift = 0) {
     ax = cam_axis(mark);
-    translate([ax.x, ax.y, cam_heli_seat_z()]) {
-        if ($preview)
+    translate([ax.x, ax.y, cam_heli_body_z()]) {
+        if ($preview) {
             cam_helicoid_body(lift);
-        translate([0, 0, cam_heli_proud() + lift - CAM_HELI_FRONT])
-            part_cam_heli_mount(mark);
+            // Bought metal F ring.
+            color("DimGray")
+                translate([0, 0, cam_heli_proud() + lift])
+                    difference() {
+                        cylinder(h = CAM_F_RING, d = F_STL_OD);
+                        translate([0, 0, -0.1])
+                            cylinder(h = CAM_F_RING + 0.2, d = TUBE_ID);
+                    }
+        }
     }
 }
 
@@ -2397,8 +2429,11 @@ module diagnostics() {
              " ", CAM_HELI_MIN, "–", CAM_HELI_MAX,
              "  body ", CAM_HELI_OD, "  neck ", CAM_HELI_NECK,
              "  recess ", CAM_HELI_RECESS,
-             "  |  collapsed is infinity, register R ",
-             cam_heli_register_z("R"), " T ", cam_heli_register_z("T"),
+             "  |  ", arm_extra() > 0 ? "Nikkor-W" : "EL (cannot focus; W only)",
+             " on a ", CAM_F_RING, " mm F ring, collapsed register ",
+             cam_heli_ring_z(), ", dial out R ", cam_heli_dial("R"),
+             " T ", cam_heli_dial("T"),
+             "  |  clock R ", CAM_HELI_CLOCK_R, "° T ", CAM_HELI_CLOCK_T, "°",
              "  |  ", cam_heli_travel(), " mm outward",
              "  |  shown ", CAM_HELI_SHOW, " mm out"));
     echo(str("baffle rings that fit at f/", FSTOP, ": ", baffle_ring_count(),
