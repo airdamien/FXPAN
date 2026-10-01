@@ -97,6 +97,7 @@ instead.
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
 | `arm_r_focus` | 1, Nikkor-W, instead of `arm_r_fw` or the R helicoid | cookie flange on the bed, F bayonet up. Stamped `fxp_rw_focus`. The W 8 mm is in the tube, then the register is 0.77 mm closer than `arm_r_fw`, so it focuses with `arm_t_fw` |
+| `arm_r_hw`, `arm_t_hw` | 1 each, Nikkor-W on the camera helicoids | cookie flange on the bed. Flat face with an M42 female for the bought helicoid; a metal F ring goes in its front |
 | `base` | 1 | flat; tripod insert and screw heads enter from the bed |
 | `cradle_r`, `cradle_t` | 1 each | flat, either way up |
 | `baffle` | 2 sheets — one arm's worth per sheet (4 rings at the f/11 default) | flat |
@@ -249,6 +250,28 @@ the reverse ring on whichever leg focuses *long*. The set gives 0.2 / 0.5 /
 Both legs should agree within one 0.2 mm shim. The transmit leg is already
 0.303 mm shorter to pay for the glass path, so if T comes out long by roughly
 that much, check that S1 really is facing the lens.
+
+**Camera helicoids (Nikkor-W).** `arm_r_hw` / `arm_t_hw` replace the fixed
+arms and the shims. Each takes a bought M52-female / M42-male 17–31 helicoid
+(body 69 mm, 16.85 mm collapsed past a 4.67 mm male) and a metal F ring in
+its front. The body is wider than the cookie and overhangs the chassis skin,
+so it does not seat on either: the male's tip stops on a lip at the foot of
+the cookie thread, and the body face stands 0.4 mm clear.
+
+1. Screw the helicoid's M42 male into the cookie until its tip stops on the
+   lip. Screw the metal F ring into the helicoid front until it bottoms.
+2. Collapsed, the register is 25.68 mm off the cookie back on the 1.93 mm
+   ring (`CAM_F_RING`). The fixed arms found best focus at 27.23 (R) and
+   27.70 (T), so R extends about 1.55 mm and T about 2.0 mm. The cradle slot lets
+   the body follow; the tripod screw is the lock.
+3. Focus the lens on T. Then turn only R's helicoid until R peaks on the
+   Focus screen's sharpness match, and tighten R's tripod screw.
+
+**Roll.** Both threads bottom where their helicoid's thread starts, the
+same place every time. If a body comes out rolled, set `CAM_HELI_CLOCK_R`
+or `CAM_HELI_CLOCK_T` to the measured roll in degrees and reprint that
+cookie: it turns the cookie's thread start, so the bottomed body stops that
+much further round. If the next shot doubles the roll, flip the sign.
 
 **Roll.** Shoot a level horizon on both. Both bodies sit upright and landscape,
 and the seam is horizontal, so any relative roll shows up as a wedge in the

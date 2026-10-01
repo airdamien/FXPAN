@@ -146,28 +146,43 @@ F_COLLAR_OD    = 62;      // F bayonet collar, and the cap on the lock lugs
 F_FMOUNT_STACK = 3.0;  // Archive-663 lens mount: register is 3 mm from the back
 // Bought camera helicoid. Amazon does not list M52-to-M52. The part it
 // does list is Pixco/Fotasy M52 female (front) to M42 male (rear), 17–31 mm.
-// The rear male screws into the cookie. The printed mount is an M52 male
-// into the front female. Body is about 65 mm and drops into the recess.
+// The rear male screws into the cookie. A metal M52-to-F ring screws into
+// the front female. The measured body is too long for the EL arms; only the
+// Nikkor-W cookies (arm_*_hw) reach focus on it.
 //
 // The M42 male is a ~41 mm hole. That clears the frame corners from about
-// f/16. The printed bayonet lip is 40 mm and is still the tighter stop.
+// f/16.
 //
-// Collapsed, the register is the fixed-arm infinity station. The D800 panel
-// is 13 mm proud, so the flange cannot come closer. Extending the helicoid
-// moves the camera out. The tripod screw is the lock.
+// Extending the helicoid moves the camera out. The tripod screw is the lock.
 CAM_HELI_REAR   = 42;     // M42×1 male into the cookie
 CAM_HELI_NOSE   = 52;     // M52×1 female, printed male
 CAM_HELI_PITCH  = 1.0;
 CAM_HELI_TOL    = 0.30;
 CAM_HELI_TOOTH  = 0.70;
-CAM_HELI_MIN    = 17;     // collapsed overall
-CAM_HELI_MAX    = 31;
-CAM_HELI_MALE   = 8;      // rear male into the cookie
-CAM_HELI_OD     = 65;     // body. Measure the one that arrives.
+CAM_HELI_MALE   = 4.67;   // rear male into the cookie, measured
+CAM_HELI_MIN    = 16.85 + CAM_HELI_MALE;   // measured body, collapsed, plus the male
+CAM_HELI_MAX    = CAM_HELI_MIN + 14;
+CAM_HELI_OD     = 69.05;  // body, measured
 CAM_HELI_ID     = 50;     // clear at the M52 end
 CAM_HELI_NECK   = 41;     // clear through the M42 male
-CAM_HELI_RECESS = 2.5;    // pocket the body sits in; the seat is its floor
+// The body is wider than the 62 mm cookie, so it sits on the cookie face and
+// the skin around it. Any pocket would run into the chassis.
+CAM_HELI_RECESS = 0;
+// The male's tip bottoms on a lip at the foot of the cookie thread, and the
+// body face stands this far off the cookie, so the chassis skin it overhangs
+// cannot tilt it. The lip only has to catch the tip, inside the male's bore.
+CAM_HELI_FLOAT  = 0.4;
+CAM_HELI_LIP_ID = 40;
 CAM_HELI_FRONT  = 5;      // printed male into the front female
+// Metal F ring screwed home in the helicoid front: helicoid face to the ring's
+// F register, measured. The Nikkor-W cookies need it under 3.88 (R) and
+// 4.35 (T), or that body collapses past focus and can never reach it.
+CAM_F_RING = 1.93;
+// Turns the cookie's M42 thread, and with it where the bottomed helicoid and
+// body stop. Degrees, about the arm axis. Set from the measured roll and
+// reprint that cookie.
+CAM_HELI_CLOCK_R = 0;
+CAM_HELI_CLOCK_T = 0;
 // Shown a little extended, on the far side of the collapsed infinity stop.
 CAM_HELI_SHOW   = 1.5;
 function cam_heli_travel() = CAM_HELI_MAX - CAM_HELI_MIN;
