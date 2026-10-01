@@ -17,6 +17,14 @@ POST_D         = 3.2;
 PLATE_PIN_D    = 2.05;
 PLATE_PIN_Y    = 18;     // along the glass, clear of both ends
 PLATE_PIN_DROP = 1.6;    // after the vertical lead-in, still above the glass
+// Centring ribs. One per cheek at each end of the slot, outside the beam
+// window, full height. Opposite pairs pinch the glass from both faces, so it
+// sits on the slot centre the arms are cut for and cannot lean. The gap is
+// a hair over the glass: printed slots close up, and the ribs are thin
+// enough to scrape to a fit.
+PLATE_RIB_GAP  = 1.10;
+PLATE_RIB_R    = 0.6;
+PLATE_RIB_LEAD = 4.0;    // taper at the top so the glass finds the gap
 // Just past the glass. 8 mm was the 50 mm-plate value and on a 75 mm plate
 // it drove both pegs into the cup walls; the −X−Y one also sat on a
 // monitor-rail screw.
@@ -249,6 +257,31 @@ module bs_frame() {
             rotate([0, 90, 0])
                 trap_ribs(win_y - 0.4, th - 0.4);
     }
+    plate_centre_ribs();
+}
+
+function plate_rib_y() = (plate_w() - 6) / 4 + plate_w() / 4;   // mid-land
+
+module plate_centre_ribs() {
+    st = slot_t();
+    r = PLATE_RIB_R;
+    z0 = shelf_z();
+    z1 = frame_top();
+    zl = z1 - PLATE_RIB_LEAD;
+    for (sx = [-1, 1], sy = [-1, 1]) {
+        xc = sx * (PLATE_RIB_GAP / 2 + r);   // rib face at ±gap/2
+        xf = sx * (st / 2 + r);              // flush with the cheek
+        intersection() {
+            hull() {
+                translate([xc, sy * plate_rib_y(), z0])
+                    cylinder(r = r, h = zl - z0, $fn = 24);
+                translate([xf, sy * plate_rib_y(), z1 - 0.01])
+                    cylinder(r = r, h = 0.01, $fn = 24);
+            }
+            translate([sx * (st / 4 + 0.25), 0, (z0 + z1) / 2])
+                cube([st / 2 + 0.5, plate_w() + 1, z1 - z0], center = true);
+        }
+    }
 }
 
 // Open-top cup: uniform wall thickness, then recut the three port windows.
@@ -374,22 +407,4 @@ module lid_retain_keepout(h = 10) {
 module fxp_pair(show_glass = true, explode_z = 0, sh, tag = "fxp_tray") {
     translate([0, 0, explode_z])
         fxp_cartridge(show_glass = show_glass, sh = sh, tag = tag);
-}
-
-// -----------------------------------------------------------------------------
-// Plate keeper. One card, the full 75 × 50 of the glass, 0.40 mm thick.
-// The window is the tray's beam opening, so the border sits on the cheeks
-// and does not vignette. Two 0.20 mm layers. Glass out, card against the
-// cheek away from the lens, glass back in on the lens side.
-// -----------------------------------------------------------------------------
-KEY_SHEET = 0.40;
-
-module part_plate_key() {
-    wy = plate_w() - 6 + 0.8;   // just past the tray window
-    wz = plate_h() - 6 + 0.8;
-    difference() {
-        cube([BS_W, BS_H, KEY_SHEET]);
-        translate([(BS_W - wy) / 2, (BS_H - wz) / 2, -0.1])
-            cube([wy, wz, KEY_SHEET + 0.2]);
-    }
 }
