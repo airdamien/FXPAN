@@ -8,7 +8,9 @@ struct Persisted: Codable {
     var simulate: Bool = false
     var shots: [String: ShotNote] = [:]
     var protectedStamps: [String] = []
-    var idleMinutes: Int = 0
+    var idleMinutes: Int = 5
+    /// False until someone picks a sleep time, so older saves of “Awake” pick up the 5 minute idle.
+    var idleChosen: Bool = false
 }
 
 enum Disk {

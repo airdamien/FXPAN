@@ -7,8 +7,11 @@ enum PTP {
     enum Op: UInt16 {
         case getDeviceInfo = 0x1001
         case getStorageIDs = 0x1004
+        case getStorageInfo = 0x1005
         case getObjectHandles = 0x1007
+        case getObjectInfo = 0x1008
         case getObject = 0x1009
+        case deleteObject = 0x100B
         case initiateCapture = 0x100E
         case getPropDesc = 0x1014
         case getProp = 0x1015
@@ -36,6 +39,8 @@ enum PTP {
     }
 
     static let objectAdded: UInt16 = 0x4002
+    /// Nikon ObjectAddedInSDRAM. The card uses 0x4002, so a sync download that follows 0x4002 saves an old card file.
+    static let addedInRAM: UInt16 = 0xC101
 
     struct Reply {
         var code: UInt16

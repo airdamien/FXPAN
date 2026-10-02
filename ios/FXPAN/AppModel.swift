@@ -26,7 +26,9 @@ final class AppModel {
     var shots: [ShotFiles] = []
     var notes: [String: ShotNote] = [:]
     var protectedStamps: Set<String> = []
-    var idleMinutes = 0
+    var idleMinutes = 5
+    var idleChosen = false
+    var sleeping = false
     var toast: Toast?
     var countdown: Int?
     var shooting = false
@@ -77,7 +79,8 @@ final class AppModel {
         rig = state.rig
         notes = state.shots
         protectedStamps = Set(state.protectedStamps)
-        idleMinutes = state.idleMinutes
+        idleMinutes = state.idleChosen ? state.idleMinutes : 5
+        idleChosen = state.idleChosen
         simulate = state.simulate
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -114,6 +117,7 @@ final class AppModel {
             note("10-pin sync on", bad: false)
         }
         ingest()
+        armIdle()
         if ProcessInfo.processInfo.arguments.contains("-shootSim") {
             photo.drive.review = 0
             try? await Task.sleep(nanoseconds: 600_000_000)
@@ -127,10 +131,15 @@ final class AppModel {
         switch phase {
         case .active:
             endStitchHold()
-            await camera.foreground()
+            if idleDue, idleMinutes > 0 {
+                await idleDown()
+            } else if !sleeping {
+                await camera.foreground()
+            }
         case .background:
             camera.background()
             if stitchRunning { beginStitchHold() }
+            if idleDue, idleMinutes > 0 { await idleDown() }
         default:
             break
         }
@@ -161,9 +170,30 @@ final class AppModel {
     }
 
     func setIdle(_ minutes: Int) {
+        idleChosen = true
         idleMinutes = minutes
         applyIdle()
         persist()
+        if minutes == 0, sleeping {
+            sleeping = false
+            Task { await camera.wakeFromIdle() }
+        }
+        armIdle()
+    }
+
+    /// A touch. Restarts the sleep clock, and brings the bodies back if they had been released.
+    func poke() {
+        let now = Date()
+        if sleeping {
+            sleeping = false
+            lastPoke = now
+            Task { await camera.wakeFromIdle() }
+            armIdle()
+            return
+        }
+        if now.timeIntervalSince(lastPoke) < 1 { return }
+        lastPoke = now
+        armIdle()
     }
 
     func recall(_ mode: NamedMode) async {
@@ -482,7 +512,48 @@ final class AppModel {
         state.shots = notes
         state.protectedStamps = Array(protectedStamps)
         state.idleMinutes = idleMinutes
+        state.idleChosen = idleChosen
         Disk.save(state)
+    }
+
+    private var idleTask: Task<Void, Never>?
+    private var idleDeadline: Date?
+    private var lastPoke = Date.distantPast
+
+    private var idleDue: Bool {
+        guard let idleDeadline else { return false }
+        return Date() >= idleDeadline
+    }
+
+    private func armIdle() {
+        idleTask?.cancel()
+        idleTask = nil
+        guard idleMinutes > 0, !sleeping else {
+            idleDeadline = nil
+            return
+        }
+        let deadline = Date().addingTimeInterval(TimeInterval(idleMinutes * 60))
+        idleDeadline = deadline
+        idleTask = Task { [weak self] in
+            let wait = deadline.timeIntervalSinceNow
+            if wait > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            }
+            guard let self, !Task.isCancelled else { return }
+            await self.idleDown()
+        }
+    }
+
+    private func idleDown() async {
+        if shooting {
+            armIdle()
+            return
+        }
+        guard !sleeping else { return }
+        sleeping = true
+        idleTask?.cancel()
+        idleTask = nil
+        await camera.idleDown()
     }
 
     private func applyIdle() {
