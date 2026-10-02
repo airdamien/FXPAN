@@ -1,0 +1,13 @@
+[Unit]
+Description=FXPAN USB ethernet gadget
+After=systemd-modules-load.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/fxpan-gadget start
+ExecStop=/usr/local/sbin/fxpan-gadget stop
+
+[Install]
+WantedBy=multi-user.target

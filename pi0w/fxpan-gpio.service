@@ -1,0 +1,13 @@
+[Unit]
+Description=FXPAN GPIO shutter listener
+After=fxpan-gadget.service
+Requires=fxpan-gadget.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/fxpan-gpio
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
