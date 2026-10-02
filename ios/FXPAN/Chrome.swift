@@ -80,15 +80,16 @@ final class PadStatus {
     var wifi = false
     private var monitor: NWPathMonitor?
 
+    private var observers: [NSObjectProtocol] = []
+
     init() {
         UIDevice.current.isBatteryMonitoringEnabled = true
         refreshBattery()
         let center = NotificationCenter.default
-        center.addObserver(forName: UIDevice.batteryLevelDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refreshBattery() }
-        }
-        center.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refreshBattery() }
+        for name in [UIDevice.batteryLevelDidChangeNotification, UIDevice.batteryStateDidChangeNotification, UIApplication.didBecomeActiveNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.refreshBattery() }
+            })
         }
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { path in
@@ -97,9 +98,10 @@ final class PadStatus {
         }
         monitor.start(queue: DispatchQueue(label: "fxpan.pad"))
         self.monitor = monitor
+        Task { @MainActor in self.refreshBattery() }
     }
 
-    private func refreshBattery() {
+    func refreshBattery() {
         let device = UIDevice.current
         level = device.batteryLevel
         charging = device.batteryState == .charging || device.batteryState == .full
@@ -160,6 +162,9 @@ struct TopBar: View {
                 .foregroundStyle(pad.wifi ? Theme.ink : Theme.faint)
                 .accessibilityLabel(pad.wifi ? "Wi-Fi connected" : "Wi-Fi off")
             PadBattery(level: pad.level, charging: pad.charging)
+                .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
+                    pad.refreshBattery()
+                }
             if model.simulate {
                 Button { model.go(.system) } label: {
                     Text("SIM")
@@ -223,31 +228,29 @@ struct PadBattery: View {
         let known = level >= 0
         let fraction = known ? CGFloat(min(1, max(0, level))) : 0
         let low = known && fraction <= 0.2 && !charging
+        let ink = low ? Theme.err : Theme.ink
         HStack(spacing: 4) {
             ZStack {
-                HStack(spacing: 1) {
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2.5)
-                            .stroke(Theme.ink.opacity(0.9), lineWidth: 1)
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(low ? Theme.err : Theme.ink)
-                            .padding(2)
-                            .frame(width: max(3, 18 * fraction), alignment: .leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(width: 22, height: 11)
-                    RoundedRectangle(cornerRadius: 0.6)
-                        .fill(Theme.ink.opacity(0.9))
-                        .frame(width: 1.6, height: 4)
-                }
+                RoundedRectangle(cornerRadius: 2.5)
+                    .stroke(ink, lineWidth: 1)
+                    .frame(width: 24, height: 12)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(ink)
+                    .frame(width: max(2, 20 * fraction), height: 8)
+                    .frame(width: 20, height: 8, alignment: .leading)
+                Capsule()
+                    .fill(ink)
+                    .frame(width: 1.6, height: 4)
+                    .offset(x: 14)
                 if charging {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.bg)
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(Theme.gold)
+                        .shadow(color: .black.opacity(0.9), radius: 0.4)
                         .offset(x: -1)
                 }
             }
-            .frame(width: 26, height: 12)
+            .frame(width: 30, height: 14)
             Text(known ? "\(Int((fraction * 100).rounded()))%" : "—")
                 .font(Theme.font(12))
                 .foregroundStyle(low ? Theme.err : Theme.dim)
@@ -264,6 +267,7 @@ struct DimPage<Controls: View, Panel: View>: View {
     @ViewBuilder var panel: () -> Panel
 
     var body: some View {
+        let usb = model.usbRevision
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { model.back() } label: {
@@ -301,6 +305,7 @@ struct DimPage<Controls: View, Panel: View>: View {
             }
             .padding(.horizontal, 12)
         }
+        .id(usb)
     }
 }
 

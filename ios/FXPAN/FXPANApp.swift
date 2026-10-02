@@ -6,6 +6,7 @@ struct FXPANApp: App {
 
     init() {
         FontBook.register()
+        UIDevice.current.isBatteryMonitoringEnabled = true
     }
 
     var body: some Scene {
