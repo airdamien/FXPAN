@@ -1,6 +1,5 @@
 import Accelerate
 import CoreGraphics
-import Darwin
 import Foundation
 
 /// The Pi's Hugin stitch: SIFT in the overlap, a similarity (scale, rotation, shift), then a five-band blend.
@@ -14,6 +13,7 @@ enum Hugin {
         var scale: Double
         var inliers: Int
         var blend: String
+        var frameWidth: Int
     }
 
     struct Affine {
@@ -37,35 +37,71 @@ enum Hugin {
         }
     }
 
-    static func make(t: CGImage, r: CGImage, overlap: Double) -> Made? {
+    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
+        try StitchGate.check(stop)
+        note?("Reading the frames")
         let tr = rgba(from: t)
         let rr = rgba(from: r)
         guard tr.w == rr.w, tr.h == rr.h, tr.w > 32, tr.h > 32 else { return nil }
-        guard let fit = align(t: tr, r: rr, overlap: overlap) else { return nil }
-        guard let warped = warp(t: tr, r: rr, fit: fit) else { return nil }
+        guard let fit = try align(t: tr, r: rr, overlap: overlap, note: note, stop: stop) else { return nil }
+        try StitchGate.check(stop)
+        note?("Warping the frames")
+        guard let warped = try warp(t: tr, r: rr, fit: fit, stop: stop) else { return nil }
         let cropped = crop(warped)
-        let useBands = memoryAllowsBands(w: cropped.w, h: cropped.h)
-        let px: [UInt8]
-        let blend: String
-        if useBands, let blended = multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: 5) {
-            px = blended
-            blend = "multiband"
-        } else if let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) {
-            px = soft
-            blend = "feather"
-        } else {
-            return nil
+        return Prepared(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, fit: fit, frameWidth: frameWidth)
+    }
+
+    /// The source frames and the uncropped warp are already gone. Blend, drop the pair, then pack.
+    static func render(_ prepared: Prepared, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Made {
+        var prepared = prepared
+        let blended = try blend(&prepared, note: note, stop: stop)
+        prepared.r = []
+        prepared.t = []
+        try StitchGate.check(stop)
+        note?("Packing the panorama")
+        guard let image = cgImage(rgba: blended.px, w: blended.w, h: blended.h) else {
+            throw PTPError.message("Could not pack the panorama")
         }
-        guard let image = cgImage(rgba: px, w: cropped.w, h: cropped.h) else { return nil }
         let made = Made(
-            image: image, overlap: fit.overlap, dy: fit.dy, rot: fit.rot, scale: fit.scale,
-            inliers: fit.inliers, blend: blend
+            image: image, overlap: prepared.fit.overlap, dy: prepared.fit.dy, rot: prepared.fit.rot,
+            scale: prepared.fit.scale, inliers: prepared.fit.inliers, blend: blended.blend, frameWidth: prepared.frameWidth
         )
         print(String(
             format: "FXPAN hugin rot=%+.2f° scale=%.4f ol=%.0f%% dy=%+d n=%d %@",
             made.rot, made.scale, made.overlap * 100, made.dy, made.inliers, made.blend
         ))
         return made
+    }
+
+    struct Prepared {
+        var r: [UInt8]
+        var t: [UInt8]
+        var w: Int
+        var h: Int
+        var fit: Fit
+        var frameWidth: Int
+    }
+
+    /// Blend, then drop both warped frames before the caller packs a third copy.
+    private static func blend(_ cropped: inout Prepared, note: StitchNote?, stop: StitchStop?) throws -> (px: [UInt8], w: Int, h: Int, blend: String) {
+        let useBands = memoryAllowsBands(w: cropped.w, h: cropped.h)
+        if useBands {
+            note?("Blending five bands")
+            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: 5, stop: stop) {
+                return (blended, cropped.w, cropped.h, "multiband")
+            }
+            try StitchGate.check(stop)
+            note?("Feathering the seam")
+            guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) else {
+                throw PTPError.message("Could not feather the seam")
+            }
+            return (soft, cropped.w, cropped.h, "feather")
+        }
+        note?("Not enough memory for five bands, feathering")
+        guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) else {
+            throw PTPError.message("Could not feather the seam")
+        }
+        return (soft, cropped.w, cropped.h, "feather")
     }
 
     // MARK: - Align
@@ -79,7 +115,7 @@ enum Hugin {
         var inliers: Int
     }
 
-    static func align(t pxT: RGBA, r pxR: RGBA, overlap: Double) -> Fit? {
+    static func align(t pxT: RGBA, r pxR: RGBA, overlap: Double, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Fit? {
         let fullW = pxR.w
         let fullH = pxR.h
         let workW = min(fullW, 1600)
@@ -87,10 +123,19 @@ enum Hugin {
         let gR = scale(gray(pxR), width: workW)
         guard gT.w == gR.w, gT.h == gR.h else { return nil }
         let band = min(gR.w / 2, max(Int((Double(gR.w) * overlap * 1.5).rounded()), Int((Double(gR.w) * 0.22).rounded())))
-        let kR = describe(detect(gR) { $0 >= gR.w - band }, on: gR)
-        let kT = describe(detect(gT) { $0 <= band }, on: gT)
+        let pad = 24
+        try StitchGate.check(stop)
+        note?("Finding features in the R overlap")
+        let kR = try features(gR, x0: max(0, gR.w - band - pad), width: band + pad, stop: stop).filter { $0.x >= Float(gR.w - band) }
+        try StitchGate.check(stop)
+        note?("Finding features in the T overlap")
+        let kT = try features(gT, x0: 0, width: min(gT.w, band + pad), stop: stop).filter { $0.x <= Float(band) }
         guard kR.count >= 8, kT.count >= 8 else { return nil }
+        try StitchGate.check(stop)
+        note?("Matching the overlap")
         guard let matched = match(left: kR, right: kT, height: gR.h), matched.count >= 8 else { return nil }
+        try StitchGate.check(stop)
+        note?("Fitting the seam")
         guard let mWork = ransac(matched) else { return nil }
         let s = Double(gR.w) / Double(fullW)
         let full = Affine(a: mWork.a, b: mWork.b, tx: mWork.tx / s, ty: mWork.ty / s)
@@ -137,7 +182,29 @@ enum Hugin {
         }
     }
 
-    private static func detect(_ img: Gray, keepX: (Int) -> Bool) -> [(x: Float, y: Float, sigma: Float, response: Float)] {
+    /// R is already flopped, so its overlap with T is the right-hand strip. Search only that strip, not the whole frame.
+    private static func features(_ img: Gray, x0: Int, width: Int, stop: StitchStop?) throws -> [KP] {
+        try StitchGate.check(stop)
+        let x0 = max(0, min(img.w - 1, x0))
+        let w = max(8, min(img.w - x0, width))
+        let strip = cropX(img, from: x0, width: w)
+        var keys = try describe(try detect(strip, stop: stop) { _ in true }, on: strip, stop: stop)
+        if x0 != 0 {
+            for i in keys.indices { keys[i].x += Float(x0) }
+        }
+        return keys
+    }
+
+    private static func cropX(_ src: Gray, from x0: Int, width: Int) -> Gray {
+        var p = [Float](repeating: 0, count: width * src.h)
+        for y in 0..<src.h {
+            let row = y * src.w + x0
+            p.replaceSubrange((y * width)..<((y + 1) * width), with: src.p[row..<(row + width)])
+        }
+        return Gray(w: width, h: src.h, p: p)
+    }
+
+    private static func detect(_ img: Gray, stop: StitchStop?, keepX: (Int) -> Bool) throws -> [(x: Float, y: Float, sigma: Float, response: Float)] {
         let layers = 3
         let sigma0 = 1.6
         let k = pow(2.0, 1.0 / Double(layers))
@@ -151,6 +218,7 @@ enum Hugin {
             blurSteps[i] = (total * total - prev * prev).squareRoot()
         }
         for oct in 0..<octaves {
+            try StitchGate.check(stop)
             var level: [Gray] = [current]
             for i in 1..<(layers + 3) {
                 level.append(blur(level[i - 1], sigma: blurSteps[i]))
@@ -229,10 +297,11 @@ enum Hugin {
         return tr * tr * r < (r + 1) * (r + 1) * det
     }
 
-    private static func describe(_ seeds: [(x: Float, y: Float, sigma: Float, response: Float)], on img: Gray) -> [KP] {
+    private static func describe(_ seeds: [(x: Float, y: Float, sigma: Float, response: Float)], on img: Gray, stop: StitchStop?) throws -> [KP] {
         var out: [KP] = []
         out.reserveCapacity(seeds.count)
-        for s in seeds {
+        for (n, s) in seeds.enumerated() {
+            if n % 32 == 0 { try StitchGate.check(stop) }
             for angle in orient(img, x: s.x, y: s.y, sigma: s.sigma) {
                 guard let d = descriptor(img, x: s.x, y: s.y, sigma: s.sigma, angle: angle) else { continue }
                 out.append(KP(x: s.x, y: s.y, sigma: s.sigma, angle: angle, response: s.response, d: d))
@@ -471,27 +540,30 @@ enum Hugin {
             sum += v
         }
         for i in 0..<kernel.count { kernel[i] /= Float(sum) }
-        var mid = [Float](repeating: 0, count: src.p.count)
         let w = src.w, h = src.h
-        for y in 0..<h {
-            for x in 0..<w {
-                var acc: Float = 0
-                for k in -radius...radius {
-                    let xx = min(w - 1, max(0, x + k))
-                    acc += src.p[y * w + xx] * kernel[k + radius]
-                }
-                mid[y * w + x] = acc
-            }
-        }
+        var mid = [Float](repeating: 0, count: src.p.count)
         var out = [Float](repeating: 0, count: src.p.count)
-        for y in 0..<h {
-            for x in 0..<w {
-                var acc: Float = 0
-                for k in -radius...radius {
-                    let yy = min(h - 1, max(0, y + k))
-                    acc += mid[yy * w + x] * kernel[k + radius]
+        src.p.withUnsafeBufferPointer { srcBuf in
+            mid.withUnsafeMutableBufferPointer { midBuf in
+                out.withUnsafeMutableBufferPointer { outBuf in
+                    var srcB = vImage_Buffer(
+                        data: UnsafeMutableRawPointer(mutating: srcBuf.baseAddress),
+                        height: vImagePixelCount(h), width: vImagePixelCount(w),
+                        rowBytes: w * MemoryLayout<Float>.stride
+                    )
+                    var midB = vImage_Buffer(
+                        data: midBuf.baseAddress, height: vImagePixelCount(h), width: vImagePixelCount(w),
+                        rowBytes: w * MemoryLayout<Float>.stride
+                    )
+                    var outB = vImage_Buffer(
+                        data: outBuf.baseAddress, height: vImagePixelCount(h), width: vImagePixelCount(w),
+                        rowBytes: w * MemoryLayout<Float>.stride
+                    )
+                    kernel.withUnsafeBufferPointer { kbuf in
+                        _ = vImageConvolve_PlanarF(&srcB, &midB, nil, 0, 0, kbuf.baseAddress!, 1, UInt32(kernel.count), 0, vImage_Flags(kvImageEdgeExtend))
+                        _ = vImageConvolve_PlanarF(&midB, &outB, nil, 0, 0, kbuf.baseAddress!, UInt32(kernel.count), 1, 0, vImage_Flags(kvImageEdgeExtend))
+                    }
                 }
-                out[y * w + x] = acc
             }
         }
         return Gray(w: w, h: h, p: out)
@@ -506,7 +578,7 @@ enum Hugin {
         var h: Int
     }
 
-    private static func warp(t: RGBA, r: RGBA, fit: Fit) -> Canvas? {
+    private static func warp(t: RGBA, r: RGBA, fit: Fit, stop: StitchStop?) throws -> Canvas? {
         let w = t.w, h = t.h
         let corners = [(0.0, 0.0), (Double(w), 0), (Double(w), Double(h)), (0, Double(h))]
         var xs: [Double] = []
@@ -527,6 +599,7 @@ enum Hugin {
         var tpx = [UInt8](repeating: 0, count: pixels * 4)
         let mt = Affine(a: fit.m.a, b: fit.m.b, tx: fit.m.tx - x0, ty: fit.m.ty - y0)
         for y in 0..<ch {
+            if y % 32 == 0 { try StitchGate.check(stop) }
             for x in 0..<cw {
                 let rx = Double(x) + x0
                 let ry = Double(y) + y0
@@ -618,25 +691,25 @@ enum Hugin {
         return Canvas(r: r, t: t, w: cw, h: ch)
     }
 
+    /// iOS raises a process's memory limit as it allocates, so `os_proc_available_memory`
+    /// under-reports what an 8 GB or 12 GB device will actually allow. Gate on installed RAM.
+    /// A 4 GB iPad stays on the feather path; five bands would get the app killed there.
     private static func memoryAllowsBands(w: Int, h: Int) -> Bool {
-        #if os(iOS)
-        let avail = os_proc_available_memory()
-        if avail == 0 { return true }
-        let need = UInt64(w) * UInt64(h) * 36
-        return avail > need
-        #else
-        _ = (w, h)
-        return true
-        #endif
+        let ram = ProcessInfo.processInfo.physicalMemory
+        let ok = ram >= 8 * 1024 * 1024 * 1024
+        print(String(format: "FXPAN bands ram=%.1fGB canvas=%dx%d %@", Double(ram) / 1_073_741_824, w, h, ok ? "yes" : "no"))
+        return ok
     }
 
-    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int) -> [UInt8]? {
+    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?) throws -> [UInt8]? {
+        try StitchGate.check(stop)
         let weight = seam(r, t, w, h)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for c in 0..<3 {
-            let rc = plane(r, w, h, c)
-            let tc = plane(t, w, h, c)
-            let blended = blendPlanes(rc, tc, weight, w, h, bands: bands)
+            try StitchGate.check(stop)
+            var rc = plane(r, w, h, c)
+            var tc = plane(t, w, h, c)
+            let blended = try blendPlanes(&rc, &tc, weight, w, h, bands: bands, stop: stop)
             for i in 0..<w * h {
                 out[i * 4 + c] = UInt8(min(255, max(0, blended[i].rounded())))
             }
@@ -648,49 +721,89 @@ enum Hugin {
         return out
     }
 
-    private static func blendPlanes(_ r: [Float], _ t: [Float], _ wgt: [Float], _ w: Int, _ h: Int, bands: Int) -> [Float] {
-        var gr: [[Float]] = [r]
-        var gt: [[Float]] = [t]
-        var gw: [[Float]] = [wgt]
-        var sizes: [(Int, Int)] = [(w, h)]
+    private static func blendPlanes(_ r: inout [Float], _ t: inout [Float], _ wgt: [Float], _ w: Int, _ h: Int, bands: Int, stop: StitchStop?) throws -> [Float] {
+        let weights = try gaussPyramid(wgt, w, h, bands: bands, stop: stop)
+        var acc = try laplacian(&r, w, h, bands: bands, stop: stop)
+        try applyWeight(&acc, weights, invert: false, stop: stop)
+        var other = try laplacian(&t, w, h, bands: bands, stop: stop)
+        try applyWeight(&other, weights, invert: true, stop: stop)
+        for level in 0..<acc.levels.count {
+            let n = min(acc.levels[level].count, other.levels[level].count)
+            for i in 0..<n { acc.levels[level][i] += other.levels[level][i] }
+            other.levels[level] = []
+        }
+        return try collapse(acc, stop: stop)
+    }
+
+    private struct Pyr {
+        var levels: [[Float]]
+        var sizes: [(Int, Int)]
+    }
+
+    private static func gaussPyramid(_ src: [Float], _ w: Int, _ h: Int, bands: Int, stop: StitchStop?) throws -> Pyr {
+        var levels = [src]
+        var sizes = [(w, h)]
         var cw = w, ch = h
         for _ in 1..<bands {
-            let (nr, nw, nh) = pyrDown(gr.last!, cw, ch)
+            try StitchGate.check(stop)
+            let (nr, nw, nh) = pyrDown(levels.last!, cw, ch)
             if nw < 8 || nh < 8 { break }
-            gr.append(nr)
-            gt.append(pyrDown(gt.last!, cw, ch).0)
-            gw.append(pyrDown(gw.last!, cw, ch).0)
+            levels.append(nr)
             sizes.append((nw, nh))
             cw = nw
             ch = nh
         }
-        let last = gr.count - 1
-        var acc = [Float](repeating: 0, count: gr[last].count)
-        mix(&acc, gr[last], gt[last], gw[last])
-        if last == 0 { return acc }
-        for level in stride(from: last - 1, through: 0, by: -1) {
-            let upAcc = pyrUp(acc, sizes[level + 1].0, sizes[level + 1].1, sizes[level].0, sizes[level].1)
-            let upR = pyrUp(gr[level + 1], sizes[level + 1].0, sizes[level + 1].1, sizes[level].0, sizes[level].1)
-            let upT = pyrUp(gt[level + 1], sizes[level + 1].0, sizes[level + 1].1, sizes[level].0, sizes[level].1)
-            var lapR = gr[level]
-            var lapT = gt[level]
-            for i in 0..<lapR.count {
-                lapR[i] -= upR[i]
-                lapT[i] -= upT[i]
-            }
-            var lap = [Float](repeating: 0, count: lapR.count)
-            mix(&lap, lapR, lapT, gw[level])
-            acc = upAcc
-            for i in 0..<acc.count { acc[i] += lap[i] }
-        }
-        return acc
+        return Pyr(levels: levels, sizes: sizes)
     }
 
-    private static func mix(_ dst: inout [Float], _ r: [Float], _ t: [Float], _ w: [Float]) {
-        for i in 0..<dst.count {
-            let a = min(1, max(0, w[i]))
-            dst[i] = r[i] * a + t[i] * (1 - a)
+    /// Gaussian pyramid turned into a Laplacian in place, one level at a time, so both frames are never expanded together.
+    private static func laplacian(_ src: inout [Float], _ w: Int, _ h: Int, bands: Int, stop: StitchStop?) throws -> Pyr {
+        var pyr = try gaussPyramid(src, w, h, bands: bands, stop: stop)
+        src = []
+        let last = pyr.levels.count - 1
+        for level in stride(from: last - 1, through: 0, by: -1) {
+            try StitchGate.check(stop)
+            let up = pyrUp(
+                pyr.levels[level + 1],
+                pyr.sizes[level + 1].0, pyr.sizes[level + 1].1,
+                pyr.sizes[level].0, pyr.sizes[level].1
+            )
+            var fine = pyr.levels[level]
+            pyr.levels[level] = []
+            for i in 0..<fine.count { fine[i] -= up[i] }
+            pyr.levels[level] = fine
         }
+        return pyr
+    }
+
+    private static func applyWeight(_ pyr: inout Pyr, _ weights: Pyr, invert: Bool, stop: StitchStop?) throws {
+        for level in 0..<pyr.levels.count {
+            try StitchGate.check(stop)
+            let mask = level < weights.levels.count ? weights.levels[level] : []
+            var px = pyr.levels[level]
+            pyr.levels[level] = []
+            let n = min(px.count, mask.count)
+            if invert {
+                for i in 0..<n { px[i] *= 1 - min(1, max(0, mask[i])) }
+            } else {
+                for i in 0..<n { px[i] *= min(1, max(0, mask[i])) }
+            }
+            pyr.levels[level] = px
+        }
+    }
+
+    private static func collapse(_ pyr: Pyr, stop: StitchStop?) throws -> [Float] {
+        let last = pyr.levels.count - 1
+        var acc = pyr.levels[last]
+        if last == 0 { return acc }
+        for level in stride(from: last - 1, through: 0, by: -1) {
+            try StitchGate.check(stop)
+            acc = pyrUp(acc, pyr.sizes[level + 1].0, pyr.sizes[level + 1].1, pyr.sizes[level].0, pyr.sizes[level].1)
+            let fine = pyr.levels[level]
+            let n = min(acc.count, fine.count)
+            for i in 0..<n { acc[i] += fine[i] }
+        }
+        return acc
     }
 
     private static func feather(r: [UInt8], t: [UInt8], w: Int, h: Int) -> [UInt8]? {
@@ -718,8 +831,8 @@ enum Hugin {
 
     private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int) -> [Float] {
         let n = w * h
-        var distR = [Int](repeating: 1_000_000, count: n)
-        var distT = [Int](repeating: 1_000_000, count: n)
+        var distR = [Int32](repeating: 1_000_000, count: n)
+        var distT = [Int32](repeating: 1_000_000, count: n)
         for i in 0..<n {
             let rr = r[i * 4 + 3] > 32
             let tt = t[i * 4 + 3] > 32
@@ -738,7 +851,7 @@ enum Hugin {
         return weight
     }
 
-    private static func chamfer(_ d: inout [Int], _ w: Int, _ h: Int) {
+    private static func chamfer(_ d: inout [Int32], _ w: Int, _ h: Int) {
         for _ in 0..<2 {
             for y in 0..<h {
                 for x in 0..<w {
@@ -791,10 +904,10 @@ enum Hugin {
                 tmp[dy * tw + dx] = src[y * w + x]
             }
         }
-        return blur5(tmp, tw, th).map { $0 * 4 }
+        return blur5(tmp, tw, th, gain: 4)
     }
 
-    private static func blur5(_ src: [Float], _ w: Int, _ h: Int) -> [Float] {
+    private static func blur5(_ src: [Float], _ w: Int, _ h: Int, gain: Float = 1) -> [Float] {
         let k1: [Float] = [1, 4, 6, 4, 1].map { $0 / 16 }
         var kernel = [Float](repeating: 0, count: 25)
         for y in 0..<5 {
@@ -808,6 +921,9 @@ enum Hugin {
                 var dstB = vImage_Buffer(data: dbuf.baseAddress, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w * MemoryLayout<Float>.stride)
                 _ = vImageConvolve_PlanarF(&srcB, &dstB, nil, 0, 0, &kernel, 5, 5, 0, vImage_Flags(kvImageEdgeExtend))
             }
+        }
+        if gain != 1 {
+            for i in 0..<dst.count { dst[i] *= gain }
         }
         return dst
     }

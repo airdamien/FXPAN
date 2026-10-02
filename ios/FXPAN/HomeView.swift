@@ -2,6 +2,10 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    @State private var zoom: CGFloat = 1
+    @State private var magnify: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var drag: CGSize = .zero
 
     private let dims: [(Route, String, String)] = [
         (.frame, "Frame", "rectangle.compress.vertical"),
@@ -80,11 +84,52 @@ struct HomeView: View {
     }
 
     private var frame: some View {
-        ZStack(alignment: .top) {
-            Button { Task { await model.toggleLive() } } label: {
-                PanoFrame(showLiveHint: !model.camera.live)
+        let scale = min(8, max(1, zoom * magnify))
+        return ZStack(alignment: .top) {
+            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02)
+                .scaleEffect(scale, anchor: .center)
+                .offset(x: pan.width + drag.width, y: pan.height + drag.height)
+                .gesture(MagnifyGesture()
+                    .onChanged { value in magnify = value.magnification }
+                    .onEnded { value in
+                        zoom = min(8, max(1, zoom * value.magnification))
+                        magnify = 1
+                        if zoom <= 1.02 {
+                            zoom = 1
+                            pan = .zero
+                            drag = .zero
+                        }
+                    })
+                .simultaneousGesture(DragGesture()
+                    .onChanged { value in
+                        guard zoom > 1.02 else { return }
+                        drag = value.translation
+                    }
+                    .onEnded { value in
+                        guard zoom > 1.02 else { return }
+                        pan.width += value.translation.width
+                        pan.height += value.translation.height
+                        drag = .zero
+                    })
+                .onTapGesture(count: 2) {
+                    zoom = 1
+                    magnify = 1
+                    pan = .zero
+                    drag = .zero
+                }
+                .onTapGesture {
+                    guard zoom <= 1.02 else { return }
+                    Task { await model.toggleLive() }
+                }
+            if zoom > 1.05 {
+                Text(String(format: "%.1f×  ·  double tap to fit", zoom))
+                    .font(Theme.font(12, weight: .medium))
+                    .foregroundStyle(Theme.gold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.65), in: Capsule())
+                    .padding(.top, 8)
             }
-            .buttonStyle(.plain)
             if let warn = warning {
                 Text(warn.text)
                     .font(Theme.font(13, weight: .medium))
@@ -95,6 +140,7 @@ struct HomeView: View {
                     .padding(.top, 10)
             }
         }
+        .clipped()
     }
 
     private var main: some View {
