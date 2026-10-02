@@ -30,6 +30,7 @@ final class AppModel {
     var toast: Toast?
     var countdown: Int?
     var shooting = false
+    var syncReady = false
     var stitchLabel: String?
     var stitchingStamp: String?
     var stitchWaiting: Set<String> = []
@@ -104,6 +105,14 @@ final class AppModel {
         if redo { try? Data("1".utf8).write(to: marker) }
         applyIdle()
         await camera.start()
+        if await SyncLink.ping() {
+            syncReady = true
+            if photo.drive.release != "sync" {
+                photo.drive.release = "sync"
+                persist()
+            }
+            note("10-pin sync on", bad: false)
+        }
         ingest()
         if ProcessInfo.processInfo.arguments.contains("-shootSim") {
             photo.drive.review = 0
@@ -181,6 +190,10 @@ final class AppModel {
         modes.removeAll { $0.id == id }
         if activeModeID == id { activeModeID = nil }
         persist()
+    }
+
+    func probeSync() async {
+        syncReady = await SyncLink.ping()
     }
 
     func toggleLive() async {

@@ -179,9 +179,12 @@ struct DriveScreen: View {
         let drive = model.photo.drive
         DimPage(title: "Drive", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Release", value: "USB", hint: "Sync is the 10-pin pulse. Later.") {
-                    ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: "usb") { _ in }
+                RowBlock(title: "Release", value: drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB", hint: "Sync drops USB, pulses the 10-pin board, then downloads.") {
+                    ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
+                        model.edit { $0.drive.release = value }
+                    }
                 }
+                .task { await model.probeSync() }
                 RowBlock(title: "Save", value: drive.save) {
                     ChipRow(options: [("ipad", UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"), ("both", "Both"), ("cards", "Cards")], selected: drive.save) { value in
                         model.edit { $0.drive.save = value }
@@ -766,7 +769,7 @@ struct AboutScreen: View {
                     .foregroundStyle(Theme.gold)
                 Text("Two Nikons, one 65:24 frame. PTP over a USB hub, stitch on this \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad").")
                     .font(Theme.font(15))
-                Text("The 10-pin sync release is not in this build.")
+                Text("10-pin sync is the Zero W on the USB gadget at 10.55.0.1. Release set to Sync pulses it.")
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
                 if !model.messages.isEmpty {
                     Text("Recent").font(Theme.font(12, weight: .semibold)).foregroundStyle(Theme.dim).padding(.top, 8)

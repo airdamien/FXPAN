@@ -121,6 +121,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FXPAN;
 				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN controls Nikon cameras connected over USB.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FXPAN tells the trigger board when to release the shutters.";
 				INFOPLIST_KEY_UIAppFonts = "Jost-VariableFont_wght.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -155,6 +156,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FXPAN;
 				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN controls Nikon cameras connected over USB.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FXPAN tells the trigger board when to release the shutters.";
 				INFOPLIST_KEY_UIAppFonts = "Jost-VariableFont_wght.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
