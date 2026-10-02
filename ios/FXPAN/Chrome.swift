@@ -114,45 +114,62 @@ struct TopBar: View {
 
     var body: some View {
         let _ = model.cameraRevision
-        HStack(spacing: 12) {
+        GeometryReader { geo in
+            bar(compact: geo.size.width < 560)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(height: 46)
+        .background(Theme.bg)
+    }
+
+    private func bar(compact: Bool) -> some View {
+        HStack(spacing: compact ? 8 : 12) {
             Button { model.home() } label: {
                 Image("FXPANWordmark")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 34)
+                    .frame(height: compact ? 22 : 34)
                     .accessibilityLabel("FXPAN")
             }
             Button { model.go(.modes) } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "person")
-                    Text(model.activeMode?.name ?? "Modes")
+                    if !compact {
+                        Text(model.activeMode?.name ?? "Modes")
+                    }
                     if model.modeDrifted {
                         Circle().fill(Theme.gold).frame(width: 6, height: 6)
                     }
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    if !compact {
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    }
                 }
                 .font(Theme.font(14, weight: .medium))
-                .padding(.horizontal, 10)
+                .padding(.horizontal, compact ? 8 : 10)
                 .padding(.vertical, 6)
                 .background(Theme.s2, in: Capsule())
             }
             HStack(spacing: 6) {
-                pill(.r)
-                pill(.t)
+                pill(.r, compact: compact)
+                pill(.t, compact: compact)
             }
             Spacer(minLength: 0)
             if let stitch = model.stitchLabel {
                 Button { model.go(.playback) } label: {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small).tint(Theme.gold)
-                        Text(stitch).font(Theme.font(13))
+                        if !compact {
+                            Text(stitch).font(Theme.font(13))
+                        }
                     }
                 }
             }
             Button { model.go(.storage) } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "sdcard")
-                    Text(sets)
+                    if !compact {
+                        Text(sets)
+                    }
                 }
                 .font(Theme.font(13))
                 .foregroundStyle(Theme.dim)
@@ -165,7 +182,7 @@ struct TopBar: View {
                 .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
                     pad.refreshBattery()
                 }
-            if model.simulate {
+            if model.simulate && !compact {
                 Button { model.go(.system) } label: {
                     Text("SIM")
                         .font(Theme.font(11, weight: .semibold))
@@ -182,9 +199,7 @@ struct TopBar: View {
                     .foregroundStyle(Theme.ink2)
             }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 46)
-        .background(Theme.bg)
+        .padding(.horizontal, compact ? 10 : 14)
     }
 
     private var sets: String {
@@ -193,7 +208,7 @@ struct TopBar: View {
         return n.formatted()
     }
 
-    private func pill(_ role: Role) -> some View {
+    private func pill(_ role: Role, compact: Bool) -> some View {
         let slot = model.camera.slots[role] ?? BodyState()
         let tint = role == .t ? Theme.transmit : Theme.reflect
         let pct = slot.battery
@@ -203,15 +218,17 @@ struct TopBar: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.s3)
                     Capsule().fill(slot.online && (pct ?? 100) <= 20 ? Theme.err : tint)
-                        .frame(width: slot.online ? CGFloat(pct ?? 0) / 100 * 28 : 0)
+                        .frame(width: slot.online ? CGFloat(pct ?? 0) / 100 * (compact ? 18 : 28) : 0)
                 }
-                .frame(width: 28, height: 6)
-                Text(!slot.online ? "out" : (pct.map { "\($0)%" } ?? "USB"))
-                    .font(Theme.font(11))
-                    .foregroundStyle(slot.online ? Theme.ink2 : Theme.faint)
-                    .frame(width: 36, alignment: .leading)
+                .frame(width: compact ? 18 : 28, height: 6)
+                if !compact {
+                    Text(!slot.online ? "out" : (pct.map { "\($0)%" } ?? "USB"))
+                        .font(Theme.font(11))
+                        .foregroundStyle(slot.online ? Theme.ink2 : Theme.faint)
+                        .frame(width: 36, alignment: .leading)
+                }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, compact ? 6 : 8)
             .padding(.vertical, 5)
             .background(Theme.s1, in: Capsule())
             .overlay(Capsule().stroke(Theme.hair, lineWidth: 1))
@@ -223,6 +240,7 @@ struct TopBar: View {
 struct PadBattery: View {
     var level: Float
     var charging: Bool
+    var showsPercent = true
 
     var body: some View {
         let known = level >= 0
@@ -251,9 +269,11 @@ struct PadBattery: View {
                 }
             }
             .frame(width: 30, height: 14)
-            Text(known ? "\(Int((fraction * 100).rounded()))%" : "—")
-                .font(Theme.font(12))
-                .foregroundStyle(low ? Theme.err : Theme.dim)
+            if showsPercent {
+                Text(known ? "\(Int((fraction * 100).rounded()))%" : "—")
+                    .font(Theme.font(12))
+                    .foregroundStyle(low ? Theme.err : Theme.dim)
+            }
         }
         .accessibilityLabel(charging ? "Charging, \(known ? "\(Int((fraction * 100).rounded())) percent" : "battery")" : "Battery")
     }
@@ -490,6 +510,8 @@ struct PanoFrame: View {
         Text(text)
             .font(Theme.font(13, weight: gold ? .semibold : .regular))
             .foregroundStyle(gold ? Theme.gold : (dim ? Theme.dim : Theme.ink))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
     }
@@ -600,6 +622,7 @@ struct ReviewOverlay: View {
                     }
                     .buttonStyle(PlainChip())
                 }
+                .frame(maxWidth: .infinity)
             }
             .padding(24)
         }

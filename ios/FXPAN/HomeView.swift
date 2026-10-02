@@ -15,11 +15,18 @@ struct HomeView: View {
     var body: some View {
         let _ = model.cameraRevision
         GeometryReader { geo in
-            let wide = geo.size.width > geo.size.height && geo.size.width >= 980
-            if wide {
+            let phone = min(geo.size.width, geo.size.height) <= 500
+            let landscape = geo.size.width > geo.size.height
+            let wide = landscape && geo.size.width >= 980
+            if phone && landscape {
+                phoneLandscape
+            } else if phone {
+                phonePortrait
+            } else if wide {
                 HStack(spacing: 10) {
                     main
                     railVertical
+                        .frame(width: 96)
                 }
             } else {
                 VStack(spacing: 10) {
@@ -33,26 +40,69 @@ struct HomeView: View {
         .padding(.bottom, 10)
     }
 
-    private var main: some View {
-        VStack(spacing: 10) {
-            ZStack(alignment: .top) {
-                Button { Task { await model.toggleLive() } } label: {
-                    PanoFrame(showLiveHint: !model.camera.live)
-                }
-                .buttonStyle(.plain)
-                if let warn = warning {
-                    Text(warn.text)
-                        .font(Theme.font(13, weight: .medium))
-                        .foregroundStyle(warn.bad ? Theme.err : Theme.warn)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.7), in: Capsule())
-                        .padding(.top, 10)
+    private var phonePortrait: some View {
+        VStack(spacing: 8) {
+            fittedFrame
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(dims, id: \.1) { dim in
+                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                        .frame(minHeight: 86)
                 }
             }
+            Spacer(minLength: 12)
+            railHorizontal
+        }
+    }
+
+    private var phoneLandscape: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                fittedFrame
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                railVertical
+                    .frame(width: 84)
+            }
+            HStack(spacing: 6) {
+                ForEach(dims, id: \.1) { dim in
+                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                }
+            }
+            .frame(height: 72)
+        }
+    }
+
+    /// The panorama's own height. On a phone the home column is much taller than 2.71:1, and the frame would otherwise stretch into a black well with the picture floating in it.
+    private var fittedFrame: some View {
+        let aspect = Catalog.nativeAspect * max(model.photo.frame.squeeze, 1)
+        return Color.clear
+            .aspectRatio(aspect, contentMode: .fit)
+            .overlay { frame }
+    }
+
+    private var frame: some View {
+        ZStack(alignment: .top) {
+            Button { Task { await model.toggleLive() } } label: {
+                PanoFrame(showLiveHint: !model.camera.live)
+            }
+            .buttonStyle(.plain)
+            if let warn = warning {
+                Text(warn.text)
+                    .font(Theme.font(13, weight: .medium))
+                    .foregroundStyle(warn.bad ? Theme.err : Theme.warn)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.7), in: Capsule())
+                    .padding(.top, 10)
+            }
+        }
+    }
+
+    private var main: some View {
+        VStack(spacing: 10) {
+            frame
             HStack(spacing: 8) {
                 ForEach(dims, id: \.1) { dim in
-                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1)) }
+                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: false) }
                 }
             }
             .frame(height: 92)
@@ -116,7 +166,6 @@ struct HomeView: View {
             Spacer(minLength: 0)
             liveButton
         }
-        .frame(width: 96)
     }
 
     private var railHorizontal: some View {
@@ -158,25 +207,25 @@ struct HomeView: View {
         s.replacingOccurrences(of: "iso", with: "", options: .caseInsensitive).filter { !$0.isWhitespace }.lowercased()
     }
 
-    private func tile(_ title: String, _ icon: String, _ lines: (String, String)) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func tile(_ title: String, _ icon: String, _ lines: (String, String), compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 12))
+                Image(systemName: icon).font(.system(size: compact ? 10 : 12))
                 Text(title.uppercased())
-                    .font(Theme.font(11, weight: .semibold))
+                    .font(Theme.font(compact ? 10 : 11, weight: .semibold))
                     .tracking(1.2)
             }
             .foregroundStyle(Theme.dim)
             Spacer(minLength: 0)
             Text(lines.0)
-                .font(Theme.font(18, weight: .medium))
+                .font(Theme.font(compact ? 15 : 18, weight: .medium))
                 .lineLimit(1)
             Text(lines.1)
-                .font(Theme.font(12))
+                .font(Theme.font(compact ? 11 : 12))
                 .foregroundStyle(Theme.dim)
                 .lineLimit(1)
         }
-        .padding(10)
+        .padding(compact ? 8 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
         .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.hair, lineWidth: 1))
@@ -200,7 +249,7 @@ struct HomeView: View {
             return (LookBook.name(photo.look), bits.isEmpty ? LookBook.note(photo.look) : bits.joined(separator: " · "))
         case "Drive":
             let engine = Catalog.engines.first { $0.0 == photo.drive.engine }?.1 ?? photo.drive.engine
-            let save = photo.drive.save == "cards" ? "Cards" : (photo.drive.save == "both" ? "Both" : "iPad")
+            let save = photo.drive.save == "cards" ? "Cards" : (photo.drive.save == "both" ? "Both" : (UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"))
             return ("USB", [save, photo.drive.autoStitch ? engine : "Hold stitch"].joined(separator: " · "))
         default:
             let w = Catalog.wbRow(photo.wb)

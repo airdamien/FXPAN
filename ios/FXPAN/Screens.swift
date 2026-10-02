@@ -183,7 +183,7 @@ struct DriveScreen: View {
                     ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: "usb") { _ in }
                 }
                 RowBlock(title: "Save", value: drive.save) {
-                    ChipRow(options: [("ipad", "iPad"), ("both", "Both"), ("cards", "Cards")], selected: drive.save) { value in
+                    ChipRow(options: [("ipad", UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"), ("both", "Both"), ("cards", "Cards")], selected: drive.save) { value in
                         model.edit { $0.drive.save = value }
                     }
                 }
@@ -651,7 +651,7 @@ struct DisplayScreen: View {
                 }
             }
         }, panel: {
-            Text("This is the iPad backlight, not the Pi HDMI panel.")
+            Text("This is the \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad") backlight, not the Pi HDMI panel.")
                 .font(Theme.font(14)).foregroundStyle(Theme.dim)
         })
     }
@@ -685,7 +685,7 @@ struct AboutScreen: View {
                 Text("FXPAN")
                     .font(Theme.font(28, weight: .semibold))
                     .foregroundStyle(Theme.gold)
-                Text("Two Nikons, one 65:24 frame. PTP over a USB hub, stitch on this iPad.")
+                Text("Two Nikons, one 65:24 frame. PTP over a USB hub, stitch on this \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad").")
                     .font(Theme.font(15))
                 Text("The 10-pin sync release is not in this build.")
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
