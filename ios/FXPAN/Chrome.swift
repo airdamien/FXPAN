@@ -63,11 +63,28 @@ struct RootView: View {
             if let url = model.peepURL {
                 PeepScreen(url: url, title: model.peepTitle) { model.closePeep() }
             }
+            if model.sleeping {
+                ZStack {
+                    Theme.bg.opacity(0.94).ignoresSafeArea()
+                    VStack(spacing: 8) {
+                        Text("Sleeping")
+                            .font(Theme.font(22, weight: .medium))
+                        Text("Touch to wake")
+                            .font(Theme.font(14))
+                            .foregroundStyle(Theme.dim)
+                    }
+                }
+                .onTapGesture { model.poke() }
+            }
         }
         .foregroundStyle(Theme.ink)
         .font(Theme.font(15))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in model.poke() }
+        )
     }
 
     @ViewBuilder
@@ -112,9 +129,9 @@ final class PadStatus {
                 Task { @MainActor in self?.refreshBattery() }
             })
         }
-        let monitor = NWPathMonitor()
+        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
         monitor.pathUpdateHandler = { path in
-            let on = path.status == .satisfied && path.usesInterfaceType(.wifi)
+            let on = path.status == .satisfied
             Task { @MainActor in self.wifi = on }
         }
         monitor.start(queue: DispatchQueue(label: "fxpan.pad"))

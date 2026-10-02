@@ -64,15 +64,9 @@ OK focus_ms=100 shutter_ms=300
 OK focus_ms=100 shutter_ms=1000
 ```
 
-Then move the same cable to the iPad. The iPad should get a `10.55.0.x` address from the Zero. With Release set to Sync, the shutter sends the same `FIRE` line to `10.55.0.1:2323`.
+Then move the same cable to the iPad. The iPad should get a `10.55.0.x` address from the Zero, and Wi-Fi stays up. The lease has no gateway and no DNS, so only `10.55.0.1` goes over the cable. With Release set to Sync, the shutter sends `FIRE` to `10.55.0.1:2323`.
 
-Wi-Fi can stay up while you check this. Once `ping 10.55.0.1` works, turn it off so the board is only reachable over the cable:
-
-```bash
-sudo rfkill block wifi
-```
-
-That block does not always survive a reboot on Pi OS. To keep Wi-Fi off, add `dtoverlay=disable-wifi` to `config.txt` and reboot. Do that only after the gadget answers, or a failed gadget leaves the board with no way in.
+If the iPad already took a lease that named this board as the router, unplug the cable and plug it back in after this config is on the Zero.
 
 ## What got installed
 

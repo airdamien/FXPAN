@@ -27,11 +27,6 @@ struct Grabbed {
     var nef: URL?
 }
 
-struct SyncMark: Sendable {
-    var handles: [UInt32]
-    var mark: Int
-}
-
 /// USB PTP for the paired Nikons, plus a no-cable scene so the UI runs in the Simulator.
 @MainActor
 final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate {
@@ -62,6 +57,9 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private var liveLine = "Live"
     /// Set while the 10-pin pulse has USB closed. A close callback must not reopen the bodies in that window.
     private var usbHeld = false
+    /// Set while idle has closed the sessions so the bodies can sleep. A close callback must not reopen them.
+    private var idling = false
+    private var liveBeforeIdle = false
 
     func start() async {
         if started { return }
@@ -75,6 +73,27 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         browser.start()
         if simulate { installSim() }
         publish()
+    }
+
+    /// Stop live view and drop the sessions so the bodies are not held awake.
+    func idleDown() async {
+        guard started, !simulate, !idling else { return }
+        liveBeforeIdle = live
+        idling = true
+        await setLive(false)
+        for link in Array(links.values) {
+            await link.closeForSync()
+        }
+        publish()
+    }
+
+    /// Open the sessions again. Live view comes back only if it was on before sleep.
+    func wakeFromIdle() async {
+        guard idling else { return }
+        let resume = liveBeforeIdle
+        idling = false
+        await foreground()
+        if resume { await setLive(true) }
     }
 
     private func seenDevices() -> [ICDevice] {
@@ -93,7 +112,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         forgetMissingFrames()
         seat()
         publish()
-        if !usbHeld {
+        if !usbHeld && !idling {
             for link in Array(links.values) where !link.sessionUp || !link.device.hasOpenSession {
                 do {
                     try await link.open()
@@ -307,11 +326,11 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
         let bodies = links.values.filter { role(of: $0.token) != nil }
         guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
-        var armed: [(NikonLink, Role, SyncMark)] = []
+        var armed: [(NikonLink, Role)] = []
         for link in bodies {
             guard let who = role(of: link.token) else { continue }
-            let mark = try await link.armSync(photo)
-            armed.append((link, who, mark))
+            try await link.armSync(photo)
+            armed.append((link, who))
         }
         usbHeld = true
         defer { usbHeld = false }
@@ -330,7 +349,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         var failures: [String] = []
         for row in armed {
             do {
-                out[row.1] = try await row.0.takeNew(stamp: stamp, role: row.1, mark: row.2)
+                out[row.1] = try await row.0.takeRAM(stamp: stamp, role: row.1)
             } catch {
                 failures.append(error.localizedDescription)
             }
@@ -367,7 +386,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             guard let link = self.links[key] else { return }
             link.noteSessionClosed()
             let stillThere = self.seenDevices().contains { $0.uuidString == key }
-            if stillThere && self.front && !self.usbHeld {
+            if stillThere && self.front && !self.usbHeld && !self.idling {
                 do { try await link.open() } catch { self.links[key] = nil }
             } else if !stillThere {
                 self.links[key] = nil
@@ -443,6 +462,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         seat()
         publish()
         Task {
+            if self.idling { return }
             do {
                 try await link.open()
                 if let vendorOK = link.info.flatMap({ $0.model.lowercased().contains("nikon") ? true : nil }),
@@ -932,11 +952,16 @@ final class NikonLink {
         await settle(minimum: 1.2, seconds: 8)
     }
 
-    /// Card write, current exposure, and the file list from before the pulse.
-    func armSync(_ photo: Photo) async throws -> SyncMark {
-        try? await set(.recordingMedia, 0)
+    /// Point the 10-pin at camera RAM and empty what is already parked there.
+    /// The body hands RAM frames back oldest first, so a leftover would be saved as the new shot.
+    func armSync(_ photo: Photo) async throws {
+        try await set(.recordingMedia, 1)
         try await apply(photo)
-        return SyncMark(handles: (try? await objectHandles()) ?? [], mark: arrivals.mark(device))
+        try await set(.recordingMedia, 1)
+        if let media = await value(.recordingMedia), media != 1 {
+            throw PTPError.message("\(model) stayed on the card")
+        }
+        await drainRAM()
     }
 
     func closeForSync() async {
@@ -951,23 +976,101 @@ final class NikonLink {
         sessionUp = false
     }
 
-    /// Files that showed up after the 10-pin pulse.
-    func takeNew(stamp: String, role: Role, mark: SyncMark) async throws -> Grabbed {
+    /// Download the frame the 10-pin just put in camera RAM, then free that slot.
+    func takeRAM(stamp: String, role: Role) async throws -> Grabbed {
         let deadline = Date().addingTimeInterval(12)
         var handles: [UInt32] = []
         while Date() < deadline {
-            _ = try? await transact(PTP.Op.deviceReady.rawValue, timeout: 1)
-            let after = (try? await objectHandles()) ?? []
-            handles = after.filter { !mark.handles.contains($0) }
+            handles = await queuedRAM()
             if !handles.isEmpty { break }
-            let fresh = arrivals.since(device, mark.mark)
-            if let grabbed = try await grabbed(from: fresh, stamp: stamp, role: role) {
-                return grabbed
-            }
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: 200_000_000)
         }
-        if handles.isEmpty { throw PTPError.message("\(role.rawValue) pulsed, no file came back") }
-        return try await save(handles: handles, stamp: stamp, role: role)
+        if handles.isEmpty { throw PTPError.message("\(role.rawValue) no frame in camera RAM") }
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        for handle in await queuedRAM() where !handles.contains(handle) {
+            handles.append(handle)
+        }
+        print("FXPAN \(model) ram \(handles.map { String(format: "%08X", $0) }.joined(separator: " "))")
+        let grabbed = try await save(handles: handles, stamp: stamp, role: role)
+        for handle in handles {
+            _ = try? await transact(PTP.Op.deleteObject.rawValue, params: [handle], timeout: 8)
+        }
+        return grabbed
+    }
+
+    /// Drop parked RAM frames so the next event is the shot we just took.
+    private func drainRAM() async {
+        var emptied = 0
+        for _ in 0..<6 {
+            let handles = await queuedRAM()
+            if handles.isEmpty { break }
+            for handle in handles {
+                guard let file = try? await transact(PTP.Op.getObject.rawValue, params: [handle], timeout: 60),
+                      file.ok, !file.data.isEmpty else { continue }
+                writeRecovered(file.data, index: emptied)
+                emptied += 1
+                _ = try? await transact(PTP.Op.deleteObject.rawValue, params: [handle], timeout: 8)
+            }
+        }
+        if emptied > 0 { print("FXPAN \(model) cleared \(emptied) old RAM frame(s)") }
+    }
+
+    private func queuedRAM() async -> [UInt32] {
+        let cards = await cardStorages()
+        var out: [UInt32] = []
+        var noted = false
+        for _ in 0..<8 {
+            guard let ev = try? await transact(PTP.Op.getEvent.rawValue, timeout: 2), ev.ok else { break }
+            let events = Self.events(ev.data)
+            if events.isEmpty {
+                if !noted, ev.data.count > 2 {
+                    noted = true
+                    print("FXPAN \(model) events \(Self.eventBrief(ev.data))")
+                }
+                break
+            }
+            var ram = false
+            for event in events {
+                guard await isRAM(event, cards: cards) else { continue }
+                ram = true
+                if !out.contains(event.param) { out.append(event.param) }
+            }
+            if !ram { continue }
+        }
+        return out
+    }
+
+    /// Fixed/removable ROM is the card. RAM storages stay out of this set.
+    private func cardStorages() async -> Set<UInt32> {
+        guard let storages = try? await transact(PTP.Op.getStorageIDs.rawValue), storages.ok else { return [] }
+        var cards: Set<UInt32> = []
+        for id in Self.words(storages.data) {
+            guard let info = try? await transact(PTP.Op.getStorageInfo.rawValue, params: [id], timeout: 4),
+                  info.ok, info.data.count >= 2 else {
+                cards.insert(id)
+                continue
+            }
+            let kind = info.data.u16(0)
+            if kind == 0x0001 || kind == 0x0002 { cards.insert(id) }
+        }
+        return cards
+    }
+
+    private func isRAM(_ event: PTPEvent, cards: Set<UInt32>) async -> Bool {
+        if event.code == PTP.addedInRAM { return true }
+        guard event.code == PTP.objectAdded else { return false }
+        guard let info = try? await transact(PTP.Op.getObjectInfo.rawValue, params: [event.param], timeout: 4),
+              info.ok, info.data.count >= 4 else { return false }
+        let storage = info.data.u32(0)
+        return !cards.contains(storage)
+    }
+
+    private func writeRecovered(_ data: Data, index: Int) {
+        let ext = data.starts(with: [0xFF, 0xD8]) ? "jpg" : "nef"
+        let dir = Disk.captures.appendingPathComponent("recovered_ram", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("\(model.filter { $0.isNumber })_\(index).\(ext)")
+        try? data.write(to: url, options: .atomic)
     }
 
     func shoot(stamp: String, role: Role, photo: Photo) async throws -> Grabbed {
@@ -1225,10 +1328,43 @@ final class NikonLink {
             let code = data.u16(i)
             let param = data.u32(i + 2)
             // 0x4002 is a card file. 0xC101 is Nikon's "added in SDRAM" when the shot stays on the iPad.
-            if (code == PTP.objectAdded || code == 0xC101), param != 0 { out.append(param) }
+            if (code == PTP.objectAdded || code == PTP.addedInRAM), param != 0 { out.append(param) }
             i += 6
         }
         return out
+    }
+
+    private struct PTPEvent {
+        var code: UInt16
+        var param: UInt32
+    }
+
+    private static func events(_ data: Data) -> [PTPEvent] {
+        guard data.count >= 2 else { return [] }
+        let count = min(Int(data.u16(0)), 32)
+        var i = 2
+        var out: [PTPEvent] = []
+        for _ in 0..<count {
+            if i + 6 > data.count { break }
+            let code = data.u16(i)
+            let param = data.u32(i + 2)
+            if param != 0 { out.append(PTPEvent(code: code, param: param)) }
+            i += 6
+        }
+        return out
+    }
+
+    private static func eventBrief(_ data: Data) -> String {
+        guard data.count >= 2 else { return "empty" }
+        let count = min(Int(data.u16(0)), 8)
+        var i = 2
+        var parts: [String] = []
+        for _ in 0..<count {
+            if i + 6 > data.count { break }
+            parts.append(String(format: "%04X:%08X", data.u16(i), data.u32(i + 2)))
+            i += 6
+        }
+        return parts.joined(separator: " ")
     }
 
     private static func fallbackType(_ prop: PTP.Prop) -> UInt16 {

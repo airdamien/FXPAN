@@ -179,7 +179,7 @@ struct DriveScreen: View {
         let drive = model.photo.drive
         DimPage(title: "Drive", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Release", value: drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB", hint: "Sync drops USB, pulses the 10-pin board, then downloads.") {
+                RowBlock(title: "Release", value: drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB", hint: "Sync drops USB, pulses the 10-pin board, then downloads the frame from camera RAM.") {
                     ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
                         model.edit { $0.drive.release = value }
                     }
@@ -726,14 +726,14 @@ struct DisplayScreen: View {
                     }
                     .tint(Theme.gold)
                 }
-                RowBlock(title: "Sleep", value: model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min") {
+                RowBlock(title: "Sleep", value: model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min", hint: "No touch for this long stops live view and lets the bodies sleep.") {
                     ChipRow(options: [("0", "Awake"), ("2", "2 min"), ("5", "5 min"), ("10", "10 min")], selected: "\(model.idleMinutes)") { value in
                         model.setIdle(Int(value) ?? 0)
                     }
                 }
             }
         }, panel: {
-            Text("This is the \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad") backlight, not the Pi HDMI panel.")
+            Text("Sleep releases the cameras. Brightness is this \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad")'s backlight.")
                 .font(Theme.font(14)).foregroundStyle(Theme.dim)
         })
     }

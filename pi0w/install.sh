@@ -82,7 +82,10 @@ install -m 0644 "$here/fxpan-gpio.service" /etc/systemd/system/fxpan-gpio.servic
 
 systemctl daemon-reload
 systemctl enable fxpan-gadget.service fxpan-dhcp.service fxpan-gpio.service
+if systemctl is-active --quiet fxpan-dhcp.service; then
+    systemctl restart fxpan-dhcp.service || true
+fi
 
-echo "installed. Wi-Fi is still up."
-echo "reboot so the USB port comes up as the gadget: sudo reboot"
-echo "after ping 10.55.0.1 works, turn Wi-Fi off with: sudo rfkill block wifi"
+echo "installed. Wi-Fi stays up, on this board and on the iPad."
+echo "the USB lease has no gateway, so the iPad keeps using Wi-Fi."
+echo "reboot if the USB port is not a gadget yet: sudo reboot"
