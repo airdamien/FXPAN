@@ -360,8 +360,6 @@ struct ChipRow: View {
             ForEach(options, id: \.0) { option in
                 let on = option.0 == selected
                 PressChip(title: option.1, on: on) { onSelect(option.0) }
-                    .disabled(option.0 == "sync")
-                    .opacity(option.0 == "sync" ? 0.4 : 1)
             }
         }
     }

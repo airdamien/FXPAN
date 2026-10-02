@@ -27,6 +27,11 @@ struct Grabbed {
     var nef: URL?
 }
 
+struct SyncMark: Sendable {
+    var handles: [UInt32]
+    var mark: Int
+}
+
 /// USB PTP for the paired Nikons, plus a no-cable scene so the UI runs in the Simulator.
 @MainActor
 final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate {
@@ -55,6 +60,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private var front = true
     private var livePoll: Task<Void, Never>?
     private var liveLine = "Live"
+    /// Set while the 10-pin pulse has USB closed. A close callback must not reopen the bodies in that window.
+    private var usbHeld = false
 
     func start() async {
         if started { return }
@@ -86,11 +93,13 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         forgetMissingFrames()
         seat()
         publish()
-        for link in Array(links.values) where !link.sessionUp || !link.device.hasOpenSession {
-            do {
-                try await link.open()
-            } catch {
-                links[link.id] = nil
+        if !usbHeld {
+            for link in Array(links.values) where !link.sessionUp || !link.device.hasOpenSession {
+                do {
+                    try await link.open()
+                } catch {
+                    links[link.id] = nil
+                }
             }
         }
         for device in seenDevices() { adopt(device) }
@@ -262,6 +271,9 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             return out
         }
         await setLive(false)
+        if photo.drive.release == "sync" {
+            return try await captureSync(stamp: stamp, photo: photo)
+        }
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
@@ -291,6 +303,46 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return out
     }
 
+    /// Arm both bodies, drop USB so the D800s honor the 10-pin, pulse the Zero, then download.
+    private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
+        let bodies = links.values.filter { role(of: $0.token) != nil }
+        guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
+        var armed: [(NikonLink, Role, SyncMark)] = []
+        for link in bodies {
+            guard let who = role(of: link.token) else { continue }
+            let mark = try await link.armSync(photo)
+            armed.append((link, who, mark))
+        }
+        usbHeld = true
+        defer { usbHeld = false }
+        for row in armed { await row.0.closeForSync() }
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let reply: String
+        do {
+            reply = try await SyncLink.fire(photo)
+        } catch {
+            for row in armed { try? await row.0.open() }
+            throw error
+        }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        for row in armed { try? await row.0.open() }
+        var out: [Role: Grabbed] = [:]
+        var failures: [String] = []
+        for row in armed {
+            do {
+                out[row.1] = try await row.0.takeNew(stamp: stamp, role: row.1, mark: row.2)
+            } catch {
+                failures.append(error.localizedDescription)
+            }
+        }
+        if out.isEmpty {
+            throw PTPError.message(failures.first ?? "Sync pulsed, no file came back")
+        }
+        print("FXPAN sync \(reply)")
+        await refreshStatus()
+        return out
+    }
+
     // MARK: - Browser
 
     nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
@@ -315,7 +367,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             guard let link = self.links[key] else { return }
             link.noteSessionClosed()
             let stillThere = self.seenDevices().contains { $0.uuidString == key }
-            if stillThere && self.front {
+            if stillThere && self.front && !self.usbHeld {
                 do { try await link.open() } catch { self.links[key] = nil }
             } else if !stillThere {
                 self.links[key] = nil
@@ -880,6 +932,44 @@ final class NikonLink {
         await settle(minimum: 1.2, seconds: 8)
     }
 
+    /// Card write, current exposure, and the file list from before the pulse.
+    func armSync(_ photo: Photo) async throws -> SyncMark {
+        try? await set(.recordingMedia, 0)
+        try await apply(photo)
+        return SyncMark(handles: (try? await objectHandles()) ?? [], mark: arrivals.mark(device))
+    }
+
+    func closeForSync() async {
+        inLive = false
+        guard device.hasOpenSession else {
+            sessionUp = false
+            return
+        }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            device.requestCloseSession(options: nil) { _ in cont.resume() }
+        }
+        sessionUp = false
+    }
+
+    /// Files that showed up after the 10-pin pulse.
+    func takeNew(stamp: String, role: Role, mark: SyncMark) async throws -> Grabbed {
+        let deadline = Date().addingTimeInterval(12)
+        var handles: [UInt32] = []
+        while Date() < deadline {
+            _ = try? await transact(PTP.Op.deviceReady.rawValue, timeout: 1)
+            let after = (try? await objectHandles()) ?? []
+            handles = after.filter { !mark.handles.contains($0) }
+            if !handles.isEmpty { break }
+            let fresh = arrivals.since(device, mark.mark)
+            if let grabbed = try await grabbed(from: fresh, stamp: stamp, role: role) {
+                return grabbed
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        if handles.isEmpty { throw PTPError.message("\(role.rawValue) pulsed, no file came back") }
+        return try await save(handles: handles, stamp: stamp, role: role)
+    }
+
     func shoot(stamp: String, role: Role, photo: Photo) async throws -> Grabbed {
         await stopLive()
         let mark = arrivals.mark(device)
@@ -925,6 +1015,10 @@ final class NikonLink {
             }
             throw PTPError.message("\(role.rawValue) fired, no file came back")
         }
+        return try await save(handles: handles, stamp: stamp, role: role)
+    }
+
+    private func save(handles: [UInt32], stamp: String, role: Role) async throws -> Grabbed {
         var jpegURL: URL?
         var nefURL: URL?
         for handle in handles.reversed() {

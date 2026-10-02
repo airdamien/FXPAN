@@ -7,6 +7,9 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
 
+# The session is usually SSH over Wi-Fi. A dropped link must not kill the script.
+trap '' HUP
+
 here="$(cd "$(dirname "$0")" && pwd)"
 boot=""
 for candidate in /boot/firmware /boot; do
@@ -29,11 +32,40 @@ if ! grep -q 'modules-load=dwc2' "$boot/cmdline.txt"; then
     sed -i 's/[[:space:]]*$/ modules-load=dwc2/' "$boot/cmdline.txt"
 fi
 
+# The Zero W has 512 MB. apt without swap is enough to reset the board mid-install.
+mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+if [[ "$mem_kb" -lt 700000 ]] && ! swapon --show | grep -q .; then
+    echo "adding swap so apt does not reset this board"
+    dd if=/dev/zero of=/var/swap bs=1M count=256
+    chmod 600 /var/swap
+    mkswap /var/swap
+    swapon /var/swap
+    grep -q '/var/swap' /etc/fstab || echo '/var/swap none swap sw 0 0' >> /etc/fstab
+fi
+
+# Power save on this radio drops the link while apt is busy.
+if command -v iw >/dev/null && iw dev wlan0 info >/dev/null 2>&1; then
+    iw dev wlan0 set power_save off || true
+fi
+install -d /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/wifi-powersave-off.conf << 'EOF'
+[connection]
+wifi.powersave = 2
+EOF
+
+# Keep the stock dnsmasq from starting. It binds every interface and knocks Wi-Fi over.
+printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod 0755 /usr/sbin/policy-rc.d
+cleanup_policy() { rm -f /usr/sbin/policy-rc.d; }
+trap cleanup_policy EXIT
 apt-get update
 apt-get install -y python3-libgpiod dnsmasq
+cleanup_policy
+trap '' EXIT
+systemctl mask dnsmasq.service
 systemctl disable --now dnsmasq.service 2>/dev/null || true
 
-install -d /etc/fxpan /usr/local/sbin /etc/NetworkManager/conf.d
+install -d /etc/fxpan /usr/local/sbin
 install -m 0755 "$here/fxpan-gadget.sh" /usr/local/sbin/fxpan-gadget
 install -m 0755 "$here/fxpan-gpio.py" /usr/local/sbin/fxpan-gpio
 install -m 0644 "$here/dnsmasq.conf" /etc/fxpan/dnsmasq.conf
@@ -42,14 +74,9 @@ install -m 0644 "$here/fxpan-gadget.service" /etc/systemd/system/fxpan-gadget.se
 install -m 0644 "$here/fxpan-dhcp.service" /etc/systemd/system/fxpan-dhcp.service
 install -m 0644 "$here/fxpan-gpio.service" /etc/systemd/system/fxpan-gpio.service
 
-if command -v rfkill >/dev/null; then
-    rfkill block wifi || true
-fi
-
 systemctl daemon-reload
 systemctl enable fxpan-gadget.service fxpan-dhcp.service fxpan-gpio.service
-if systemctl is-active --quiet NetworkManager; then
-    systemctl reload NetworkManager || true
-fi
 
-echo "installed. reboot so the USB port comes up as the gadget: sudo reboot"
+echo "installed. Wi-Fi is still up."
+echo "reboot so the USB port comes up as the gadget: sudo reboot"
+echo "after ping 10.55.0.1 works, turn Wi-Fi off with: sudo rfkill block wifi"

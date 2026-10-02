@@ -4,7 +4,7 @@ The trigger board plugs onto the Zero W. The iPad is the USB host and powers the
 
 A D800 ignores the 10-pin remote while USB is claimed. The iPad has to end live view and close both camera sessions, wait, send `FIRE`, wait for `OK`, then open the sessions again and download.
 
-This directory is the Zero side only. The iPad app does not send `FIRE` yet.
+This directory is the Zero side only. In the iPad app, set Release to Sync. The shutter then sends `FIRE` here.
 
 ## Hardware
 
@@ -25,7 +25,7 @@ Use the micro-USB port labeled **USB**, the data port next to the HDMI jack. The
 
 Use Raspberry Pi Imager and **Raspberry Pi OS Lite, 32-bit**. The Zero W is ARMv6. A 64-bit image will not boot.
 
-In Imager’s settings, set the hostname to `fxpan-gpio`, create the user, and enable SSH. Join Wi-Fi for this setup only. Wi-Fi comes off after the gadget is working.
+In Imager’s settings, set the hostname to `fxpan-gpio`, create the user, and enable SSH. Join Wi-Fi for setup. Leave it on until the USB gadget answers. The install used to block Wi-Fi while you were still logged in over it, which dropped the session before the script finished. It does not do that now.
 
 Boot, SSH in, and copy this directory onto the Zero:
 
@@ -37,7 +37,7 @@ sudo ./install.sh
 sudo reboot
 ```
 
-`install.sh` adds `dtoverlay=dwc2,dr_mode=peripheral` and `modules-load=dwc2`, installs the gadget and the shutter service, and turns Wi-Fi off.
+`install.sh` adds `dtoverlay=dwc2,dr_mode=peripheral` and `modules-load=dwc2`, installs the gadget and the shutter service, and leaves Wi-Fi up. On a 512 MB Zero it also adds a swap file so `apt` does not run the board out of memory and reboot it. The stock `dnsmasq` service is masked so it cannot bind Wi-Fi. The gadget DHCP server is a separate unit and only listens on `usb0`.
 
 ## After reboot
 
@@ -64,7 +64,15 @@ OK focus_ms=100 shutter_ms=300
 OK focus_ms=100 shutter_ms=1000
 ```
 
-Then move the same cable to the iPad. The iPad should get a `10.55.0.x` address from the Zero. The command to send, once the app does it, is the same line to `10.55.0.1:2323`.
+Then move the same cable to the iPad. The iPad should get a `10.55.0.x` address from the Zero. With Release set to Sync, the shutter sends the same `FIRE` line to `10.55.0.1:2323`.
+
+Wi-Fi can stay up while you check this. Once `ping 10.55.0.1` works, turn it off so the board is only reachable over the cable:
+
+```bash
+sudo rfkill block wifi
+```
+
+That block does not always survive a reboot on Pi OS. To keep Wi-Fi off, add `dtoverlay=disable-wifi` to `config.txt` and reboot. Do that only after the gadget answers, or a failed gadget leaves the board with no way in.
 
 ## What got installed
 

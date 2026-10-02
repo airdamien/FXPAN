@@ -296,7 +296,8 @@ struct HomeView: View {
         case "Drive":
             let engine = Catalog.engines.first { $0.0 == photo.drive.engine }?.1 ?? photo.drive.engine
             let save = photo.drive.save == "cards" ? "Cards" : (photo.drive.save == "both" ? "Both" : (UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"))
-            return ("USB", [save, photo.drive.autoStitch ? engine : "Hold stitch"].joined(separator: " · "))
+            let release = photo.drive.release == "sync" ? "Sync" : "USB"
+            return (release, [save, photo.drive.autoStitch ? engine : "Hold stitch"].joined(separator: " · "))
         default:
             let w = Catalog.wbRow(photo.wb)
             return (w.1, w.2 > 0 ? "\(w.2) K" : "Bodies decide")
