@@ -11,6 +11,24 @@ struct RootView: View {
             Theme.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 TopBar()
+                if let stitch = model.stitchLabel {
+                    HStack(spacing: 10) {
+                        Text(stitch)
+                            .font(Theme.font(13, weight: .medium))
+                            .foregroundStyle(Theme.gold)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Cancel") { model.cancelStitch() }
+                            .font(Theme.font(13, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Theme.s3, in: Capsule())
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
+                }
                 ZStack {
                     HomeView().opacity(model.route.isEmpty ? 1 : 0)
                     if let route = model.route.last {
@@ -41,6 +59,9 @@ struct RootView: View {
             }
             if let stamp = model.reviewStamp, let shot = model.shots.first(where: { $0.stamp == stamp }) {
                 ReviewOverlay(shot: shot)
+            }
+            if let url = model.peepURL {
+                PeepScreen(url: url, title: model.peepTitle) { model.closePeep() }
             }
         }
         .foregroundStyle(Theme.ink)
@@ -611,6 +632,9 @@ struct ReviewOverlay: View {
                 PairPicture(shot: shot, rig: model.rig, squeeze: model.photo.frame.squeeze)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(maxHeight: 420)
+                    .onLongPressGesture(minimumDuration: 0.35) {
+                        model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+                    }
                 HStack(spacing: 12) {
                     Button("Keep") { model.reviewStamp = nil }
                         .buttonStyle(GoldButton())
@@ -638,6 +662,127 @@ struct GoldButton: ButtonStyle {
             .padding(.vertical, 10)
             .background(Theme.gold, in: Capsule())
             .opacity(configuration.isPressed ? 0.8 : 1)
+    }
+}
+
+struct PeepScreen: View {
+    var url: URL
+    var title: String
+    var close: () -> Void
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let image {
+                ZoomImage(image: image)
+                    .ignoresSafeArea()
+            } else {
+                ProgressView().tint(Theme.gold)
+            }
+            VStack {
+                HStack {
+                    Text(title)
+                        .font(Theme.font(15, weight: .medium))
+                        .foregroundStyle(Theme.gold)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Close", action: close)
+                        .buttonStyle(PlainChip())
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .background(.black.opacity(0.45))
+                Spacer()
+                Text("Pinch to inspect. Double tap for pixels.")
+                    .font(Theme.font(12))
+                    .foregroundStyle(Theme.dim)
+                    .padding(.bottom, 12)
+            }
+        }
+        .task(id: url) {
+            let url = url
+            let cg = await Task.detached(priority: .userInitiated) { Stitcher.image(at: url) }.value
+            if let cg { image = UIImage(cgImage: cg) }
+        }
+    }
+}
+
+struct ZoomImage: UIViewRepresentable {
+    var image: UIImage
+
+    func makeUIView(context: Context) -> PeepScroll {
+        let scroll = PeepScroll()
+        scroll.photo.image = image
+        return scroll
+    }
+
+    func updateUIView(_ scroll: PeepScroll, context: Context) {
+        if scroll.photo.image !== image {
+            scroll.photo.image = image
+            scroll.fitted = false
+        }
+        scroll.fitIfNeeded()
+    }
+}
+
+final class PeepScroll: UIScrollView, UIScrollViewDelegate {
+    let photo = UIImageView()
+    var fitted = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delegate = self
+        backgroundColor = .black
+        bouncesZoom = true
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+        photo.isUserInteractionEnabled = true
+        addSubview(photo)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(doubleTap(_:)))
+        tap.numberOfTapsRequired = 2
+        addGestureRecognizer(tap)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        fitIfNeeded()
+    }
+
+    func fitIfNeeded() {
+        guard let image = photo.image, !fitted, bounds.width > 1, bounds.height > 1 else { return }
+        fitted = true
+        photo.frame = CGRect(origin: .zero, size: image.size)
+        contentSize = image.size
+        let fit = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        minimumZoomScale = fit
+        maximumZoomScale = max(1, fit * 8)
+        zoomScale = fit
+        centerPhoto()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { photo }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { centerPhoto() }
+
+    private func centerPhoto() {
+        let spareX = max(0, bounds.width - photo.frame.width)
+        let spareY = max(0, bounds.height - photo.frame.height)
+        photo.center = CGPoint(x: photo.frame.width / 2 + spareX / 2, y: photo.frame.height / 2 + spareY / 2)
+    }
+
+    @objc func doubleTap(_ gesture: UITapGestureRecognizer) {
+        if zoomScale > minimumZoomScale * 1.05 {
+            setZoomScale(minimumZoomScale, animated: true)
+        } else {
+            let point = gesture.location(in: photo)
+            let scale = min(maximumZoomScale, max(1, minimumZoomScale * 4))
+            let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+            zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
+        }
     }
 }
 

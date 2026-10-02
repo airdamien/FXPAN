@@ -17,5 +17,10 @@ struct FXPANApp: App {
                 .tint(Theme.gold)
                 .task { await model.start() }
         }
+        .onChange(of: scenePhase) { _, phase in
+            Task { await model.scene(phase) }
+        }
     }
+
+    @Environment(\.scenePhase) private var scenePhase
 }

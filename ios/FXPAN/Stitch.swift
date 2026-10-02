@@ -19,33 +19,48 @@ struct StitchReport: Codable {
     var scale: Double?
     var inliers: Int?
     var blend: String?
+    var sec: Double?
+}
+
+typealias StitchNote = @Sendable (String) -> Void
+typealias StitchStop = @Sendable () -> Bool
+
+struct StitchHalt: Error {}
+
+enum StitchGate {
+    static func check(_ stop: StitchStop?) throws {
+        if stop?() == true || Task.isCancelled { throw StitchHalt() }
+    }
 }
 
 enum Stitcher {
     static let work = 360
 
-    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo) throws -> StitchReport {
+    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
+        try StitchGate.check(stop)
+        if photo.drive.engine == "hugin" {
+            if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, note: note, stop: stop) {
+                return try finish(
+                    built.image, dest: dest, ana: ana, photo: photo, frameWidth: built.frameWidth,
+                    overlap: built.overlap, dy: built.dy, flip: rig.flipR, mode: "hugin", score: nil,
+                    rot: built.rot, scale: built.scale, inliers: built.inliers, blend: built.blend, note: note, stop: stop
+                )
+            }
+            note?("Features missed, feathering the seam")
+            print("FXPAN hugin SIFT missed — feather")
+        }
+        note?("Reading the pair")
         guard let tImage = image(at: tURL), let rImage = image(at: rURL) else {
             throw PTPError.message("Could not read the pair")
         }
+        let frameWidth = tImage.width
         let profileOverlap = rig.overlap(width: tImage.width, height: tImage.height)
-        if photo.drive.engine == "hugin" {
-            let oriented = rig.flipR ? flop(rImage) : rImage
-            let balanced = rig.balance ? matched(oriented, to: tImage, overlap: profileOverlap) : oriented
-            if let made = Hugin.make(t: tImage, r: balanced, overlap: profileOverlap) {
-                return try finish(
-                    made.image, dest: dest, ana: ana, photo: photo, frameWidth: tImage.width,
-                    overlap: made.overlap, dy: made.dy, flip: rig.flipR, mode: "hugin", score: nil,
-                    rot: made.rot, scale: made.scale, inliers: made.inliers, blend: made.blend
-                )
-            }
-            print("FXPAN hugin SIFT missed — feather")
-        }
         var overlap = profileOverlap
         var dy = rig.dy
         var flip = rig.flipR
         var score: Double?
         if photo.drive.engine == "match" {
+            note?("Searching the overlap")
             let found = search(t: tImage, r: rImage, profileFlip: rig.flipR)
             score = found.score
             if found.score <= 0.42 {
@@ -57,26 +72,50 @@ enum Stitcher {
         var oriented = flip ? flop(rImage) : rImage
         if rig.balance { oriented = matched(oriented, to: tImage, overlap: overlap) }
         let mode = photo.drive.engine == "hugin" ? "hugin" : (photo.drive.engine == "cut" ? "cut" : (photo.drive.engine == "match" ? "match" : "blend"))
-        var cg = paint(t: tImage, r: oriented, overlap: overlap, dy: dy, cut: mode == "cut", clip: photo.frame.clip)
+        note?(mode == "cut" ? "Cutting the seam" : "Blending the seam")
+        let cg = paint(t: tImage, r: oriented, overlap: overlap, dy: dy, cut: mode == "cut", clip: photo.frame.clip)
         let blendName = photo.drive.engine == "hugin" ? "feather" : nil
         return try finish(
-            cg, dest: dest, ana: ana, photo: photo, frameWidth: tImage.width,
+            cg, dest: dest, ana: ana, photo: photo, frameWidth: frameWidth,
             overlap: overlap, dy: dy, flip: flip, mode: mode, score: score,
-            rot: nil, scale: nil, inliers: nil, blend: blendName
+            rot: nil, scale: nil, inliers: nil, blend: blendName, note: note, stop: stop
         )
+    }
+
+    /// The source frames die with this function, before the blend allocates its pyramids.
+    private static func huginFile(tURL: URL, rURL: URL, rig: Rig, note: StitchNote?, stop: StitchStop?) throws -> Hugin.Made? {
+        note?("Reading the pair")
+        guard let prepared = try preparePair(tURL: tURL, rURL: rURL, rig: rig, note: note, stop: stop) else { return nil }
+        return try Hugin.render(prepared, note: note, stop: stop)
+    }
+
+    private static func preparePair(tURL: URL, rURL: URL, rig: Rig, note: StitchNote?, stop: StitchStop?) throws -> Hugin.Prepared? {
+        guard let tImage = image(at: tURL), let rImage = image(at: rURL) else {
+            throw PTPError.message("Could not read the pair")
+        }
+        let overlap = rig.overlap(width: tImage.width, height: tImage.height)
+        let oriented = rig.flipR ? flop(rImage) : rImage
+        let balanced = rig.balance ? matched(oriented, to: tImage, overlap: overlap) : oriented
+        return try Hugin.prepare(t: tImage, r: balanced, overlap: overlap, frameWidth: tImage.width, note: note, stop: stop)
     }
 
     private static func finish(
         _ image: CGImage, dest: URL, ana: URL?, photo: Photo, frameWidth: Int,
         overlap: Double, dy: Int, flip: Bool, mode: String, score: Double?,
-        rot: Double?, scale: Double?, inliers: Int?, blend: String?
+        rot: Double?, scale: Double?, inliers: Int?, blend: String?, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
+        try StitchGate.check(stop)
         var cg = image
         if !LookBook.identity(photo.look) {
+            note?("Grading the look")
             cg = grade(cg, look: photo.look)
+            try StitchGate.check(stop)
         }
+        note?("Writing the panorama")
         try jpeg(cg, to: dest)
         if photo.frame.squeeze > 1.01, let ana {
+            try StitchGate.check(stop)
+            note?("Desqueezing")
             let wide = stretch(cg, squeeze: photo.frame.squeeze)
             try jpeg(wide, to: ana)
         }
@@ -418,8 +457,9 @@ enum Stitcher {
     // MARK: - CG
 
     static func image(at url: URL) -> CGImage? {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(src, 0, nil)
+        let opts = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, opts) else { return nil }
+        return CGImageSourceCreateImageAtIndex(src, 0, opts)
     }
 
     static func thumbnail(at url: URL, maxPixel: Int) -> CGImage? {
@@ -503,8 +543,35 @@ enum Stitcher {
     }
 
     static func grade(_ image: CGImage, look: LookSet) -> CGImage {
+        let w = image.width
+        let h = image.height
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return image }
+        let ciCtx = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
+        let source = CIImage(cgImage: image)
+        let band = 192
+        var top = 0
+        while top < h {
+            autoreleasepool {
+                let bh = min(band, h - top)
+                let extent = CGRect(x: 0, y: h - top - bh, width: w, height: bh)
+                let strip = lookImage(source.cropped(to: extent), look: look)
+                if let cg = ciCtx.createCGImage(strip, from: extent) {
+                    ctx.draw(cg, in: extent)
+                }
+            }
+            top += band
+        }
+        return ctx.makeImage() ?? image
+    }
+
+    /// Point filters only, so a strip grades the same as the whole frame. Grain stays inside the strip instead of allocating a full-frame noise image.
+    private static func lookImage(_ source: CIImage, look: LookSet) -> CIImage {
         let base = LookBook.base(look.base)
-        var ci = CIImage(cgImage: image)
+        var ci = source
         if base.mono {
             let m = LookBook.mix(look.filter)
             ci = ci.applyingFilter("CIColorMatrix", parameters: [
@@ -547,7 +614,6 @@ enum Stitcher {
             ])
             ci = faded.applyingFilter("CIOverlayBlendMode", parameters: [kCIInputBackgroundImageKey: ci])
         }
-        let ctx = CIContext(options: [.workingColorSpace: NSNull()])
-        return ctx.createCGImage(ci, from: ci.extent) ?? image
+        return ci
     }
 }

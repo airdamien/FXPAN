@@ -303,7 +303,11 @@ struct PlaybackScreen: View {
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
                     ForEach(model.shots) { shot in
-                        Button { model.go(.shot(shot.stamp)) } label: { card(shot) }
+                        card(shot)
+                            .onTapGesture { model.go(.shot(shot.stamp)) }
+                            .onLongPressGesture(minimumDuration: 0.35) {
+                                model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+                            }
                     }
                 }
             }
@@ -326,9 +330,18 @@ struct PlaybackScreen: View {
     }
 
     private func state(_ shot: ShotFiles) -> String {
-        if shot.stamp == model.stitchingStamp && shot.pano == nil { return "Stitching" }
+        if shot.stamp == model.stitchingStamp && shot.pano == nil { return model.stitchLabel ?? "Stitching" }
         if model.stitchWaiting.contains(shot.stamp) && shot.pano == nil { return "Queued" }
-        if shot.pano != nil { return model.notes[shot.stamp]?.look ?? "Stitched" }
+        if shot.pano != nil {
+            let report = FrameFacts.report(shot.stamp)
+            let mp = FrameFacts.output(shot, report: report)
+            if mp != "—" {
+                var bits = [mp]
+                if let sec = report?.sec { bits.append(FrameFacts.formatSec(sec)) }
+                return bits.joined(separator: " · ")
+            }
+            return model.notes[shot.stamp]?.look ?? "Stitched"
+        }
         if shot.ready { return "Not stitched" }
         return shot.t == nil ? "T missing" : "R missing"
     }
@@ -347,8 +360,12 @@ struct ShotScreen: View {
             VStack(alignment: .leading, spacing: 12) {
                 ChipRow(options: choices, selected: selected) { part = $0 }
                 if let shot {
+                    let report = FrameFacts.report(stamp)
                     fact("Status", status(shot))
-                    fact("Stitch", FrameFacts.stitch(stamp))
+                    fact("Size", FrameFacts.size(shot, report: report))
+                    fact("Output", FrameFacts.output(shot, report: report))
+                    fact("Time", report?.sec.map(FrameFacts.formatSec) ?? "—")
+                    fact("Stitch", FrameFacts.stitch(report))
                     fact("T", FrameFacts.exposure(shot.t))
                     fact("R", FrameFacts.exposure(shot.r))
                 }
@@ -359,11 +376,19 @@ struct ShotScreen: View {
                 HStack {
                     Button(model.protectedStamps.contains(stamp) ? "Unlock" : "Protect") { model.protect(stamp) }
                         .buttonStyle(PlainChip())
-                    Button("Restitch") { model.restitch(stamp) }
-                        .buttonStyle(PlainChip())
+                    if model.stitchingStamp == stamp || model.stitchWaiting.contains(stamp) {
+                        Button("Cancel") { model.cancelStitch() }
+                            .buttonStyle(PlainChip())
+                    } else {
+                        Button("Restitch") { model.restitch(stamp) }
+                            .buttonStyle(PlainChip())
+                    }
                     Button("Delete") { model.deleteShot(stamp); model.back() }
                         .buttonStyle(PlainChip())
                 }
+                Text("Hold the picture to inspect pixels.")
+                    .font(Theme.font(12))
+                    .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
                     ShareLink(item: url) { Text("Share") }
                         .buttonStyle(GoldButton())
@@ -372,6 +397,9 @@ struct ShotScreen: View {
         }, panel: {
             if let shot {
                 ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze)
+                    .onLongPressGesture(minimumDuration: 0.35) {
+                        model.peep(file(shot, part: selected), title: shot.name)
+                    }
             } else {
                 Text("Missing file").foregroundStyle(Theme.dim)
             }
@@ -389,7 +417,7 @@ struct ShotScreen: View {
     }
 
     private func status(_ shot: ShotFiles) -> String {
-        if shot.stamp == model.stitchingStamp { return "Stitching" }
+        if shot.stamp == model.stitchingStamp { return model.stitchLabel ?? "Stitching" }
         if model.stitchWaiting.contains(shot.stamp) { return "Queued" }
         if shot.pano != nil { return "Stitched" }
         if shot.ready { return "Not stitched" }
@@ -397,6 +425,10 @@ struct ShotScreen: View {
     }
 
     private func shareURL(_ shot: ShotFiles?, part: String) -> URL? {
+        file(shot, part: part)
+    }
+
+    private func file(_ shot: ShotFiles?, part: String) -> URL? {
         guard let shot else { return nil }
         switch part {
         case "t": return shot.t
@@ -412,9 +444,11 @@ struct ShotScreen: View {
                 .font(Theme.font(11, weight: .semibold))
                 .tracking(1)
                 .foregroundStyle(Theme.dim)
-                .frame(width: 64, alignment: .leading)
-            Text(value).font(Theme.font(14))
-            Spacer(minLength: 0)
+                .frame(width: 72, alignment: .leading)
+            Text(value)
+                .font(Theme.font(14))
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -438,10 +472,55 @@ enum FrameFacts {
         return bits.isEmpty ? "—" : bits.joined(separator: " · ")
     }
 
-    static func stitch(_ stamp: String) -> String {
+    static func report(_ stamp: String) -> StitchReport? {
         let url = Disk.captures.appendingPathComponent("P_\(stamp).json")
-        guard let data = try? Data(contentsOf: url),
-              let report = try? JSONDecoder().decode(StitchReport.self, from: data) else { return "—" }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(StitchReport.self, from: data)
+    }
+
+    /// The delivered file: the desqueezed ana when there is one, otherwise the panorama.
+    static func outputURL(_ shot: ShotFiles) -> URL? {
+        shot.ana ?? shot.pano
+    }
+
+    static func pixels(_ url: URL?) -> (Int, Int)? {
+        guard let url,
+              let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] else { return nil }
+        let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue
+        let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue
+        guard let w, let h, w > 0, h > 0 else { return nil }
+        return (w, h)
+    }
+
+    static func size(_ shot: ShotFiles, report: StitchReport?) -> String {
+        if let px = pixels(outputURL(shot)) ?? report.map({ ($0.width, $0.height) }) {
+            return "\(px.0.formatted()) × \(px.1.formatted())"
+        }
+        return "—"
+    }
+
+    static func output(_ shot: ShotFiles, report: StitchReport?) -> String {
+        if let px = pixels(outputURL(shot)) ?? report.map({ ($0.width, $0.height) }) {
+            return megapixels(px.0, px.1)
+        }
+        return "—"
+    }
+
+    static func megapixels(_ width: Int, _ height: Int) -> String {
+        let mp = Double(width) * Double(height) / 1_000_000
+        return String(format: mp >= 100 ? "%.0f MP" : "%.1f MP", mp)
+    }
+
+    static func formatSec(_ sec: Double) -> String {
+        if sec < 60 { return String(format: "%.1f s", sec) }
+        let minutes = Int(sec) / 60
+        let rest = sec - Double(minutes * 60)
+        return String(format: "%dm %.0fs", minutes, rest)
+    }
+
+    static func stitch(_ report: StitchReport?) -> String {
+        guard let report else { return "—" }
         let pct = Int((report.overlap * 100).rounded())
         var text = "\(report.mode) · \(pct)% · dy \(report.dy)\(report.flipR ? " · flop R" : "")"
         if let rot = report.rot {

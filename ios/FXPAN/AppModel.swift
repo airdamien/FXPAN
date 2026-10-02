@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 
 enum Route: Hashable {
     case home
@@ -33,6 +34,8 @@ final class AppModel {
     var stitchingStamp: String?
     var stitchWaiting: Set<String> = []
     var reviewStamp: String?
+    var peepURL: URL?
+    var peepTitle = ""
     var messages: [String] = []
     var preview: UIImage?
     var simulate = false
@@ -47,6 +50,13 @@ final class AppModel {
     private var reviewTask: Task<Void, Never>?
     private var stitchQueue: [String] = []
     private var stitchRunning = false
+    private var stitchHold: UIBackgroundTaskIdentifier = .invalid
+    private var stitchPhase = "Stitching"
+    private var stitchBegan = Date()
+    private var stitchClock: Task<Void, Never>?
+    private var stitchPiece: Task<StitchReport, Error>?
+    private let stitchStop = StitchStopFlag()
+    private var scenePhase: ScenePhase = .active
     private var previewToken = 0
 
     var activeMode: NamedMode? { modes.first { $0.id == activeModeID } }
@@ -99,6 +109,21 @@ final class AppModel {
             photo.drive.review = 0
             try? await Task.sleep(nanoseconds: 600_000_000)
             await fire()
+        }
+    }
+
+    /// A stitch keeps running for the short time iOS allows after a switch away. This is not a background-processing mode. The hold exists only while the app is actually in the background and a stitch is in flight.
+    func scene(_ phase: ScenePhase) async {
+        scenePhase = phase
+        switch phase {
+        case .active:
+            endStitchHold()
+            await camera.foreground()
+        case .background:
+            camera.background()
+            if stitchRunning { beginStitchHold() }
+        default:
+            break
         }
     }
 
@@ -300,11 +325,73 @@ final class AppModel {
         var waiting = stitchWaiting
         waiting.insert(stamp)
         stitchWaiting = waiting
-        stitchLabel = stitchRunning ? "Queued · \(stitchQueue.count)" : "Stitching"
+        stitchLabel = stitchRunning ? "Queued · \(stitchQueue.count)" : "Reading the pair"
         if !stitchRunning {
+            stitchStop.reset()
             stitchRunning = true
+            if scenePhase == .background { beginStitchHold() }
             Task { await drain() }
         }
+    }
+
+    func cancelStitch() {
+        guard stitchRunning else { return }
+        stitchQueue.removeAll()
+        stitchWaiting = []
+        stitchStop.cancel()
+        stitchPiece?.cancel()
+        noteStitch("Cancelling")
+    }
+
+    func peep(_ url: URL?, title: String) {
+        guard let url else { return }
+        peepTitle = title
+        peepURL = url
+    }
+
+    func closePeep() {
+        peepURL = nil
+    }
+
+    /// Asked only while the app is in the background and a stitch is still running. Ended as soon as the app is visible again, or when the queue is empty.
+    private func beginStitchHold() {
+        guard stitchRunning, stitchHold == .invalid else { return }
+        stitchHold = UIApplication.shared.beginBackgroundTask(withName: "fxpan-stitch") { [weak self] in
+            Task { @MainActor in self?.endStitchHold() }
+        }
+    }
+
+    private func endStitchHold() {
+        let id = stitchHold
+        guard id != .invalid else { return }
+        stitchHold = .invalid
+        UIApplication.shared.endBackgroundTask(id)
+    }
+
+    func noteStitch(_ phase: String) {
+        stitchPhase = phase
+        paintStitch()
+    }
+
+    private func beginClock() {
+        stitchBegan = Date()
+        stitchPhase = "Reading the pair"
+        paintStitch()
+        stitchClock?.cancel()
+        stitchClock = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                self?.paintStitch()
+            }
+        }
+    }
+
+    private func paintStitch() {
+        let elapsed = max(0, Int(Date().timeIntervalSince(stitchBegan)))
+        let clock = elapsed < 60 ? "\(elapsed)s" : "\(elapsed / 60)m \(elapsed % 60)s"
+        let waiting = stitchQueue.count
+        stitchLabel = waiting == 0 ? "\(stitchPhase) · \(clock)" : "\(stitchPhase) · \(clock) · \(waiting) waiting"
     }
 
     private func drain() async {
@@ -313,6 +400,9 @@ final class AppModel {
             stitchLabel = nil
             stitchingStamp = nil
             stitchWaiting = []
+            stitchClock?.cancel()
+            stitchClock = nil
+            endStitchHold()
             reloadShots()
             ingest()
         }
@@ -322,7 +412,7 @@ final class AppModel {
             var waiting = stitchWaiting
             waiting.remove(stamp)
             stitchWaiting = waiting
-            stitchLabel = stitchQueue.isEmpty ? "Stitching" : "Stitching · \(stitchQueue.count) waiting"
+            beginClock()
             await runStitch(stamp)
             reloadShots()
         }
@@ -339,13 +429,27 @@ final class AppModel {
         let rig = rig
         let photo = photo
         do {
-            let report = try await Task.detached(priority: .userInitiated) {
-                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo)
-            }.value
+            let note: StitchNote = { phase in
+                Task { @MainActor in self.noteStitch(phase) }
+            }
+            let stop = stitchStop
+            let job = Task.detached(priority: .userInitiated) {
+                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, note: note, stop: { stop.cancelled })
+            }
+            stitchPiece = job
+            defer { stitchPiece = nil }
+            let started = CFAbsoluteTimeGetCurrent()
+            var report = try await job.value
+            if stitchStop.cancelled { throw StitchHalt() }
+            report.sec = CFAbsoluteTimeGetCurrent() - started
             let side = Disk.captures.appendingPathComponent("P_\(stamp).json")
             if let data = try? JSONEncoder().encode(report) {
                 try? data.write(to: side)
             }
+        } catch is StitchHalt {
+            note("Stitch cancelled", bad: false)
+        } catch is CancellationError {
+            note("Stitch cancelled", bad: false)
         } catch {
             note(error.localizedDescription, bad: true)
         }
@@ -382,6 +486,29 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             self?.toast = nil
         }
+    }
+}
+
+final class StitchStopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func cancel() {
+        lock.lock()
+        value = true
+        lock.unlock()
+    }
+
+    func reset() {
+        lock.lock()
+        value = false
+        lock.unlock()
+    }
+
+    var cancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }
 

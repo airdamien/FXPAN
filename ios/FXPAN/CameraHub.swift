@@ -52,6 +52,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private var simPhase: CGFloat = 0
     private var simTimer: Timer?
     private var started = false
+    private var front = true
     private var livePoll: Task<Void, Never>?
     private var liveLine = "Live"
 
@@ -66,6 +67,51 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         await authorize()
         browser.start()
         if simulate { installSim() }
+        publish()
+    }
+
+    private func seenDevices() -> [ICDevice] {
+        browser.devices ?? []
+    }
+
+    /// iOS closes camera sessions while the app is away and does not always deliver a removal. Drop anything the browser no longer lists, and reopen a session that closed while the body is still plugged in.
+    func foreground() async {
+        guard started, !simulate else { return }
+        front = true
+        let ids = Set(seenDevices().compactMap(\.uuidString))
+        for id in Array(links.keys) where !ids.contains(id) {
+            links[id]?.noteSessionClosed()
+            links.removeValue(forKey: id)
+        }
+        forgetMissingFrames()
+        seat()
+        publish()
+        for link in Array(links.values) where !link.sessionUp || !link.device.hasOpenSession {
+            do {
+                try await link.open()
+            } catch {
+                links[link.id] = nil
+            }
+        }
+        for device in seenDevices() { adopt(device) }
+        if !links.values.contains(where: \.inLive) {
+            live = false
+            livePoll?.cancel()
+            livePoll = nil
+        }
+        forgetMissingFrames()
+        seat()
+        publish()
+    }
+
+    /// Live view cannot survive the app switcher. Leave the sessions alone until iOS closes them, so a quick switch does not reopen both bodies.
+    func background() {
+        guard started, !simulate else { return }
+        front = false
+        live = false
+        livePoll?.cancel()
+        livePoll = nil
+        for link in links.values { link.leaveLive() }
         publish()
     }
 
@@ -263,7 +309,27 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     }
 
     nonisolated func device(_ device: ICDevice, didOpenSessionWithError error: Error?) {}
-    nonisolated func device(_ device: ICDevice, didCloseSessionWithError error: Error?) {}
+    nonisolated func device(_ device: ICDevice, didCloseSessionWithError error: Error?) {
+        let key = device.uuidString ?? ""
+        Task { @MainActor in
+            guard let link = self.links[key] else { return }
+            link.noteSessionClosed()
+            let stillThere = self.seenDevices().contains { $0.uuidString == key }
+            if stillThere && self.front {
+                do { try await link.open() } catch { self.links[key] = nil }
+            } else if !stillThere {
+                self.links[key] = nil
+            }
+            if !self.links.values.contains(where: \.inLive) {
+                self.live = false
+                self.livePoll?.cancel()
+                self.livePoll = nil
+            }
+            self.forgetMissingFrames()
+            self.seat()
+            self.publish()
+        }
+    }
     nonisolated func didRemove(_ device: ICDevice) {}
     nonisolated func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
         let files = items.compactMap { $0 as? ICCameraFile }
@@ -452,7 +518,11 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         if live {
             line = liveLine
         } else if online.isEmpty {
-            line = links.isEmpty ? (controlAuthorized ? "No bodies on USB" : line) : "Bodies seen, not paired"
+            if links.values.contains(where: \.sessionUp) {
+                line = "Bodies seen, not paired"
+            } else {
+                line = controlAuthorized ? "No bodies on USB" : line
+            }
         } else if online.count == 1 {
             line = "\(online[0].rawValue) on USB"
         } else {
@@ -460,6 +530,17 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         }
         onChange?()
         onSeat?()
+    }
+
+    private func forgetMissingFrames() {
+        for role in Role.allCases {
+            let token = role == .t ? pairT : pairR
+            let alive = links.values.contains { $0.token == token && $0.sessionUp }
+            if !alive {
+                realFrames[role] = nil
+                frames[role] = nil
+            }
+        }
     }
 
     private func installSim() {
@@ -544,6 +625,7 @@ final class NikonLink {
     private var txn: UInt32 = 1
     private var chain: Task<Void, Never>?
     private(set) var inLive = false
+    private(set) var sessionUp = false
     private var exposure = BodyState()
 
     var serial: String { PTP.usable(info?.serial ?? "") }
@@ -568,14 +650,40 @@ final class NikonLink {
 
     func state(role: Role, paired: Bool) -> BodyState {
         var s = exposure
-        s.online = true
+        s.online = sessionUp
         s.paired = paired
         s.serial = serial.isEmpty ? token : serial
         s.model = model
         return s
     }
 
+    func leaveLive() { inLive = false }
+
+    func noteSessionClosed() {
+        sessionUp = false
+        inLive = false
+    }
+
     func open() async throws {
+        if sessionUp && device.hasOpenSession { return }
+        if let opening {
+            try await opening.value
+            if sessionUp && device.hasOpenSession { return }
+        }
+        let task = Task { try await self.openSession() }
+        opening = task
+        do {
+            try await task.value
+            opening = nil
+        } catch {
+            opening = nil
+            throw error
+        }
+    }
+
+    private var opening: Task<Void, Error>?
+
+    private func openSession() async throws {
         if !device.hasOpenSession {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 device.requestOpenSession(options: nil) { error in
@@ -588,6 +696,7 @@ final class NikonLink {
             throw PTPError.message("Could not read the camera")
         }
         info = parsed
+        sessionUp = true
         for prop in [PTP.Prop.battery, .compression, .whiteBalance, .fNumber, .exposureTime, .program, .iso, .isoAuto, .recordingMedia, .isoAutoHi] {
             guard parsed.properties.contains(prop.rawValue) else { continue }
             if let descReply = try? await transact(PTP.Op.getPropDesc.rawValue, params: [UInt32(prop.rawValue)]),
