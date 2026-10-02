@@ -215,10 +215,10 @@ struct DriveScreen: View {
             }
         }, panel: {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Match searches the overlap. Blend and cut use the rig percentage.")
+                Text("Hugin fits a small rotation and scale in the overlap, then blends in five bands. A miss feathers the rig overlap.")
                     .font(Theme.font(14))
                     .foregroundStyle(Theme.ink2)
-                Text("Feature match and the 16-bit master stay on the Pi until a real pair confirms this overlap.")
+                Text("Match only shifts. Blend and cut use the rig percentage.")
                     .font(Theme.font(13))
                     .foregroundStyle(Theme.dim)
             }
@@ -443,7 +443,17 @@ enum FrameFacts {
         guard let data = try? Data(contentsOf: url),
               let report = try? JSONDecoder().decode(StitchReport.self, from: data) else { return "—" }
         let pct = Int((report.overlap * 100).rounded())
-        return "\(report.mode) · \(pct)% · dy \(report.dy)\(report.flipR ? " · flop R" : "")"
+        var text = "\(report.mode) · \(pct)% · dy \(report.dy)\(report.flipR ? " · flop R" : "")"
+        if let rot = report.rot {
+            text += String(format: " · %+.2f°", rot)
+        }
+        if let scale = report.scale, abs(scale - 1) >= 0.002 {
+            text += String(format: " · ×%.3f", scale)
+        }
+        if let blend = report.blend {
+            text += " · \(blend)"
+        }
+        return text
     }
 }
 

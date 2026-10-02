@@ -15,6 +15,10 @@ struct StitchReport: Codable {
     var squeeze: Double
     var look: String
     var score: Double?
+    var rot: Double?
+    var scale: Double?
+    var inliers: Int?
+    var blend: String?
 }
 
 enum Stitcher {
@@ -24,7 +28,20 @@ enum Stitcher {
         guard let tImage = image(at: tURL), let rImage = image(at: rURL) else {
             throw PTPError.message("Could not read the pair")
         }
-        var overlap = rig.overlap(width: tImage.width, height: tImage.height)
+        let profileOverlap = rig.overlap(width: tImage.width, height: tImage.height)
+        if photo.drive.engine == "hugin" {
+            let oriented = rig.flipR ? flop(rImage) : rImage
+            let balanced = rig.balance ? matched(oriented, to: tImage, overlap: profileOverlap) : oriented
+            if let made = Hugin.make(t: tImage, r: balanced, overlap: profileOverlap) {
+                return try finish(
+                    made.image, dest: dest, ana: ana, photo: photo, frameWidth: tImage.width,
+                    overlap: made.overlap, dy: made.dy, flip: rig.flipR, mode: "hugin", score: nil,
+                    rot: made.rot, scale: made.scale, inliers: made.inliers, blend: made.blend
+                )
+            }
+            print("FXPAN hugin SIFT missed — feather")
+        }
+        var overlap = profileOverlap
         var dy = rig.dy
         var flip = rig.flipR
         var score: Double?
@@ -39,8 +56,22 @@ enum Stitcher {
         }
         var oriented = flip ? flop(rImage) : rImage
         if rig.balance { oriented = matched(oriented, to: tImage, overlap: overlap) }
-        let mode = photo.drive.engine == "cut" ? "cut" : (photo.drive.engine == "match" ? "match" : "blend")
+        let mode = photo.drive.engine == "hugin" ? "hugin" : (photo.drive.engine == "cut" ? "cut" : (photo.drive.engine == "match" ? "match" : "blend"))
         var cg = paint(t: tImage, r: oriented, overlap: overlap, dy: dy, cut: mode == "cut", clip: photo.frame.clip)
+        let blendName = photo.drive.engine == "hugin" ? "feather" : nil
+        return try finish(
+            cg, dest: dest, ana: ana, photo: photo, frameWidth: tImage.width,
+            overlap: overlap, dy: dy, flip: flip, mode: mode, score: score,
+            rot: nil, scale: nil, inliers: nil, blend: blendName
+        )
+    }
+
+    private static func finish(
+        _ image: CGImage, dest: URL, ana: URL?, photo: Photo, frameWidth: Int,
+        overlap: Double, dy: Int, flip: Bool, mode: String, score: Double?,
+        rot: Double?, scale: Double?, inliers: Int?, blend: String?
+    ) throws -> StitchReport {
+        var cg = image
         if !LookBook.identity(photo.look) {
             cg = grade(cg, look: photo.look)
         }
@@ -49,11 +80,11 @@ enum Stitcher {
             let wide = stretch(cg, squeeze: photo.frame.squeeze)
             try jpeg(wide, to: ana)
         }
-        let ol = max(1, min(tImage.width - 1, Int((Double(tImage.width) * overlap).rounded())))
+        let ol = max(1, min(frameWidth - 1, Int((Double(frameWidth) * overlap).rounded())))
         return StitchReport(
             overlap: overlap, overlapPx: ol, dy: dy, flipR: flip, mode: mode,
             width: cg.width, height: cg.height, squeeze: photo.frame.squeeze,
-            look: photo.look.base, score: score
+            look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend
         )
     }
 

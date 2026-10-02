@@ -31,6 +31,7 @@ struct Grabbed {
 @MainActor
 final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate {
     var onChange: (() -> Void)?
+    var onSeat: (() -> Void)?
 
     var simulate = false {
         didSet { publish(); if simulate { installSim() } else { frames = realFrames } }
@@ -321,6 +322,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         let link = NikonLink(device: camera, arrivals: arrivals)
         camera.delegate = self
         links[id] = link
+        seat()
+        publish()
         Task {
             do {
                 try await link.open()
@@ -433,6 +436,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             slots[.r] = BodyState(online: true, paired: true, serial: "SIM-R", model: "D800", battery: 74, iso: "400", shutter: "1/250", fstop: "8", program: "M", wb: "Auto")
             line = "Simulator"
             onChange?()
+            onSeat?()
             return
         }
         var next: [Role: BodyState] = [
@@ -455,6 +459,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             line = "T and R on USB"
         }
         onChange?()
+        onSeat?()
     }
 
     private func installSim() {

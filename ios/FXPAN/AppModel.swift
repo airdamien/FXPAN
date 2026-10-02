@@ -38,6 +38,8 @@ final class AppModel {
     var simulate = false
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
+    /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
+    var usbRevision = 0
 
     let camera = CameraHub()
     private var applyTask: Task<Void, Never>?
@@ -56,6 +58,9 @@ final class AppModel {
     func start() async {
         var state = Disk.load()
         photo = state.photo
+        let huginMark = Disk.support.appendingPathComponent("hugin-default")
+        let adoptHugin = !FileManager.default.fileExists(atPath: huginMark.path)
+        if adoptHugin && photo.drive.engine == "match" { photo.drive.engine = "hugin" }
         modes = state.modes
         activeModeID = state.activeModeID
         rig = state.rig
@@ -63,10 +68,17 @@ final class AppModel {
         protectedStamps = Set(state.protectedStamps)
         idleMinutes = state.idleMinutes
         simulate = state.simulate
+        if adoptHugin {
+            try? Data("1".utf8).write(to: huginMark)
+            if photo.drive.engine == "hugin" { persist() }
+        }
         camera.simulate = state.simulate
         camera.onChange = { [weak self] in
             self?.cameraRevision += 1
             self?.ingest()
+        }
+        camera.onSeat = { [weak self] in
+            self?.usbRevision += 1
         }
         if let renamed = CaptureIndex.renameLegacy(stamp: "probe") {
             if let note = notes.removeValue(forKey: "probe") { notes[renamed] = note }
