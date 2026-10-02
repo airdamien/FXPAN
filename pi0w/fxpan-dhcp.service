@@ -1,0 +1,14 @@
+[Unit]
+Description=FXPAN DHCP on the USB gadget
+After=fxpan-gadget.service
+Requires=fxpan-gadget.service
+BindsTo=fxpan-gadget.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/fxpan/dnsmasq.conf --pid-file
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
