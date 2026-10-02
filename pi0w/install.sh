@@ -27,10 +27,16 @@ if ! grep -q '^dtoverlay=dwc2' "$boot/config.txt"; then
     printf '\n# FXPAN USB gadget\ndtoverlay=dwc2,dr_mode=peripheral\n' >> "$boot/config.txt"
 fi
 
+if [[ ! -s "$boot/cmdline.txt" ]]; then
+    echo "$boot/cmdline.txt is empty. Restore it before running this." >&2
+    exit 1
+fi
 if ! grep -q 'modules-load=dwc2' "$boot/cmdline.txt"; then
     # cmdline.txt is one line. Keep it that way.
     sed -i 's/[[:space:]]*$/ modules-load=dwc2/' "$boot/cmdline.txt"
 fi
+# The boot partition is FAT. A reset before writeback leaves cmdline.txt empty.
+sync
 
 # The Zero W has 512 MB. apt without swap is enough to reset the board mid-install.
 mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
