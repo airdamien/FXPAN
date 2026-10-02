@@ -252,6 +252,10 @@ function el180_stem_od() =
 // and infinity only had 0.5 mm of spare, so this ring focuses near, not at
 // infinity. Take it off when the machined ring arrives — do not move the stem.
 M65_MAJOR       = 65;
+// Turns the W stems' helicoid thread start, and with it where the bottomed
+// helicoid, nose and Copal stop. Degrees, positive is counter-clockwise
+// facing the cookie. 90 puts the shutter controls on top.
+STEM_W_CLOCK    = 90;
 M65_RING_MALE   = 6;     // into the helicoid. Face it shorter if it bottoms early.
 M65_RING_ADD    = 8;     // M62 female, equal to the lens thread. This is the stack.
 M65_RING_OD     = 72;    // under the Ø76 barrel, proud of the M65 so it can stop

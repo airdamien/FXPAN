@@ -1567,7 +1567,7 @@ module stem_thread_liner(z0, major = EL180_M62_MAJOR) {
 // Bought M62 helicoid. The female stays in the wall and stops on the inner
 // face, so nothing printed crosses into the chamber and the tray can drop
 // in from the top. Screw the helicoid in after the tray is in.
-module part_stem(major = EL180_M62_MAJOR, tag = "stem") {
+module part_stem(major = EL180_M62_MAJOR, tag = "stem", clock = 0) {
     od = HELI_NUT_OD;
     z_bot = -WALL;
     z_top = -WALL + EL180_M62_LEN;
@@ -1577,7 +1577,7 @@ module part_stem(major = EL180_M62_MAJOR, tag = "stem") {
         difference() {
             ScrewHole(major, EL180_M62_LEN,
                       pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
-                      position = [0, 0, z_bot])
+                      position = [0, 0, z_bot], rotation = [0, 0, clock])
                 union() {
                     stem_cookie();
                     translate([0, 0, z_bot])
@@ -1608,7 +1608,7 @@ module part_stem_w() {
         difference() {
             ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
                       pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
-                      position = [0, 0, z_bot])
+                      position = [0, 0, z_bot], rotation = [0, 0, STEM_W_CLOCK])
                 union() {
                     port_flange("");
                     translate([0, 0, z_bot])
@@ -2573,7 +2573,7 @@ module export_part() {
     else if (PART == "m65_ring")
         part_m65_ring();
     else if (PART == "stem_m65")
-        part_stem(M65_MAJOR, "stem65");
+        part_stem(M65_MAJOR, "stem65", STEM_W_CLOCK);
     else if (PART == "section")
         assembly();
     else if (PART == "isco_cut")
