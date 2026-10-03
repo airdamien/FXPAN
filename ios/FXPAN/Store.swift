@@ -94,6 +94,40 @@ struct ShotFiles: Identifiable, Equatable {
     }
 }
 
+#if targetEnvironment(simulator)
+/// Display copies of real stitches, so Playback has pictures when Xcode runs the simulator.
+enum SampleShots {
+    private static let files = [
+        "P_20261002201628.jpg", "P_20261002201628.json",
+        "P_20261002195445.jpg", "P_20261002195445.json",
+        "P_20261002201952.jpg", "P_20261002201952.json",
+    ]
+
+    static func install() {
+        let mark = Disk.support.appendingPathComponent("sample-panos")
+        if FileManager.default.fileExists(atPath: mark.path) { return }
+        var placed = 0
+        for name in files {
+            let stem = (name as NSString).deletingPathExtension
+            let ext = (name as NSString).pathExtension
+            guard let src = Bundle.main.url(forResource: stem, withExtension: ext, subdirectory: "Samples")
+                    ?? Bundle.main.url(forResource: stem, withExtension: ext) else { continue }
+            let dest = Disk.captures.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: dest.path) {
+                placed += 1
+                continue
+            }
+            if (try? FileManager.default.copyItem(at: src, to: dest)) != nil {
+                placed += 1
+            }
+        }
+        if placed > 0 {
+            try? Data("1".utf8).write(to: mark)
+        }
+    }
+}
+#endif
+
 enum CaptureIndex {
     static func stampNow() -> String {
         let f = DateFormatter()
