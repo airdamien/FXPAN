@@ -7,7 +7,7 @@ enum Route: Hashable {
     case modes
     case playback
     case shot(String)
-    case system, cameras, rig, display, storage, about
+    case system, cameras, rig, display, storage, about, apple
 }
 
 struct Toast: Equatable {
@@ -28,6 +28,8 @@ final class AppModel {
     var protectedStamps: Set<String> = []
     var idleMinutes = 5
     var idleChosen = false
+    /// Nil until the Apple panel is touched. Nil offers every Core Image effect.
+    var appleOn: [String]?
     var sleeping = false
     var toast: Toast?
     var countdown: Int?
@@ -84,6 +86,7 @@ final class AppModel {
         protectedStamps = Set(state.protectedStamps)
         idleMinutes = state.idleChosen ? state.idleMinutes : 5
         idleChosen = state.idleChosen
+        appleOn = state.appleOn
         simulate = state.simulate
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -328,6 +331,27 @@ final class AppModel {
         return true
     }
 
+    var appleEnabled: [String] { appleOn ?? AppleBook.defaultOn }
+
+    func setApple(_ id: String, on: Bool) {
+        var ids = appleEnabled
+        if on {
+            if !ids.contains(id) { ids.append(id) }
+        } else {
+            ids.removeAll { $0 == id }
+        }
+        appleOn = AppleBook.effects.map(\.id).filter { ids.contains($0) }
+        persist()
+    }
+
+    /// Remember which Apple effect the viewer is trying. The file changes only on Save look.
+    func stageApple(_ stamp: String, _ apple: String) {
+        var row = notes[stamp] ?? ShotNote()
+        row.styleApple = apple
+        notes[stamp] = row
+        persist()
+    }
+
     func protect(_ stamp: String) {
         if protectedStamps.contains(stamp) { protectedStamps.remove(stamp) }
         else { protectedStamps.insert(stamp) }
@@ -356,6 +380,7 @@ final class AppModel {
                     row.styleBase = look.base
                     row.styleGrain = look.grain
                     row.styleFilter = look.filter
+                    row.styleApple = look.apple
                     self.notes[stamp] = row
                     self.savingStyle = nil
                     self.stitchGeneration += 1
@@ -627,6 +652,7 @@ final class AppModel {
         state.protectedStamps = Array(protectedStamps)
         state.idleMinutes = idleMinutes
         state.idleChosen = idleChosen
+        state.appleOn = appleOn
         Disk.save(state)
     }
 

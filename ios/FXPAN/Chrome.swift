@@ -106,6 +106,7 @@ struct RootView: View {
         case .display: DisplayScreen()
         case .storage: StorageScreen()
         case .about: AboutScreen()
+        case .apple: AppleScreen()
         }
     }
 }
@@ -609,6 +610,7 @@ struct PairPicture: View {
     var shot: ShotFiles
     var rig: Rig
     var squeeze: Double
+    var look: LookSet = LookSet()
     @State private var image: UIImage?
 
     var body: some View {
@@ -624,8 +626,9 @@ struct PairPicture: View {
             let shot = shot
             let rig = rig
             let squeeze = squeeze
+            let look = look
             image = await Task.detached(priority: .userInitiated) {
-                Self.make(shot, rig: rig, squeeze: squeeze)
+                Self.make(shot, rig: rig, squeeze: squeeze, look: look)
             }.value
         }
     }
@@ -636,39 +639,57 @@ struct PairPicture: View {
             let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(url.path)#\(modified)"
         }
-        return [shot.ana, shot.pano, shot.t, shot.r].map(revised).joined(separator: "|")
+        return [shot.ana, shot.pano, shot.t, shot.r].map(revised).joined(separator: "|") + "|\(look.apple)|\(look.base)|\(look.grain)"
     }
 
     /// The finished panorama when it exists. Until then, T and R side by side the same way live view is composed.
-    private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double) -> UIImage? {
-        if let url = shot.ana ?? shot.pano, let cg = Stitcher.thumbnail(at: url, maxPixel: 1800) {
-            return UIImage(cgImage: cg)
+    private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
+        let cg: CGImage?
+        if let url = shot.ana ?? shot.pano, let image = Stitcher.thumbnail(at: url, maxPixel: 1800) {
+            cg = image
+        } else {
+            let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
+            let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
+            if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
+                cg = preview
+            } else {
+                cg = t ?? r
+            }
         }
-        let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-        let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-        if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
-            return UIImage(cgImage: cg)
-        }
-        if let cg = t ?? r { return UIImage(cgImage: cg) }
-        return nil
+        guard let cg else { return nil }
+        let shown = LookBook.identity(look) ? cg : Stitcher.grade(cg, look: look)
+        return UIImage(cgImage: shown)
     }
 }
 
 struct ReviewOverlay: View {
     @Environment(AppModel.self) private var model
     var shot: ShotFiles
+    @State private var apple = "off"
+
+    private var previewLook: LookSet {
+        var look = LookSet()
+        look.apple = apple
+        return look
+    }
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.72).ignoresSafeArea()
             VStack(spacing: 16) {
-                PairPicture(shot: shot, rig: model.rig, squeeze: model.photo.frame.squeeze)
+                PairPicture(shot: shot, rig: model.rig, squeeze: model.photo.frame.squeeze, look: previewLook)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(maxHeight: 420)
                     .clipped()
                     .onLongPressGesture(minimumDuration: 0.35) {
                         model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
                     }
+                ForEach(AppleBook.groups) { group in
+                    let chips = AppleBook.options(model.appleEnabled, group: group.id, current: apple)
+                    if !chips.isEmpty {
+                        ChipRow(options: chips, selected: apple) { pick($0) }
+                    }
+                }
                 HStack(spacing: 12) {
                     PressChip(title: "Keep", on: true) { model.reviewStamp = nil }
                     PressChip(title: "Delete", filled: false) { model.deleteShot(shot.stamp) }
@@ -681,6 +702,15 @@ struct ReviewOverlay: View {
             }
             .padding(24)
         }
+        .onAppear {
+            let saved = model.notes[shot.stamp]?.styleApple ?? "off"
+            apple = saved.isEmpty ? "off" : saved
+        }
+    }
+
+    private func pick(_ id: String) {
+        apple = id
+        model.stageApple(shot.stamp, id)
     }
 }
 

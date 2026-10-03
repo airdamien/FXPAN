@@ -3,6 +3,7 @@ import CoreImage
 import ImageIO
 import UIKit
 import UniformTypeIdentifiers
+import Vision
 
 struct StitchReport: Codable {
     var overlap: Double
@@ -20,6 +21,8 @@ struct StitchReport: Codable {
     var inliers: Int?
     var blend: String?
     var sec: Double?
+    /// `ciraw` when the pair was developed from the NEFs.
+    var develop: String?
 }
 
 typealias StitchNote = @Sendable (String) -> Void
@@ -33,26 +36,59 @@ enum StitchGate {
     }
 }
 
+/// Apple's raw develop. Orientation stays unrotated so it matches the JPEG the stitch already flops.
+enum RawDevelop {
+    static func image(at url: URL, lens: Bool) -> CGImage? {
+        guard let filter = CIRAWFilter(imageURL: url) else { return nil }
+        if #available(iOS 27.0, *) {
+            DispatchQueue.global(qos: .userInitiated).sync {
+                let wait = DispatchSemaphore(value: 0)
+                _ = filter.downloadResources(timeout: 180) { error in
+                    if let error { print("FXPAN ciraw decoder \(error.localizedDescription)") }
+                    wait.signal()
+                }
+                wait.wait()
+            }
+        }
+        filter.orientation = .up
+        filter.isDraftModeEnabled = false
+        filter.scaleFactor = 1
+        filter.extendedDynamicRangeAmount = 0
+        if #available(iOS 26.0, *) {
+            if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = true }
+        }
+        if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = lens }
+        guard let output = filter.outputImage else { return nil }
+        var extent = output.extent.integral
+        if extent.isInfinite || extent.isNull || extent.isEmpty {
+            extent = CGRect(origin: .zero, size: filter.nativeSize)
+        }
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let ctx = CIContext(options: [.cacheIntermediates: false])
+        return ctx.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space)
+    }
+}
+
 enum Stitcher {
     static let work = 360
 
     static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
         if photo.drive.engine == "hugin" {
-            if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, note: note, stop: stop) {
+            if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, note: note, stop: stop) {
                 return try finish(
-                    built.image, dest: dest, ana: ana, photo: photo, frameWidth: built.frameWidth,
-                    overlap: built.overlap, dy: built.dy, flip: rig.flipR, mode: "hugin", score: nil,
-                    rot: built.rot, scale: built.scale, inliers: built.inliers, blend: built.blend, note: note, stop: stop
+                    built.made.image, dest: dest, ana: ana, photo: photo, frameWidth: built.made.frameWidth,
+                    overlap: built.made.overlap, dy: built.made.dy, flip: rig.flipR, mode: "hugin", score: nil,
+                    rot: built.made.rot, scale: built.made.scale, inliers: built.made.inliers, blend: built.made.blend,
+                    develop: built.develop, note: note, stop: stop
                 )
             }
             note?("Features missed, feathering the seam")
             print("FXPAN hugin SIFT missed — feather")
         }
-        note?("Reading the pair")
-        guard let tImage = image(at: tURL), let rImage = image(at: rURL) else {
-            throw PTPError.message("Could not read the pair")
-        }
+        let loaded = try loadPair(tURL: tURL, rURL: rURL, photo: photo, note: note)
+        let tImage = loaded.t
+        let rImage = loaded.r
         let frameWidth = tImage.width
         let profileOverlap = rig.overlap(width: tImage.width, height: tImage.height)
         var overlap = profileOverlap
@@ -83,33 +119,60 @@ enum Stitcher {
         return try finish(
             cg, dest: dest, ana: ana, photo: photo, frameWidth: frameWidth,
             overlap: overlap, dy: dy, flip: flip, mode: mode, score: score,
-            rot: nil, scale: nil, inliers: nil, blend: blendName, note: note, stop: stop
+            rot: nil, scale: nil, inliers: nil, blend: blendName, develop: loaded.develop, note: note, stop: stop
         )
     }
 
     /// The source frames die with this function, before the blend allocates its pyramids.
-    private static func huginFile(tURL: URL, rURL: URL, rig: Rig, note: StitchNote?, stop: StitchStop?) throws -> Hugin.Made? {
-        note?("Reading the pair")
-        guard let prepared = try preparePair(tURL: tURL, rURL: rURL, rig: rig, note: note, stop: stop) else { return nil }
-        return try Hugin.render(prepared, note: note, stop: stop)
+    private static func huginFile(tURL: URL, rURL: URL, rig: Rig, photo: Photo, note: StitchNote?, stop: StitchStop?) throws -> (made: Hugin.Made, develop: String?)? {
+        let staged = try stage(tURL: tURL, rURL: rURL, rig: rig, photo: photo, note: note, stop: stop)
+        guard let prepared = staged.prepared else { return nil }
+        let made = try Hugin.render(prepared, note: note, stop: stop)
+        return (made, staged.develop)
     }
 
-    private static func preparePair(tURL: URL, rURL: URL, rig: Rig, note: StitchNote?, stop: StitchStop?) throws -> Hugin.Prepared? {
-        guard let tImage = image(at: tURL), let rImage = image(at: rURL) else {
-            throw PTPError.message("Could not read the pair")
-        }
-        let overlap = rig.overlap(width: tImage.width, height: tImage.height)
-        let oriented = rig.flipR ? flop(rImage) : rImage
-        return try Hugin.prepare(
-            t: tImage, r: oriented, overlap: overlap, frameWidth: tImage.width,
+    /// Develop or read, fit, then drop the source frames before the pyramid.
+    private static func stage(tURL: URL, rURL: URL, rig: Rig, photo: Photo, note: StitchNote?, stop: StitchStop?) throws -> (prepared: Hugin.Prepared?, develop: String?) {
+        let loaded = try loadPair(tURL: tURL, rURL: rURL, photo: photo, note: note)
+        let overlap = rig.overlap(width: loaded.t.width, height: loaded.t.height)
+        let oriented = rig.flipR ? flop(loaded.r) : loaded.r
+        let prepared = try Hugin.prepare(
+            t: loaded.t, r: oriented, overlap: overlap, frameWidth: loaded.t.width,
             balance: rig.balance, note: note, stop: stop
         )
+        return (prepared, loaded.develop)
+    }
+
+    private static func loadPair(tURL: URL, rURL: URL, photo: Photo, note: StitchNote?) throws -> (t: CGImage, r: CGImage, develop: String?) {
+        if photo.drive.ciraw {
+            let tNef = tURL.deletingPathExtension().appendingPathExtension("nef")
+            let rNef = rURL.deletingPathExtension().appendingPathExtension("nef")
+            let files = FileManager.default
+            if files.fileExists(atPath: tNef.path), files.fileExists(atPath: rNef.path) {
+                note?("Developing T")
+                guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens) else {
+                    throw PTPError.message("Could not develop T")
+                }
+                note?("Developing R")
+                guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens) else {
+                    throw PTPError.message("Could not develop R")
+                }
+                print("FXPAN ciraw \(t.width)x\(t.height) lens \(photo.drive.cirawLens)")
+                return (t, r, "ciraw")
+            }
+            note?("No NEF, using the JPEG")
+        }
+        note?("Reading the pair")
+        guard let t = image(at: tURL), let r = image(at: rURL) else {
+            throw PTPError.message("Could not read the pair")
+        }
+        return (t, r, nil)
     }
 
     private static func finish(
         _ image: CGImage, dest: URL, ana: URL?, photo: Photo, frameWidth: Int,
         overlap: Double, dy: Int, flip: Bool, mode: String, score: Double?,
-        rot: Double?, scale: Double?, inliers: Int?, blend: String?, note: StitchNote? = nil, stop: StitchStop? = nil
+        rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
         try StitchGate.check(stop)
         var cg = image
@@ -130,7 +193,7 @@ enum Stitcher {
         return StitchReport(
             overlap: overlap, overlapPx: ol, dy: dy, flipR: flip, mode: mode,
             width: cg.width, height: cg.height, squeeze: photo.frame.squeeze,
-            look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend
+            look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend, develop: develop
         )
     }
 
@@ -583,6 +646,7 @@ enum Stitcher {
     }
 
     static func grade(_ image: CGImage, look: LookSet) -> CGImage {
+        let image = vision(image, effect: look.apple)
         let w = image.width
         let h = image.height
         let cs = CGColorSpaceCreateDeviceRGB()
@@ -591,14 +655,14 @@ enum Stitcher {
             space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return image }
         let ciCtx = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
-        let source = CIImage(cgImage: image)
+        let prepared = apple(CIImage(cgImage: image), effect: look.apple)
         let band = 192
         var top = 0
         while top < h {
             autoreleasepool {
                 let bh = min(band, h - top)
                 let extent = CGRect(x: 0, y: h - top - bh, width: w, height: bh)
-                let strip = lookImage(source.cropped(to: extent), look: look)
+                let strip = lookImage(prepared.cropped(to: extent), look: look)
                 if let cg = ciCtx.createCGImage(strip, from: extent) {
                     ctx.draw(cg, in: extent)
                 }
@@ -606,6 +670,82 @@ enum Stitcher {
             top += band
         }
         return ctx.makeImage() ?? image
+    }
+
+    /// Subject and people masks run before the strip grade. No instance means the frame stays as it was.
+    private static func vision(_ image: CGImage, effect: String) -> CGImage {
+        let request: VNImageBasedRequest?
+        switch effect {
+        case "subject": request = VNGenerateForegroundInstanceMaskRequest()
+        case "people": request = VNGeneratePersonInstanceMaskRequest()
+        default: request = nil
+        }
+        guard let request else { return image }
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        guard (try? handler.perform([request])) != nil,
+              let obs = request.results?.first as? VNInstanceMaskObservation,
+              obs.allInstances.count > 0,
+              let buffer = try? obs.generateMaskedImage(ofInstances: obs.allInstances, from: handler, croppedToInstancesExtent: false) else {
+            return image
+        }
+        let cut = CIImage(cvPixelBuffer: buffer)
+        let ciCtx = CIContext(options: [.workingColorSpace: NSNull()])
+        guard let subject = ciCtx.createCGImage(cut, from: cut.extent) else { return image }
+        let w = image.width
+        let h = image.height
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return image }
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        ctx.draw(image, in: rect)
+        ctx.setFillColor(red: 0, green: 0, blue: 0, alpha: 0.55)
+        ctx.fill(rect)
+        ctx.draw(subject, in: rect)
+        return ctx.makeImage() ?? image
+    }
+
+    /// Applied on the whole frame, then cropped into strips. Vignette, bloom, and sharpen need the full extent.
+    private static func apple(_ source: CIImage, effect: String) -> CIImage {
+        guard let item = AppleBook.effect(effect) else { return source }
+        let short = min(source.extent.width, source.extent.height)
+        switch item.id {
+        case "subject", "people":
+            return source
+        case "sharpen":
+            return source.applyingFilter(item.filter, parameters: [kCIInputSharpnessKey: 0.7])
+        case "unsharp":
+            return source.applyingFilter(item.filter, parameters: [
+                kCIInputRadiusKey: max(1.5, short * 0.0018),
+                kCIInputIntensityKey: 0.7,
+            ])
+        case "denoise":
+            return source.applyingFilter(item.filter, parameters: ["inputNoiseLevel": 0.03, "inputSharpness": 0.45])
+        case "bloom":
+            return source.applyingFilter(item.filter, parameters: [
+                kCIInputRadiusKey: max(4, short * 0.012),
+                kCIInputIntensityKey: 0.55,
+            ])
+        case "vignette":
+            return source.applyingFilter(item.filter, parameters: [kCIInputIntensityKey: 0.85, "inputRadius": 1.5])
+        case "recover":
+            return source.applyingFilter(item.filter, parameters: ["inputHighlightAmount": 0.45, "inputShadowAmount": 0.4])
+        case "vibrance":
+            return source.applyingFilter(item.filter, parameters: [kCIInputAmountKey: 0.8])
+        case "warm":
+            return source.applyingFilter(item.filter, parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0),
+                "inputTargetNeutral": CIVector(x: 4800, y: 8),
+            ])
+        case "cool":
+            return source.applyingFilter(item.filter, parameters: [
+                "inputNeutral": CIVector(x: 6500, y: 0),
+                "inputTargetNeutral": CIVector(x: 9000, y: -6),
+            ])
+        default:
+            return source.applyingFilter(item.filter)
+        }
     }
 
     /// Point filters only, so a strip grades the same as the whole frame. Grain stays inside the strip instead of allocating a full-frame noise image.
