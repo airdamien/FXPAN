@@ -507,7 +507,7 @@ struct PanoFrame: View {
                 Image(uiImage: preview)
                     .resizable()
                     .scaledToFit()
-                    .padding(.bottom, 36)
+                    .padding(.bottom, showRange ? 74 : 36)
             } else {
                 VStack(spacing: 8) {
                     Text("No frame yet")
@@ -525,15 +525,36 @@ struct PanoFrame: View {
             if model.photo.focus.aid == "loupe", model.preview != nil {
                 Loupe()
             }
-            VStack {
-                Spacer()
-                exposureStrip
+            if showRange {
+                if model.photo.focus.aid == "range" {
+                    RangeBrackets()
+                }
+                VStack {
+                    Spacer()
+                    HStack {
+                        RangeMark(aim: model.rangeR, title: "R", tint: Theme.reflect)
+                        Spacer()
+                        RangeMark(aim: model.rangeT, title: "T", tint: Theme.transmit)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
+                    exposureStrip
+                }
+            } else {
+                VStack {
+                    Spacer()
+                    exposureStrip
+                }
             }
         }
         .aspectRatio(aspect, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+    }
+
+    private var showRange: Bool {
+        model.camera.live && model.photo.focus.aid != "off" && model.preview != nil
     }
 
     private var guideRatio: Double? {
@@ -585,6 +606,134 @@ struct GuideLines: View {
             .stroke(Theme.gold.opacity(0.8), lineWidth: 1)
         }
         .allowsHitTesting(false)
+    }
+}
+
+struct RangeBrackets: View {
+    var body: some View {
+        GeometryReader { geo in
+            Path { path in
+                corner(&path, CGPoint(x: geo.size.width * 0.27, y: geo.size.height * 0.38))
+                corner(&path, CGPoint(x: geo.size.width * 0.73, y: geo.size.height * 0.38))
+            }
+            .stroke(Theme.gold.opacity(0.85), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func corner(_ path: inout Path, _ center: CGPoint) {
+        let arm: CGFloat = 8
+        let box: CGFloat = 34
+        let x0 = center.x - box / 2
+        let y0 = center.y - box / 2
+        let x1 = center.x + box / 2
+        let y1 = center.y + box / 2
+        path.move(to: CGPoint(x: x0, y: y0 + arm))
+        path.addLine(to: CGPoint(x: x0, y: y0))
+        path.addLine(to: CGPoint(x: x0 + arm, y: y0))
+        path.move(to: CGPoint(x: x1 - arm, y: y0))
+        path.addLine(to: CGPoint(x: x1, y: y0))
+        path.addLine(to: CGPoint(x: x1, y: y0 + arm))
+        path.move(to: CGPoint(x: x0, y: y1 - arm))
+        path.addLine(to: CGPoint(x: x0, y: y1))
+        path.addLine(to: CGPoint(x: x0 + arm, y: y1))
+        path.move(to: CGPoint(x: x1 - arm, y: y1))
+        path.addLine(to: CGPoint(x: x1, y: y1))
+        path.addLine(to: CGPoint(x: x1, y: y1 - arm))
+    }
+}
+
+struct RangeMark: View {
+    var aim: FocusAim
+    var title: String
+    var tint: Color
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(Theme.font(10, weight: .semibold))
+                .foregroundStyle(tint)
+            ZStack {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(Color(hex: 0x140E0A))
+                Canvas { context, size in
+                    marks(context, size)
+                }
+                if aim != .lost {
+                    Text("0")
+                        .font(Theme.font(12, weight: .medium))
+                        .foregroundStyle(zero)
+                        .offset(y: -7)
+                }
+            }
+            .frame(width: 84, height: 28)
+        }
+    }
+
+    private var zero: Color {
+        if case .locked = aim { return Theme.gold }
+        return Theme.ink
+    }
+
+    private var ink: GraphicsContext.Shading {
+        let color: Color = {
+            if case .locked = aim { return Theme.gold }
+            return Theme.ink
+        }()
+        return .color(color)
+    }
+
+    private func marks(_ context: GraphicsContext, _ size: CGSize) {
+        let y: CGFloat = 16
+        switch aim {
+        case .locked:
+            bar(context, 36, y)
+            bar(context, 46, y)
+        case .lost:
+            shaft(context, side: -1, count: 6, width: size.width, y: y)
+            shaft(context, side: 1, count: 6, width: size.width, y: y)
+        case .turn(let side, let amount):
+            shaft(context, side: side, count: amount > 1 ? 6 : 3, width: size.width, y: y)
+        }
+    }
+
+    private func shaft(_ context: GraphicsContext, side: Int, count: Int, width: CGFloat, y: CGFloat) {
+        let step: CGFloat = 4
+        if side < 0 {
+            chevron(context, tip: 5, y: y + 4, left: true)
+            let start: CGFloat = count > 3 ? 15 : 26
+            for i in 0..<count {
+                bar(context, start + CGFloat(i) * step, y)
+            }
+        } else {
+            let end = width - 7
+            let start = end - CGFloat(count - 1) * step - 10
+            for i in 0..<count {
+                bar(context, start + CGFloat(i) * step, y)
+            }
+            chevron(context, tip: width - 5, y: y + 4, left: false)
+        }
+    }
+
+    private func bar(_ context: GraphicsContext, _ x: CGFloat, _ y: CGFloat) {
+        context.fill(Path(CGRect(x: x, y: y, width: 2, height: 8)), with: ink)
+    }
+
+    private func chevron(_ context: GraphicsContext, tip: CGFloat, y: CGFloat, left: Bool) {
+        var path = Path()
+        let w: CGFloat = 7
+        let h: CGFloat = 4.5
+        if left {
+            path.move(to: CGPoint(x: tip, y: y))
+            path.addLine(to: CGPoint(x: tip + w, y: y - h))
+            path.addLine(to: CGPoint(x: tip + w, y: y + h))
+        } else {
+            path.move(to: CGPoint(x: tip, y: y))
+            path.addLine(to: CGPoint(x: tip - w, y: y - h))
+            path.addLine(to: CGPoint(x: tip - w, y: y + h))
+        }
+        path.closeSubpath()
+        context.fill(path, with: ink)
     }
 }
 

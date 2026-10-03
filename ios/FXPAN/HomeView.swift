@@ -288,8 +288,10 @@ struct HomeView: View {
         case "Light":
             return (Catalog.fmtISO(photo.light.iso), "\(Catalog.fmtShut(photo.light.shutter)) · \(Catalog.fmtF(photo.light.fstop)) · \(photo.light.program)")
         case "Focus":
+            if photo.focus.aid == "off" { return ("Off", "Lens helicoid") }
+            if photo.focus.aid == "range" { return ("Range", "Arrow toward the sharp point") }
             let aid = photo.focus.aid.prefix(1).uppercased() + photo.focus.aid.dropFirst()
-            return (aid == "Off" ? "Off" : String(aid), photo.focus.aid == "off" ? "Lens helicoid" : "\(photo.focus.color) · \(photo.focus.level)")
+            return (String(aid), "\(photo.focus.color) · \(photo.focus.level)")
         case "Look":
             let bits = LookBook.tweaks(photo.look)
             return (LookBook.name(photo.look), bits.isEmpty ? LookBook.note(photo.look) : bits.joined(separator: " · "))

@@ -110,8 +110,8 @@ struct FocusScreen: View {
     var body: some View {
         DimPage(title: "Focus", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Aid", value: model.photo.focus.aid) {
-                    ChipRow(options: [("off", "Off"), ("peaking", "Peaking"), ("loupe", "Loupe")], selected: model.photo.focus.aid) { value in
+                RowBlock(title: "Aid", value: model.photo.focus.aid, hint: "Range watches the center of each frame. Turn the ring: the arrow shortens toward the 0 while that way gets sharper, and it jumps across when you pass the sharp point so you come back. Both arrows means turn until it sees a direction.") {
+                    ChipRow(options: [("off", "Off"), ("peaking", "Peaking"), ("loupe", "Loupe"), ("range", "Range")], selected: model.photo.focus.aid) { value in
                         model.edit { $0.focus.aid = value }
                     }
                 }
@@ -136,7 +136,7 @@ struct LookScreen: View {
         let look = model.photo.look
         DimPage(title: "Look", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Base", value: LookBook.name(look)) {
+                RowBlock(title: "Base", value: LookBook.name(look), hint: look.base == "apple" ? "Local tone and noise on the NEF, then vibrance and a light sharpen. A JPEG gets that finish in Core Image." : "") {
                     ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: look.base) { value in
                         model.edit {
                             $0.look.base = value
@@ -195,7 +195,7 @@ struct DriveScreen: View {
                         model.edit { $0.drive.quality = value }
                     }
                 }
-                RowBlock(title: "Develop", value: drive.ciraw ? "CIRAW" : "JPEG", hint: "CIRAW opens the NEF and recovers highlights. No NEF uses the JPEG.") {
+                RowBlock(title: "Develop", value: drive.ciraw ? "CIRAW" : "JPEG", hint: "CIRAW opens the NEF and recovers highlights. The Apple mode also runs local tone, noise, and detail. No NEF uses the JPEG.") {
                     ChipRow(options: [("0", "JPEG"), ("1", "CIRAW")], selected: drive.ciraw ? "1" : "0") { value in
                         model.edit { $0.drive.ciraw = value == "1" }
                     }
@@ -305,7 +305,9 @@ struct ModesScreen: View {
 
     private func modeLine(_ mode: NamedMode) -> String {
         let p = mode.photo
-        return "\(Catalog.format(p.frame.squeeze).1) · \(Catalog.fmtISO(p.light.iso)) · \(LookBook.name(p.look))"
+        var line = "\(Catalog.format(p.frame.squeeze).1) · \(Catalog.fmtISO(p.light.iso)) · \(LookBook.name(p.look))"
+        if p.drive.ciraw { line += " · CIRAW" }
+        return line
     }
 }
 
@@ -440,8 +442,13 @@ struct ShotScreen: View {
                     model.saveStyle(stamp, look: previewLook)
                 }
                 .buttonStyle(GoldButton())
-                .disabled(model.savingStyle != nil || shot?.pano == nil)
-                Text("Save look writes this style, including an Apple effect, onto the panorama. Pick another and save again to replace it.")
+                .disabled(model.savingStyle != nil || model.upscaleLabel != nil || shot?.pano == nil)
+                Button(model.upscaleLabel ?? "Upscale") {
+                    model.upscale(stamp)
+                }
+                .buttonStyle(GoldButton())
+                .disabled(model.upscaleLabel != nil || model.savingStyle != nil || shot?.pano == nil)
+                Text("Save look writes this style onto the panorama. Upscale runs Real-ESRGAN on the subject, in overlapping tiles, and scales the rest of the frame to match. Another tap starts from the original.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
@@ -683,7 +690,7 @@ struct SystemScreen: View {
                 nav("Rig", "\(Int((model.rig.overlap * 100).rounded()))%\(model.rig.flipR ? " · flop R" : "")", .rig)
                 nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min", .display)
                 nav("Storage", Disk.freeBytes().map(Disk.fmtBytes) ?? "", .storage)
-                nav("Apple", model.appleEnabled.isEmpty ? "Off" : "\(model.appleEnabled.count) on", .apple)
+                nav("Apple", appleLine, .apple)
                 nav("About", "FXPAN", .about)
                 Toggle(isOn: Binding(get: { model.simulate }, set: { model.setSimulate($0) })) {
                     VStack(alignment: .leading) {
@@ -702,6 +709,12 @@ struct SystemScreen: View {
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
             }
         })
+    }
+
+    private var appleLine: String {
+        let gpu = model.metalWarp ? "Metal" : "CPU"
+        if model.appleEnabled.isEmpty { return gpu }
+        return "\(gpu) · \(model.appleEnabled.count) on"
     }
 
     private func nav(_ title: String, _ value: String, _ route: Route) -> some View {
@@ -724,6 +737,16 @@ struct AppleScreen: View {
     var body: some View {
         DimPage(title: "Apple", crumb: "System", controls: {
             VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(get: { model.metalWarp }, set: { model.setMetalWarp($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Metal warp").font(Theme.font(16, weight: .medium))
+                        Text("Samples both frames on the GPU while stitching. Off uses the same bilinear on the CPU.")
+                            .font(Theme.font(12)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .tint(Theme.gold)
+                .padding(12)
+                .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
                 Text("Still-image tools that can run on a finished Nikon JPEG. Turn on the ones you want as buttons in playback and on the keep screen.")
                     .font(Theme.font(13))
                     .foregroundStyle(Theme.dim)

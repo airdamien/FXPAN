@@ -38,7 +38,7 @@ enum StitchGate {
 
 /// Apple's raw develop. Orientation stays unrotated so it matches the JPEG the stitch already flops.
 enum RawDevelop {
-    static func image(at url: URL, lens: Bool) -> CGImage? {
+    static func image(at url: URL, lens: Bool, apple: Bool) -> CGImage? {
         guard let filter = CIRAWFilter(imageURL: url) else { return nil }
         if #available(iOS 27.0, *) {
             DispatchQueue.global(qos: .userInitiated).sync {
@@ -54,10 +54,9 @@ enum RawDevelop {
         filter.isDraftModeEnabled = false
         filter.scaleFactor = 1
         filter.extendedDynamicRangeAmount = 0
-        if #available(iOS 26.0, *) {
-            if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = true }
-        }
+        if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = true }
         if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = lens }
+        if apple { tone(filter) }
         guard let output = filter.outputImage else { return nil }
         var extent = output.extent.integral
         if extent.isInfinite || extent.isNull || extent.isEmpty {
@@ -67,15 +66,27 @@ enum RawDevelop {
         let ctx = CIContext(options: [.cacheIntermediates: false])
         return ctx.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space)
     }
+
+    /// The part of an iPhone photo CIRAW can actually do: local tone, open shadows, denoise, a little detail.
+    private static func tone(_ filter: CIRAWFilter) {
+        filter.boostAmount = 1
+        filter.boostShadowAmount = 1.2
+        if filter.isLocalToneMapSupported { filter.localToneMapAmount = 0.8 }
+        if filter.isLuminanceNoiseReductionSupported { filter.luminanceNoiseReductionAmount = 0.3 }
+        if filter.isColorNoiseReductionSupported { filter.colorNoiseReductionAmount = 0.4 }
+        if filter.isSharpnessSupported { filter.sharpnessAmount = 0.3 }
+        if filter.isDetailSupported { filter.detailAmount = 0.8 }
+        if filter.isContrastSupported { filter.contrastAmount = 0.28 }
+    }
 }
 
 enum Stitcher {
     static let work = 360
 
-    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
+    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
         if photo.drive.engine == "hugin" {
-            if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, note: note, stop: stop) {
+            if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop) {
                 return try finish(
                     built.made.image, dest: dest, ana: ana, photo: photo, frameWidth: built.made.frameWidth,
                     overlap: built.made.overlap, dy: built.made.dy, flip: rig.flipR, mode: "hugin", score: nil,
@@ -124,21 +135,21 @@ enum Stitcher {
     }
 
     /// The source frames die with this function, before the blend allocates its pyramids.
-    private static func huginFile(tURL: URL, rURL: URL, rig: Rig, photo: Photo, note: StitchNote?, stop: StitchStop?) throws -> (made: Hugin.Made, develop: String?)? {
-        let staged = try stage(tURL: tURL, rURL: rURL, rig: rig, photo: photo, note: note, stop: stop)
+    private static func huginFile(tURL: URL, rURL: URL, rig: Rig, photo: Photo, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> (made: Hugin.Made, develop: String?)? {
+        let staged = try stage(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop)
         guard let prepared = staged.prepared else { return nil }
         let made = try Hugin.render(prepared, note: note, stop: stop)
         return (made, staged.develop)
     }
 
     /// Develop or read, fit, then drop the source frames before the pyramid.
-    private static func stage(tURL: URL, rURL: URL, rig: Rig, photo: Photo, note: StitchNote?, stop: StitchStop?) throws -> (prepared: Hugin.Prepared?, develop: String?) {
+    private static func stage(tURL: URL, rURL: URL, rig: Rig, photo: Photo, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> (prepared: Hugin.Prepared?, develop: String?) {
         let loaded = try loadPair(tURL: tURL, rURL: rURL, photo: photo, note: note)
         let overlap = rig.overlap(width: loaded.t.width, height: loaded.t.height)
         let oriented = rig.flipR ? flop(loaded.r) : loaded.r
         let prepared = try Hugin.prepare(
             t: loaded.t, r: oriented, overlap: overlap, frameWidth: loaded.t.width,
-            balance: rig.balance, note: note, stop: stop
+            balance: rig.balance, metal: metal, note: note, stop: stop
         )
         return (prepared, loaded.develop)
     }
@@ -150,14 +161,15 @@ enum Stitcher {
             let files = FileManager.default
             if files.fileExists(atPath: tNef.path), files.fileExists(atPath: rNef.path) {
                 note?("Developing T")
-                guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens) else {
+                let apple = photo.look.base == "apple"
+                guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens, apple: apple) else {
                     throw PTPError.message("Could not develop T")
                 }
                 note?("Developing R")
-                guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens) else {
+                guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens, apple: apple) else {
                     throw PTPError.message("Could not develop R")
                 }
-                print("FXPAN ciraw \(t.width)x\(t.height) lens \(photo.drive.cirawLens)")
+                print("FXPAN ciraw \(t.width)x\(t.height) lens \(photo.drive.cirawLens) apple \(apple)")
                 return (t, r, "ciraw")
             }
             note?("No NEF, using the JPEG")
@@ -178,7 +190,7 @@ enum Stitcher {
         var cg = image
         if !LookBook.identity(photo.look) {
             note?("Grading the look")
-            cg = grade(cg, look: photo.look)
+            cg = grade(cg, look: photo.look, fromRaw: develop == "ciraw")
             try StitchGate.check(stop)
         }
         note?("Writing the panorama")
@@ -645,7 +657,7 @@ enum Stitcher {
         }
     }
 
-    static func grade(_ image: CGImage, look: LookSet) -> CGImage {
+    static func grade(_ image: CGImage, look: LookSet, fromRaw: Bool = false) -> CGImage {
         let image = vision(image, effect: look.apple)
         let w = image.width
         let h = image.height
@@ -655,7 +667,8 @@ enum Stitcher {
             space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return image }
         let ciCtx = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
-        let prepared = apple(CIImage(cgImage: image), effect: look.apple)
+        var prepared = apple(CIImage(cgImage: image), effect: look.apple)
+        if look.base == "apple" { prepared = phone(prepared, fromRaw: fromRaw) }
         let band = 192
         var top = 0
         while top < h {
@@ -746,6 +759,20 @@ enum Stitcher {
         default:
             return source.applyingFilter(item.filter)
         }
+    }
+
+    /// Vibrance and a light sharpen. A JPEG also gets denoise and a highlight pull, which the raw develop already did.
+    private static func phone(_ source: CIImage, fromRaw: Bool) -> CIImage {
+        var ci = source
+        if !fromRaw {
+            ci = ci.applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": 0.02, "inputSharpness": 0.4])
+            ci = ci.applyingFilter("CIHighlightShadowAdjust", parameters: [
+                "inputHighlightAmount": 0.62, "inputShadowAmount": 0.22,
+            ])
+        }
+        ci = ci.applyingFilter("CIVibrance", parameters: [kCIInputAmountKey: fromRaw ? 0.35 : 0.5])
+        ci = ci.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: fromRaw ? 0.28 : 0.4])
+        return ci
     }
 
     /// Point filters only, so a strip grades the same as the whole frame. Grain stays inside the strip instead of allocating a full-frame noise image.

@@ -30,6 +30,8 @@ final class AppModel {
     var idleChosen = false
     /// Nil until the Apple panel is touched. Nil offers every Core Image effect.
     var appleOn: [String]?
+    /// GPU bilinear for the full-resolution warp. Off uses the same sample on the CPU.
+    var metalWarp = true
     var sleeping = false
     var toast: Toast?
     var countdown: Int?
@@ -41,11 +43,14 @@ final class AppModel {
     var stitchGeneration = 0
     var stitchWaiting: Set<String> = []
     var savingStyle: String?
+    var upscaleLabel: String?
     var reviewStamp: String?
     var peepURL: URL?
     var peepTitle = ""
     var messages: [String] = []
     var preview: UIImage?
+    var rangeT: FocusAim = .lost
+    var rangeR: FocusAim = .lost
     var simulate = false
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
@@ -53,6 +58,8 @@ final class AppModel {
     var usbRevision = 0
 
     let camera = CameraHub()
+    private let dialT = FocusDial()
+    private let dialR = FocusDial()
     private var applyTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
@@ -80,6 +87,8 @@ final class AppModel {
         let adoptHugin = !FileManager.default.fileExists(atPath: huginMark.path)
         if adoptHugin && photo.drive.engine == "match" { photo.drive.engine = "hugin" }
         modes = state.modes
+        let addApple = !modes.contains { $0.id == "apple" }
+        if addApple { modes.insert(Seed.appleMode(), at: 0) }
         activeModeID = state.activeModeID
         rig = state.rig
         notes = state.shots
@@ -87,11 +96,12 @@ final class AppModel {
         idleMinutes = state.idleChosen ? state.idleMinutes : 5
         idleChosen = state.idleChosen
         appleOn = state.appleOn
+        metalWarp = state.metalWarp ?? true
         simulate = state.simulate
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
-            if photo.drive.engine == "hugin" { persist() }
         }
+        if addApple || (adoptHugin && photo.drive.engine == "hugin") { persist() }
         camera.simulate = state.simulate
         camera.onChange = { [weak self] in
             self?.cameraRevision += 1
@@ -344,6 +354,11 @@ final class AppModel {
         persist()
     }
 
+    func setMetalWarp(_ on: Bool) {
+        metalWarp = on
+        persist()
+    }
+
     /// Remember which Apple effect the viewer is trying. The file changes only on Save look.
     func stageApple(_ stamp: String, _ apple: String) {
         var row = notes[stamp] ?? ShotNote()
@@ -356,6 +371,59 @@ final class AppModel {
         if protectedStamps.contains(stamp) { protectedStamps.remove(stamp) }
         else { protectedStamps.insert(stamp) }
         persist()
+    }
+
+    /// Real-ESRGAN on the panorama. Subject tiles use the network. A later tap reads the saved original, so the enlarge does not stack.
+    func upscale(_ stamp: String) {
+        if upscaleLabel != nil || savingStyle != nil { return }
+        let pano = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
+        guard FileManager.default.fileExists(atPath: pano.path) else {
+            note("No panorama to upscale", bad: true)
+            return
+        }
+        upscaleLabel = "Upscaling"
+        note("Upscaling", bad: false)
+        let ana = Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg")
+        let squeeze = notes[stamp]?.squeeze ?? photo.frame.squeeze
+        let hasAna = FileManager.default.fileExists(atPath: ana.path)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let source = try UpscaleStore.source(stamp: stamp, pano: pano)
+                guard let cg = Stitcher.image(at: source) else {
+                    throw PTPError.message("Could not read the panorama")
+                }
+                let (out, scale) = try SuperRes.image(cg) { phase in
+                    Task { @MainActor in self?.upscaleLabel = phase }
+                }
+                let dir = Disk.captures.appendingPathComponent("upscale", isDirectory: true)
+                let tmp = dir.appendingPathComponent("writing-\(stamp).jpg")
+                try Stitcher.jpeg(out, to: tmp)
+                _ = try FileManager.default.replaceItemAt(pano, withItemAt: tmp)
+                if hasAna, squeeze > 1.01 {
+                    let wideW = Int((Double(out.width) * squeeze).rounded())
+                    if wideW > out.width, Int64(wideW) * Int64(out.height) * 4 < 1_600_000_000 {
+                        let wide = Stitcher.stretch(out, squeeze: squeeze)
+                        if wide.width == wideW {
+                            try Stitcher.jpeg(wide, to: ana)
+                        }
+                    }
+                }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.upscaleLabel = nil
+                    self.stitchGeneration += 1
+                    self.reloadShots()
+                    self.note("Upscaled \(scale)×", bad: false)
+                    self.ingest()
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.upscaleLabel = nil
+                    self.note(error.localizedDescription, bad: true)
+                }
+            }
+        }
     }
 
     /// Write the playback style onto the panorama. The unstyled stitch is kept, so another save replaces it.
@@ -454,11 +522,21 @@ final class AppModel {
                 self.previewDirty = false
                 let t = self.camera.frames[.t]?.cgImage
                 let r = self.camera.frames[.r]?.cgImage
-                let image = await Task.detached(priority: .userInitiated) {
-                    await Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL)
+                let meter = self.camera.live && photo.focus.aid != "off"
+                let made = await Task.detached(priority: .userInitiated) {
+                    await Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter)
                 }.value
-                if let image {
+                if let image = made.image {
                     self.preview = image
+                }
+                if meter {
+                    self.rangeT = made.t.map { self.dialT.push($0) } ?? .lost
+                    self.rangeR = made.r.map { self.dialR.push($0) } ?? .lost
+                } else {
+                    self.dialT.reset()
+                    self.dialR.reset()
+                    self.rangeT = .lost
+                    self.rangeR = .lost
                 }
             }
             self.previewBusy = false
@@ -466,17 +544,35 @@ final class AppModel {
         }
     }
 
-    private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?) async -> UIImage? {
+    private struct PreviewMade {
+        var image: UIImage?
+        var t: Double?
+        var r: Double?
+    }
+
+    private static func scored(_ image: CGImage) -> Double? {
+        let value = FocusMeter.score(image)
+        return value > 0 ? value : nil
+    }
+
+    private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool) async -> PreviewMade {
+        let scores = PreviewMade(
+            image: nil,
+            t: meter ? t.flatMap { scored($0) } : nil,
+            r: meter ? r.flatMap { scored($0) } : nil
+        )
         if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400) {
             var out = cg
             if !LookBook.identity(photo.look) { out = Stitcher.grade(out, look: photo.look) }
             if photo.focus.aid == "peaking" { out = Peak.draw(out, color: photo.focus.color, level: photo.focus.level) }
-            return UIImage(cgImage: out)
+            return PreviewMade(image: UIImage(cgImage: out), t: scores.t, r: scores.r)
         }
-        if let t { return UIImage(cgImage: t) }
-        if let r { return UIImage(cgImage: r) }
-        if let fallback, let image = UIImage(contentsOfFile: fallback.path) { return image }
-        return nil
+        if let t { return PreviewMade(image: UIImage(cgImage: t), t: scores.t, r: scores.r) }
+        if let r { return PreviewMade(image: UIImage(cgImage: r), t: scores.t, r: scores.r) }
+        if let fallback, let image = UIImage(contentsOfFile: fallback.path) {
+            return PreviewMade(image: image, t: scores.t, r: scores.r)
+        }
+        return scores
     }
 
     private func scheduleApply() {
@@ -605,8 +701,9 @@ final class AppModel {
                 Task { @MainActor in self.noteStitch(phase) }
             }
             let stop = stitchStop
+            let metal = metalWarp
             let job = Task.detached(priority: .userInitiated) {
-                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, note: note, stop: { stop.cancelled })
+                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, metal: metal, note: note, stop: { stop.cancelled })
             }
             stitchPiece = job
             defer { stitchPiece = nil }
@@ -653,6 +750,7 @@ final class AppModel {
         state.idleMinutes = idleMinutes
         state.idleChosen = idleChosen
         state.appleOn = appleOn
+        state.metalWarp = metalWarp
         Disk.save(state)
     }
 
