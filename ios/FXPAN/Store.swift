@@ -11,6 +11,8 @@ struct Persisted: Codable {
     var idleMinutes: Int = 5
     /// False until someone picks a sleep time, so older saves of “Awake” pick up the 5 minute idle.
     var idleChosen: Bool = false
+    /// Nil until the Apple panel is touched, which means every Core Image effect is offered.
+    var appleOn: [String]? = nil
 }
 
 enum Disk {

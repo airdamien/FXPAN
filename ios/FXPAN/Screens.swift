@@ -195,6 +195,18 @@ struct DriveScreen: View {
                         model.edit { $0.drive.quality = value }
                     }
                 }
+                RowBlock(title: "Develop", value: drive.ciraw ? "CIRAW" : "JPEG", hint: "CIRAW opens the NEF and recovers highlights. No NEF uses the JPEG.") {
+                    ChipRow(options: [("0", "JPEG"), ("1", "CIRAW")], selected: drive.ciraw ? "1" : "0") { value in
+                        model.edit { $0.drive.ciraw = value == "1" }
+                    }
+                }
+                if drive.ciraw {
+                    RowBlock(title: "Lens", value: drive.cirawLens ? "Corrected" : "Off", hint: "Apple's lens correction. Off keeps the overlap you already tuned.") {
+                        ChipRow(options: [("0", "Off"), ("1", "Correct")], selected: drive.cirawLens ? "1" : "0") { value in
+                            model.edit { $0.drive.cirawLens = value == "1" }
+                        }
+                    }
+                }
                 RowBlock(title: "Timer", value: drive.timer == 0 ? "Off" : "\(drive.timer) s") {
                     ChipRow(options: Catalog.timers.map { ("\($0)", $0 == 0 ? "Off" : "\($0) s") }, selected: "\(drive.timer)") { value in
                         model.edit { $0.drive.timer = Int(value) ?? 0 }
@@ -357,6 +369,7 @@ struct ShotScreen: View {
     @State private var styleBase = "standard"
     @State private var styleGrain = "off"
     @State private var styleFilter = "none"
+    @State private var styleApple = "off"
 
     private var previewLook: LookSet {
         var look = LookSet()
@@ -364,6 +377,7 @@ struct ShotScreen: View {
         look.id = styleBase
         look.grain = styleGrain
         look.filter = LookBook.isMono(look) ? styleFilter : "none"
+        look.apple = styleApple
         return look
     }
 
@@ -401,6 +415,10 @@ struct ShotScreen: View {
                 ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: model.photo.drive.engine) { value in
                     model.restitch(stamp, engine: value)
                 }
+                ChipRow(options: [("jpeg", "JPEG"), ("ciraw", "CIRAW")], selected: model.photo.drive.ciraw ? "ciraw" : "jpeg") { value in
+                    model.edit { $0.drive.ciraw = value == "ciraw" }
+                    model.restitch(stamp)
+                }
                 Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
@@ -409,12 +427,21 @@ struct ShotScreen: View {
                     ChipRow(options: LookBook.filters.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleFilter) { styleFilter = $0 }
                 }
                 ChipRow(options: LookBook.grains.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleGrain) { styleGrain = $0 }
+                ForEach(AppleBook.groups) { group in
+                    let chips = AppleBook.options(model.appleEnabled, group: group.id, current: styleApple)
+                    if !chips.isEmpty {
+                        Text(group.viewer)
+                            .font(Theme.font(12))
+                            .foregroundStyle(Theme.dim)
+                        ChipRow(options: chips, selected: styleApple) { pickApple($0) }
+                    }
+                }
                 Button(model.savingStyle == stamp ? "Saving" : "Save look") {
                     model.saveStyle(stamp, look: previewLook)
                 }
                 .buttonStyle(GoldButton())
                 .disabled(model.savingStyle != nil || shot?.pano == nil)
-                Text("Save look writes this style onto the panorama. Pick another and save again to replace it.")
+                Text("Save look writes this style, including an Apple effect, onto the panorama. Pick another and save again to replace it.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
@@ -440,6 +467,12 @@ struct ShotScreen: View {
         styleBase = note.styleBase
         styleGrain = note.styleGrain.isEmpty ? "off" : note.styleGrain
         styleFilter = note.styleFilter.isEmpty ? "none" : note.styleFilter
+        styleApple = note.styleApple.isEmpty ? "off" : note.styleApple
+    }
+
+    private func pickApple(_ id: String) {
+        styleApple = id
+        model.stageApple(stamp, id)
     }
 
     private func parts(_ shot: ShotFiles?) -> [(String, String)] {
@@ -568,6 +601,9 @@ enum FrameFacts {
         if let blend = report.blend {
             text += " · \(blend)"
         }
+        if report.develop == "ciraw" {
+            text += " · CIRAW"
+        }
         return text
     }
 }
@@ -606,7 +642,7 @@ struct ShotPart: View {
             let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(url.path)#\(modified)"
         }
-        return "\(generation)|\(part)|\(look.base)|\(look.grain)|\(look.filter)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))|\(revised(LookStore.plain(stamp: shot.stamp, ana: false)))|\(revised(LookStore.plain(stamp: shot.stamp, ana: true)))"
+        return "\(generation)|\(part)|\(look.base)|\(look.grain)|\(look.filter)|\(look.apple)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))|\(revised(LookStore.plain(stamp: shot.stamp, ana: false)))|\(revised(LookStore.plain(stamp: shot.stamp, ana: true)))"
     }
 
     private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
@@ -647,6 +683,7 @@ struct SystemScreen: View {
                 nav("Rig", "\(Int((model.rig.overlap * 100).rounded()))%\(model.rig.flipR ? " · flop R" : "")", .rig)
                 nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min", .display)
                 nav("Storage", Disk.freeBytes().map(Disk.fmtBytes) ?? "", .storage)
+                nav("Apple", model.appleEnabled.isEmpty ? "Off" : "\(model.appleEnabled.count) on", .apple)
                 nav("About", "FXPAN", .about)
                 Toggle(isOn: Binding(get: { model.simulate }, set: { model.setSimulate($0) })) {
                     VStack(alignment: .leading) {
@@ -678,6 +715,56 @@ struct SystemScreen: View {
         .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
         .contentShape(RoundedRectangle(cornerRadius: Theme.radius))
         .highPriorityGesture(TapGesture().onEnded { model.go(route) })
+    }
+}
+
+struct AppleScreen: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        DimPage(title: "Apple", crumb: "System", controls: {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Still-image tools that can run on a finished Nikon JPEG. Turn on the ones you want as buttons in playback and on the keep screen.")
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.dim)
+                Text("Super-resolution, temporal denoise, and motion blur need a video frame at 1920 pixels or a run of frames. Image Playground draws a new picture. Smart HDR and Deep Fusion stay inside the iPhone camera.")
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.ink2)
+                ForEach(AppleBook.groups) { group in
+                    self.group(group.title, group.id)
+                }
+            }
+        }, panel: {
+            Text("Off leaves the stitch as shot. Save look in playback writes the one you pick.")
+                .font(Theme.font(14))
+                .foregroundStyle(Theme.dim)
+        })
+    }
+
+    @ViewBuilder
+    private func group(_ title: String, _ id: String) -> some View {
+        let rows = AppleBook.effects.filter { $0.group == id }
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(Theme.font(11, weight: .semibold))
+                .tracking(1.1)
+                .foregroundStyle(Theme.dim)
+            ForEach(rows) { effect in
+                Toggle(isOn: Binding(
+                    get: { model.appleEnabled.contains(effect.id) },
+                    set: { model.setApple(effect.id, on: $0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(effect.title).font(Theme.font(16, weight: .medium))
+                        Text(effect.detail).font(Theme.font(12)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .tint(Theme.gold)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
     }
 }
 

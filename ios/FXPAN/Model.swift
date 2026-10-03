@@ -31,7 +31,7 @@ struct FocusSet: Codable, Equatable {
     var level: String = "std"
 }
 
-struct LookSet: Codable, Equatable {
+struct LookSet: Equatable {
     var id: String = "standard"
     var base: String = "standard"
     var color: Int = 0
@@ -39,9 +39,41 @@ struct LookSet: Codable, Equatable {
     var shadow: Int = 0
     var grain: String = "off"
     var filter: String = "none"
+    /// A Core Image effect to try on the finished frame. Off leaves the stitch alone.
+    var apple: String = "off"
 }
 
-struct DriveSet: Codable, Equatable {
+extension LookSet: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case id, base, color, highlight, shadow, grain, filter, apple
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? "standard"
+        base = try c.decodeIfPresent(String.self, forKey: .base) ?? "standard"
+        color = try c.decodeIfPresent(Int.self, forKey: .color) ?? 0
+        highlight = try c.decodeIfPresent(Int.self, forKey: .highlight) ?? 0
+        shadow = try c.decodeIfPresent(Int.self, forKey: .shadow) ?? 0
+        grain = try c.decodeIfPresent(String.self, forKey: .grain) ?? "off"
+        filter = try c.decodeIfPresent(String.self, forKey: .filter) ?? "none"
+        apple = try c.decodeIfPresent(String.self, forKey: .apple) ?? "off"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(base, forKey: .base)
+        try c.encode(color, forKey: .color)
+        try c.encode(highlight, forKey: .highlight)
+        try c.encode(shadow, forKey: .shadow)
+        try c.encode(grain, forKey: .grain)
+        try c.encode(filter, forKey: .filter)
+        try c.encode(apple, forKey: .apple)
+    }
+}
+
+struct DriveSet: Equatable {
     /// USB is the release that ships. Sync is the 10-pin path, left for later.
     var release: String = "usb"
     var save: String = "ipad"
@@ -50,6 +82,42 @@ struct DriveSet: Codable, Equatable {
     var review: Int = 10
     var autoStitch: Bool = true
     var engine: String = "hugin"
+    /// Develop the NEFs with CIRAW before the stitch. Off uses the camera JPEG.
+    var ciraw: Bool = false
+    /// Apple lens correction on the raw develop. Off keeps the overlap geometry already tuned.
+    var cirawLens: Bool = false
+}
+
+extension DriveSet: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case release, save, quality, timer, review, autoStitch, engine, ciraw, cirawLens
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        release = try c.decodeIfPresent(String.self, forKey: .release) ?? "usb"
+        save = try c.decodeIfPresent(String.self, forKey: .save) ?? "ipad"
+        quality = try c.decodeIfPresent(String.self, forKey: .quality) ?? "NEF+Fine"
+        timer = try c.decodeIfPresent(Int.self, forKey: .timer) ?? 0
+        review = try c.decodeIfPresent(Int.self, forKey: .review) ?? 10
+        autoStitch = try c.decodeIfPresent(Bool.self, forKey: .autoStitch) ?? true
+        engine = try c.decodeIfPresent(String.self, forKey: .engine) ?? "hugin"
+        ciraw = try c.decodeIfPresent(Bool.self, forKey: .ciraw) ?? false
+        cirawLens = try c.decodeIfPresent(Bool.self, forKey: .cirawLens) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(release, forKey: .release)
+        try c.encode(save, forKey: .save)
+        try c.encode(quality, forKey: .quality)
+        try c.encode(timer, forKey: .timer)
+        try c.encode(review, forKey: .review)
+        try c.encode(autoStitch, forKey: .autoStitch)
+        try c.encode(engine, forKey: .engine)
+        try c.encode(ciraw, forKey: .ciraw)
+        try c.encode(cirawLens, forKey: .cirawLens)
+    }
 }
 
 struct Photo: Codable, Equatable {
@@ -90,11 +158,12 @@ struct ShotNote: Equatable {
     var styleBase: String = "standard"
     var styleGrain: String = "off"
     var styleFilter: String = "none"
+    var styleApple: String = "off"
 }
 
 extension ShotNote: Codable {
     private enum CodingKeys: String, CodingKey {
-        case modeName, look, squeeze, styleBase, styleGrain, styleFilter
+        case modeName, look, squeeze, styleBase, styleGrain, styleFilter, styleApple
     }
 
     init(from decoder: Decoder) throws {
@@ -105,6 +174,7 @@ extension ShotNote: Codable {
         styleBase = try c.decodeIfPresent(String.self, forKey: .styleBase) ?? "standard"
         styleGrain = try c.decodeIfPresent(String.self, forKey: .styleGrain) ?? "off"
         styleFilter = try c.decodeIfPresent(String.self, forKey: .styleFilter) ?? "none"
+        styleApple = try c.decodeIfPresent(String.self, forKey: .styleApple) ?? "off"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +185,7 @@ extension ShotNote: Codable {
         try c.encode(styleBase, forKey: .styleBase)
         try c.encode(styleGrain, forKey: .styleGrain)
         try c.encode(styleFilter, forKey: .styleFilter)
+        try c.encode(styleApple, forKey: .styleApple)
     }
 }
 
@@ -283,6 +354,7 @@ enum LookBook {
             bits.append(look.filter.prefix(1).uppercased() + look.filter.dropFirst())
         }
         if look.grain != "off" { bits.append(look.grain) }
+        if !look.apple.isEmpty, look.apple != "off" { bits.append(AppleBook.title(look.apple)) }
         return bits.joined(separator: " · ")
     }
 
@@ -306,6 +378,70 @@ enum LookBook {
         let b = base(look.base)
         return !b.mono && abs(b.sat - 1) < 0.01 && b.gain == nil && b.curve == 0
             && look.color == 0 && look.highlight == 0 && look.shadow == 0 && look.grain == "off"
+            && (look.apple.isEmpty || look.apple == "off")
+    }
+}
+
+/// Still-image tools in this SDK that can run on a finished Nikon JPEG.
+enum AppleBook {
+    struct Group: Identifiable, Equatable {
+        var id: String
+        var title: String
+        var viewer: String
+    }
+
+    struct Effect: Identifiable, Equatable {
+        var id: String
+        var title: String
+        var detail: String
+        var filter: String
+        var group: String
+    }
+
+    static let groups: [Group] = [
+        Group(id: "effect", title: "Photo effects", viewer: "Apple photo effect"),
+        Group(id: "color", title: "Color", viewer: "Apple color"),
+        Group(id: "finish", title: "Finish", viewer: "Apple finish"),
+        Group(id: "vision", title: "Vision", viewer: "Vision"),
+    ]
+
+    static let effects: [Effect] = [
+        Effect(id: "mono", title: "Mono", detail: "Black and white", filter: "CIPhotoEffectMono", group: "effect"),
+        Effect(id: "noir", title: "Noir", detail: "Hard black and white", filter: "CIPhotoEffectNoir", group: "effect"),
+        Effect(id: "chrome", title: "Chrome", detail: "Cool, contrasty color", filter: "CIPhotoEffectChrome", group: "effect"),
+        Effect(id: "fade", title: "Fade", detail: "Lifted blacks", filter: "CIPhotoEffectFade", group: "effect"),
+        Effect(id: "instant", title: "Instant", detail: "Instant-film color", filter: "CIPhotoEffectInstant", group: "effect"),
+        Effect(id: "process", title: "Process", detail: "Cross-process color", filter: "CIPhotoEffectProcess", group: "effect"),
+        Effect(id: "tonal", title: "Tonal", detail: "Flat black and white", filter: "CIPhotoEffectTonal", group: "effect"),
+        Effect(id: "transfer", title: "Transfer", detail: "Warm and faded", filter: "CIPhotoEffectTransfer", group: "effect"),
+        Effect(id: "vibrance", title: "Vibrance", detail: "Color that holds skin tones", filter: "CIVibrance", group: "color"),
+        Effect(id: "warm", title: "Warm", detail: "Shift the white point warmer", filter: "CITemperatureAndTint", group: "color"),
+        Effect(id: "cool", title: "Cool", detail: "Shift the white point cooler", filter: "CITemperatureAndTint", group: "color"),
+        Effect(id: "sharpen", title: "Sharpen", detail: "Luminance sharpen", filter: "CISharpenLuminance", group: "finish"),
+        Effect(id: "unsharp", title: "Unsharp", detail: "Stronger edge contrast", filter: "CIUnsharpMask", group: "finish"),
+        Effect(id: "denoise", title: "Denoise", detail: "Smooth noise, keep edges", filter: "CINoiseReduction", group: "finish"),
+        Effect(id: "bloom", title: "Bloom", detail: "Glow on the bright edges", filter: "CIBloom", group: "finish"),
+        Effect(id: "vignette", title: "Vignette", detail: "Darken the corners", filter: "CIVignette", group: "finish"),
+        Effect(id: "recover", title: "Recover", detail: "Pull highlights, open shadows", filter: "CIHighlightShadowAdjust", group: "finish"),
+        Effect(id: "subject", title: "Subject", detail: "Keep what Vision can lift, darken the rest", filter: "VNGenerateForegroundInstanceMaskRequest", group: "vision"),
+        Effect(id: "people", title: "People", detail: "Same lift, people only", filter: "VNGeneratePersonInstanceMaskRequest", group: "vision"),
+    ]
+
+    static let defaultOn: [String] = effects.map(\.id)
+
+    static func effect(_ id: String) -> Effect? {
+        effects.first { $0.id == id }
+    }
+
+    static func title(_ id: String) -> String {
+        effect(id)?.title ?? ""
+    }
+
+    /// Off, plus the effects this group is allowed to show. The current pick stays listed so it can be turned off.
+    static func options(_ enabled: [String], group: String, current: String) -> [(String, String)] {
+        let rows = effects.filter { $0.group == group && (enabled.contains($0.id) || $0.id == current) }
+        if rows.isEmpty { return [] }
+        return [("off", "Off")] + rows.map { ($0.id, $0.title) }
     }
 }
 
