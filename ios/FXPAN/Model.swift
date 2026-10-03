@@ -122,7 +122,7 @@ enum Catalog {
         ("2:1", 2, "2:1"), ("16:9", 16.0 / 9, "16:9"), ("4:3", 4.0 / 3, "4:3"),
     ]
     static let engines: [(String, String, String)] = [
-        ("hugin", "Hugin", "SIFT similarity, five-band blend"),
+        ("hugin", "Hugin", "SIFT similarity, multiband blend"),
         ("match", "Match", "Search overlap and dy"),
         ("blend", "Blend", "Fixed overlap, feathered"),
         ("cut", "Cut", "Fixed overlap, hard seam"),
