@@ -83,10 +83,39 @@ struct Rig: Codable, Equatable {
     }
 }
 
-struct ShotNote: Codable, Equatable {
+struct ShotNote: Equatable {
     var modeName: String = ""
     var look: String = ""
     var squeeze: Double = 1
+    var styleBase: String = "standard"
+    var styleGrain: String = "off"
+    var styleFilter: String = "none"
+}
+
+extension ShotNote: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case modeName, look, squeeze, styleBase, styleGrain, styleFilter
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        modeName = try c.decodeIfPresent(String.self, forKey: .modeName) ?? ""
+        look = try c.decodeIfPresent(String.self, forKey: .look) ?? ""
+        squeeze = try c.decodeIfPresent(Double.self, forKey: .squeeze) ?? 1
+        styleBase = try c.decodeIfPresent(String.self, forKey: .styleBase) ?? "standard"
+        styleGrain = try c.decodeIfPresent(String.self, forKey: .styleGrain) ?? "off"
+        styleFilter = try c.decodeIfPresent(String.self, forKey: .styleFilter) ?? "none"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(modeName, forKey: .modeName)
+        try c.encode(look, forKey: .look)
+        try c.encode(squeeze, forKey: .squeeze)
+        try c.encode(styleBase, forKey: .styleBase)
+        try c.encode(styleGrain, forKey: .styleGrain)
+        try c.encode(styleFilter, forKey: .styleFilter)
+    }
 }
 
 enum Catalog {
@@ -246,6 +275,15 @@ enum LookBook {
 
     static func name(_ look: LookSet) -> String {
         names.first { $0.0 == look.base }?.1 ?? "Standard"
+    }
+
+    static func savedTitle(_ look: LookSet) -> String {
+        var bits = [name(look)]
+        if isMono(look), look.filter != "none" {
+            bits.append(look.filter.prefix(1).uppercased() + look.filter.dropFirst())
+        }
+        if look.grain != "off" { bits.append(look.grain) }
+        return bits.joined(separator: " · ")
     }
 
     static func note(_ look: LookSet) -> String {

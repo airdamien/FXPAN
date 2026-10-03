@@ -38,6 +38,7 @@ final class AppModel {
     /// Bumped when a stitch finishes so an open photo reloads the new file.
     var stitchGeneration = 0
     var stitchWaiting: Set<String> = []
+    var savingStyle: String?
     var reviewStamp: String?
     var peepURL: URL?
     var peepTitle = ""
@@ -330,6 +331,47 @@ final class AppModel {
         persist()
     }
 
+    /// Write the playback style onto the panorama. The unstyled stitch is kept, so another save replaces it.
+    func saveStyle(_ stamp: String, look: LookSet) {
+        if savingStyle != nil { return }
+        let pano = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
+        guard FileManager.default.fileExists(atPath: pano.path) else {
+            note("No panorama to save", bad: true)
+            return
+        }
+        savingStyle = stamp
+        note("Saving the look", bad: false)
+        let ana = Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg")
+        let look = look
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try LookStore.keep(stamp: stamp, look: look, pano: pano, ana: ana)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    var row = self.notes[stamp] ?? ShotNote()
+                    row.look = LookBook.savedTitle(look)
+                    row.styleBase = look.base
+                    row.styleGrain = look.grain
+                    row.styleFilter = look.filter
+                    self.notes[stamp] = row
+                    self.savingStyle = nil
+                    self.stitchGeneration += 1
+                    self.persist()
+                    self.reloadShots()
+                    self.note("Saved \(row.look)", bad: false)
+                    self.ingest()
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.savingStyle = nil
+                    self.note(error.localizedDescription, bad: true)
+                    self.ingest()
+                }
+            }
+        }
+    }
+
     func restitch(_ stamp: String, engine: String? = nil) {
         if let engine, photo.drive.engine != engine {
             photo.drive.engine = engine
@@ -550,6 +592,7 @@ final class AppModel {
             if let data = try? JSONEncoder().encode(report) {
                 try? data.write(to: side)
             }
+            LookStore.remove(stamp)
         } catch is StitchHalt {
             if discard(stamp) { return }
             if tookRestart(stamp) { return }
