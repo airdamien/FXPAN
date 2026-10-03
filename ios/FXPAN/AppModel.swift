@@ -101,6 +101,9 @@ final class AppModel {
             guard let self, !self.shooting else { return }
             self.scheduleApply()
         }
+        #if targetEnvironment(simulator)
+        SampleShots.install()
+        #endif
         if let renamed = CaptureIndex.renameLegacy(stamp: "probe") {
             if let note = notes.removeValue(forKey: "probe") { notes[renamed] = note }
             if protectedStamps.remove("probe") != nil { protectedStamps.insert(renamed) }
