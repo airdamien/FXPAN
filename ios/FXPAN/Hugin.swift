@@ -37,7 +37,7 @@ enum Hugin {
         }
     }
 
-    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, balance: Bool = false, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
+    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, balance: Bool = false, metal: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
         try StitchGate.check(stop)
         note?("Reading the frames")
         let tr = rgba(from: t)
@@ -45,8 +45,8 @@ enum Hugin {
         guard tr.w == rr.w, tr.h == rr.h, tr.w > 32, tr.h > 32 else { return nil }
         guard let fit = try align(t: tr, r: rr, overlap: overlap, note: note, stop: stop) else { return nil }
         try StitchGate.check(stop)
-        note?("Warping the frames")
-        guard let warped = try warp(t: tr, r: rr, fit: fit, stop: stop) else { return nil }
+        note?(metal ? "Warping on the GPU" : "Warping the frames")
+        guard let warped = try warp(t: tr, r: rr, fit: fit, metal: metal, note: note, stop: stop) else { return nil }
         let cropped = crop(warped)
         var pr = cropped.r
         var pt = cropped.t
@@ -660,7 +660,7 @@ enum Hugin {
         var h: Int
     }
 
-    private static func warp(t: RGBA, r: RGBA, fit: Fit, stop: StitchStop?) throws -> Canvas? {
+    private static func warp(t: RGBA, r: RGBA, fit: Fit, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> Canvas? {
         let w = t.w, h = t.h
         let corners = [(0.0, 0.0), (Double(w), 0), (Double(w), Double(h)), (0, Double(h))]
         var xs: [Double] = []
@@ -677,9 +677,14 @@ enum Hugin {
         if cw < 16 || ch < 16 || cw > w * 3 || ch > h * 2 { return nil }
         let pixels = cw * ch
         if pixels > 80_000_000 { return nil }
+        let mt = Affine(a: fit.m.a, b: fit.m.b, tx: fit.m.tx - x0, ty: fit.m.ty - y0)
+        if metal, let gpu = WarpGPU.frames(r: r, t: t, x0: x0, y0: y0, cw: cw, ch: ch, mt: mt) {
+            return Canvas(r: gpu.r, t: gpu.t, w: cw, h: ch)
+        }
+        if metal { note?("Warping on the CPU") }
+        let started = CFAbsoluteTimeGetCurrent()
         var rpx = [UInt8](repeating: 0, count: pixels * 4)
         var tpx = [UInt8](repeating: 0, count: pixels * 4)
-        let mt = Affine(a: fit.m.a, b: fit.m.b, tx: fit.m.tx - x0, ty: fit.m.ty - y0)
         for y in 0..<ch {
             if y % 32 == 0 { try StitchGate.check(stop) }
             for x in 0..<cw {
@@ -696,6 +701,7 @@ enum Hugin {
                 }
             }
         }
+        print(String(format: "FXPAN warp cpu %dx%d %.2fs", cw, ch, CFAbsoluteTimeGetCurrent() - started))
         return Canvas(r: rpx, t: tpx, w: cw, h: ch)
     }
 
@@ -707,17 +713,15 @@ enum Hugin {
         let i10 = i00 + 4
         let i01 = i00 + img.w * 4
         let i11 = i01 + 4
-        var out = (UInt8(0), UInt8(0), UInt8(0))
-        var rgb = [UInt8](repeating: 0, count: 3)
-        for c in 0..<3 {
-            let v = (1 - fx) * (1 - fy) * Float(img.px[i00 + c])
-                + fx * (1 - fy) * Float(img.px[i10 + c])
-                + (1 - fx) * fy * Float(img.px[i01 + c])
-                + fx * fy * Float(img.px[i11 + c])
-            rgb[c] = UInt8(min(255, max(0, v.rounded())))
+        let p = img.px
+        func chan(_ c: Int) -> UInt8 {
+            let v = (1 - fx) * (1 - fy) * Float(p[i00 + c])
+                + fx * (1 - fy) * Float(p[i10 + c])
+                + (1 - fx) * fy * Float(p[i01 + c])
+                + fx * fy * Float(p[i11 + c])
+            return UInt8(min(255, max(0, v.rounded())))
         }
-        out = (rgb[0], rgb[1], rgb[2])
-        return out
+        return (chan(0), chan(1), chan(2))
     }
 
     private static func crop(_ canvas: Canvas) -> Canvas {

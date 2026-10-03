@@ -229,7 +229,7 @@ enum Catalog {
     ]
     static let timers = [0, 2, 5, 10]
     static let reviews = [0, 3, 5, 10, 15]
-    static let aids = ["off", "peaking", "loupe"]
+    static let aids = ["off", "peaking", "loupe", "range"]
     static let peakColors: [(String, String, UInt32)] = [
         ("red", "Red", 0xFF3B30), ("yellow", "Yellow", 0xFFD60A),
         ("white", "White", 0xFFFFFF), ("blue", "Blue", 0x40A0FF),
@@ -299,6 +299,7 @@ enum LookBook {
 
     static let names: [(String, String, String)] = [
         ("standard", "Standard", "As shot"),
+        ("apple", "Apple", "Local tone, vibrance, and a light sharpen"),
         ("neutral", "Neutral", "Flat, to grade"),
         ("vivid", "Vivid", "Saturated"),
         ("landscape", "Landscape", "Greens and blues"),
@@ -316,6 +317,7 @@ enum LookBook {
         case "landscape": return Base(sat: 1.18, curve: 1, gain: (1, 1.05, 1.06), mono: false)
         case "chrome": return Base(sat: 0.78, curve: 2.2, gain: nil, mono: false)
         case "mono": return Base(sat: 0, curve: 1.2, gain: nil, mono: true)
+        case "apple": return Base(sat: 1, curve: 0, gain: nil, mono: false)
         default: return Base(sat: 1, curve: 0, gain: nil, mono: false)
         }
     }
@@ -375,6 +377,7 @@ enum LookBook {
     }
 
     static func identity(_ look: LookSet) -> Bool {
+        if look.base == "apple" { return false }
         let b = base(look.base)
         return !b.mono && abs(b.sat - 1) < 0.01 && b.gain == nil && b.curve == 0
             && look.color == 0 && look.highlight == 0 && look.shadow == 0 && look.grain == "off"
@@ -483,11 +486,27 @@ enum Seed {
         bench.drive.timer = 2
 
         return [
+            appleMode(),
             NamedMode(id: "landscape", name: "Landscape", photo: landscape),
             NamedMode(id: "street", name: "Street", photo: street),
             NamedMode(id: "ana2", name: "Ana 2×", photo: ana),
             NamedMode(id: "mono", name: "Mono", photo: mono),
             NamedMode(id: "bench", name: "Bench", photo: bench),
         ]
+    }
+
+    /// CIRAW local tone when a NEF is present, then vibrance and a light sharpen on the panorama.
+    static func appleMode() -> NamedMode {
+        var photo = Photo()
+        photo.light.iso = "100"
+        photo.light.shutter = "1/250"
+        photo.light.fstop = "8"
+        photo.look.base = "apple"
+        photo.look.id = "apple"
+        photo.drive.quality = "NEF+Fine"
+        photo.drive.engine = "hugin"
+        photo.drive.ciraw = true
+        photo.wb = "Auto"
+        return NamedMode(id: "apple", name: "Apple", photo: photo)
     }
 }

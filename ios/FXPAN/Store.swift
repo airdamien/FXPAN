@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 struct Persisted: Codable {
     var photo = Photo()
@@ -13,6 +14,8 @@ struct Persisted: Codable {
     var idleChosen: Bool = false
     /// Nil until the Apple panel is touched, which means every Core Image effect is offered.
     var appleOn: [String]? = nil
+    /// Nil means the GPU warp stays on, including saves from before the switch existed.
+    var metalWarp: Bool? = nil
 }
 
 enum Disk {
@@ -230,6 +233,32 @@ enum CaptureIndex {
             try? FileManager.default.removeItem(at: root.appendingPathComponent(name))
         }
         LookStore.remove(stamp)
+    }
+}
+
+/// The panorama before Real-ESRGAN, so a second upscale starts from the same frame instead of enlarging the enlarged one.
+enum UpscaleStore {
+    static func source(stamp: String, pano: URL) throws -> URL {
+        let dir = Disk.captures.appendingPathComponent("upscale", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let base = dir.appendingPathComponent("P_\(stamp).jpg")
+        let currentW = width(pano)
+        let baseW = width(base)
+        let refresh = !FileManager.default.fileExists(atPath: base.path) || (currentW > 0 && baseW > 0 && currentW <= baseW)
+        if refresh {
+            if FileManager.default.fileExists(atPath: base.path) {
+                try FileManager.default.removeItem(at: base)
+            }
+            try FileManager.default.copyItem(at: pano, to: base)
+        }
+        return base
+    }
+
+    private static func width(_ url: URL) -> Int {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue else { return 0 }
+        return w
     }
 }
 
