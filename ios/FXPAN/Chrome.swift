@@ -631,7 +631,12 @@ struct PairPicture: View {
     }
 
     private var token: String {
-        [shot.ana?.path, shot.pano?.path, shot.t?.path, shot.r?.path].compactMap { $0 }.joined(separator: "|")
+        func revised(_ url: URL?) -> String {
+            guard let url else { return "" }
+            let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            return "\(url.path)#\(modified)"
+        }
+        return [shot.ana, shot.pano, shot.t, shot.r].map(revised).joined(separator: "|")
     }
 
     /// The finished panorama when it exists. Until then, T and R side by side the same way live view is composed.

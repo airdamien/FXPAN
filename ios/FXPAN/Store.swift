@@ -193,5 +193,59 @@ enum CaptureIndex {
             guard stems.contains(stem) else { continue }
             try? FileManager.default.removeItem(at: root.appendingPathComponent(name))
         }
+        LookStore.remove(stamp)
+    }
+}
+
+/// The unstyled stitch, kept so a saved look can be replaced without grading a graded file.
+enum LookStore {
+    static func plain(stamp: String, ana: Bool) -> URL? {
+        let url = directory().appendingPathComponent(ana ? "P_\(stamp)_ana.jpg" : "P_\(stamp).jpg")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    static func remove(_ stamp: String) {
+        try? FileManager.default.removeItem(at: directory().appendingPathComponent("P_\(stamp).jpg"))
+        try? FileManager.default.removeItem(at: directory().appendingPathComponent("P_\(stamp)_ana.jpg"))
+    }
+
+    static func keep(stamp: String, look: LookSet, pano: URL, ana: URL) throws {
+        let dir = directory()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let panoBase = dir.appendingPathComponent("P_\(stamp).jpg")
+        let anaBase = dir.appendingPathComponent("P_\(stamp)_ana.jpg")
+        if !FileManager.default.fileExists(atPath: panoBase.path) {
+            try FileManager.default.copyItem(at: pano, to: panoBase)
+        }
+        if FileManager.default.fileExists(atPath: ana.path), !FileManager.default.fileExists(atPath: anaBase.path) {
+            try FileManager.default.copyItem(at: ana, to: anaBase)
+        }
+        try write(from: panoBase, to: pano, look: look)
+        if FileManager.default.fileExists(atPath: anaBase.path) {
+            try write(from: anaBase, to: ana, look: look)
+        }
+    }
+
+    private static func directory() -> URL {
+        Disk.captures.appendingPathComponent("look", isDirectory: true)
+    }
+
+    private static func write(from source: URL, to dest: URL, look: LookSet) throws {
+        if LookBook.identity(look) {
+            guard source.path != dest.path else { return }
+            let tmp = dest.appendingPathExtension("writing")
+            try? FileManager.default.removeItem(at: tmp)
+            try FileManager.default.copyItem(at: source, to: tmp)
+            _ = try FileManager.default.replaceItemAt(dest, withItemAt: tmp)
+            return
+        }
+        guard let image = Stitcher.image(at: source) else {
+            throw PTPError.message("Could not read the panorama")
+        }
+        let graded = Stitcher.grade(image, look: look)
+        let tmp = dest.appendingPathExtension("writing")
+        try? FileManager.default.removeItem(at: tmp)
+        try Stitcher.jpeg(graded, to: tmp)
+        _ = try FileManager.default.replaceItemAt(dest, withItemAt: tmp)
     }
 }

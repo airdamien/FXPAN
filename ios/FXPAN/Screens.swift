@@ -354,6 +354,18 @@ struct ShotScreen: View {
     @Environment(AppModel.self) private var model
     var stamp: String
     @State private var part = "pano"
+    @State private var styleBase = "standard"
+    @State private var styleGrain = "off"
+    @State private var styleFilter = "none"
+
+    private var previewLook: LookSet {
+        var look = LookSet()
+        look.base = styleBase
+        look.id = styleBase
+        look.grain = styleGrain
+        look.filter = LookBook.isMono(look) ? styleFilter : "none"
+        return look
+    }
 
     var body: some View {
         let shot = model.shots.first { $0.stamp == stamp }
@@ -392,6 +404,19 @@ struct ShotScreen: View {
                 Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
+                ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: styleBase) { styleBase = $0 }
+                if LookBook.isMono(previewLook) {
+                    ChipRow(options: LookBook.filters.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleFilter) { styleFilter = $0 }
+                }
+                ChipRow(options: LookBook.grains.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleGrain) { styleGrain = $0 }
+                Button(model.savingStyle == stamp ? "Saving" : "Save look") {
+                    model.saveStyle(stamp, look: previewLook)
+                }
+                .buttonStyle(GoldButton())
+                .disabled(model.savingStyle != nil || shot?.pano == nil)
+                Text("Save look writes this style onto the panorama. Pick another and save again to replace it.")
+                    .font(Theme.font(12))
+                    .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
                     ShareLink(item: url) { Text("Share") }
                         .buttonStyle(GoldButton())
@@ -399,7 +424,7 @@ struct ShotScreen: View {
             }
         }, panel: {
             if let shot {
-                ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze, generation: model.stitchGeneration)
+                ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze, generation: model.stitchGeneration, look: previewLook)
                     .onLongPressGesture(minimumDuration: 0.35) {
                         model.peep(file(shot, part: selected), title: shot.name)
                     }
@@ -407,6 +432,14 @@ struct ShotScreen: View {
                 Text("Missing file").foregroundStyle(Theme.dim)
             }
         })
+        .onAppear(perform: restoreStyle)
+    }
+
+    private func restoreStyle() {
+        guard let note = model.notes[stamp] else { return }
+        styleBase = note.styleBase
+        styleGrain = note.styleGrain.isEmpty ? "off" : note.styleGrain
+        styleFilter = note.styleFilter.isEmpty ? "none" : note.styleFilter
     }
 
     private func parts(_ shot: ShotFiles?) -> [(String, String)] {
@@ -545,6 +578,7 @@ struct ShotPart: View {
     var rig: Rig
     var squeeze: Double
     var generation: Int
+    var look: LookSet
     @State private var image: UIImage?
 
     var body: some View {
@@ -559,8 +593,9 @@ struct ShotPart: View {
             let part = part
             let rig = rig
             let squeeze = squeeze
+            let look = look
             image = await Task.detached(priority: .userInitiated) {
-                Self.load(shot, part: part, rig: rig, squeeze: squeeze)
+                Self.load(shot, part: part, rig: rig, squeeze: squeeze, look: look)
             }.value
         }
     }
@@ -571,29 +606,34 @@ struct ShotPart: View {
             let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             return "\(url.path)#\(modified)"
         }
-        return "\(generation)|\(part)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))"
+        return "\(generation)|\(part)|\(look.base)|\(look.grain)|\(look.filter)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))|\(revised(LookStore.plain(stamp: shot.stamp, ana: false)))|\(revised(LookStore.plain(stamp: shot.stamp, ana: true)))"
     }
 
-    private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double) -> UIImage? {
+    private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
+        let cg: CGImage?
         switch part {
         case "t":
-            return shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { UIImage(cgImage: $0) }
+            cg = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
         case "r":
-            guard let cg = shot.r.flatMap({ Stitcher.thumbnail(at: $0, maxPixel: 1800) }) else { return nil }
-            return UIImage(cgImage: rig.flipR ? Stitcher.flop(cg) : cg)
+            cg = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { rig.flipR ? Stitcher.flop($0) : $0 }
         case "ana":
-            return shot.ana.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { UIImage(cgImage: $0) }
+            cg = (LookStore.plain(stamp: shot.stamp, ana: true) ?? shot.ana).flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
         default:
-            if let cg = shot.pano.flatMap({ Stitcher.thumbnail(at: $0, maxPixel: 1800) }) {
-                return UIImage(cgImage: cg)
+            if let pano = (LookStore.plain(stamp: shot.stamp, ana: false) ?? shot.pano).flatMap({ Stitcher.thumbnail(at: $0, maxPixel: 1800) }) {
+                cg = pano
+            } else {
+                let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
+                let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
+                if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
+                    cg = preview
+                } else {
+                    cg = t ?? r
+                }
             }
-            let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-            let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-            if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
-                return UIImage(cgImage: cg)
-            }
-            return (t ?? r).map { UIImage(cgImage: $0) }
         }
+        guard let cg else { return nil }
+        let shown = LookBook.identity(look) ? cg : Stitcher.grade(cg, look: look)
+        return UIImage(cgImage: shown)
     }
 }
 
