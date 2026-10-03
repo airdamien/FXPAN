@@ -12,6 +12,7 @@ struct BodyState: Equatable {
     var fstop = ""
     var program = ""
     var wb = ""
+    var link = ""
 }
 
 struct DetectedCamera: Identifiable, Equatable {
@@ -20,6 +21,7 @@ struct DetectedCamera: Identifiable, Equatable {
     var serial: String
     var model: String
     var role: Role?
+    var link = ""
 }
 
 struct Grabbed {
@@ -32,6 +34,8 @@ struct Grabbed {
 final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate {
     var onChange: (() -> Void)?
     var onSeat: (() -> Void)?
+    /// A body finished opening. The app pushes the saved exposure back on.
+    var onReady: (() -> Void)?
 
     var simulate = false {
         didSet { publish(); if simulate { installSim() } else { frames = realFrames } }
@@ -130,9 +134,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         forgetMissingFrames()
         seat()
         publish()
+        onReady?()
     }
-
-    /// Live view cannot survive the app switcher. Leave the sessions alone until iOS closes them, so a quick switch does not reopen both bodies.
     func background() {
         guard started, !simulate else { return }
         front = false
@@ -172,7 +175,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     }
 
     func apply(_ photo: Photo) async {
-        guard !simulate, photo.exposes else { return }
+        guard !simulate, photo.exposes, !usbHeld, !idling else { return }
         await withTaskGroup(of: Void.self) { group in
             for link in links.values where role(of: link.token) != nil {
                 group.addTask { try? await link.apply(photo) }
@@ -480,6 +483,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
                 self.claimRoles()
                 self.seat()
                 await self.refreshStatus()
+                self.onReady?()
                 self.probeLiveIfAsked()
             } catch {
                 self.line = error.localizedDescription
@@ -557,7 +561,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
 
     private func seat() {
         detected = links.values.map { link in
-            DetectedCamera(id: link.id, token: link.token, serial: link.serial, model: link.model, role: role(of: link.token))
+            DetectedCamera(id: link.id, token: link.token, serial: link.serial, model: link.model, role: role(of: link.token), link: link.linkLabel)
         }.sorted { $0.model < $1.model }
     }
 
@@ -698,6 +702,7 @@ final class NikonLink {
     private var chain: Task<Void, Never>?
     private(set) var inLive = false
     private(set) var sessionUp = false
+    private(set) var linkLabel = ""
     private var exposure = BodyState()
 
     var serial: String { PTP.usable(info?.serial ?? "") }
@@ -726,6 +731,7 @@ final class NikonLink {
         s.paired = paired
         s.serial = serial.isEmpty ? token : serial
         s.model = model
+        s.link = linkLabel
         return s
     }
 
@@ -1005,7 +1011,7 @@ final class NikonLink {
             let handles = await queuedRAM()
             if handles.isEmpty { break }
             for handle in handles {
-                guard let file = try? await transact(PTP.Op.getObject.rawValue, params: [handle], timeout: 60),
+                guard let file = try? await pullObject(handle),
                       file.ok, !file.data.isEmpty else { continue }
                 writeRecovered(file.data, index: emptied)
                 emptied += 1
@@ -1126,7 +1132,7 @@ final class NikonLink {
         var nefURL: URL?
         for handle in handles.reversed() {
             if jpegURL != nil && nefURL != nil { break }
-            let file = try await transact(PTP.Op.getObject.rawValue, params: [handle], timeout: 60)
+            let file = try await pullObject(handle)
             guard file.ok, !file.data.isEmpty else { continue }
             if file.data.starts(with: [0xFF, 0xD8]) {
                 let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")
@@ -1147,6 +1153,29 @@ final class NikonLink {
         return Grabbed(jpeg: jpegURL, nef: nefURL)
     }
 
+    private func pullObject(_ handle: UInt32) async throws -> PTP.Reply {
+        let started = CFAbsoluteTimeGetCurrent()
+        let file = try await transact(PTP.Op.getObject.rawValue, params: [handle], timeout: 60)
+        if file.ok { noteTransfer(bytes: file.data.count, seconds: CFAbsoluteTimeGetCurrent() - started) }
+        return file
+    }
+
+    /// USB 2 cannot deliver 55 MB/s of payload. A short transfer is not long enough to call a slow link.
+    private func noteTransfer(bytes: Int, seconds: Double) {
+        guard bytes >= 1_000_000, seconds >= 0.05 else { return }
+        let rate = Double(bytes) / seconds / 1_000_000
+        let next: String
+        if rate >= 55 {
+            next = "USB3 · \(Int(rate.rounded())) MB/s"
+        } else if seconds >= 0.4 {
+            next = "USB2 · \(Int(rate.rounded())) MB/s"
+        } else {
+            return
+        }
+        linkLabel = next
+        print("FXPAN \(model) \(linkLabel) \(bytes) bytes")
+    }
+
     private func waitArrival(after mark: Int) async -> [ICCameraFile] {
         let deadline = Date().addingTimeInterval(8)
         while Date() < deadline {
@@ -1164,7 +1193,9 @@ final class NikonLink {
         for file in files.reversed() {
             if jpegURL != nil && nefURL != nil { break }
             let name = (file.name ?? "").uppercased()
+            let started = CFAbsoluteTimeGetCurrent()
             let data = try await readFile(file)
+            noteTransfer(bytes: data.count, seconds: CFAbsoluteTimeGetCurrent() - started)
             guard !data.isEmpty else { continue }
             if name.hasSuffix("JPG") || data.starts(with: [0xFF, 0xD8]) {
                 let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")

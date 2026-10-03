@@ -660,7 +660,9 @@ enum Hugin {
             }
         }
         let cols = opaque.enumerated().filter { $0.element }.map { $0.offset }
-        guard let x0 = cols.first, let x1 = cols.last, x1 > x0 else { return canvas }
+        guard let firstCol = cols.first, let lastCol = cols.last, lastCol > firstCol else { return canvas }
+        var x0 = firstCol
+        var x1 = lastCol
         var heights: [Int] = []
         for x in cols { heights.append(bot[x] - top[x] + 1) }
         heights.sort()
@@ -676,6 +678,29 @@ enum Hugin {
         if let tMax = tops.max(), let bMin = bots.min(), bMin > tMax + 8 {
             y0 = tMax
             y1 = bMin + 1
+        }
+        // A small roll makes the outer columns shorter than this window. Those corners are empty and turn white in the JPEG.
+        var left = x0
+        var right = x1
+        var covered = false
+        if y1 > y0 {
+            for x in x0...x1 where opaque[x] && top[x] <= y0 && bot[x] >= y1 - 1 {
+                if !covered { left = x; covered = true }
+                right = x
+            }
+        }
+        if covered, right > left + 16 {
+            x0 = left
+            x1 = right
+        }
+        let pad = 3
+        if x1 - x0 > pad * 2 + 32 {
+            x0 += pad
+            x1 -= pad
+        }
+        if y1 - y0 > pad * 2 + 32 {
+            y0 += pad
+            y1 -= pad
         }
         let cw = x1 - x0 + 1
         let ch = y1 - y0
@@ -707,11 +732,27 @@ enum Hugin {
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for c in 0..<3 {
             try StitchGate.check(stop)
-            var rc = plane(r, w, h, c)
-            var tc = plane(t, w, h, c)
+            var rc = filledPlane(r, w, h, c)
+            var tc = filledPlane(t, w, h, c)
             let blended = try blendPlanes(&rc, &tc, weight, w, h, bands: bands, stop: stop)
             for i in 0..<w * h {
-                out[i * 4 + c] = UInt8(min(255, max(0, blended[i].rounded())))
+                let o = i * 4
+                let ra = r[o + 3] > 32
+                let ta = t[o + 3] > 32
+                let value: Float
+                if ra && ta {
+                    let rv = Float(r[o + c])
+                    let tv = Float(t[o + c])
+                    // The pyramid overshoots past the brighter frame. Keep the photograph's own highlights.
+                    value = min(max(rv, tv), max(min(rv, tv), blended[i]))
+                } else if ra {
+                    value = Float(r[o + c])
+                } else if ta {
+                    value = Float(t[o + c])
+                } else {
+                    value = blended[i]
+                }
+                out[o + c] = UInt8(min(255, max(0, value.rounded())))
             }
         }
         for i in 0..<w * h {
@@ -872,9 +913,43 @@ enum Hugin {
         }
     }
 
-    private static func plane(_ px: [UInt8], _ w: Int, _ h: Int, _ c: Int) -> [Float] {
-        var o = [Float](repeating: 0, count: w * h)
-        for i in 0..<w * h { o[i] = Float(px[i * 4 + c]) }
+    /// Empty warp pixels are black. A five-band pyramid treats that cliff as detail and the bright side overshoots white.
+    /// Continue the last real pixel across the gap so the bands only see the photograph.
+    private static func filledPlane(_ px: [UInt8], _ w: Int, _ h: Int, _ c: Int) -> [Float] {
+        var o = [Float](repeating: -1, count: w * h)
+        for i in 0..<w * h where px[i * 4 + 3] > 32 {
+            o[i] = Float(px[i * 4 + c])
+        }
+        for y in 0..<h {
+            var carry: Float = -1
+            let row = y * w
+            for x in 0..<w {
+                let i = row + x
+                if o[i] >= 0 { carry = o[i] }
+                else if carry >= 0 { o[i] = carry }
+            }
+            carry = -1
+            for x in stride(from: w - 1, through: 0, by: -1) {
+                let i = row + x
+                if o[i] >= 0 { carry = o[i] }
+                else if carry >= 0 { o[i] = carry }
+            }
+        }
+        for x in 0..<w {
+            var carry: Float = -1
+            for y in 0..<h {
+                let i = y * w + x
+                if o[i] >= 0 { carry = o[i] }
+                else if carry >= 0 { o[i] = carry }
+            }
+            carry = -1
+            for y in stride(from: h - 1, through: 0, by: -1) {
+                let i = y * w + x
+                if o[i] >= 0 { carry = o[i] }
+                else if carry >= 0 { o[i] = carry }
+            }
+        }
+        for i in 0..<o.count where o[i] < 0 { o[i] = 0 }
         return o
     }
 

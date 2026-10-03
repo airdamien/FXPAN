@@ -192,6 +192,19 @@ struct TopBar: View {
                 pill(.t, compact: compact)
             }
             Spacer(minLength: 0)
+            if model.photo.drive.release == "sync" {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(model.syncReady ? Theme.gold : Theme.faint)
+                        .frame(width: 7, height: 7)
+                    if !compact {
+                        Text("Sync")
+                            .font(Theme.font(13, weight: .medium))
+                            .foregroundStyle(model.syncReady ? Theme.ink : Theme.dim)
+                    }
+                }
+                .accessibilityLabel(model.syncReady ? "Sync board answering" : "Sync board not answering")
+            }
             if let stitch = model.stitchLabel {
                 Button { model.go(.playback) } label: {
                     HStack(spacing: 6) {
@@ -647,19 +660,17 @@ struct ReviewOverlay: View {
                 PairPicture(shot: shot, rig: model.rig, squeeze: model.photo.frame.squeeze)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(maxHeight: 420)
+                    .clipped()
                     .onLongPressGesture(minimumDuration: 0.35) {
                         model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
                     }
                 HStack(spacing: 12) {
-                    Button("Keep") { model.reviewStamp = nil }
-                        .buttonStyle(GoldButton())
-                    Button("Delete") { model.deleteShot(shot.stamp) }
-                        .buttonStyle(PlainChip())
-                    Button("Playback") {
+                    PressChip(title: "Keep", on: true) { model.reviewStamp = nil }
+                    PressChip(title: "Delete", filled: false) { model.deleteShot(shot.stamp) }
+                    PressChip(title: "Playback", filled: false) {
                         model.reviewStamp = nil
                         model.go(.shot(shot.stamp))
                     }
-                    .buttonStyle(PlainChip())
                 }
                 .frame(maxWidth: .infinity)
             }

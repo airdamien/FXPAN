@@ -69,11 +69,16 @@ enum Stitcher {
                 flip = found.flip
             }
         }
+        var pairT = tImage
         var oriented = flip ? flop(rImage) : rImage
-        if rig.balance { oriented = matched(oriented, to: tImage, overlap: overlap) }
+        if rig.balance {
+            let pair = matched(oriented, to: pairT, overlap: overlap)
+            pairT = pair.t
+            oriented = pair.r
+        }
         let mode = photo.drive.engine == "hugin" ? "hugin" : (photo.drive.engine == "cut" ? "cut" : (photo.drive.engine == "match" ? "match" : "blend"))
         note?(mode == "cut" ? "Cutting the seam" : "Blending the seam")
-        let cg = paint(t: tImage, r: oriented, overlap: overlap, dy: dy, cut: mode == "cut", clip: photo.frame.clip)
+        let cg = paint(t: pairT, r: oriented, overlap: overlap, dy: dy, cut: mode == "cut", clip: photo.frame.clip)
         let blendName = photo.drive.engine == "hugin" ? "feather" : nil
         return try finish(
             cg, dest: dest, ana: ana, photo: photo, frameWidth: frameWidth,
@@ -95,8 +100,8 @@ enum Stitcher {
         }
         let overlap = rig.overlap(width: tImage.width, height: tImage.height)
         let oriented = rig.flipR ? flop(rImage) : rImage
-        let balanced = rig.balance ? matched(oriented, to: tImage, overlap: overlap) : oriented
-        return try Hugin.prepare(t: tImage, r: balanced, overlap: overlap, frameWidth: tImage.width, note: note, stop: stop)
+        let pair = rig.balance ? matched(oriented, to: tImage, overlap: overlap) : (t: tImage, r: oriented)
+        return try Hugin.prepare(t: pair.t, r: pair.r, overlap: overlap, frameWidth: tImage.width, note: note, stop: stop)
     }
 
     private static func finish(
@@ -184,7 +189,8 @@ enum Stitcher {
         return image
     }
 
-    private static func matched(_ r: CGImage, to t: CGImage, overlap: Double) -> CGImage {
+    /// Match the overlap by darkening the brighter body. Scaling the darker one up clips its highlights.
+    private static func matched(_ r: CGImage, to t: CGImage, overlap: Double) -> (t: CGImage, r: CGImage) {
         let tg = gray(t, width: work)
         let rg = gray(r, width: work)
         let ol = max(4, min(tg.w - 1, Int((Double(tg.w) * overlap).rounded())))
@@ -201,17 +207,27 @@ enum Stitcher {
         }
         let tm = mean(tg, x0: 0, x1: ol)
         let rm = mean(rg, x0: rg.w - ol, x1: rg.w)
-        guard rm > 4, tm > 4 else { return r }
+        guard rm > 4, tm > 4 else { return (t, r) }
         let scale = tm / rm
-        guard abs(scale - 1) > 0.03, scale >= 0.40, scale <= 2.50 else { return r }
-        let ci = CIImage(cgImage: r).applyingFilter("CIColorMatrix", parameters: [
+        guard abs(scale - 1) > 0.03, scale >= 0.40, scale <= 2.50 else { return (t, r) }
+        if scale < 1 {
+            print(String(format: "FXPAN balance R ×%.2f", scale))
+            return (t, scaled(r, by: scale))
+        }
+        let down = 1 / scale
+        print(String(format: "FXPAN balance T ×%.2f", down))
+        return (scaled(t, by: down), r)
+    }
+
+    private static func scaled(_ image: CGImage, by scale: Double) -> CGImage {
+        let ci = CIImage(cgImage: image).applyingFilter("CIColorMatrix", parameters: [
             "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
             "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
             "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
             "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
         ])
         let ctx = CIContext(options: [.workingColorSpace: NSNull()])
-        return ctx.createCGImage(ci, from: ci.extent) ?? r
+        return ctx.createCGImage(ci, from: ci.extent) ?? image
     }
 
     static func preview(t: CGImage, r: CGImage, rig: Rig, squeeze: Double, maxWidth: Int) -> CGImage? {
@@ -463,7 +479,8 @@ enum Stitcher {
     }
 
     static func thumbnail(at url: URL, maxPixel: Int) -> CGImage? {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { return nil }
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixel,
