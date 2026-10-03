@@ -143,7 +143,8 @@ enum Hugin {
         guard let matched = match(left: kR, right: kT, height: gR.h), matched.count >= 8 else { return nil }
         try StitchGate.check(stop)
         note?("Fitting the seam")
-        guard let mWork = ransac(matched) else { return nil }
+        guard var mWork = ransac(matched) else { return nil }
+        mWork = nudge(mWork, r: gR, t: gT)
         let s = Double(gR.w) / Double(fullW)
         let full = Affine(a: mWork.a, b: mWork.b, tx: mWork.tx / s, ty: mWork.ty / s)
         guard sane(full, w: fullW, h: fullH) else { return nil }
@@ -534,6 +535,80 @@ enum Hugin {
         let tx = mu - a * mx + b * my
         let ty = mv - b * mx - a * my
         return Solved(a: a, b: b, tx: tx, ty: ty, inliers: idx.count)
+    }
+
+    /// The feature fit splits the difference between near and far. Slide it so the middle of the overlap agrees.
+    private static func nudge(_ m: Solved, r: Gray, t: Gray) -> Solved {
+        let y0 = Int(Double(r.h) * 0.35)
+        let y1 = Int(Double(r.h) * 0.65)
+        let x0 = max(8, Int(m.tx) + 8)
+        let x1 = r.w - 8
+        guard x1 - x0 > 16, y1 - y0 > 16 else { return m }
+        var xs: [Int] = []
+        var ys: [Int] = []
+        var rv: [Float] = []
+        for y in stride(from: y0, to: y1, by: 4) {
+            for x in stride(from: x0, to: x1, by: 4) {
+                xs.append(x)
+                ys.append(y)
+                rv.append(r.at(x, y))
+            }
+        }
+        guard xs.count > 200 else { return m }
+        func score(_ dx: Double, _ dy: Double) -> Double {
+            let tx = m.tx + dx
+            let ty = m.ty + dy
+            let s2 = m.a * m.a + m.b * m.b
+            if s2 < 1e-6 { return -1 }
+            var num = 0.0, sr = 0.0, st = 0.0, dr = 0.0, dt = 0.0, n = 0.0
+            for i in 0..<xs.count {
+                let dxv = Double(xs[i]) - tx
+                let dyv = Double(ys[i]) - ty
+                let u = (m.a * dxv + m.b * dyv) / s2
+                let v = (-m.b * dxv + m.a * dyv) / s2
+                let ui = Int(u.rounded(.down))
+                let vi = Int(v.rounded(.down))
+                if ui < 1 || vi < 1 || ui + 1 >= t.w || vi + 1 >= t.h { continue }
+                let fu = u - Double(ui)
+                let fv = v - Double(vi)
+                let tv = Double(t.at(ui, vi)) * (1 - fu) * (1 - fv)
+                    + Double(t.at(ui + 1, vi)) * fu * (1 - fv)
+                    + Double(t.at(ui, vi + 1)) * (1 - fu) * fv
+                    + Double(t.at(ui + 1, vi + 1)) * fu * fv
+                let rr = Double(rv[i])
+                sr += rr
+                st += tv
+                dr += rr * rr
+                dt += tv * tv
+                num += rr * tv
+                n += 1
+            }
+            if n < 150 { return -1 }
+            let vr = dr - sr * sr / n
+            let vt = dt - st * st / n
+            if vr < 1 || vt < 1 { return -1 }
+            return (num - sr * st / n) / (vr * vt).squareRoot()
+        }
+        let base = score(0, 0)
+        var best = base
+        var bestDx = 0
+        var bestDy = 0
+        for dy in -16...16 {
+            for dx in -16...16 {
+                let s = score(Double(dx), Double(dy))
+                if s > best {
+                    best = s
+                    bestDx = dx
+                    bestDy = dy
+                }
+            }
+        }
+        if abs(bestDx) == 16 || abs(bestDy) == 16 || best < base + 0.004 { return m }
+        print(String(format: "FXPAN nudge %+d %+d px at fit size, ncc %.3f -> %.3f", bestDx, bestDy, base, best))
+        var out = m
+        out.tx += Double(bestDx)
+        out.ty += Double(bestDy)
+        return out
     }
 
     private static func blur(_ src: Gray, sigma: Double) -> Gray {
