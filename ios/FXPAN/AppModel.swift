@@ -35,6 +35,8 @@ final class AppModel {
     var syncReady = false
     var stitchLabel: String?
     var stitchingStamp: String?
+    /// Bumped when a stitch finishes so an open photo reloads the new file.
+    var stitchGeneration = 0
     var stitchWaiting: Set<String> = []
     var reviewStamp: String?
     var peepURL: URL?
@@ -94,6 +96,10 @@ final class AppModel {
         camera.onSeat = { [weak self] in
             self?.usbRevision += 1
         }
+        camera.onReady = { [weak self] in
+            guard let self, !self.shooting else { return }
+            self.scheduleApply()
+        }
         if let renamed = CaptureIndex.renameLegacy(stamp: "probe") {
             if let note = notes.removeValue(forKey: "probe") { notes[renamed] = note }
             if protectedStamps.remove("probe") != nil { protectedStamps.insert(renamed) }
@@ -118,6 +124,7 @@ final class AppModel {
         }
         ingest()
         armIdle()
+        watchSync()
         if ProcessInfo.processInfo.arguments.contains("-shootSim") {
             photo.drive.review = 0
             try? await Task.sleep(nanoseconds: 600_000_000)
@@ -223,7 +230,21 @@ final class AppModel {
     }
 
     func probeSync() async {
+        if shooting { return }
         syncReady = await SyncLink.ping()
+    }
+
+    /// Keeps the top-bar Sync mark current. A ping during a release would sit on the same socket as FIRE.
+    private func watchSync() {
+        syncWatch?.cancel()
+        syncWatch = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                if self.photo.drive.release == "sync" {
+                    await self.probeSync()
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
     }
 
     func toggleLive() async {
@@ -277,6 +298,14 @@ final class AppModel {
             note("Protected", bad: true)
             return
         }
+        reviewTask?.cancel()
+        droppedStamps.insert(stamp)
+        stitchQueue.removeAll { $0 == stamp }
+        stitchWaiting.remove(stamp)
+        if stitchingStamp == stamp {
+            stitchStop.cancel()
+            stitchPiece?.cancel()
+        }
         CaptureIndex.delete(stamp: stamp)
         notes[stamp] = nil
         if reviewStamp == stamp { reviewStamp = nil }
@@ -285,14 +314,42 @@ final class AppModel {
         ingest()
     }
 
+    /// The stitcher may already be holding this pair. Drop the result instead of writing it back.
+    private func discard(_ stamp: String) -> Bool {
+        guard droppedStamps.contains(stamp) else { return false }
+        droppedStamps.remove(stamp)
+        CaptureIndex.delete(stamp: stamp)
+        stitchStop.reset()
+        reloadShots()
+        return true
+    }
+
     func protect(_ stamp: String) {
         if protectedStamps.contains(stamp) { protectedStamps.remove(stamp) }
         else { protectedStamps.insert(stamp) }
         persist()
     }
 
-    func restitch(_ stamp: String) {
+    func restitch(_ stamp: String, engine: String? = nil) {
+        if let engine, photo.drive.engine != engine {
+            photo.drive.engine = engine
+            persist()
+        }
+        if stitchingStamp == stamp {
+            restartStamp = stamp
+            stitchStop.cancel()
+            stitchPiece?.cancel()
+        }
+        stitchQueue.removeAll { $0 == stamp }
         enqueue(stamp)
+    }
+
+    /// The stitch in flight was stopped so this set can run again with another engine.
+    private func tookRestart(_ stamp: String) -> Bool {
+        guard restartStamp == stamp else { return false }
+        restartStamp = nil
+        stitchStop.reset()
+        return true
     }
 
     func pair(_ serial: String, role: Role) { camera.pair(serial, role: role) }
@@ -356,7 +413,7 @@ final class AppModel {
         applyTask?.cancel()
         applyTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)
-            guard let self, !Task.isCancelled else { return }
+            guard let self, !Task.isCancelled, !self.shooting else { return }
             await self.camera.apply(self.photo)
             self.ingest()
         }
@@ -462,8 +519,10 @@ final class AppModel {
     }
 
     private func runStitch(_ stamp: String) async {
+        if discard(stamp) { return }
         let shot = CaptureIndex.list().first { $0.stamp == stamp }
         guard let t = shot?.t, let r = shot?.r else {
+            if discard(stamp) { return }
             note("Need T and R for \(stamp)", bad: true)
             return
         }
@@ -483,6 +542,8 @@ final class AppModel {
             defer { stitchPiece = nil }
             let started = CFAbsoluteTimeGetCurrent()
             var report = try await job.value
+            if discard(stamp) { return }
+            if tookRestart(stamp) { return }
             if stitchStop.cancelled { throw StitchHalt() }
             report.sec = CFAbsoluteTimeGetCurrent() - started
             let side = Disk.captures.appendingPathComponent("P_\(stamp).json")
@@ -490,12 +551,19 @@ final class AppModel {
                 try? data.write(to: side)
             }
         } catch is StitchHalt {
+            if discard(stamp) { return }
+            if tookRestart(stamp) { return }
             note("Stitch cancelled", bad: false)
         } catch is CancellationError {
+            if discard(stamp) { return }
+            if tookRestart(stamp) { return }
             note("Stitch cancelled", bad: false)
         } catch {
+            if discard(stamp) { return }
+            if tookRestart(stamp) { return }
             note(error.localizedDescription, bad: true)
         }
+        stitchGeneration += 1
     }
 
     private func reloadShots() {
@@ -517,6 +585,9 @@ final class AppModel {
     }
 
     private var idleTask: Task<Void, Never>?
+    private var syncWatch: Task<Void, Never>?
+    private var droppedStamps: Set<String> = []
+    private var restartStamp: String?
     private var idleDeadline: Date?
     private var lastPoke = Date.distantPast
 

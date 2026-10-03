@@ -382,14 +382,14 @@ struct ShotScreen: View {
                     if model.stitchingStamp == stamp || model.stitchWaiting.contains(stamp) {
                         Button("Cancel") { model.cancelStitch() }
                             .buttonStyle(PlainChip())
-                    } else {
-                        Button("Restitch") { model.restitch(stamp) }
-                            .buttonStyle(PlainChip())
                     }
                     Button("Delete") { model.deleteShot(stamp); model.back() }
                         .buttonStyle(PlainChip())
                 }
-                Text("Hold the picture to inspect pixels.")
+                ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: model.photo.drive.engine) { value in
+                    model.restitch(stamp, engine: value)
+                }
+                Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
@@ -399,7 +399,7 @@ struct ShotScreen: View {
             }
         }, panel: {
             if let shot {
-                ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze)
+                ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze, generation: model.stitchGeneration)
                     .onLongPressGesture(minimumDuration: 0.35) {
                         model.peep(file(shot, part: selected), title: shot.name)
                     }
@@ -544,6 +544,7 @@ struct ShotPart: View {
     var part: String
     var rig: Rig
     var squeeze: Double
+    var generation: Int
     @State private var image: UIImage?
 
     var body: some View {
@@ -565,7 +566,12 @@ struct ShotPart: View {
     }
 
     private var token: String {
-        "\(part)|\(shot.pano?.path ?? "")|\(shot.t?.path ?? "")|\(shot.r?.path ?? "")|\(shot.ana?.path ?? "")"
+        func revised(_ url: URL?) -> String {
+            guard let url else { return "" }
+            let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            return "\(url.path)#\(modified)"
+        }
+        return "\(generation)|\(part)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))"
     }
 
     private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double) -> UIImage? {
@@ -653,6 +659,11 @@ struct CamerasScreen: View {
                         Text(cam.model.isEmpty ? "Nikon" : cam.model).font(Theme.font(16, weight: .medium))
                         Text(cam.serial.isEmpty ? "No serial · USB port \(cam.token.drop { $0 != "-" }.dropFirst())" : "#\(cam.serial)")
                             .font(Theme.font(12)).foregroundStyle(Theme.dim)
+                        if !cam.link.isEmpty {
+                            Text(cam.link)
+                                .font(Theme.font(12, weight: .medium))
+                                .foregroundStyle(Theme.ink2)
+                        }
                         HStack {
                             PressChip(title: "T", on: cam.role == .t, filled: false) { model.pair(cam.token, role: .t) }
                             PressChip(title: "R", on: cam.role == .r, filled: false) { model.pair(cam.token, role: .r) }
@@ -669,21 +680,67 @@ struct CamerasScreen: View {
                 }
             }
         }, panel: {
-            VStack(alignment: .leading, spacing: 8) {
-                slot(.t)
-                slot(.r)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SEATED")
+                    .font(Theme.font(11, weight: .semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.dim)
+                seat(.t)
+                seat(.r)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         })
     }
 
-    private func slot(_ role: Role) -> some View {
+    private func seat(_ role: Role) -> some View {
         let s = model.camera.slots[role] ?? BodyState()
-        return HStack {
-            Text(role.rawValue).foregroundStyle(role == .t ? Theme.transmit : Theme.reflect).font(Theme.font(16, weight: .semibold))
-            Text(s.online ? s.model : (s.paired ? "paired, off USB" : "open"))
+        let tint = role == .t ? Theme.transmit : Theme.reflect
+        let name = s.model.isEmpty ? "Nikon" : s.model
+        let state = s.online ? "On USB" : (s.paired ? "Paired, off USB" : "Open")
+        let exposure = [s.program, s.iso, s.shutter, s.fstop.isEmpty ? "" : "f/\(s.fstop)"].filter { !$0.isEmpty }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(role.rawValue)
+                    .font(Theme.font(28, weight: .medium))
+                    .foregroundStyle(tint)
+                Text(state)
+                    .font(Theme.font(13))
+                    .foregroundStyle(s.online ? Theme.ink2 : Theme.dim)
+                Spacer()
+                if s.online, let pct = s.battery {
+                    Text("\(pct)%")
+                        .font(Theme.font(13))
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+            Text(s.online || s.paired ? name : "No body")
+                .font(Theme.font(16, weight: .medium))
+            HStack(alignment: .top, spacing: 18) {
+                seatFact("Serial", s.serial.isEmpty ? "—" : s.serial)
+                seatFact("Link", s.link.isEmpty ? "—" : s.link)
+            }
+            if s.online, !exposure.isEmpty {
+                Text(exposure.joined(separator: " · "))
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.dim)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(s.paired ? tint.opacity(0.85) : Theme.hair, lineWidth: 1))
+    }
+
+    private func seatFact(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(Theme.font(10, weight: .semibold))
+                .tracking(1.1)
+                .foregroundStyle(Theme.faint)
+            Text(value)
+                .font(Theme.font(13))
                 .foregroundStyle(Theme.ink2)
-            Spacer()
-            Text(s.serial.isEmpty ? "" : "#\(s.serial.suffix(4))").foregroundStyle(Theme.dim).font(Theme.font(12))
+                .lineLimit(1)
         }
     }
 }
@@ -703,7 +760,7 @@ struct RigScreen: View {
                         model.editRig { $0.flipR = value == "1" }
                     }
                 }
-                RowBlock(title: "Balance", value: model.rig.balance ? "Overlap" : "Off", hint: "Scale R so the shared strip matches T") {
+                RowBlock(title: "Balance", value: model.rig.balance ? "Overlap" : "Off", hint: "Darken the brighter body so the shared strip matches") {
                     ChipRow(options: [("1", "Balance"), ("0", "Off")], selected: model.rig.balance ? "1" : "0") { value in
                         model.editRig { $0.balance = value == "1" }
                     }
