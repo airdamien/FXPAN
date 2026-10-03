@@ -218,7 +218,7 @@ struct DriveScreen: View {
             }
         }, panel: {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Hugin fits a small rotation and scale in the overlap, then blends in five bands. A miss feathers the rig overlap.")
+                Text("Hugin fits a small rotation and scale in the overlap, then blends in bands sized to the overlap. A miss feathers the rig overlap.")
                     .font(Theme.font(14))
                     .foregroundStyle(Theme.ink2)
                 Text("Match only shifts. Blend and cut use the rig percentage.")

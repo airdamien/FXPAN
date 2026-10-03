@@ -2,7 +2,7 @@ import Accelerate
 import CoreGraphics
 import Foundation
 
-/// The Pi's Hugin stitch: SIFT in the overlap, a similarity (scale, rotation, shift), then a five-band blend.
+/// The Pi's Hugin stitch: SIFT in the overlap, a similarity (scale, rotation, shift), then a multiband blend.
 /// A miss returns nil and the caller feathers the rig overlap.
 enum Hugin {
     struct Made {
@@ -86,8 +86,9 @@ enum Hugin {
     private static func blend(_ cropped: inout Prepared, note: StitchNote?, stop: StitchStop?) throws -> (px: [UInt8], w: Int, h: Int, blend: String) {
         let useBands = memoryAllowsBands(w: cropped.w, h: cropped.h)
         if useBands {
-            note?("Blending five bands")
-            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: 5, stop: stop) {
+            let bands = bandCount(overlapPx: Int((cropped.fit.overlap * Double(cropped.frameWidth)).rounded()))
+            note?("Blending \(bands) bands")
+            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: bands, stop: stop) {
                 return (blended, cropped.w, cropped.h, "multiband")
             }
             try StitchGate.check(stop)
@@ -97,7 +98,7 @@ enum Hugin {
             }
             return (soft, cropped.w, cropped.h, "feather")
         }
-        note?("Not enough memory for five bands, feathering")
+        note?("Not enough memory for bands, feathering")
         guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) else {
             throw PTPError.message("Could not feather the seam")
         }
@@ -716,9 +717,15 @@ enum Hugin {
         return Canvas(r: r, t: t, w: cw, h: ch)
     }
 
+    /// The coarsest band carries exposure across the seam and must fade out before either frame's edge of the overlap.
+    private static func bandCount(overlapPx: Int) -> Int {
+        let top = Int(log2(max(1, Double(overlapPx) / 6)).rounded(.down))
+        return min(10, max(5, top + 1))
+    }
+
     /// iOS raises a process's memory limit as it allocates, so `os_proc_available_memory`
     /// under-reports what an 8 GB or 12 GB device will actually allow. Gate on installed RAM.
-    /// A 4 GB iPad stays on the feather path; five bands would get the app killed there.
+    /// A 4 GB iPad stays on the feather path; the band blend would get the app killed there.
     private static func memoryAllowsBands(w: Int, h: Int) -> Bool {
         let ram = ProcessInfo.processInfo.physicalMemory
         let ok = ram >= 8 * 1024 * 1024 * 1024
@@ -798,11 +805,12 @@ enum Hugin {
     }
 
     /// Gaussian pyramid turned into a Laplacian in place, one level at a time, so both frames are never expanded together.
+    /// Fine to coarse only: each level subtracts the Gaussian above it, which must not have been converted yet.
     private static func laplacian(_ src: inout [Float], _ w: Int, _ h: Int, bands: Int, stop: StitchStop?) throws -> Pyr {
         var pyr = try gaussPyramid(src, w, h, bands: bands, stop: stop)
         src = []
         let last = pyr.levels.count - 1
-        for level in stride(from: last - 1, through: 0, by: -1) {
+        for level in 0..<last {
             try StitchGate.check(stop)
             let up = pyrUp(
                 pyr.levels[level + 1],
@@ -913,7 +921,7 @@ enum Hugin {
         }
     }
 
-    /// Empty warp pixels are black. A five-band pyramid treats that cliff as detail and the bright side overshoots white.
+    /// Empty warp pixels are black. A band pyramid treats that cliff as detail and the bright side overshoots white.
     /// Continue the last real pixel across the gap so the bands only see the photograph.
     private static func filledPlane(_ px: [UInt8], _ w: Int, _ h: Int, _ c: Int) -> [Float] {
         var o = [Float](repeating: -1, count: w * h)
