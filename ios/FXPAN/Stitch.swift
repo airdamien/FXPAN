@@ -100,8 +100,10 @@ enum Stitcher {
         }
         let overlap = rig.overlap(width: tImage.width, height: tImage.height)
         let oriented = rig.flipR ? flop(rImage) : rImage
-        let pair = rig.balance ? matched(oriented, to: tImage, overlap: overlap) : (t: tImage, r: oriented)
-        return try Hugin.prepare(t: pair.t, r: pair.r, overlap: overlap, frameWidth: tImage.width, note: note, stop: stop)
+        return try Hugin.prepare(
+            t: tImage, r: oriented, overlap: overlap, frameWidth: tImage.width,
+            balance: rig.balance, note: note, stop: stop
+        )
     }
 
     private static func finish(
@@ -189,41 +191,62 @@ enum Stitcher {
         return image
     }
 
-    /// Match the overlap by darkening the brighter body. Scaling the darker one up clips its highlights.
+    /// Match the overlap by darkening the brighter body, one scale per channel. Scaling up clips highlights.
     private static func matched(_ r: CGImage, to t: CGImage, overlap: Double) -> (t: CGImage, r: CGImage) {
-        let tg = gray(t, width: work)
-        let rg = gray(r, width: work)
-        let ol = max(4, min(tg.w - 1, Int((Double(tg.w) * overlap).rounded())))
-        func mean(_ g: Gray, x0: Int, x1: Int) -> Double {
-            var sum = 0
-            var n = 0
-            for y in stride(from: 0, to: g.h, by: 2) {
-                for x in x0..<x1 {
-                    sum += Int(g.pix[y * g.w + x])
-                    n += 1
+        let width = 480
+        let th = max(1, t.height * width / max(1, t.width))
+        let tb = bitmap(sized(t, to: width, height: th))
+        let rb = bitmap(sized(r, to: width, height: th))
+        let ol = max(4, min(tb.w - 1, Int((Double(tb.w) * overlap).rounded())))
+        var sumT = [0.0, 0.0, 0.0]
+        var sumR = [0.0, 0.0, 0.0]
+        var n = 0
+        let rows = min(tb.h, rb.h)
+        for y in stride(from: 0, to: rows, by: 2) {
+            for x in 0..<ol {
+                let ti = (y * tb.w + x) * 4
+                let ri = (y * rb.w + (rb.w - ol + x)) * 4
+                var usable = true
+                for c in 0..<3 {
+                    if tb.px[ti + c] < 16 || tb.px[ti + c] > 240 || rb.px[ri + c] < 16 || rb.px[ri + c] > 240 {
+                        usable = false
+                    }
                 }
+                if !usable { continue }
+                for c in 0..<3 {
+                    sumT[c] += Double(tb.px[ti + c])
+                    sumR[c] += Double(rb.px[ri + c])
+                }
+                n += 1
             }
-            return n == 0 ? 0 : Double(sum) / Double(n)
         }
-        let tm = mean(tg, x0: 0, x1: ol)
-        let rm = mean(rg, x0: rg.w - ol, x1: rg.w)
-        guard rm > 4, tm > 4 else { return (t, r) }
-        let scale = tm / rm
-        guard abs(scale - 1) > 0.03, scale >= 0.40, scale <= 2.50 else { return (t, r) }
-        if scale < 1 {
-            print(String(format: "FXPAN balance R ×%.2f", scale))
-            return (t, scaled(r, by: scale))
+        guard n > 40 else { return (t, r) }
+        var gT = [1.0, 1.0, 1.0]
+        var gR = [1.0, 1.0, 1.0]
+        for c in 0..<3 {
+            let tm = sumT[c] / Double(n)
+            let rm = sumR[c] / Double(n)
+            guard rm > 4, tm > 4 else { continue }
+            let scale = tm / rm
+            guard scale >= 0.40, scale <= 2.50, abs(scale - 1) > 0.008 else { continue }
+            if scale < 1 { gR[c] = scale } else { gT[c] = 1 / scale }
         }
-        let down = 1 / scale
-        print(String(format: "FXPAN balance T ×%.2f", down))
-        return (scaled(t, by: down), r)
+        guard gR.contains(where: { $0 < 0.999 }) || gT.contains(where: { $0 < 0.999 }) else { return (t, r) }
+        if gR.contains(where: { $0 < 0.999 }) {
+            print(String(format: "FXPAN balance R ×%.3f %.3f %.3f", gR[0], gR[1], gR[2]))
+        }
+        if gT.contains(where: { $0 < 0.999 }) {
+            print(String(format: "FXPAN balance T ×%.3f %.3f %.3f", gT[0], gT[1], gT[2]))
+        }
+        return (scaled(t, by: gT), scaled(r, by: gR))
     }
 
-    private static func scaled(_ image: CGImage, by scale: Double) -> CGImage {
+    private static func scaled(_ image: CGImage, by scale: [Double]) -> CGImage {
+        if scale.allSatisfy({ abs($0 - 1) < 0.001 }) { return image }
         let ci = CIImage(cgImage: image).applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
+            "inputRVector": CIVector(x: scale[0], y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: scale[1], z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: scale[2], w: 0),
             "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
         ])
         let ctx = CIContext(options: [.workingColorSpace: NSNull()])

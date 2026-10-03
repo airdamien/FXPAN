@@ -760,7 +760,7 @@ struct RigScreen: View {
                         model.editRig { $0.flipR = value == "1" }
                     }
                 }
-                RowBlock(title: "Balance", value: model.rig.balance ? "Overlap" : "Off", hint: "Darken the brighter body so the shared strip matches") {
+                RowBlock(title: "Balance", value: model.rig.balance ? "Overlap" : "Off", hint: "Match color in the shared strip, darkening whichever body is brighter") {
                     ChipRow(options: [("1", "Balance"), ("0", "Off")], selected: model.rig.balance ? "1" : "0") { value in
                         model.editRig { $0.balance = value == "1" }
                     }
