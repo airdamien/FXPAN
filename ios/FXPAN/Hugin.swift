@@ -37,7 +37,7 @@ enum Hugin {
         }
     }
 
-    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
+    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, balance: Bool = false, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
         try StitchGate.check(stop)
         note?("Reading the frames")
         let tr = rgba(from: t)
@@ -48,7 +48,13 @@ enum Hugin {
         note?("Warping the frames")
         guard let warped = try warp(t: tr, r: rr, fit: fit, stop: stop) else { return nil }
         let cropped = crop(warped)
-        return Prepared(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, fit: fit, frameWidth: frameWidth)
+        var pr = cropped.r
+        var pt = cropped.t
+        if balance {
+            note?("Balancing the overlap")
+            balancePair(&pr, &pt, cropped.w, cropped.h)
+        }
+        return Prepared(r: pr, t: pt, w: cropped.w, h: cropped.h, fit: fit, frameWidth: frameWidth)
     }
 
     /// The source frames and the uncropped warp are already gone. Blend, drop the pair, then pack.
@@ -715,6 +721,95 @@ enum Hugin {
             t.replaceSubrange(d..<(d + cw * 4), with: canvas.t[s..<(s + cw * 4)])
         }
         return Canvas(r: r, t: t, w: cw, h: ch)
+    }
+
+    /// Match red, green, and blue on the pixels that land on top of each other.
+    /// A scale alone meets the average: shadows on one body stay hot and the highlights go the other way.
+    /// Fit a slope and a black level per channel, and only darken, so a highlight is never pushed past what that body recorded.
+    private static func balancePair(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int) {
+        var sumR = [0.0, 0.0, 0.0]
+        var sumT = [0.0, 0.0, 0.0]
+        var rr = [0.0, 0.0, 0.0]
+        var rt = [0.0, 0.0, 0.0]
+        var n = 0.0
+        for y in stride(from: 0, to: h, by: 4) {
+            for x in stride(from: 0, to: w, by: 4) {
+                let i = (y * w + x) * 4
+                guard r[i + 3] > 32, t[i + 3] > 32 else { continue }
+                var usable = true
+                for c in 0..<3 {
+                    let rv = r[i + c]
+                    let tv = t[i + c]
+                    if rv < 16 || rv > 240 || tv < 16 || tv > 240 { usable = false }
+                }
+                if !usable { continue }
+                for c in 0..<3 {
+                    let rv = Double(r[i + c])
+                    let tv = Double(t[i + c])
+                    sumR[c] += rv
+                    sumT[c] += tv
+                    rr[c] += rv * rv
+                    rt[c] += rv * tv
+                }
+                n += 1
+            }
+        }
+        guard n > 200 else { return }
+        var slope = [1.0, 1.0, 1.0]
+        var offset = [0.0, 0.0, 0.0]
+        var onT = [false, false, false]
+        var live = [false, false, false]
+        for c in 0..<3 {
+            guard sumR[c] > 1 else { continue }
+            let meanGain = sumT[c] / sumR[c]
+            guard meanGain >= 0.40, meanGain <= 2.50 else { continue }
+            var g = meanGain
+            var b = 0.0
+            let det = rr[c] * n - sumR[c] * sumR[c]
+            if det > 1 {
+                let ag = (rt[c] * n - sumR[c] * sumT[c]) / det
+                let ab = (rr[c] * sumT[c] - sumR[c] * rt[c]) / det
+                if ag >= 0.50, ag <= 1.80, abs(ab) <= 40 {
+                    let mid = meanGain >= 1 ? (128 - ab) / ag : ag * 128 + ab
+                    if mid < 127 {
+                        g = ag
+                        b = ab
+                    }
+                }
+            }
+            if abs(meanGain - 1) <= 0.008, abs(b) < 1.5 { continue }
+            slope[c] = g
+            offset[c] = b
+            onT[c] = meanGain >= 1
+            live[c] = true
+        }
+        guard live.contains(true) else { return }
+        func line(_ wantT: Bool) -> String {
+            (0..<3).map { c in
+                guard live[c], onT[c] == wantT else { return "·" }
+                return String(format: "×%.3f%+.1f", slope[c], offset[c])
+            }.joined(separator: " ")
+        }
+        let tLine = line(true)
+        let rLine = line(false)
+        if tLine.contains("×") { print("FXPAN balance T \(tLine)") }
+        if rLine.contains("×") { print("FXPAN balance R \(rLine)") }
+        curve(&t, slope, offset, onT, live, pullT: true)
+        curve(&r, slope, offset, onT, live, pullT: false)
+    }
+
+    /// `pullT` maps T down onto R with `(v − offset) / slope`. The other way maps R down onto T.
+    private static func curve(_ px: inout [UInt8], _ slope: [Double], _ offset: [Double], _ onT: [Bool], _ live: [Bool], pullT: Bool) {
+        for i in stride(from: 0, to: px.count, by: 4) {
+            guard px[i + 3] > 32 else { continue }
+            for c in 0..<3 where live[c] && onT[c] == pullT {
+                let v = Double(px[i + c])
+                let out = pullT ? (v - offset[c]) / slope[c] : slope[c] * v + offset[c]
+                if out < v {
+                    px[i + c] = UInt8(min(255, max(0, out.rounded())))
+                }
+            }
+        }
     }
 
     /// The coarsest band carries exposure across the seam and must fade out before either frame's edge of the overlap.
