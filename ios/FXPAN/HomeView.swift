@@ -123,7 +123,7 @@ struct HomeView: View {
     private func frame(flush: Bool = false) -> some View {
         let scale = min(8, max(1, zoom * magnify))
         return ZStack(alignment: .top) {
-            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02, flush: flush)
+            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02, flush: flush, aiming: zoom <= 1.02)
                 .scaleEffect(scale, anchor: .center)
                 .offset(x: pan.width + drag.width, y: pan.height + drag.height)
                 .gesture(MagnifyGesture()
@@ -156,8 +156,26 @@ struct HomeView: View {
                 }
                 .onTapGesture {
                     guard zoom <= 1.02 else { return }
+                    if model.photo.focus.aid != "off", model.camera.live { return }
                     Task { await model.toggleLive() }
                 }
+            if model.simulate, model.photo.focus.aid != "off" {
+                HStack {
+                    Spacer()
+                    Text(model.playingFocus ? "Playing" : "Play focus")
+                        .font(Theme.font(12, weight: .semibold))
+                        .foregroundStyle(Theme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.65), in: Capsule())
+                        .contentShape(Capsule())
+                        .highPriorityGesture(TapGesture().onEnded {
+                            guard !model.playingFocus else { return }
+                            Task { await model.playFocus() }
+                        })
+                }
+                .padding(8)
+            }
             if zoom > 1.05 {
                 Text(String(format: "%.1f×  ·  double tap to fit", zoom))
                     .font(Theme.font(12, weight: .medium))
@@ -326,7 +344,9 @@ struct HomeView: View {
             return (Catalog.fmtISO(photo.light.iso), "\(Catalog.fmtShut(photo.light.shutter)) · \(Catalog.fmtF(photo.light.fstop)) · \(photo.light.program)")
         case "Focus":
             if photo.focus.aid == "off" { return ("Off", "Lens helicoid") }
-            if photo.focus.aid == "range" { return ("Range", "Arrow toward the sharp point") }
+            if photo.focus.aid == "range" {
+                return ("Range", model.focusAt == nil ? "Box on the sharp part" : "Watching your point")
+            }
             let aid = photo.focus.aid.prefix(1).uppercased() + photo.focus.aid.dropFirst()
             return (String(aid), "\(photo.focus.color) · \(photo.focus.level)")
         case "Look":

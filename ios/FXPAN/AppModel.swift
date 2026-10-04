@@ -51,6 +51,12 @@ final class AppModel {
     var preview: UIImage?
     var rangeT: FocusAim = .lost
     var rangeR: FocusAim = .lost
+    /// A tap on the panorama, in unit coordinates. Nil follows the sharpest part of the stitch.
+    var focusAt: CGPoint?
+    var focusBox: CGRect?
+    var focusSharp: CGRect?
+    var focusPlace: FocusPlace = .both
+    var playingFocus = false
     var simulate = false
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
@@ -60,6 +66,7 @@ final class AppModel {
     let camera = CameraHub()
     private let dialT = FocusDial()
     private let dialR = FocusDial()
+    private var lastPlace: FocusPlace?
     private var applyTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
@@ -267,6 +274,151 @@ final class AppModel {
     func toggleLive() async {
         await camera.setLive(!camera.live)
         ingest()
+    }
+
+    /// Pin the rangefinder on a point in the panorama. Tapping the current window lets it follow the sharp part again.
+    func aimFocus(_ point: CGPoint) {
+        let p = CGPoint(x: min(1, max(0, point.x)), y: min(1, max(0, point.y)))
+        if let focusAt, FocusMeter.window(around: focusAt).contains(p) {
+            self.focusAt = nil
+        } else {
+            focusAt = p
+        }
+        dialT.reset()
+        dialR.reset()
+        lastPlace = nil
+        schedulePreview()
+    }
+
+    /// Walk each captured panorama from sharp to soft and back, so the box and the arrow can be reviewed on a real picture.
+    func playFocus() async {
+        guard camera.simulate, !playingFocus else { return }
+        let pages = focusPages()
+        guard !pages.isEmpty else {
+            note("No captured panorama to play", bad: true)
+            return
+        }
+        playingFocus = true
+        camera.focusHold = true
+        camera.focusDrive = true
+        defer {
+            playingFocus = false
+            camera.focusBlur = 0
+            camera.focusHold = false
+            camera.focusDrive = false
+            ingest()
+        }
+        if !camera.live {
+            await camera.setLive(true)
+        }
+        let steps = Self.blurSteps()
+        let aim = focusAt
+        for page in pages {
+            dialT.reset()
+            dialR.reset()
+            lastPlace = nil
+            let source = page.image
+            let fitted = await Task.detached(priority: .userInitiated) {
+                Self.fitPlay(source)
+            }.value
+            let overlap = page.overlap
+            for radius in steps {
+                let frame = await Task.detached(priority: .userInitiated) {
+                    FrameBlur.image(fitted, radius: radius)
+                }.value
+                let read = await Task.detached(priority: .userInitiated) {
+                    FocusMeter.read(frame, aim: aim, overlap: overlap, only: nil)
+                }.value
+                preview = UIImage(cgImage: frame)
+                applyFocus(read)
+                try? await Task.sleep(nanoseconds: 320_000_000)
+            }
+        }
+    }
+
+    private struct FocusPage {
+        var image: CGImage
+        var overlap: Double
+    }
+
+    private struct PanoOverlap: Decodable {
+        var overlap: Double?
+    }
+
+    /// Captured stitches in the library, newest first. The overlap written beside each file places R and T.
+    private func focusPages() -> [FocusPage] {
+        shots.compactMap(\.pano).compactMap { url in
+            guard let image = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
+            let overlap = storedOverlap(beside: url) ?? rig.overlap
+            return FocusPage(image: image, overlap: overlap)
+        }
+    }
+
+    private func applyFocus(_ read: FocusRead) {
+        if read.place != lastPlace {
+            dialT.reset()
+            dialR.reset()
+            lastPlace = read.place
+        }
+        switch read.place {
+        case .t:
+            rangeT = read.score.map { dialT.push($0) } ?? .lost
+            rangeR = .lost
+        case .r:
+            rangeR = read.score.map { dialR.push($0) } ?? .lost
+            rangeT = .lost
+        case .both:
+            if let score = read.score {
+                rangeT = dialT.push(score)
+                rangeR = dialR.push(score)
+            } else {
+                rangeT = .lost
+                rangeR = .lost
+            }
+        }
+        focusBox = read.box
+        focusSharp = read.sharp
+        focusPlace = read.place
+    }
+
+    private func clearFocus() {
+        dialT.reset()
+        dialR.reset()
+        lastPlace = nil
+        rangeT = .lost
+        rangeR = .lost
+        focusBox = nil
+        focusSharp = nil
+    }
+
+    private static func blurSteps() -> [CGFloat] {
+        var steps: [CGFloat] = []
+        var radius: CGFloat = 0
+        while radius < 30 {
+            steps.append(radius)
+            radius += 3
+        }
+        while radius > 0 {
+            steps.append(radius)
+            radius -= 3
+        }
+        steps.append(0)
+        return steps
+    }
+
+    nonisolated private static func fitPlay(_ image: CGImage) -> CGImage {
+        let maxW = 1400
+        guard image.width > maxW else { return image }
+        let height = max(16, Int((Double(image.height) * Double(maxW) / Double(image.width)).rounded()))
+        return Stitcher.sized(image, to: maxW, height: height)
+    }
+
+    private func storedOverlap(beside jpeg: URL) -> Double? {
+        let json = jpeg.deletingPathExtension().appendingPathExtension("json")
+        guard let data = try? Data(contentsOf: json),
+              let note = try? JSONDecoder().decode(PanoOverlap.self, from: data),
+              let overlap = note.overlap, overlap > 0.05, overlap < 0.55 else { return nil }
+        return overlap
     }
 
     func fire() async {
@@ -520,23 +672,22 @@ final class AppModel {
             guard let self else { return }
             while self.previewDirty {
                 self.previewDirty = false
+                if self.playingFocus { continue }
                 let t = self.camera.frames[.t]?.cgImage
                 let r = self.camera.frames[.r]?.cgImage
                 let meter = self.camera.live && photo.focus.aid != "off"
+                let aim = self.focusAt
                 let made = await Task.detached(priority: .userInitiated) {
-                    await Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter)
+                    Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim)
                 }.value
+                if self.playingFocus { continue }
                 if let image = made.image {
                     self.preview = image
                 }
                 if meter {
-                    self.rangeT = made.t.map { self.dialT.push($0) } ?? .lost
-                    self.rangeR = made.r.map { self.dialR.push($0) } ?? .lost
+                    self.applyFocus(FocusRead(score: made.score, box: made.box, sharp: made.sharp, place: made.place))
                 } else {
-                    self.dialT.reset()
-                    self.dialR.reset()
-                    self.rangeT = .lost
-                    self.rangeR = .lost
+                    self.clearFocus()
                 }
             }
             self.previewBusy = false
@@ -546,33 +697,32 @@ final class AppModel {
 
     private struct PreviewMade {
         var image: UIImage?
-        var t: Double?
-        var r: Double?
+        var score: Double?
+        var box: CGRect?
+        var sharp: CGRect?
+        var place: FocusPlace = .both
     }
 
-    private static func scored(_ image: CGImage) -> Double? {
-        let value = FocusMeter.score(image)
-        return value > 0 ? value : nil
-    }
-
-    private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool) async -> PreviewMade {
-        let scores = PreviewMade(
-            image: nil,
-            t: meter ? t.flatMap { scored($0) } : nil,
-            r: meter ? r.flatMap { scored($0) } : nil
-        )
+    nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?) -> PreviewMade {
         if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400) {
+            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil) : FocusRead()
             var out = cg
             if !LookBook.identity(photo.look) { out = Stitcher.grade(out, look: photo.look) }
             if photo.focus.aid == "peaking" { out = Peak.draw(out, color: photo.focus.color, level: photo.focus.level) }
-            return PreviewMade(image: UIImage(cgImage: out), t: scores.t, r: scores.r)
+            return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
         }
-        if let t { return PreviewMade(image: UIImage(cgImage: t), t: scores.t, r: scores.r) }
-        if let r { return PreviewMade(image: UIImage(cgImage: r), t: scores.t, r: scores.r) }
+        if let t {
+            let read = meter ? FocusMeter.read(t, aim: aim, overlap: rig.overlap, only: .t) : FocusRead(place: .t)
+            return PreviewMade(image: UIImage(cgImage: t), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
+        }
+        if let r {
+            let read = meter ? FocusMeter.read(r, aim: aim, overlap: rig.overlap, only: .r) : FocusRead(place: .r)
+            return PreviewMade(image: UIImage(cgImage: r), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
+        }
         if let fallback, let image = UIImage(contentsOfFile: fallback.path) {
-            return PreviewMade(image: image, t: scores.t, r: scores.r)
+            return PreviewMade(image: image)
         }
-        return scores
+        return PreviewMade()
     }
 
     private func scheduleApply() {

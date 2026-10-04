@@ -1,3 +1,4 @@
+import CoreImage
 import ImageCaptureCore
 import UIKit
 
@@ -55,6 +56,11 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private var realFrames: [Role: UIImage] = [:]
     private var simPhase: CGFloat = 0
     private var simTimer: Timer?
+    /// Gaussian radius applied to the simulator frames. The focus review holds the scene and walks this out and back.
+    var focusBlur: CGFloat = 0
+    var focusHold = false
+    /// While a focus review is pushing its own frames, the live clock stays quiet.
+    var focusDrive = false
     private var started = false
     private var front = true
     private var livePoll: Task<Void, Never>?
@@ -630,14 +636,34 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         simTimer?.invalidate()
         simTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.simulate, self.live else { return }
-                self.simPhase += 0.15
-                let pair = SimScene.pair(phase: self.simPhase)
-                self.frames[.t] = UIImage(cgImage: pair.t)
-                self.frames[.r] = UIImage(cgImage: pair.r)
-                self.onChange?()
+                guard let self, self.simulate, self.live, !self.focusDrive else { return }
+                self.pushSimFrame()
             }
         }
+    }
+
+    func pushSimFrame() {
+        guard simulate else { return }
+        if !focusHold { simPhase += 0.15 }
+        let pair = SimScene.pair(phase: simPhase)
+        frames[.t] = Self.softened(pair.t, focusBlur)
+        frames[.r] = Self.softened(pair.r, focusBlur)
+        onChange?()
+    }
+
+    private static func softened(_ image: CGImage, _ radius: CGFloat) -> UIImage {
+        UIImage(cgImage: FrameBlur.image(image, radius: radius))
+    }
+}
+
+enum FrameBlur {
+    private static let context = CIContext(options: nil)
+
+    static func image(_ image: CGImage, radius: CGFloat) -> CGImage {
+        guard radius > 0.15 else { return image }
+        let input = CIImage(cgImage: image)
+        let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: radius).cropped(to: input.extent)
+        return context.createCGImage(blurred, from: input.extent) ?? image
     }
 }
 

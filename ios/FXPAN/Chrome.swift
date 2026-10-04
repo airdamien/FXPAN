@@ -578,6 +578,10 @@ struct PanoFrame: View {
     var showGuide = true
     var showLiveHint = false
     var flush = false
+    /// False while the picture is zoomed, so a tap still fits the frame instead of pinning focus.
+    var aiming = true
+
+    private let strip: CGFloat = 36
 
     var body: some View {
         let squeeze = model.photo.frame.squeeze
@@ -588,7 +592,7 @@ struct PanoFrame: View {
                 Image(uiImage: preview)
                     .resizable()
                     .scaledToFit()
-                    .padding(.bottom, showRange ? 74 : 36)
+                    .padding(.bottom, strip)
             } else {
                 VStack(spacing: 8) {
                     Text("No frame yet")
@@ -601,37 +605,119 @@ struct PanoFrame: View {
                 }
             }
             if showGuide, let ratio = guideRatio {
-                GuideLines(ratio: ratio, frame: aspect, bottomInset: showRange ? 74 : 36)
+                GuideLines(ratio: ratio, frame: aspect, bottomInset: strip)
             }
             if model.photo.focus.aid == "loupe", model.preview != nil {
                 Loupe()
             }
-            if showRange {
-                if model.photo.focus.aid == "range" {
-                    RangeBrackets()
-                }
-                VStack {
-                    Spacer()
-                    HStack {
-                        RangeMark(aim: model.rangeR, title: "R", tint: Theme.reflect)
-                        Spacer()
-                        RangeMark(aim: model.rangeT, title: "T", tint: Theme.transmit)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 4)
-                    exposureStrip
-                }
-            } else {
-                VStack {
-                    Spacer()
-                    exposureStrip
-                }
+            VStack {
+                Spacer()
+                exposureStrip
             }
+            focusOverlay(aspect: aspect)
         }
         .aspectRatio(aspect, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .clipShape(RoundedRectangle(cornerRadius: flush ? 0 : Theme.radius))
+    }
+
+    @ViewBuilder
+    private func focusOverlay(aspect: Double) -> some View {
+        let canAim = aiming && model.camera.live && model.photo.focus.aid != "off"
+        GeometryReader { geo in
+            let image = GuideFit.image(in: geo.size, aspect: aspect, bottomInset: strip)
+            ZStack(alignment: .topLeading) {
+                focusArt(in: image)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                if canAim {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(SpatialTapGesture().onEnded { value in
+                            let p = value.location
+                            guard image.contains(p), image.width > 1, image.height > 1 else { return }
+                            model.aimFocus(CGPoint(
+                                x: (p.x - image.minX) / image.width,
+                                y: (p.y - image.minY) / image.height
+                            ))
+                        })
+                }
+            }
+        }
+    }
+
+    private func focusArt(in image: CGRect) -> some View {
+        let pinned = model.focusAt != nil
+        return ZStack(alignment: .topLeading) {
+            if showRange, let sharp = model.focusSharp, !pinned || sharpOutside(sharp) {
+                brackets(unit: sharp, in: image, strong: !pinned)
+            }
+            if showRange, pinned, let box = model.focusBox {
+                brackets(unit: box, in: image, strong: true)
+            }
+            if showRange, model.photo.focus.aid == "range", let box = model.focusBox {
+                rangeMarks(unit: box, in: image)
+            }
+        }
+    }
+
+    private func sharpOutside(_ sharp: CGRect) -> Bool {
+        guard let box = model.focusBox else { return true }
+        return !box.contains(CGPoint(x: sharp.midX, y: sharp.midY))
+    }
+
+    private func brackets(unit: CGRect, in image: CGRect, strong: Bool) -> some View {
+        let rect = CGRect(
+            x: image.minX + unit.minX * image.width,
+            y: image.minY + unit.minY * image.height,
+            width: unit.width * image.width,
+            height: unit.height * image.height
+        )
+        return Path { path in
+            let arm = min(16, max(6, min(rect.width, rect.height) * 0.28))
+            let x0 = rect.minX
+            let y0 = rect.minY
+            let x1 = rect.maxX
+            let y1 = rect.maxY
+            path.move(to: CGPoint(x: x0, y: y0 + arm))
+            path.addLine(to: CGPoint(x: x0, y: y0))
+            path.addLine(to: CGPoint(x: x0 + arm, y: y0))
+            path.move(to: CGPoint(x: x1 - arm, y: y0))
+            path.addLine(to: CGPoint(x: x1, y: y0))
+            path.addLine(to: CGPoint(x: x1, y: y0 + arm))
+            path.move(to: CGPoint(x: x0, y: y1 - arm))
+            path.addLine(to: CGPoint(x: x0, y: y1))
+            path.addLine(to: CGPoint(x: x0 + arm, y: y1))
+            path.move(to: CGPoint(x: x1 - arm, y: y1))
+            path.addLine(to: CGPoint(x: x1, y: y1))
+            path.addLine(to: CGPoint(x: x1, y: y1 - arm))
+        }
+        .stroke(Theme.gold.opacity(strong ? 0.95 : 0.4), lineWidth: strong ? 1.5 : 1)
+    }
+
+    private func rangeMarks(unit: CGRect, in image: CGRect) -> some View {
+        let rect = CGRect(
+            x: image.minX + unit.minX * image.width,
+            y: image.minY + unit.minY * image.height,
+            width: unit.width * image.width,
+            height: unit.height * image.height
+        )
+        let marks = HStack(spacing: 6) {
+            if model.focusPlace != .t {
+                RangeMark(aim: model.rangeR, title: "R", tint: Theme.reflect)
+            }
+            if model.focusPlace != .r {
+                RangeMark(aim: model.rangeT, title: "T", tint: Theme.transmit)
+            }
+        }
+        let width: CGFloat = model.focusPlace == .both ? 176 : 84
+        let below = rect.maxY + 32 < image.maxY
+        let y = below ? rect.maxY + 2 : max(image.minY, rect.minY - 32)
+        let x = min(image.maxX - width, max(image.minX, rect.midX - width / 2))
+        return marks
+            .frame(width: width, height: 30)
+            .position(x: x + width / 2, y: y + 15)
     }
 
     private var showRange: Bool {
@@ -729,40 +815,6 @@ struct GuideLines: View {
             .stroke(Theme.gold.opacity(0.9), lineWidth: 1)
         }
         .allowsHitTesting(false)
-    }
-}
-
-struct RangeBrackets: View {
-    var body: some View {
-        GeometryReader { geo in
-            Path { path in
-                corner(&path, CGPoint(x: geo.size.width * 0.27, y: geo.size.height * 0.38))
-                corner(&path, CGPoint(x: geo.size.width * 0.73, y: geo.size.height * 0.38))
-            }
-            .stroke(Theme.gold.opacity(0.85), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func corner(_ path: inout Path, _ center: CGPoint) {
-        let arm: CGFloat = 8
-        let box: CGFloat = 34
-        let x0 = center.x - box / 2
-        let y0 = center.y - box / 2
-        let x1 = center.x + box / 2
-        let y1 = center.y + box / 2
-        path.move(to: CGPoint(x: x0, y: y0 + arm))
-        path.addLine(to: CGPoint(x: x0, y: y0))
-        path.addLine(to: CGPoint(x: x0 + arm, y: y0))
-        path.move(to: CGPoint(x: x1 - arm, y: y0))
-        path.addLine(to: CGPoint(x: x1, y: y0))
-        path.addLine(to: CGPoint(x: x1, y: y0 + arm))
-        path.move(to: CGPoint(x: x0, y: y1 - arm))
-        path.addLine(to: CGPoint(x: x0, y: y1))
-        path.addLine(to: CGPoint(x: x0 + arm, y: y1))
-        path.move(to: CGPoint(x: x1 - arm, y: y1))
-        path.addLine(to: CGPoint(x: x1, y: y1))
-        path.addLine(to: CGPoint(x: x1, y: y1 - arm))
     }
 }
 
