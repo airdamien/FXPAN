@@ -27,8 +27,8 @@ struct HomeView: View {
         let _ = model.cameraRevision
         switch pane {
         case .picture:
-            frame(flush: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            fittedFrame(flush: true)
+                .frame(maxWidth: .infinity, alignment: .top)
                 .background(Color.black)
         case .controls:
             controlsColumn
@@ -83,7 +83,7 @@ struct HomeView: View {
 
     private var phonePortrait: some View {
         VStack(spacing: 8) {
-            fittedFrame
+            fittedFrame()
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(dims, id: \.1) { dim in
                     Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
@@ -98,7 +98,7 @@ struct HomeView: View {
     private var phoneLandscape: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                fittedFrame
+                fittedFrame()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 railVertical
                     .frame(width: 84)
@@ -112,12 +112,20 @@ struct HomeView: View {
         }
     }
 
-    /// The panorama's own height. On a phone the home column is much taller than 2.71:1, and the frame would otherwise stretch into a black well with the picture floating in it.
-    private var fittedFrame: some View {
-        let aspect = Catalog.nativeAspect * max(model.photo.frame.squeeze, 1)
-        return Color.clear
-            .aspectRatio(aspect, contentMode: .fit)
-            .overlay { frame() }
+    /// The picture's own height. A half-screen panel is much taller than the panorama, and the frame would otherwise sit in a black well.
+    private func fittedFrame(flush: Bool = false) -> some View {
+        Color.clear
+            .aspectRatio(frameAspect, contentMode: .fit)
+            .overlay { frame(flush: flush) }
+            .frame(maxWidth: .infinity)
+    }
+
+    /// The preview's aspect when a frame is up, so a stitch that isn't 2.71:1 still fills the width.
+    private var frameAspect: Double {
+        if let preview = model.preview, preview.size.height > 1 {
+            return Double(preview.size.width / preview.size.height)
+        }
+        return Catalog.nativeAspect * max(model.photo.frame.squeeze, 1)
     }
 
     private func frame(flush: Bool = false) -> some View {

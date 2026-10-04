@@ -54,11 +54,15 @@ struct RootView: View {
     /// Half folded: the picture fills the screen above the hinge, and the controls sit on the screen below it.
     private func book(_ split: BookSplit, topInset: CGFloat, bottomInset: CGFloat) -> some View {
         VStack(spacing: 0) {
-            HomeView(pane: .picture)
-                .padding(.top, topInset)
-                .frame(maxWidth: .infinity)
-                .frame(height: split.top)
-                .clipped()
+            VStack(spacing: 0) {
+                HomeView(pane: .picture)
+                    .padding(.top, topInset)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                if split.hinge > 0 {
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: split.hinge > 0 ? split.top : nil, alignment: .top)
             Color.clear
                 .frame(height: split.hinge)
             VStack(spacing: 0) {
@@ -74,8 +78,8 @@ struct RootView: View {
                 }
             }
             .padding(.bottom, bottomInset)
-            .frame(maxWidth: .infinity)
-            .frame(height: split.bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(height: split.hinge > 0 ? split.bottom : nil, alignment: .top)
             .clipped()
             .environment(\.halfOpen, true)
         }
@@ -585,14 +589,18 @@ struct PanoFrame: View {
 
     var body: some View {
         let squeeze = model.photo.frame.squeeze
-        let aspect = Catalog.nativeAspect * max(squeeze, 1)
+        let aspect: Double = {
+            if let preview = model.preview, preview.size.height > 1 {
+                return Double(preview.size.width / preview.size.height)
+            }
+            return Catalog.nativeAspect * max(squeeze, 1)
+        }()
         ZStack {
             Color.black
             if let preview = model.preview {
                 Image(uiImage: preview)
                     .resizable()
                     .scaledToFit()
-                    .padding(.bottom, strip)
             } else {
                 VStack(spacing: 8) {
                     Text("No frame yet")
@@ -605,7 +613,7 @@ struct PanoFrame: View {
                 }
             }
             if showGuide, let ratio = guideRatio {
-                GuideLines(ratio: ratio, frame: aspect, bottomInset: strip)
+                GuideLines(ratio: ratio, frame: aspect, bottomInset: 0)
             }
             if model.photo.focus.aid == "loupe", model.preview != nil {
                 Loupe()
@@ -626,7 +634,7 @@ struct PanoFrame: View {
     private func focusOverlay(aspect: Double) -> some View {
         let canAim = aiming && model.camera.live && model.photo.focus.aid != "off"
         GeometryReader { geo in
-            let image = GuideFit.image(in: geo.size, aspect: aspect, bottomInset: strip)
+            let image = GuideFit.image(in: geo.size, aspect: aspect, bottomInset: 0)
             ZStack(alignment: .topLeading) {
                 focusArt(in: image)
                     .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
