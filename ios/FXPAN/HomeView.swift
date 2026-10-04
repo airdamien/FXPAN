@@ -1,7 +1,14 @@
 import SwiftUI
 
+enum HomePane {
+    case all
+    case picture
+    case controls
+}
+
 struct HomeView: View {
     @Environment(AppModel.self) private var model
+    var pane: HomePane = .all
     @State private var zoom: CGFloat = 1
     @State private var magnify: CGFloat = 1
     @State private var pan: CGSize = .zero
@@ -18,6 +25,19 @@ struct HomeView: View {
 
     var body: some View {
         let _ = model.cameraRevision
+        switch pane {
+        case .picture:
+            frame(flush: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+        case .controls:
+            controlsColumn
+        case .all:
+            arranged
+        }
+    }
+
+    private var arranged: some View {
         GeometryReader { geo in
             let phone = min(geo.size.width, geo.size.height) <= 500
             let landscape = geo.size.width > geo.size.height
@@ -41,6 +61,23 @@ struct HomeView: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 12)
+        .padding(.bottom, 10)
+    }
+
+    /// Tiles and the shutter, without the frame. The book fold keeps the picture on the other screen.
+    private var controlsColumn: some View {
+        VStack(spacing: 8) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(dims, id: \.1) { dim in
+                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                        .frame(minHeight: 86)
+                }
+            }
+            Spacer(minLength: 8)
+            railHorizontal
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
         .padding(.bottom, 10)
     }
 
@@ -80,13 +117,13 @@ struct HomeView: View {
         let aspect = Catalog.nativeAspect * max(model.photo.frame.squeeze, 1)
         return Color.clear
             .aspectRatio(aspect, contentMode: .fit)
-            .overlay { frame }
+            .overlay { frame() }
     }
 
-    private var frame: some View {
+    private func frame(flush: Bool = false) -> some View {
         let scale = min(8, max(1, zoom * magnify))
         return ZStack(alignment: .top) {
-            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02)
+            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02, flush: flush)
                 .scaleEffect(scale, anchor: .center)
                 .offset(x: pan.width + drag.width, y: pan.height + drag.height)
                 .gesture(MagnifyGesture()
@@ -145,7 +182,7 @@ struct HomeView: View {
 
     private var main: some View {
         VStack(spacing: 10) {
-            frame
+            frame()
             HStack(spacing: 8) {
                 ForEach(dims, id: \.1) { dim in
                     Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: false) }

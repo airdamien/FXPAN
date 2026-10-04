@@ -1,92 +1,244 @@
 import ImageIO
 import SwiftUI
 
+private struct GuideRowKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct FrameScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.halfOpen) private var halfOpen
+    @State private var guideRow: CGFloat = 0
+
     var body: some View {
         DimPage(title: "Frame", controls: {
-            VStack(spacing: 10) {
-                RowBlock(title: "Format", value: Catalog.format(model.photo.frame.squeeze).1) {
-                    ChipRow(options: Catalog.formats.map { (String($0.0), $0.1) }, selected: String(Catalog.format(model.photo.frame.squeeze).0)) { value in
-                        model.edit { $0.frame.squeeze = Double(value) ?? 1 }
+            if halfOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        formatBlock(fill: rowFill)
+                        guideBlock
+                            .background {
+                                GeometryReader { geo in
+                                    Color.clear.preference(key: GuideRowKey.self, value: geo.size.height)
+                                }
+                            }
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        edgesBlock(fill: rowFill)
+                        overlapBlock(fill: rowFill)
                     }
                 }
-                RowBlock(title: "Guide", value: Catalog.guide(model.photo.frame.guide).2, hint: "Frame lines to compose inside") {
-                    ChipRow(options: Catalog.guides.map { ($0.0, $0.2) }, selected: model.photo.frame.guide) { value in
-                        model.edit { $0.frame.guide = value }
-                    }
-                }
-                RowBlock(title: "Edges", value: model.photo.frame.clip ? "Clip to aligned" : "Full canvas", hint: "After alignment") {
-                    ChipRow(options: [("1", "Clip to aligned"), ("0", "Full canvas")], selected: model.photo.frame.clip ? "1" : "0") { value in
-                        model.edit { $0.frame.clip = value == "1" }
-                    }
+                .onPreferenceChange(GuideRowKey.self) { guideRow = $0 }
+            } else {
+                VStack(spacing: 10) {
+                    formatBlock()
+                    guideBlock
+                    edgesBlock()
                 }
             }
         }, panel: {
             VStack(alignment: .leading, spacing: 12) {
-                PanoFrame().frame(maxHeight: 280)
-                Text("Two frames, \(Int((model.rig.overlap * 100).rounded()))% overlap, one 65:24 strip")
+                LivePanel { PanoFrame().frame(maxHeight: 280) }
+                FrameSketch(
+                    aspect: Catalog.nativeAspect * max(model.photo.frame.squeeze, 1),
+                    guide: Catalog.guide(model.photo.frame.guide).1,
+                    overlap: model.rig.overlap
+                )
+                Text("Two frames, \(Int((model.rig.overlap * 100).rounded()))% overlap, one \(Catalog.format(model.photo.frame.squeeze).1) strip")
                     .font(Theme.font(13))
                     .foregroundStyle(Theme.dim)
-                HStack(spacing: 8) {
-                    Text("R").foregroundStyle(Theme.reflect)
-                    RoundedRectangle(cornerRadius: 3).stroke(Theme.reflect, lineWidth: 1).frame(width: 70, height: 46)
-                    Text("T").foregroundStyle(Theme.transmit)
-                    RoundedRectangle(cornerRadius: 3).stroke(Theme.transmit, lineWidth: 1).frame(width: 70, height: 46)
-                    Image(systemName: "arrow.right")
-                    Text("2.71:1").foregroundStyle(Theme.gold)
-                }
-                .font(Theme.font(13, weight: .medium))
             }
         })
     }
+
+    private var rowFill: CGFloat? { guideRow > 1 ? guideRow : nil }
+
+    private func formatBlock(fill: CGFloat? = nil) -> some View {
+        RowBlock(title: "Format", value: Catalog.format(model.photo.frame.squeeze).1, fillHeight: fill) {
+            ChipRow(options: Catalog.formats.map { (String($0.0), $0.1) }, selected: String(Catalog.format(model.photo.frame.squeeze).0)) { value in
+                model.edit { $0.frame.squeeze = Double(value) ?? 1 }
+            }
+        }
+    }
+
+    private var guideBlock: some View {
+        RowBlock(title: "Guide", value: Catalog.guide(model.photo.frame.guide).2, hint: "Frame lines to compose inside") {
+            ChipRow(options: Catalog.guides.map { ($0.0, $0.2) }, selected: model.photo.frame.guide) { value in
+                model.edit { $0.frame.guide = value }
+            }
+        }
+    }
+
+    private func edgesBlock(fill: CGFloat? = nil) -> some View {
+        RowBlock(title: "Edges", value: model.photo.frame.clip ? "Clip to aligned" : "Full canvas", hint: "After alignment", fillHeight: fill) {
+            ChipRow(options: [("1", "Clip to aligned"), ("0", "Full canvas")], selected: model.photo.frame.clip ? "1" : "0") { value in
+                model.edit { $0.frame.clip = value == "1" }
+            }
+        }
+    }
+
+    private func overlapBlock(fill: CGFloat? = nil) -> some View {
+        let pct = Int((model.rig.overlap * 100).rounded())
+        return RowBlock(title: "Overlap", value: "\(pct)%", hint: "R on the left, T on the right", fillHeight: fill) {
+            EmptyView()
+        }
+    }
+}
+
+/// The stitched strip, with each body and the guide crop in the same proportions as the picture.
+struct FrameSketch: View {
+    var aspect: Double
+    var guide: Double
+    var overlap: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let canvas = CGSize(width: max(0, geo.size.width - 2), height: max(0, geo.size.height - 2))
+            let pano = GuideFit.image(in: canvas, aspect: aspect, bottomInset: 0).offsetBy(dx: 1, dy: 1)
+            let span = max(0.1, 2 - overlap)
+            let unit = pano.width / span
+            let rRect = CGRect(x: pano.minX, y: pano.minY, width: unit, height: pano.height)
+            let tRect = CGRect(x: pano.minX + unit * (1 - overlap), y: pano.minY, width: unit, height: pano.height)
+            let crop = GuideFit.crop(in: pano, ratio: guide)
+            ZStack {
+                Path { $0.addRect(pano) }.fill(Color.black)
+                Path { $0.addRect(rRect) }.stroke(Theme.reflect, lineWidth: 1.5)
+                Path { $0.addRect(tRect) }.stroke(Theme.transmit, lineWidth: 1.5)
+                if guide > 0 {
+                    Path { $0.addRect(crop) }.stroke(Theme.gold, lineWidth: 1)
+                }
+                Text("R")
+                    .font(Theme.font(11, weight: .semibold))
+                    .foregroundStyle(Theme.reflect)
+                    .position(x: rRect.minX + 16, y: rRect.midY)
+                Text("T")
+                    .font(Theme.font(11, weight: .semibold))
+                    .foregroundStyle(Theme.transmit)
+                    .position(x: tRect.maxX - 16, y: tRect.midY)
+            }
+        }
+        .frame(height: 88)
+    }
+}
+
+private struct ShutterRowKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 struct LightScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.halfOpen) private var halfOpen
+    @State private var shutterRow: CGFloat = 0
+
     var body: some View {
         let _ = model.cameraRevision
-        let light = model.photo.light
         DimPage(title: "Light", controls: {
-            VStack(spacing: 10) {
-                RowBlock(title: "Mode", value: light.program) {
-                    ChipRow(options: Catalog.programs.map { ($0.0, $0.0) }, selected: light.program) { value in
-                        model.edit { $0.light.program = value }
+            if halfOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        bodyLine(.t)
+                        bodyLine(.r)
                     }
+                    HStack(alignment: .top, spacing: 8) {
+                        isoBlock(hint: false, fill: rowFill)
+                        shutterBlock
+                            .background {
+                                GeometryReader { geo in
+                                    Color.clear.preference(key: ShutterRowKey.self, value: geo.size.height)
+                                }
+                            }
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        apertureBlock(hint: false, fill: rowFill)
+                        meterBlock(fill: rowFill)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        modeBlock(fill: rowFill)
+                        masterBlock(fill: rowFill)
+                    }
+                    Text(model.camera.line).font(Theme.font(13)).foregroundStyle(Theme.dim)
                 }
-                RowBlock(title: "ISO", value: Catalog.fmtISO(light.iso), hint: light.followCam ? "Camera decides" : "Both bodies") {
-                    Ruler(values: Catalog.iso, selected: light.iso, label: { Catalog.isAuto($0) ? "Auto" : $0 }) { value in
-                        model.edit { $0.light.iso = value }
-                    }
-                }
-                RowBlock(title: "Shutter", value: Catalog.fmtShut(light.shutter)) {
-                    Ruler(values: Catalog.shutter, selected: light.shutter, label: Catalog.fmtShut) { value in
-                        model.edit { $0.light.shutter = value }
-                    }
-                }
-                RowBlock(title: "Aperture", value: Catalog.fmtF(light.fstop), hint: "Taking-lens iris") {
-                    Ruler(values: Catalog.fstop, selected: light.fstop, label: { Catalog.isAuto($0) ? "Auto" : $0 }) { value in
-                        model.edit { $0.light.fstop = value }
-                    }
-                }
-                RowBlock(title: "Master", value: light.master) {
-                    ChipRow(options: [("T", "T"), ("R", "R")], selected: light.master) { value in
-                        model.edit { $0.light.master = value }
-                    }
-                }
-                RowBlock(title: "Meter", value: light.followCam ? "Camera" : "FXPAN") {
-                    ChipRow(options: [("0", "Set from here"), ("1", "Camera decides")], selected: light.followCam ? "1" : "0") { value in
-                        model.edit { $0.light.followCam = value == "1" }
-                    }
+                .onPreferenceChange(ShutterRowKey.self) { shutterRow = $0 }
+            } else {
+                VStack(spacing: 10) {
+                    modeBlock()
+                    isoBlock()
+                    shutterBlock
+                    apertureBlock()
+                    masterBlock()
+                    meterBlock()
                 }
             }
         }, panel: {
-            VStack(alignment: .leading, spacing: 10) {
-                bodyLine(.t)
-                bodyLine(.r)
-                Text(model.camera.line).font(Theme.font(13)).foregroundStyle(Theme.dim)
+            if halfOpen {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    bodyLine(.t)
+                    bodyLine(.r)
+                    Text(model.camera.line).font(Theme.font(13)).foregroundStyle(Theme.dim)
+                }
             }
         })
+    }
+
+    /// Height of the shutter card. The other control cards use it so every row matches.
+    private var rowFill: CGFloat? { shutterRow > 1 ? shutterRow : nil }
+
+    private func modeBlock(fill: CGFloat? = nil) -> some View {
+        let light = model.photo.light
+        return RowBlock(title: "Mode", value: light.program, fillHeight: fill) {
+            ChipRow(options: Catalog.programs.map { ($0.0, $0.0) }, selected: light.program) { value in
+                model.edit { $0.light.program = value }
+            }
+        }
+    }
+
+    private func isoBlock(hint: Bool = true, fill: CGFloat? = nil) -> some View {
+        let light = model.photo.light
+        return RowBlock(title: "ISO", value: Catalog.fmtISO(light.iso), hint: hint ? (light.followCam ? "Camera decides" : "Both bodies") : "", fillHeight: fill) {
+            Ruler(values: Catalog.iso, selected: light.iso, label: { Catalog.isAuto($0) ? "Auto" : $0 }) { value in
+                model.edit { $0.light.iso = value }
+            }
+        }
+    }
+
+    private var shutterBlock: some View {
+        let light = model.photo.light
+        return RowBlock(title: "Shutter", value: Catalog.fmtShut(light.shutter)) {
+            Ruler(values: Catalog.shutter, selected: light.shutter, label: Catalog.fmtShut) { value in
+                model.edit { $0.light.shutter = value }
+            }
+        }
+    }
+
+    private func apertureBlock(hint: Bool = true, fill: CGFloat? = nil) -> some View {
+        let light = model.photo.light
+        return RowBlock(title: "Aperture", value: Catalog.fmtF(light.fstop), hint: hint ? "Taking-lens iris" : "", fillHeight: fill) {
+            Ruler(values: Catalog.fstop, selected: light.fstop, label: { Catalog.isAuto($0) ? "Auto" : $0 }) { value in
+                model.edit { $0.light.fstop = value }
+            }
+        }
+    }
+
+    private func masterBlock(fill: CGFloat? = nil) -> some View {
+        let light = model.photo.light
+        return RowBlock(title: "Master", value: light.master, fillHeight: fill) {
+            ChipRow(options: [("T", "T"), ("R", "R")], selected: light.master) { value in
+                model.edit { $0.light.master = value }
+            }
+        }
+    }
+
+    private func meterBlock(fill: CGFloat? = nil) -> some View {
+        let light = model.photo.light
+        return RowBlock(title: "Meter", value: light.followCam ? "Camera" : "FXPAN", fillHeight: fill) {
+            ChipRow(options: [("0", "Set from here"), ("1", "Camera decides")], selected: light.followCam ? "1" : "0") { value in
+                model.edit { $0.light.followCam = value == "1" }
+            }
+        }
     }
 
     private func bodyLine(_ role: Role) -> some View {
@@ -126,7 +278,7 @@ struct FocusScreen: View {
                     }
                 }
             }
-        }, panel: { PanoFrame().frame(maxHeight: 320) })
+        }, panel: { LivePanel { PanoFrame().frame(maxHeight: 320) } })
     }
 }
 
@@ -161,7 +313,7 @@ struct LookScreen: View {
                     }
                 }
             }
-        }, panel: { PanoFrame(showGuide: false).frame(maxHeight: 320) })
+        }, panel: { LivePanel { PanoFrame(showGuide: false).frame(maxHeight: 320) } })
     }
 
     private func stepper(_ title: String, _ value: Int, _ set: @escaping (Int) -> Void) -> some View {
@@ -173,71 +325,162 @@ struct LookScreen: View {
     }
 }
 
+private struct DriveRowKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct DriveScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.halfOpen) private var halfOpen
+    @State private var driveRow: CGFloat = 0
+
     var body: some View {
         let drive = model.photo.drive
         DimPage(title: "Drive", controls: {
-            VStack(spacing: 10) {
-                RowBlock(title: "Release", value: drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB", hint: "Sync drops USB, pulses the 10-pin board, then downloads the frame from camera RAM.") {
-                    ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
-                        model.edit { $0.drive.release = value }
+            if halfOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    pair(releaseBlock(fill: rowFill, compact: true), timerBlock(fill: rowFill))
+                    pair(
+                        fileBlock.background {
+                            GeometryReader { geo in
+                                Color.clear.preference(key: DriveRowKey.self, value: geo.size.height)
+                            }
+                        },
+                        developBlock(fill: rowFill, compact: true)
+                    )
+                    pair(saveBlock(fill: rowFill), reviewBlock(fill: rowFill))
+                    pair(stitchBlock(fill: rowFill), engineBlock(fill: rowFill))
+                    if drive.ciraw {
+                        pair(lensBlock(fill: rowFill, compact: true), overlapNote(fill: rowFill))
                     }
                 }
-                .task { await model.probeSync() }
-                RowBlock(title: "Save", value: drive.save) {
-                    ChipRow(options: [("ipad", UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"), ("both", "Both"), ("cards", "Cards")], selected: drive.save) { value in
-                        model.edit { $0.drive.save = value }
-                    }
-                }
-                RowBlock(title: "File", value: drive.quality) {
-                    ChipRow(options: Catalog.quality.map { ($0.0, $0.1) }, selected: drive.quality) { value in
-                        model.edit { $0.drive.quality = value }
-                    }
-                }
-                RowBlock(title: "Develop", value: drive.ciraw ? "CIRAW" : "JPEG", hint: "CIRAW opens the NEF and recovers highlights. The Apple mode also runs local tone, noise, and detail. No NEF uses the JPEG.") {
-                    ChipRow(options: [("0", "JPEG"), ("1", "CIRAW")], selected: drive.ciraw ? "1" : "0") { value in
-                        model.edit { $0.drive.ciraw = value == "1" }
-                    }
-                }
-                if drive.ciraw {
-                    RowBlock(title: "Lens", value: drive.cirawLens ? "Corrected" : "Off", hint: "Apple's lens correction. Off keeps the overlap you already tuned.") {
-                        ChipRow(options: [("0", "Off"), ("1", "Correct")], selected: drive.cirawLens ? "1" : "0") { value in
-                            model.edit { $0.drive.cirawLens = value == "1" }
-                        }
-                    }
-                }
-                RowBlock(title: "Timer", value: drive.timer == 0 ? "Off" : "\(drive.timer) s") {
-                    ChipRow(options: Catalog.timers.map { ("\($0)", $0 == 0 ? "Off" : "\($0) s") }, selected: "\(drive.timer)") { value in
-                        model.edit { $0.drive.timer = Int(value) ?? 0 }
-                    }
-                }
-                RowBlock(title: "Review", value: drive.review == 0 ? "Off" : "\(drive.review) s") {
-                    ChipRow(options: Catalog.reviews.map { ("\($0)", $0 == 0 ? "Off" : "\($0) s") }, selected: "\(drive.review)") { value in
-                        model.edit { $0.drive.review = Int(value) ?? 0 }
-                    }
-                }
-                RowBlock(title: "Stitch", value: drive.autoStitch ? "After the shot" : "Hold") {
-                    ChipRow(options: [("1", "Auto"), ("0", "Hold")], selected: drive.autoStitch ? "1" : "0") { value in
-                        model.edit { $0.drive.autoStitch = value == "1" }
-                    }
-                }
-                RowBlock(title: "Engine", value: drive.engine) {
-                    ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: drive.engine) { value in
-                        model.edit { $0.drive.engine = value }
-                    }
+                .onPreferenceChange(DriveRowKey.self) { driveRow = $0 }
+            } else {
+                VStack(spacing: 10) {
+                    releaseBlock().task { await model.probeSync() }
+                    saveBlock()
+                    fileBlock
+                    developBlock()
+                    if drive.ciraw { lensBlock() }
+                    timerBlock()
+                    reviewBlock()
+                    stitchBlock()
+                    engineBlock()
                 }
             }
         }, panel: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Hugin fits a small rotation and scale in the overlap, then blends in bands sized to the overlap. A miss feathers the rig overlap.")
-                    .font(Theme.font(14))
-                    .foregroundStyle(Theme.ink2)
-                Text("Match only shifts. Blend and cut use the rig percentage.")
-                    .font(Theme.font(13))
-                    .foregroundStyle(Theme.dim)
+            if halfOpen {
+                EmptyView()
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Hugin fits a small rotation and scale in the overlap, then blends in bands sized to the overlap. A miss feathers the rig overlap.")
+                        .font(Theme.font(14))
+                        .foregroundStyle(Theme.ink2)
+                    Text("Match only shifts. Blend and cut use the rig percentage.")
+                        .font(Theme.font(13))
+                        .foregroundStyle(Theme.dim)
+                }
             }
         })
+        .task { await model.probeSync() }
+    }
+
+    private var rowFill: CGFloat? { driveRow > 1 ? driveRow : nil }
+
+    private func pair<A: View, B: View>(_ leading: A, _ trailing: B) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            leading.frame(maxWidth: .infinity, alignment: .top)
+            trailing.frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func releaseBlock(fill: CGFloat? = nil, compact: Bool = false) -> some View {
+        let drive = model.photo.drive
+        let value = drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB"
+        return RowBlock(title: "Release", value: value, hint: compact ? "" : "Sync drops USB, pulses the 10-pin board, then downloads the frame from camera RAM.", fillHeight: fill) {
+            ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
+                model.edit { $0.drive.release = value }
+            }
+        }
+    }
+
+    private func saveBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Save", value: drive.save, fillHeight: fill) {
+            ChipRow(options: [("ipad", UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"), ("both", "Both"), ("cards", "Cards")], selected: drive.save) { value in
+                model.edit { $0.drive.save = value }
+            }
+        }
+    }
+
+    private var fileBlock: some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "File", value: drive.quality) {
+            ChipRow(options: Catalog.quality.map { ($0.0, $0.1) }, selected: drive.quality) { value in
+                model.edit { $0.drive.quality = value }
+            }
+        }
+    }
+
+    private func developBlock(fill: CGFloat? = nil, compact: Bool = false) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Develop", value: drive.ciraw ? "CIRAW" : "JPEG", hint: compact ? "" : "CIRAW opens the NEF and recovers highlights. The Apple mode also runs local tone, noise, and detail. No NEF uses the JPEG.", fillHeight: fill) {
+            ChipRow(options: [("0", "JPEG"), ("1", "CIRAW")], selected: drive.ciraw ? "1" : "0") { value in
+                model.edit { $0.drive.ciraw = value == "1" }
+            }
+        }
+    }
+
+    private func lensBlock(fill: CGFloat? = nil, compact: Bool = false) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Lens", value: drive.cirawLens ? "Corrected" : "Off", hint: compact ? "" : "Apple's lens correction. Off keeps the overlap you already tuned.", fillHeight: fill) {
+            ChipRow(options: [("0", "Off"), ("1", "Correct")], selected: drive.cirawLens ? "1" : "0") { value in
+                model.edit { $0.drive.cirawLens = value == "1" }
+            }
+        }
+    }
+
+    private func overlapNote(fill: CGFloat? = nil) -> some View {
+        RowBlock(title: "Overlap", value: "Kept", hint: "Correction off leaves the rig overlap alone.", fillHeight: fill) {
+            EmptyView()
+        }
+    }
+
+    private func timerBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Timer", value: drive.timer == 0 ? "Off" : "\(drive.timer) s", fillHeight: fill) {
+            ChipRow(options: Catalog.timers.map { ("\($0)", $0 == 0 ? "Off" : "\($0) s") }, selected: "\(drive.timer)") { value in
+                model.edit { $0.drive.timer = Int(value) ?? 0 }
+            }
+        }
+    }
+
+    private func reviewBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Review", value: drive.review == 0 ? "Off" : "\(drive.review) s", fillHeight: fill) {
+            ChipRow(options: Catalog.reviews.map { ("\($0)", $0 == 0 ? "Off" : "\($0) s") }, selected: "\(drive.review)") { value in
+                model.edit { $0.drive.review = Int(value) ?? 0 }
+            }
+        }
+    }
+
+    private func stitchBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Stitch", value: drive.autoStitch ? "After the shot" : "Hold", fillHeight: fill) {
+            ChipRow(options: [("1", "Auto"), ("0", "Hold")], selected: drive.autoStitch ? "1" : "0") { value in
+                model.edit { $0.drive.autoStitch = value == "1" }
+            }
+        }
+    }
+
+    private func engineBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Engine", value: drive.engine, fillHeight: fill) {
+            ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: drive.engine) { value in
+                model.edit { $0.drive.engine = value }
+            }
+        }
     }
 }
 
@@ -250,7 +493,7 @@ struct WBScreen: View {
                     model.edit { $0.wb = value }
                 }
             }
-        }, panel: { PanoFrame(showGuide: false).frame(maxHeight: 320) })
+        }, panel: { LivePanel { PanoFrame(showGuide: false).frame(maxHeight: 320) } })
     }
 }
 
@@ -916,7 +1159,7 @@ struct RigScreen: View {
                     }
                 }
             }
-        }, panel: { PanoFrame(showGuide: false).frame(maxHeight: 280) })
+        }, panel: { LivePanel { PanoFrame(showGuide: false).frame(maxHeight: 280) } })
     }
 }
 
