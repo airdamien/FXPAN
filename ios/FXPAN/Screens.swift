@@ -259,10 +259,11 @@ struct LightScreen: View {
 
 struct FocusScreen: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.halfOpen) private var halfOpen
     var body: some View {
         DimPage(title: "Focus", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Aid", value: model.photo.focus.aid, hint: "Range watches the center of each frame. Turn the ring: the arrow shortens toward the 0 while that way gets sharper, and it jumps across when you pass the sharp point so you come back. Both arrows means turn until it sees a direction.") {
+                RowBlock(title: "Aid", value: model.photo.focus.aid, hint: "The box sits on the sharp part of the panorama. Tap the picture to watch one place, and tap that box again to follow the sharp part. Range shortens the arrow while that place gets sharper, and jumps across when you pass the sharp point.") {
                     ChipRow(options: [("off", "Off"), ("peaking", "Peaking"), ("loupe", "Loupe"), ("range", "Range")], selected: model.photo.focus.aid) { value in
                         model.edit { $0.focus.aid = value }
                     }
@@ -276,6 +277,20 @@ struct FocusScreen: View {
                     ChipRow(options: Catalog.peakLevels.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: model.photo.focus.level) { value in
                         model.edit { $0.focus.level = value }
                     }
+                }
+                if model.simulate, !halfOpen {
+                    Text(model.playingFocus ? "Playing the blur" : "Play focus")
+                        .font(Theme.font(15, weight: .semibold))
+                        .foregroundStyle(Theme.gold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Theme.s2, in: RoundedRectangle(cornerRadius: Theme.radius))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.gold, lineWidth: 1))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.radius))
+                        .highPriorityGesture(TapGesture().onEnded {
+                            guard !model.playingFocus else { return }
+                            Task { await model.playFocus() }
+                        })
                 }
             }
         }, panel: { LivePanel { PanoFrame().frame(maxHeight: 320) } })
