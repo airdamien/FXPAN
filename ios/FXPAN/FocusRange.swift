@@ -21,13 +21,18 @@ struct FocusRead: Equatable {
     var box: CGRect?
     var sharp: CGRect?
     var place: FocusPlace = .both
+    /// Sharpest the watched window has been. A new spot has to beat this, so a uniform blur cannot drag the box onto a leftover edge.
+    var holdBest: Double = 0
 }
 
 enum FocusMeter {
+    private static let cols = 24
+    private static let rows = 8
+
     /// A window around a tap, in panorama units.
     static func window(around point: CGPoint) -> CGRect {
-        let w: CGFloat = 0.18
-        let h: CGFloat = 0.46
+        let w: CGFloat = 0.14
+        let h: CGFloat = 0.28
         let x = min(1 - w, max(0, point.x - w / 2))
         let y = min(1 - h, max(0, point.y - h / 2))
         return CGRect(x: x, y: y, width: w, height: h)
@@ -44,118 +49,198 @@ enum FocusMeter {
         return onT ? .t : .r
     }
 
-    /// Sharpest cluster in the panorama, plus the score of the place being watched.
-    static func read(_ image: CGImage, aim: CGPoint?, overlap: Double, only: FocusPlace?) -> FocusRead {
-        let sharp = survey(image)
-        let box = aim.map { window(around: $0) } ?? sharp
-        guard let box else { return FocusRead() }
-        let value = score(image, in: box)
+    /// Fine detail in the panorama. `hold` is the window already being watched. It stays until some other place is plainly sharper than that window has ever been.
+    static func read(_ image: CGImage, aim: CGPoint?, overlap: Double, only: FocusPlace?, hold: CGRect?, holdBest: Double) -> FocusRead {
+        guard let map = detail(image) else { return FocusRead(holdBest: holdBest) }
+        if let aim {
+            let box = window(around: aim)
+            let value = mean(map, unit: box)
+            return FocusRead(
+                score: value > 0.2 ? value : nil,
+                box: box,
+                sharp: box,
+                place: place(x: box.midX, overlap: overlap, only: only),
+                holdBest: holdBest
+            )
+        }
+        guard let found = cluster(map) else { return FocusRead(holdBest: holdBest) }
+        var box = found.box
+        var score = found.score
+        var best = max(holdBest, score)
+        if let hold {
+            let heldScore = mean(map, unit: hold)
+            best = max(holdBest, heldScore)
+            let plainlySharper = score >= best * 0.45 && score >= heldScore * 1.55
+            if !plainlySharper {
+                box = hold
+                score = heldScore
+            } else {
+                best = score
+            }
+        }
         return FocusRead(
-            score: value > 0 ? value : nil,
+            score: score > 0.2 ? score : nil,
             box: box,
-            sharp: sharp,
-            place: place(x: box.midX, overlap: overlap, only: only)
+            sharp: box,
+            place: place(x: box.midX, overlap: overlap, only: only),
+            holdBest: best
         )
     }
 
-    /// Mean edge strength inside a normalized rect of the panorama.
-    static func score(_ image: CGImage, in unit: CGRect) -> Double {
-        let w = image.width
-        let h = image.height
-        guard w > 16, h > 16 else { return 0 }
-        let x = min(w - 8, max(0, Int(unit.minX * CGFloat(w))))
-        let y = min(h - 8, max(0, Int(unit.minY * CGFloat(h))))
-        let cw = min(w - x, max(8, Int(unit.width * CGFloat(w))))
-        let ch = min(h - y, max(8, Int(unit.height * CGFloat(h))))
-        let crop = CGRect(x: x, y: y, width: cw, height: ch)
-        guard let piece = image.cropping(to: crop) else { return 0 }
-        let dw = 48
-        let dh = 32
-        var px = [UInt8](repeating: 0, count: dw * dh * 4)
-        guard let ctx = CGContext(
-            data: &px, width: dw, height: dh, bitsPerComponent: 8, bytesPerRow: dw * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return 0 }
-        ctx.interpolationQuality = .low
-        ctx.draw(piece, in: CGRect(x: 0, y: 0, width: dw, height: dh))
-        return bufferScore(px, stride: dw, x: 0, y: 0, w: dw, h: dh)
+    private struct Detail {
+        var cells: [Double]
+        var cols: Int
+        var rows: Int
     }
 
-    /// Bounding box of the sharpest neighborhood, in panorama units. Nil when the frame is blank.
-    private static func survey(_ image: CGImage) -> CGRect? {
-        let cols = 12
-        let rows = 4
-        let gw = 8
-        let gh = 8
-        let width = cols * gw
-        let height = rows * gh
+    /// Mean fine detail. A mild blur is subtracted so a soft foreground, which has already lost its detail, loses to the plane that is actually sharp.
+    private static func detail(_ image: CGImage) -> Detail? {
+        let width = 480
+        let height = max(64, Int((Double(image.height) * Double(width) / Double(max(image.width, 1))).rounded()))
         var px = [UInt8](repeating: 0, count: width * height * 4)
         guard let ctx = CGContext(
             data: &px, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
-        ctx.interpolationQuality = .low
+        ctx.interpolationQuality = .medium
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        var cell = [Double](repeating: 0, count: cols * rows)
-        var best = 0.0
-        var bestI = 0
+        var luma = [Double](repeating: 0, count: width * height)
+        for i in luma.indices {
+            let o = i * 4
+            luma[i] = Double(px[o]) * 0.3 + Double(px[o + 1]) * 0.59 + Double(px[o + 2]) * 0.11
+        }
+        let soft = gaussian(luma, width: width, height: height, sigma: 2.2)
+        var cells = [Double](repeating: 0, count: cols * rows)
         for row in 0..<rows {
             for col in 0..<cols {
-                let i = row * cols + col
-                let value = bufferScore(px, stride: width, x: col * gw, y: row * gh, w: gw, h: gh)
-                cell[i] = value
-                if value > best {
-                    best = value
-                    bestI = i
+                let x0 = col * width / cols
+                let x1 = (col + 1) * width / cols
+                let y0 = row * height / rows
+                let y1 = (row + 1) * height / rows
+                var acc = 0.0
+                var n = 0
+                for y in stride(from: y0, to: y1, by: 2) {
+                    for x in stride(from: x0, to: x1, by: 2) {
+                        let i = y * width + x
+                        acc += abs(luma[i] - soft[i])
+                        n += 1
+                    }
                 }
+                cells[row * cols + col] = n > 0 ? acc / Double(n) : 0
             }
         }
-        guard best > 0 else { return nil }
-        let peakCol = bestI % cols
-        let peakRow = bestI / cols
-        let gate = best * 0.62
+        return Detail(cells: cells, cols: cols, rows: rows)
+    }
+
+    private static func cluster(_ map: Detail) -> (box: CGRect, score: Double)? {
+        var best = 0.0
+        var peak = 0
+        for (i, value) in map.cells.enumerated() where value > best {
+            best = value
+            peak = i
+        }
+        guard best > 0.4 else { return nil }
+        let peakCol = peak % map.cols
+        let peakRow = peak / map.cols
+        let gate = best * 0.72
         var minC = peakCol
         var maxC = peakCol
         var minR = peakRow
         var maxR = peakRow
-        for row in 0..<rows {
-            for col in 0..<cols {
-                if max(abs(col - peakCol), abs(row - peakRow)) > 2 { continue }
-                if cell[row * cols + col] < gate { continue }
-                minC = min(minC, col)
-                maxC = max(maxC, col)
-                minR = min(minR, row)
-                maxR = max(maxR, row)
+        var stack = [peak]
+        var seen = Set<Int>()
+        while let i = stack.popLast() {
+            if seen.contains(i) { continue }
+            seen.insert(i)
+            if map.cells[i] < gate { continue }
+            let col = i % map.cols
+            let row = i / map.cols
+            if max(abs(col - peakCol), abs(row - peakRow)) > 2 { continue }
+            minC = min(minC, col)
+            maxC = max(maxC, col)
+            minR = min(minR, row)
+            maxR = max(maxR, row)
+            for next in [i - 1, i + 1, i - map.cols, i + map.cols] where next >= 0 && next < map.cells.count {
+                let nextCol = next % map.cols
+                if abs(nextCol - col) > 1 { continue }
+                stack.append(next)
             }
         }
-        let pad: CGFloat = 0.35
-        let x = max(0, (CGFloat(minC) - pad) / CGFloat(cols))
-        let y = max(0, (CGFloat(minR) - pad) / CGFloat(rows))
-        let boxW = min(1 - x, (CGFloat(maxC - minC + 1) + pad * 2) / CGFloat(cols))
-        let boxH = min(1 - y, (CGFloat(maxR - minR + 1) + pad * 2) / CGFloat(rows))
-        return CGRect(x: x, y: y, width: boxW, height: boxH)
+        while maxC - minC + 1 < 3 {
+            if minC > 0, peakCol - minC <= maxC - peakCol { minC -= 1 }
+            else if maxC + 1 < map.cols { maxC += 1 }
+            else if minC > 0 { minC -= 1 }
+            else { break }
+        }
+        while maxR - minR + 1 < 2 {
+            if minR > 0, peakRow - minR <= maxR - peakRow { minR -= 1 }
+            else if maxR + 1 < map.rows { maxR += 1 }
+            else if minR > 0 { minR -= 1 }
+            else { break }
+        }
+        let box = CGRect(
+            x: CGFloat(minC) / CGFloat(map.cols),
+            y: CGFloat(minR) / CGFloat(map.rows),
+            width: CGFloat(maxC - minC + 1) / CGFloat(map.cols),
+            height: CGFloat(maxR - minR + 1) / CGFloat(map.rows)
+        )
+        return (box, mean(map, unit: box))
     }
 
-    private static func bufferScore(_ px: [UInt8], stride: Int, x: Int, y: Int, w: Int, h: Int) -> Double {
-        var luma = 0.0
-        var edge = 0.0
+    private static func mean(_ map: Detail, unit: CGRect) -> Double {
+        var acc = 0.0
         var n = 0
-        func tone(_ i: Int) -> Double {
-            Double(px[i]) * 0.3 + Double(px[i + 1]) * 0.59 + Double(px[i + 2]) * 0.11
-        }
-        for row in y..<(y + h - 1) {
-            for col in x..<(x + w - 1) {
-                let i = (row * stride + col) * 4
-                let sample = tone(i)
-                luma += sample
-                edge += abs(sample - tone(i + 4)) + abs(sample - tone(((row + 1) * stride + col) * 4))
+        for row in 0..<map.rows {
+            for col in 0..<map.cols {
+                let cx = (CGFloat(col) + 0.5) / CGFloat(map.cols)
+                let cy = (CGFloat(row) + 0.5) / CGFloat(map.rows)
+                guard unit.contains(CGPoint(x: cx, y: cy)) else { continue }
+                acc += map.cells[row * map.cols + col]
                 n += 1
             }
         }
-        guard n > 0, luma / Double(n) >= 8 else { return 0 }
-        return edge / Double(n)
+        if n == 0, !map.cells.isEmpty {
+            let col = min(map.cols - 1, max(0, Int(unit.midX * CGFloat(map.cols))))
+            let row = min(map.rows - 1, max(0, Int(unit.midY * CGFloat(map.rows))))
+            return map.cells[row * map.cols + col]
+        }
+        return n > 0 ? acc / Double(n) : 0
+    }
+
+    private static func gaussian(_ src: [Double], width: Int, height: Int, sigma: Double) -> [Double] {
+        let radius = max(1, Int((sigma * 2.5).rounded()))
+        var kernel = [Double](repeating: 0, count: radius * 2 + 1)
+        var weight = 0.0
+        for i in -radius...radius {
+            let v = exp(-0.5 * Double(i * i) / (sigma * sigma))
+            kernel[i + radius] = v
+            weight += v
+        }
+        for i in kernel.indices { kernel[i] /= weight }
+        var horizontal = [Double](repeating: 0, count: src.count)
+        for y in 0..<height {
+            for x in 0..<width {
+                var acc = 0.0
+                for k in -radius...radius {
+                    let xx = min(width - 1, max(0, x + k))
+                    acc += src[y * width + xx] * kernel[k + radius]
+                }
+                horizontal[y * width + x] = acc
+            }
+        }
+        var dst = [Double](repeating: 0, count: src.count)
+        for y in 0..<height {
+            for x in 0..<width {
+                var acc = 0.0
+                for k in -radius...radius {
+                    let yy = min(height - 1, max(0, y + k))
+                    acc += horizontal[yy * width + x] * kernel[k + radius]
+                }
+                dst[y * width + x] = acc
+            }
+        }
+        return dst
     }
 }
 

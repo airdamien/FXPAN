@@ -67,6 +67,8 @@ final class AppModel {
     private let dialT = FocusDial()
     private let dialR = FocusDial()
     private var lastPlace: FocusPlace?
+    /// Sharpest the current focus window has been. Kept so a blur cannot drag the box onto a different edge.
+    private var heldBest = 0.0
     private var applyTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
@@ -287,6 +289,8 @@ final class AppModel {
         dialT.reset()
         dialR.reset()
         lastPlace = nil
+        heldBest = 0
+        focusBox = nil
         schedulePreview()
     }
 
@@ -317,6 +321,8 @@ final class AppModel {
             dialT.reset()
             dialR.reset()
             lastPlace = nil
+            focusBox = nil
+            heldBest = 0
             let source = page.image
             let fitted = await Task.detached(priority: .userInitiated) {
                 Self.fitPlay(source)
@@ -326,8 +332,10 @@ final class AppModel {
                 let frame = await Task.detached(priority: .userInitiated) {
                     FrameBlur.image(fitted, radius: radius)
                 }.value
+                let hold = aim == nil ? self.focusBox : nil
+                let best = self.heldBest
                 let read = await Task.detached(priority: .userInitiated) {
-                    FocusMeter.read(frame, aim: aim, overlap: overlap, only: nil)
+                    FocusMeter.read(frame, aim: aim, overlap: overlap, only: nil, hold: hold, holdBest: best)
                 }.value
                 preview = UIImage(cgImage: frame)
                 applyFocus(read)
@@ -377,8 +385,9 @@ final class AppModel {
             }
         }
         focusBox = read.box
-        focusSharp = read.sharp
+        focusSharp = read.box
         focusPlace = read.place
+        heldBest = read.holdBest
     }
 
     private func clearFocus() {
@@ -389,6 +398,7 @@ final class AppModel {
         rangeR = .lost
         focusBox = nil
         focusSharp = nil
+        heldBest = 0
     }
 
     private static func blurSteps() -> [CGFloat] {
@@ -677,15 +687,17 @@ final class AppModel {
                 let r = self.camera.frames[.r]?.cgImage
                 let meter = self.camera.live && photo.focus.aid != "off"
                 let aim = self.focusAt
+                let hold = aim == nil ? self.focusBox : nil
+                let best = self.heldBest
                 let made = await Task.detached(priority: .userInitiated) {
-                    Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim)
+                    Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim, hold: hold, holdBest: best)
                 }.value
                 if self.playingFocus { continue }
                 if let image = made.image {
                     self.preview = image
                 }
                 if meter {
-                    self.applyFocus(FocusRead(score: made.score, box: made.box, sharp: made.sharp, place: made.place))
+                    self.applyFocus(FocusRead(score: made.score, box: made.box, sharp: made.box, place: made.place, holdBest: made.holdBest))
                 } else {
                     self.clearFocus()
                 }
@@ -701,23 +713,24 @@ final class AppModel {
         var box: CGRect?
         var sharp: CGRect?
         var place: FocusPlace = .both
+        var holdBest: Double = 0
     }
 
-    nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?) -> PreviewMade {
+    nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?, hold: CGRect?, holdBest: Double) -> PreviewMade {
         if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400) {
-            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil) : FocusRead()
+            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil, hold: hold, holdBest: holdBest) : FocusRead()
             var out = cg
             if !LookBook.identity(photo.look) { out = Stitcher.grade(out, look: photo.look) }
             if photo.focus.aid == "peaking" { out = Peak.draw(out, color: photo.focus.color, level: photo.focus.level) }
-            return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
+            return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let t {
-            let read = meter ? FocusMeter.read(t, aim: aim, overlap: rig.overlap, only: .t) : FocusRead(place: .t)
-            return PreviewMade(image: UIImage(cgImage: t), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
+            let read = meter ? FocusMeter.read(t, aim: aim, overlap: rig.overlap, only: .t, hold: hold, holdBest: holdBest) : FocusRead(place: .t)
+            return PreviewMade(image: UIImage(cgImage: t), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let r {
-            let read = meter ? FocusMeter.read(r, aim: aim, overlap: rig.overlap, only: .r) : FocusRead(place: .r)
-            return PreviewMade(image: UIImage(cgImage: r), score: read.score, box: read.box, sharp: read.sharp, place: read.place)
+            let read = meter ? FocusMeter.read(r, aim: aim, overlap: rig.overlap, only: .r, hold: hold, holdBest: holdBest) : FocusRead(place: .r)
+            return PreviewMade(image: UIImage(cgImage: r), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let fallback, let image = UIImage(contentsOfFile: fallback.path) {
             return PreviewMade(image: image)
