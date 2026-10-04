@@ -62,7 +62,8 @@ struct RootView: View {
                 HomeView(pane: .picture)
                     .padding(.top, topInset)
                     .frame(maxWidth: .infinity, alignment: .top)
-                Spacer(minLength: 0)
+                    .layoutPriority(1)
+                ShotStrip()
             }
             .frame(height: split.top, alignment: .top)
             .clipped()
@@ -174,6 +175,80 @@ struct RootView: View {
         case .about: AboutScreen()
         case .apple: AppleScreen()
         }
+    }
+}
+
+/// Recent stitches in the band above the hinge. A swipe moves along the row. A long press opens that shot in playback.
+struct ShotStrip: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        GeometryReader { geo in
+            if geo.size.height >= 72, !model.shots.isEmpty {
+                let cardW = min(300, max(148, (geo.size.width - 32) / 2.15))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(model.shots) { shot in
+                            cardView(shot, width: cardW, height: geo.size.height)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .defaultScrollAnchor(.leading)
+            }
+        }
+    }
+
+    private func cardView(_ shot: ShotFiles, width: CGFloat, height: CGFloat) -> some View {
+        let line = status(shot)
+        return VStack(alignment: .leading, spacing: 4) {
+            PairPicture(shot: shot, rig: model.rig, squeeze: model.photo.frame.squeeze)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            HStack(spacing: 6) {
+                Text(clock(shot))
+                    .foregroundStyle(Theme.faint)
+                Text(line.text)
+                    .foregroundStyle(line.color)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .font(Theme.font(12, weight: .medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+        }
+        .padding(6)
+        .frame(width: width, height: max(64, height - 16))
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radiusS))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusS).stroke(Theme.hair, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusS))
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in model.go(.shot(shot.stamp)) }
+        )
+        .accessibilityLabel("\(clock(shot)), \(line.text)")
+        .accessibilityHint("Long press to open in playback")
+    }
+
+    private func status(_ shot: ShotFiles) -> (text: String, color: Color) {
+        if shot.stamp == model.stitchingStamp {
+            return (model.stitchLabel ?? "Stitching", Theme.gold)
+        }
+        if model.stitchWaiting.contains(shot.stamp) {
+            return ("Queued", Theme.gold)
+        }
+        if shot.pano != nil { return ("Stitched", Theme.ink2) }
+        if shot.ready { return ("Not stitched", Theme.dim) }
+        return (shot.t == nil ? "T missing" : "R missing", Theme.err)
+    }
+
+    private func clock(_ shot: ShotFiles) -> String {
+        let digits = shot.name.filter(\.isNumber)
+        guard digits.count >= 12 else { return shot.name }
+        let hour = digits.dropFirst(8).prefix(2)
+        let minute = digits.dropFirst(10).prefix(2)
+        return "\(hour):\(minute)"
     }
 }
 
