@@ -112,20 +112,10 @@ struct HomeView: View {
         }
     }
 
-    /// The picture's own height. A half-screen panel is much taller than the panorama, and the frame would otherwise sit in a black well.
+    /// The picture's own height, with the exposure line under it. The book fold keeps this on the screen above the hinge.
     private func fittedFrame(flush: Bool = false) -> some View {
-        Color.clear
-            .aspectRatio(frameAspect, contentMode: .fit)
-            .overlay { frame(flush: flush) }
+        frame(flush: flush)
             .frame(maxWidth: .infinity)
-    }
-
-    /// The preview's aspect when a frame is up, so a stitch that isn't 2.71:1 still fills the width.
-    private var frameAspect: Double {
-        if let preview = model.preview, preview.size.height > 1 {
-            return Double(preview.size.width / preview.size.height)
-        }
-        return Catalog.nativeAspect * max(model.photo.frame.squeeze, 1)
     }
 
     private func frame(flush: Bool = false) -> some View {
