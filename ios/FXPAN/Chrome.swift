@@ -11,6 +11,7 @@ struct RootView: View {
         let _ = model.cameraRevision
         GeometryReader { geo in
             let split = BookSplit.resolve(division: division, size: geo.size)
+            let halfOpen = split != nil || division != nil
             ZStack {
                 Theme.bg.ignoresSafeArea()
                 if let split {
@@ -23,6 +24,9 @@ struct RootView: View {
             }
             .background {
                 FoldProbe(division: $division)
+            }
+            .onChange(of: halfOpen, initial: true) { _, on in
+                FoldOrientation.update(halfOpen: on)
             }
         }
         .ignoresSafeArea()
@@ -58,11 +62,10 @@ struct RootView: View {
                 HomeView(pane: .picture)
                     .padding(.top, topInset)
                     .frame(maxWidth: .infinity, alignment: .top)
-                if split.hinge > 0 {
-                    Spacer(minLength: 0)
-                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, maxHeight: split.hinge > 0 ? split.top : nil, alignment: .top)
+            .frame(height: split.top, alignment: .top)
+            .clipped()
             Color.clear
                 .frame(height: split.hinge)
             VStack(spacing: 0) {
@@ -78,8 +81,8 @@ struct RootView: View {
                 }
             }
             .padding(.bottom, bottomInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .frame(height: split.hinge > 0 ? split.bottom : nil, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .frame(height: split.bottom, alignment: .top)
             .clipped()
             .environment(\.halfOpen, true)
         }
@@ -595,39 +598,39 @@ struct PanoFrame: View {
             }
             return Catalog.nativeAspect * max(squeeze, 1)
         }()
-        ZStack {
-            Color.black
-            if let preview = model.preview {
-                Image(uiImage: preview)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                VStack(spacing: 8) {
-                    Text("No frame yet")
-                        .font(Theme.font(16, weight: .medium))
-                    if showLiveHint {
-                        Text("Tap to start live view")
-                            .font(Theme.font(13))
-                            .foregroundStyle(Theme.dim)
+        VStack(spacing: 0) {
+            ZStack {
+                Color.black
+                if let preview = model.preview {
+                    Image(uiImage: preview)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    VStack(spacing: 8) {
+                        Text("No frame yet")
+                            .font(Theme.font(16, weight: .medium))
+                        if showLiveHint {
+                            Text("Tap to start live view")
+                                .font(Theme.font(13))
+                                .foregroundStyle(Theme.dim)
+                        }
                     }
                 }
+                if showGuide, let ratio = guideRatio {
+                    GuideLines(ratio: ratio, frame: aspect, bottomInset: 0)
+                }
+                if model.photo.focus.aid == "loupe", model.preview != nil {
+                    Loupe()
+                }
+                focusOverlay(aspect: aspect)
             }
-            if showGuide, let ratio = guideRatio {
-                GuideLines(ratio: ratio, frame: aspect, bottomInset: 0)
-            }
-            if model.photo.focus.aid == "loupe", model.preview != nil {
-                Loupe()
-            }
-            VStack {
-                Spacer()
-                exposureStrip
-            }
-            focusOverlay(aspect: aspect)
+            .aspectRatio(aspect, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+            .clipShape(RoundedRectangle(cornerRadius: flush ? 0 : Theme.radius))
+            exposureStrip
         }
-        .aspectRatio(aspect, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: flush ? 0 : Theme.radius))
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     @ViewBuilder
@@ -749,7 +752,7 @@ struct PanoFrame: View {
             }
             cell(format.1, dim: true)
         }
-        .background(.black.opacity(0.55))
+        .background(Theme.s1)
     }
 
     private func cell(_ text: String, gold: Bool = false, dim: Bool = false) -> some View {

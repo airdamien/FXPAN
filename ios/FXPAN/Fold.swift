@@ -1,3 +1,4 @@
+import ObjectiveC
 import SwiftUI
 
 private struct HalfOpenKey: EnvironmentKey {
@@ -97,9 +98,72 @@ struct FoldProbe: UIViewRepresentable {
             for region in regions {
                 guard (region.value(forKey: "active") as? Bool) == true else { continue }
                 guard let box = (region.value(forKey: "frame") as? NSValue)?.cgRectValue else { continue }
-                if box.width >= box.height, box.width > 40 { return box }
+                if max(box.width, box.height) > 40 { return box }
             }
             return nil
         }
+    }
+}
+
+/// Read from the scene-delegate block, which is not on the main actor.
+private enum FoldLock {
+    nonisolated(unsafe) static var halfOpen = false
+    nonisolated(unsafe) static var pad = false
+    nonisolated(unsafe) static var installed = false
+
+    static func mask() -> UInt {
+        if halfOpen { return UIInterfaceOrientationMask.portrait.rawValue | UIInterfaceOrientationMask.portraitUpsideDown.rawValue }
+        if pad { return UIInterfaceOrientationMask.all.rawValue }
+        return UIInterfaceOrientationMask.allButUpsideDown.rawValue
+    }
+}
+
+/// Portrait only while the Duo is half open. A phone and the cover screen keep both landscapes.
+@MainActor
+enum FoldOrientation {
+    static var halfOpen = false
+
+    static var mask: UIInterfaceOrientationMask {
+        if halfOpen { return [.portrait, .portraitUpsideDown] }
+        return UIDevice.current.userInterfaceIdiom == .pad ? .all : .allButUpsideDown
+    }
+
+    /// SwiftUI installs its own scene delegate and ignores a replacement, so the orientation method has to be added there.
+    static func install() {
+        guard !FoldLock.installed else { return }
+        guard let cls = NSClassFromString("SwiftUI.AppSceneDelegate") else { return }
+        FoldLock.pad = UIDevice.current.userInterfaceIdiom == .pad
+        let sel = NSSelectorFromString("supportedInterfaceOrientationsForWindowScene:")
+        let block: @convention(block) (AnyObject, UIWindowScene) -> UInt = { _, _ in
+            FoldLock.mask()
+        }
+        let imp = imp_implementationWithBlock(block)
+        if let existing = class_getInstanceMethod(cls, sel) {
+            method_setImplementation(existing, imp)
+        } else {
+            class_addMethod(cls, sel, imp, "Q@:@")
+        }
+        FoldLock.installed = true
+    }
+
+    static func update(halfOpen: Bool) {
+        install()
+        self.halfOpen = halfOpen
+        FoldLock.halfOpen = halfOpen
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows {
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+            let turned = scene.interfaceOrientation == .landscapeLeft || scene.interfaceOrientation == .landscapeRight
+            guard halfOpen, turned else { continue }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+        }
+    }
+}
+
+final class FoldScene: NSObject, UIWindowSceneDelegate {
+    @available(iOS 27.0, *)
+    func supportedInterfaceOrientations(for windowScene: UIWindowScene) -> UIInterfaceOrientationMask {
+        FoldOrientation.mask
     }
 }
