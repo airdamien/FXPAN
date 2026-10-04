@@ -4,33 +4,68 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var model
 
+    @State private var division: CGRect?
+
     var body: some View {
         @Bindable var model = model
         let _ = model.cameraRevision
-        ZStack {
-            Theme.bg.ignoresSafeArea()
+        GeometryReader { geo in
+            let split = BookSplit.resolve(division: division, size: geo.size)
+            ZStack {
+                Theme.bg.ignoresSafeArea()
+                if let split {
+                    book(split, topInset: geo.safeAreaInsets.top, bottomInset: geo.safeAreaInsets.bottom)
+                } else {
+                    column
+                        .padding(geo.safeAreaInsets)
+                }
+                overlays
+            }
+            .background {
+                FoldProbe(division: $division)
+            }
+        }
+        .ignoresSafeArea()
+        .foregroundStyle(Theme.ink)
+        .font(Theme.font(15))
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in model.poke() }
+        )
+    }
+
+    private var column: some View {
+        VStack(spacing: 0) {
+            TopBar()
+            stitchBanner
+            ZStack {
+                HomeView().opacity(model.route.isEmpty ? 1 : 0)
+                if let route = model.route.last {
+                    screen(route)
+                        .background(Theme.bg)
+                        .transition(.move(edge: .trailing))
+                }
+            }
+        }
+    }
+
+    /// Half folded: the picture fills the screen above the hinge, and the controls sit on the screen below it.
+    private func book(_ split: BookSplit, topInset: CGFloat, bottomInset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            HomeView(pane: .picture)
+                .padding(.top, topInset)
+                .frame(maxWidth: .infinity)
+                .frame(height: split.top)
+                .clipped()
+            Color.clear
+                .frame(height: split.hinge)
             VStack(spacing: 0) {
                 TopBar()
-                if let stitch = model.stitchLabel {
-                    HStack(spacing: 10) {
-                        Text(stitch)
-                            .font(Theme.font(13, weight: .medium))
-                            .foregroundStyle(Theme.gold)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Cancel") { model.cancelStitch() }
-                            .font(Theme.font(13, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Theme.s3, in: Capsule())
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 4)
-                }
+                stitchBanner
                 ZStack {
-                    HomeView().opacity(model.route.isEmpty ? 1 : 0)
+                    HomeView(pane: .controls).opacity(model.route.isEmpty ? 1 : 0)
                     if let route = model.route.last {
                         screen(route)
                             .background(Theme.bg)
@@ -38,6 +73,38 @@ struct RootView: View {
                     }
                 }
             }
+            .padding(.bottom, bottomInset)
+            .frame(maxWidth: .infinity)
+            .frame(height: split.bottom)
+            .clipped()
+            .environment(\.halfOpen, true)
+        }
+    }
+
+    @ViewBuilder
+    private var stitchBanner: some View {
+        if let stitch = model.stitchLabel {
+            HStack(spacing: 10) {
+                Text(stitch)
+                    .font(Theme.font(13, weight: .medium))
+                    .foregroundStyle(Theme.gold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Cancel") { model.cancelStitch() }
+                    .font(Theme.font(13, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Theme.s3, in: Capsule())
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 4)
+        }
+    }
+
+    private var overlays: some View {
+        ZStack {
             if let n = model.countdown {
                 Text("\(n)")
                     .font(Theme.font(120, weight: .medium))
@@ -77,14 +144,6 @@ struct RootView: View {
                 .onTapGesture { model.poke() }
             }
         }
-        .foregroundStyle(Theme.ink)
-        .font(Theme.font(15))
-        .statusBarHidden(true)
-        .persistentSystemOverlays(.hidden)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in model.poke() }
-        )
     }
 
     @ViewBuilder
@@ -333,6 +392,7 @@ struct PadBattery: View {
 
 struct DimPage<Controls: View, Panel: View>: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.halfOpen) private var halfOpen
     var title: String
     var crumb: String?
     @ViewBuilder var controls: () -> Controls
@@ -360,19 +420,31 @@ struct DimPage<Controls: View, Panel: View>: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 6)
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 16) {
-                    ScrollView { controls().padding(.bottom, 20) }
-                        .frame(maxWidth: 460)
-                    panel()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        panel().frame(minHeight: 180)
-                        controls()
+            Group {
+                if halfOpen {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            panel()
+                            controls()
+                        }
+                        .padding(.bottom, 24)
                     }
-                    .padding(.bottom, 24)
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 16) {
+                            ScrollView { controls().padding(.bottom, 20) }
+                                .frame(maxWidth: 460)
+                            panel()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                panel().frame(minHeight: 180)
+                                controls()
+                            }
+                            .padding(.bottom, 24)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -432,10 +504,12 @@ struct RowBlock<Content: View>: View {
     var title: String
     var value: String
     var hint: String = ""
+    /// When set, the card is exactly this tall so a row of controls matches the shutter.
+    var fillHeight: CGFloat? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let card = VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title.uppercased())
                     .font(Theme.font(11, weight: .semibold))
@@ -450,9 +524,15 @@ struct RowBlock<Content: View>: View {
             content()
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(height: fillHeight, alignment: .top)
         .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
         .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.hair, lineWidth: 1))
+        if fillHeight == nil {
+            card
+        } else {
+            card.clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+        }
     }
 }
 
@@ -497,6 +577,7 @@ struct PanoFrame: View {
     @Environment(AppModel.self) private var model
     var showGuide = true
     var showLiveHint = false
+    var flush = false
 
     var body: some View {
         let squeeze = model.photo.frame.squeeze
@@ -520,7 +601,7 @@ struct PanoFrame: View {
                 }
             }
             if showGuide, let ratio = guideRatio {
-                GuideLines(ratio: ratio, frame: aspect)
+                GuideLines(ratio: ratio, frame: aspect, bottomInset: showRange ? 74 : 36)
             }
             if model.photo.focus.aid == "loupe", model.preview != nil {
                 Loupe()
@@ -550,7 +631,7 @@ struct PanoFrame: View {
         .aspectRatio(aspect, contentMode: .fit)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+        .clipShape(RoundedRectangle(cornerRadius: flush ? 0 : Theme.radius))
     }
 
     private var showRange: Bool {
@@ -588,22 +669,64 @@ struct PanoFrame: View {
     }
 }
 
+enum GuideFit {
+    /// Where the panorama sits inside the frame, above the exposure strip.
+    static func image(in size: CGSize, aspect: Double, bottomInset: CGFloat) -> CGRect {
+        let box = CGRect(x: 0, y: 0, width: size.width, height: max(0, size.height - bottomInset))
+        guard box.width > 1, box.height > 1, aspect > 0 else { return box }
+        let boxAspect = box.width / box.height
+        let width: CGFloat
+        let height: CGFloat
+        if aspect > boxAspect {
+            width = box.width
+            height = width / aspect
+        } else {
+            height = box.height
+            width = height * aspect
+        }
+        return CGRect(
+            x: box.minX + (box.width - width) / 2,
+            y: box.minY + (box.height - height) / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    /// The guide crop centered in the picture. A narrower guide insets the sides. A wider one insets the top and bottom.
+    static func crop(in image: CGRect, ratio: Double) -> CGRect {
+        guard ratio > 0, image.width > 1, image.height > 1 else { return image }
+        let imageAspect = image.width / image.height
+        let width: CGFloat
+        let height: CGFloat
+        if ratio < imageAspect {
+            height = image.height
+            width = height * ratio
+        } else {
+            width = image.width
+            height = width / ratio
+        }
+        return CGRect(
+            x: image.midX - width / 2,
+            y: image.midY - height / 2,
+            width: width,
+            height: height
+        ).insetBy(dx: 0.5, dy: 0.5)
+    }
+}
+
 struct GuideLines: View {
     var ratio: Double
     var frame: Double
+    var bottomInset: CGFloat
 
     var body: some View {
         GeometryReader { geo in
-            let inset = max(0, (geo.size.width - geo.size.height * ratio) / 2)
+            let image = GuideFit.image(in: geo.size, aspect: frame, bottomInset: bottomInset)
+            let crop = GuideFit.crop(in: image, ratio: ratio)
             Path { path in
-                if ratio < frame {
-                    path.move(to: CGPoint(x: inset, y: 8))
-                    path.addLine(to: CGPoint(x: inset, y: geo.size.height - 44))
-                    path.move(to: CGPoint(x: geo.size.width - inset, y: 8))
-                    path.addLine(to: CGPoint(x: geo.size.width - inset, y: geo.size.height - 44))
-                }
+                path.addRect(crop)
             }
-            .stroke(Theme.gold.opacity(0.8), lineWidth: 1)
+            .stroke(Theme.gold.opacity(0.9), lineWidth: 1)
         }
         .allowsHitTesting(false)
     }
