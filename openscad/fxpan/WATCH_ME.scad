@@ -137,8 +137,10 @@ function cam_heli_ring_z() = cam_heli_front_z() + CAM_F_RING;
 function cam_heli_dial(mark) = cam_heli_focus_z(mark) - cam_heli_ring_z();
 // Fixed printed-F register for the W on the lens helicoid, arm frame.
 function wl_register_z(mark) =
-    cam_heli_ring_z() + (mark == "T" ? W_INF_BODY_T : W_INF_BODY_R)
-    - cam_heli_proud() - W_LENS_HELI_BODY - W_LENS_INF_MARGIN;
+    cam_heli_ring_z() + W_INF_BODY_T
+    - cam_heli_proud() - W_LENS_HELI_BODY - W_LENS_INF_MARGIN
+    + (mark == "T" ? 0 : W_WL_PRINTED_R - W_WL_PRINTED_T
+                         + W_LENS_FOCUS_R - W_LENS_FOCUS_T);
 function wl_tube_len(mark) = wl_register_z(mark) - patch_t() - F_FMOUNT_STACK;
 function inf_stem() =
     STEM == 1 || PART == "stem_el180_inf";

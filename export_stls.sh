@@ -11,6 +11,7 @@
 #   ./export_stls.sh --monitor               easel rails + case back + sunshade → stls/monitor/
 #   ./export_stls.sh --isco [part ...]       EL180 + ISCO attachment → stls/isco/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
+#   ./export_stls.sh --phone                 iPhone hot-shoe mounts → stls/phone/
 #   focus_sled / focus_anchor → stls/tools/ (also in every chassis default list)
 #   case_back is the Wormfingers bottom with easel + Pi holes.
 #   sunshade → stls/monitor/ (also in hybrid / hybrid-shift / shadowgraph defaults)
@@ -89,6 +90,12 @@ elif [[ "${1:-}" == "--tools" ]]; then
     scad=$root/openscad/focus_sled.scad
     out=$root/stls/tools
     default_parts=(focus_sled focus_anchor)
+elif [[ "${1:-}" == "--phone" ]]; then
+    shift
+    scad=$root/openscad/phone/WATCH_ME.scad
+    out=$root/stls/phone
+    default_parts=(pm17_cradle pm17_shoe duo_tray_cased duo_tray_bare duo_shoe)
+    tail_note="Phone mounts: shoes foot-down; cradle and trays flat on their backs. 17 Pro Max: M3×16 + nut; Duo: M3×10 + nut, countersunk from the phone side."
 fi
 
 if [[ -n "${OPENSCAD:-}" && -x "$OPENSCAD" ]]; then

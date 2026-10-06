@@ -270,11 +270,18 @@ NW_DIRECT_GROW  = 0.8;
 // helicoid body measured 29.18 at focus, against 16.68 collapsed. T read
 // 2.19 longer than R on the same caliper (12.08 vs 9.89, offset zero), both
 // on metal F rings. The lens helicoid then lifts the lens by its body, so
-// the arms come in by the same.
+// the arms come in by the same. T is set from that.
 W_INF_BODY_R      = 29.18;
 W_INF_BODY_T      = W_INF_BODY_R + 12.08 - 9.89;
 W_LENS_HELI_BODY  = 16.58;  // measured, collapsed, past its 4.47 male
 W_LENS_INF_MARGIN = 1.0;    // infinity this far into the lens helicoid travel
+// R is set from T. On the first arm_*_wl prints, the lens helicoid
+// (cookie face to lens face) peaked T at 17.81 and R at 20.38; R's arm
+// takes the difference so both peak together. Those prints' registers:
+W_LENS_FOCUS_T    = 17.81;
+W_LENS_FOCUS_R    = 20.38;
+W_WL_PRINTED_T    = 22.62;
+W_WL_PRINTED_R    = 20.43;
 M65_RING_MALE   = 6;     // into the helicoid. Face it shorter if it bottoms early.
 M65_RING_ADD    = 8;     // M62 female, equal to the lens thread. This is the stack.
 M65_RING_OD     = 72;    // under the Ø76 barrel, proud of the M65 so it can stop

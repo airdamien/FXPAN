@@ -98,7 +98,7 @@ instead.
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
 | `arm_r_focus` | 1, Nikkor-W, instead of `arm_r_fw` or the R helicoid | cookie flange on the bed, F bayonet up. Stamped `fxp_rw_focus`. The W 8 mm is in the tube, then the register is 0.77 mm closer than `arm_r_fw`, so it focuses with `arm_t_fw` |
-| `arm_r_wl`, `arm_t_wl` | 1 each, Nikkor-W focusing on its M65 lens helicoid with `stem_nw_m65` | cookie flange on the bed, printed F up. Fixed registers 20.43 (R) and 22.62 (T), so infinity sits 1 mm into the lens helicoid's travel. No camera helicoids; the bodies bolt to the cradles 0.4 (R) and 2.6 (T) mm past the slot's EL mark |
+| `arm_r_wl`, `arm_t_wl` | 1 each, Nikkor-W focusing on its M65 lens helicoid with `stem_nw_m65` | cookie flange on the bed, printed F up. Fixed registers 23.00 (R) and 22.62 (T), so both peak at the same lens helicoid setting, about 1 mm into its travel. No camera helicoids; the bodies bolt to the cradles 3.0 (R) and 2.6 (T) mm past the slot's EL mark |
 | `arm_r_hw`, `arm_t_hw` | 1 each, Nikkor-W on the camera helicoids | cookie flange on the bed. Flat face with an M42 female for the bought helicoid; a metal F ring goes in its front |
 | `base` | 1 | flat; tripod insert and screw heads enter from the bed. 176 × 190 mm. Each camera slot runs along that camera's lens axis, 24 mm long, from 2 mm inside the EL register to 22 mm past it, so a camera helicoid has its whole travel |
 | `cradle_r`, `cradle_t` | 1 each | flat, either way up. 12 mm tall (`CRADLE_EXTRA` 2 mm over the chassis solve) so the body sits on it before the tripod screw is tightened; the same M3s still reach |
@@ -263,8 +263,10 @@ lens. The field test with `stem_nw_direct` focused R with its camera
 helicoid body at 29.18 mm, 12.50 past the 16.68 collapsed. T read 2.19 mm
 longer than R on the same caliper, so 31.37, at the end of its travel. The
 M65 lens helicoid lifts the lens 16.58 mm, so the arms come in by that plus
-1 mm of margin: R 20.43, T 22.62. The D800 front panel then clears by 0.93
-(R) and 3.12 (T).
+1 mm of margin: T 22.62. On the first prints the lens helicoid (cookie face
+to lens face) peaked T at 17.81 and R at 20.38, with R at 20.43, so R
+reprints 2.57 longer at 23.00 and both peak together. The D800 front panel
+clears by 3.12 (T) and 3.50 (R).
 
 1. Screw the M65 helicoid into `stem_m65` until its body sits on the cookie
    face. Screw `stem_nw_m65` into its front. The body is 82.67 mm across,
@@ -278,8 +280,8 @@ M65 lens helicoid lifts the lens 16.58 mm, so the arms come in by that plus
    bodies are bayoneted to fixed arms, so the cradles only carry weight;
    tighten both tripod screws wherever the bodies land. If R peaks at a
    different lens setting, the difference in helicoid height is how far R's
-   arm moves: if R wants the lens further out, raise `W_INF_BODY_R` by it,
-   further in, lower it, and reprint `arm_r_wl`.
+   arm moves: set `W_LENS_FOCUS_T` / `W_LENS_FOCUS_R` to the two heights
+   and `W_WL_PRINTED_R` to the R arm you measured on, and reprint `arm_r_wl`.
 
 **Camera helicoids (Nikkor-W).** `arm_r_hw` / `arm_t_hw` replace the fixed
 arms and the shims. Each takes a bought M52-female / M42-male 17–31 helicoid
