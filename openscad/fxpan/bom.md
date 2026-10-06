@@ -190,7 +190,7 @@ build.
 | `el180_adapter` | the M62 helicoid, keeping short `stem` | Two-piece stand-in: printed male into the 8 mm boss. Prefer `stem_el180_inf`. |
 | `arm_r_f` / `arm_t_f` (`ARM_MOUNT = 1`) | the 52 mm reverse rings | Archive-663 male F. The lip is the mesh as shipped (40 mm). Plastic lugs still should not carry a D800 — the cradles take the weight. Dry-fit clocking with `F_MOUNT_CLOCK`. |
 | `arm_r_focus` | `arm_r_fw`, and the R helicoid on the Nikkor-W | Same printed F and the same R cookie as `arm_r_fw`, including the W 8 mm, then 0.77 mm shorter so the bayonet is in focus when `arm_t_fw` is. Stamped `fxp_rw_focus`. |
-| `arm_r_wl` / `arm_t_wl` | the camera helicoids, focusing the Nikkor-W on its M65 lens helicoid | Printed F, no rings and no camera helicoids. Registers 20.43 (R) and 22.62 (T), from the field infinity on `stem_nw_direct` less the 16.58 mm lens helicoid. Use with `stem_m65` + M65 helicoid + `stem_nw_m65`. |
+| `arm_r_wl` / `arm_t_wl` | the camera helicoids, focusing the Nikkor-W on its M65 lens helicoid | Printed F, no rings and no camera helicoids. Registers 23.00 (R) and 22.62 (T): T from the field infinity on `stem_nw_direct` less the 16.58 mm lens helicoid, R from where the first prints peaked on the lens helicoid. Use with `stem_m65` + M65 helicoid + `stem_nw_m65`. |
 | `arm_r_hw` / `arm_t_hw` | `arm_r_focus` / `arm_t_fw` and the shims | Nikkor-W. Needs the **M52-female / M42-male 17–31 helicoid** above and a **metal M52-to-F ring**, two of each. Cookie is the M42 female. The male's tip bottoms on a lip in the cookie; the body floats 0.4 mm off the face. On the measured 1.93 mm ring, collapsed is 25.51: R dials out 1.72 to focus, T 2.19. |
 
 ## Export
