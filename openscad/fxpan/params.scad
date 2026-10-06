@@ -160,7 +160,7 @@ CAM_HELI_PITCH  = 1.0;
 CAM_HELI_TOL    = 0.30;
 CAM_HELI_TOOTH  = 0.70;
 CAM_HELI_MALE   = 4.67;   // rear male into the cookie, measured
-CAM_HELI_MIN    = 16.85 + CAM_HELI_MALE;   // measured body, collapsed, plus the male
+CAM_HELI_MIN    = 16.68 + CAM_HELI_MALE;   // measured body, collapsed, plus the male
 CAM_HELI_MAX    = CAM_HELI_MIN + 14;
 CAM_HELI_OD     = 69.05;  // body, measured
 CAM_HELI_ID     = 50;     // clear at the M52 end
@@ -256,6 +256,25 @@ M65_MAJOR       = 65;
 // helicoid, nose and Copal stop. Degrees, positive is counter-clockwise
 // facing the cookie. 90 puts the shutter controls on top.
 STEM_W_CLOCK    = 90;
+// The M65 lens helicoid is wider than the stem cookie's 80 mm rebate. The
+// chassis face is relieved round it to just under the cookie face, so the
+// body seats on the cookie, where the arms are solved for.
+M65_HELI_OD     = 82.67;  // measured, widest
+M65_HELI_CLEAR  = 1.0;
+// stem_nw_direct: the W nose screwed straight into stem_m65 with no lens
+// helicoid. The cookie's female is cut loose for a metal male; printed into
+// printed, the stock M65 nose rattles. This much on the male's major.
+NW_DIRECT_GROW  = 0.8;
+// Nikkor-W focusing on the M65 lens helicoid, on fixed printed-F arms
+// (arm_r_wl / arm_t_wl). Field, stem_nw_direct at distance: R's camera
+// helicoid body measured 29.18 at focus, against 16.68 collapsed. T read
+// 2.19 longer than R on the same caliper (12.08 vs 9.89, offset zero), both
+// on metal F rings. The lens helicoid then lifts the lens by its body, so
+// the arms come in by the same.
+W_INF_BODY_R      = 29.18;
+W_INF_BODY_T      = W_INF_BODY_R + 12.08 - 9.89;
+W_LENS_HELI_BODY  = 16.58;  // measured, collapsed, past its 4.47 male
+W_LENS_INF_MARGIN = 1.0;    // infinity this far into the lens helicoid travel
 M65_RING_MALE   = 6;     // into the helicoid. Face it shorter if it bottoms early.
 M65_RING_ADD    = 8;     // M62 female, equal to the lens thread. This is the stack.
 M65_RING_OD     = 72;    // under the Ø76 barrel, proud of the M65 so it can stop
@@ -523,6 +542,12 @@ LID_GAP      = 0.5;
 LID_CAP      = 5;
 LID_SCREW    = 5;
 LID_NUT_DROP = 12;
+// Lid screws at the two +Y corners only: at nut height every other corner
+// is cookie rebate. Each nut sits in full wall just past the chamber corner,
+// across the wall by A and along it by B, so its slot opens into the chamber
+// and the tray closes it.
+LID_SCREW_A  = 43.7;
+LID_SCREW_B  = 37.0;
 
 // --- base and cradles ------------------------------------------------------
 // A D800 is ~1 kg. The bayonet locates; the base carries.
@@ -550,10 +575,18 @@ function d800_tripod_in() =
 CRADLE_T = 10;
 function chassis_plinth() =
     max(PORT_SLOT_LIP, d800_axis_base() + CRADLE_T - BOX_Z / 2);
+// Cradle only, past CRADLE_T. The field bodies sat above the cradles, and the
+// tripod screw pulled them down onto it through the arms. The chassis skirt
+// does not move; the M3 counterbores deepen by the same, so the bolts stay.
+CRADLE_EXTRA    = 2.0;
 BASE_T          = 8;
 BASE_WEB        = 24;
 BASE_PAD_D      = 46;
-BASE_SLOT_L     = 18;
+// The slot runs from 2 mm inside the EL register (arm_r/arm_t) to 22 mm
+// past it: the W fixed arms at +8 and the camera helicoids, collapsed at
+// +5.7, through their full 14 mm. BASE_SLOT_C is where its middle sits.
+BASE_SLOT_L     = 24;
+BASE_SLOT_C     = 10;
 BASE_SLOT_W     = 7;
 BASE_SCREW_D    = 6.6;
 BASE_HEAD_D     = 24;     // knurled 1/4-20 camera thumbscrew

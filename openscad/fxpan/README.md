@@ -86,20 +86,22 @@ instead.
 | part | quantity | bed orientation |
 | --- | --- | --- |
 | `ringgauge` | 1, before anything else | flat |
-| `chassis` | 1 | floor down |
-| `lid` | 1 | outer face down |
+| `chassis` | 1 | floor down. The lens face is relieved to an 83.7 mm circle so the M65 lens helicoid seats on the cookie. On the logo side a 3 mm post rises from the logo window's sill to 6 mm over the floor, where the wall would be, so the tray cannot slide into the window |
+| `lid` | 1 | outer face down. Two screw holes, at the +Y corners, to match the chassis |
 | `display_mount` | 1 pair | rails on their flat face |
 | `fxp_tray` | 1 | floor down |
 | `stem` | 1 (with an M62 helicoid) | cookie flange on the bed, boss up |
 | `stem_m65` | 1 (with the M65 helicoid) | cookie flange on the bed, boss up. Thread start turned 90° counter-clockwise facing the cookie (`STEM_W_CLOCK`), so the bottomed Nikkor-W has its shutter controls on top |
 | `m65_ring` | 1, until the flangeless metal ring arrives. EL-Nikkor only | lens seat up, male down on a raft |
 | `stem_nw_m65` | 1, Nikkor-W on the M65 helicoid | Copal board up, male down on a raft |
+| `stem_nw_direct` | 1, Nikkor-W straight into `stem_m65`, no lens helicoid | Copal board up, male down on a raft. The male is 0.8 mm fatter (`NW_DIRECT_GROW`) so it threads snug into the printed female; focus on the camera helicoids |
 | `stem_el180_inf` | 1 until the helicoid arrives | cookie flange on the bed, M62 boss up |
 | `arm_r`, `arm_t` | 1 each | cookie flange on the bed, camera mouth up |
 | `arm_r_focus` | 1, Nikkor-W, instead of `arm_r_fw` or the R helicoid | cookie flange on the bed, F bayonet up. Stamped `fxp_rw_focus`. The W 8 mm is in the tube, then the register is 0.77 mm closer than `arm_r_fw`, so it focuses with `arm_t_fw` |
+| `arm_r_wl`, `arm_t_wl` | 1 each, Nikkor-W focusing on its M65 lens helicoid with `stem_nw_m65` | cookie flange on the bed, printed F up. Fixed registers 20.43 (R) and 22.62 (T), so infinity sits 1 mm into the lens helicoid's travel. No camera helicoids; the bodies bolt to the cradles 0.4 (R) and 2.6 (T) mm past the slot's EL mark |
 | `arm_r_hw`, `arm_t_hw` | 1 each, Nikkor-W on the camera helicoids | cookie flange on the bed. Flat face with an M42 female for the bought helicoid; a metal F ring goes in its front |
-| `base` | 1 | flat; tripod insert and screw heads enter from the bed |
-| `cradle_r`, `cradle_t` | 1 each | flat, either way up |
+| `base` | 1 | flat; tripod insert and screw heads enter from the bed. 176 × 190 mm. Each camera slot runs along that camera's lens axis, 24 mm long, from 2 mm inside the EL register to 22 mm past it, so a camera helicoid has its whole travel |
+| `cradle_r`, `cradle_t` | 1 each | flat, either way up. 12 mm tall (`CRADLE_EXTRA` 2 mm over the chassis solve) so the body sits on it before the tripod screw is tightened; the same M3s still reach |
 | `baffle` | 2 sheets — one arm's worth per sheet (4 rings at the f/11 default) | flat |
 | `shims` | 1 sheet of 3 | flat |
 | `el180_adapter` | only if the helicoid has not arrived | male thread down |
@@ -183,7 +185,11 @@ plate and print time than the 90 mm squares they replace.
    down; it should go in with a firm push. If it will not, scrape the ribs
    with a blade, the same amount off each side, so the glass stays centred.
 
-5. **Tray into the chassis**, floor down. One retention post stands on the
+5. **Lid nuts, then the tray.** First push an **M3 nut** flat into each of
+   the two slots 12 mm under the rim in the +Y corners of the chamber, one in the +X wall
+   and one in the −X end of the +Y wall, until it stops on the screw axis.
+   The slot fits the nut's flats, so it cannot turn. Then the **tray** goes
+   in, floor down, and its wall closes both slots. One retention post stands on the
    plate frame in the dead corner between the cameras; the other stands on
    the inactive beam under the −X wall, so the lid forks are not in the cup
    walls and not on the monitor-rail screws. Both go up through the lid.
@@ -206,7 +212,8 @@ plate and print time than the 90 mm squares they replace.
    it, then run the two **M3 × 6 grub screws** down onto the barrel. The grubs,
    not the thread, are what actually hold clock and roll — and once a body is
    on you cannot reach them, so finish this before step 10.
-8. **Lid** with four M3 × 20 into the corner nuts. It sits on an unbroken rim
+8. **Lid** with two M3 × 20 into the +Y corner nuts. The other corners are
+   cookie rebate at nut height, so the −Y edge is held by the lid lip. It sits on an unbroken rim
    and its edges should be flush with the chassis on all four sides — the
    cookie pockets are blind and do not break the top. Check the forks have
    captured the tray posts before you tighten. Six M3 holes with nut traps
@@ -251,18 +258,41 @@ Both legs should agree within one 0.2 mm shim. The transmit leg is already
 0.303 mm shorter to pay for the glass path, so if T comes out long by roughly
 that much, check that S1 really is facing the lens.
 
+**Lens helicoid (Nikkor-W).** `arm_r_wl` / `arm_t_wl` put focus back on the
+lens. The field test with `stem_nw_direct` focused R with its camera
+helicoid body at 29.18 mm, 12.50 past the 16.68 collapsed. T read 2.19 mm
+longer than R on the same caliper, so 31.37, at the end of its travel. The
+M65 lens helicoid lifts the lens 16.58 mm, so the arms come in by that plus
+1 mm of margin: R 20.43, T 22.62. The D800 front panel then clears by 0.93
+(R) and 3.12 (T).
+
+1. Screw the M65 helicoid into `stem_m65` until its body sits on the cookie
+   face. Screw `stem_nw_m65` into its front. The body is 82.67 mm across,
+   wider than the cookie's 80 mm rebate, so the chassis face is relieved to
+   an 83.7 mm circle round the lens bore, 0.3 mm under the cookie face
+   (`M65_HELI_OD`). On an older chassis, open the rim to that circle; it is
+   about 1 mm at the middle of each side, 2.3 mm deep.
+2. Collapse the helicoid fully, then open it until a distant target peaks on
+   T. That is about a millimetre.
+3. Check R on the Focus screen's sharpness match at the same setting. The
+   bodies are bayoneted to fixed arms, so the cradles only carry weight;
+   tighten both tripod screws wherever the bodies land. If R peaks at a
+   different lens setting, the difference in helicoid height is how far R's
+   arm moves: if R wants the lens further out, raise `W_INF_BODY_R` by it,
+   further in, lower it, and reprint `arm_r_wl`.
+
 **Camera helicoids (Nikkor-W).** `arm_r_hw` / `arm_t_hw` replace the fixed
 arms and the shims. Each takes a bought M52-female / M42-male 17–31 helicoid
-(body 69 mm, 16.85 mm collapsed past a 4.67 mm male) and a metal F ring in
+(body 69 mm, 16.68 mm collapsed past a 4.67 mm male) and a metal F ring in
 its front. The body is wider than the cookie and overhangs the chassis skin,
 so it does not seat on either: the male's tip stops on a lip at the foot of
 the cookie thread, and the body face stands 0.4 mm clear.
 
 1. Screw the helicoid's M42 male into the cookie until its tip stops on the
    lip. Screw the metal F ring into the helicoid front until it bottoms.
-2. Collapsed, the register is 25.68 mm off the cookie back on the 1.93 mm
+2. Collapsed, the register is 25.51 mm off the cookie back on the 1.93 mm
    ring (`CAM_F_RING`). The fixed arms found best focus at 27.23 (R) and
-   27.70 (T), so R extends about 1.55 mm and T about 2.0 mm. The cradle slot lets
+   27.70 (T), so R extends about 1.7 mm and T about 2.2 mm. The cradle slot lets
    the body follow; the tripod screw is the lock.
 3. Focus the lens on T. Then turn only R's helicoid until R peaks on the
    Focus screen's sharpness match, and tighten R's tripod screw.
