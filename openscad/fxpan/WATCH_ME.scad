@@ -41,6 +41,7 @@ SHOW_LID = 1; // [0:hide, 1:show]
 SHOW_PANELS = 1; // [0:hide, 1:show]
 SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
+SHOW_TRIGGER = 1; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:D800]
 SHOW_LENS = 0; // [0:hide, 1:show]
 SHOW_LENS_MARKS = 0; // [0:hide, 1:pupils and focal plane]
@@ -1848,6 +1849,60 @@ module lid_lining_mask() {
             cube([s + 4, s + 4, 40 + L], center = true);
 }
 
+// Trigger board (KiCad x right, y down) to the lid: turned 180° so the jack
+// edge faces +X, TRIG_EDGE_IN short of the lid edge, centred in Y.
+function trig_xy(p) = [
+    chassis_out() / 2 - TRIG_EDGE_IN - (p[0] - TRIG_EDGE[0]),
+    p[1] - (TRIG_EDGE[1] + TRIG_EDGE[3]) / 2
+];
+function trig_holes() = concat(TRIG_ZERO_HOLES, TRIG_HAT_HOLES);
+
+module trig_lid_holes() {
+    for (p = trig_holes())
+        translate(concat(trig_xy(p), [LID_T - TRIG_HOLE_DEEP]))
+            cylinder(h = TRIG_HOLE_DEEP + 1, d = TRIG_PILOT_D, $fn = 24);
+}
+
+module trig_rib_keepout() {
+    for (p = trig_holes())
+        translate(trig_xy(p))
+            cylinder(h = 10, d = 7, center = true);
+}
+
+// Ghost: Zero, board, jacks. z = 0 is the lid top.
+module trigger_stack_ghost() {
+    zero_z  = TRIG_STANDOFF;
+    board_z = zero_z + 1.4 + 8.5;
+    module outline(x0, y0, x1, y1)
+        hull()
+            for (p = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]])
+                translate(trig_xy(p)) square(0.01, center = true);
+    for (p = trig_holes())
+        color("Gold")
+            translate(trig_xy(p))
+                cylinder(h = p[1] > 50 ? board_z : zero_z, d = 4.5, $fn = 6);
+    color("DarkGreen")
+        translate([0, 0, zero_z])
+            linear_extrude(1.4)
+                outline(TRIG_ZERO_HOLES[0][0] - 3.5, TRIG_ZERO_HOLES[0][1] - 3.5,
+                        TRIG_ZERO_HOLES[0][0] + 61.5, TRIG_ZERO_HOLES[0][1] + 26.5);
+    color("Black")
+        translate([0, 0, zero_z - 5.5])
+            linear_extrude(5.5)
+                let (cx = (TRIG_ZERO_HOLES[0][0] + TRIG_ZERO_HOLES[1][0]) / 2,
+                     cy = TRIG_ZERO_HOLES[0][1])
+                    outline(cx - 25.4, cy - 2.54, cx + 25.4, cy + 2.54);
+    color("SeaGreen", 0.85)
+        translate([0, 0, board_z])
+            linear_extrude(1.6)
+                outline(TRIG_EDGE[0], TRIG_EDGE[1], TRIG_EDGE[2], TRIG_EDGE[3]);
+    for (j = TRIG_JACKS)
+        color("DimGray")
+            translate([0, 0, board_z + 1.6])
+                linear_extrude(5)
+                    outline(TRIG_EDGE[0], j[1] - 3, TRIG_EDGE[0] + 14, j[1] + 3);
+}
+
 module part_lid() {
     s   = BOX_XY;
     out = chassis_out();
@@ -1860,19 +1915,17 @@ module part_lid() {
             translate([0, 0, -LID_LIP / 2 + 0.01])
                 lid_align_lip();
             lid_retain_tabs(lip = LID_LIP);
-            display_lid_nut_pads(LID_LIP);
-            display_lid_bosses(LID_T);
         }
         translate([0, 0, BOX_Z / 2 + ex * 0.4]) {
             for (p = lid_screws())
                 translate([p[0], p[1], -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
-            display_lid_cuts(LID_T, LID_LIP);
+            trig_lid_holes();
             plate_stamp(fxp_tag("lid"), s, LID_T, STAMP_DEPTH, 5.0);
             difference() {
                 lid_inner_ribs();
                 lid_retain_keepout();
-                display_lid_pad_keepout();
+                trig_rib_keepout();
             }
         }
     }
@@ -2333,6 +2386,9 @@ module assembly() {
 
     if (SHOW_LID)
         part_lid();
+    if (SHOW_TRIGGER && $preview)
+        translate([0, 0, BOX_Z / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)])
+            trigger_stack_ghost();
     if (SHOW_MONITOR || SHOW_PI)
         translate([0, 0, BOX_Z / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)]) {
             if (SHOW_MONITOR)

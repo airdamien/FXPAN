@@ -87,8 +87,7 @@ instead.
 | --- | --- | --- |
 | `ringgauge` | 1, before anything else | flat |
 | `chassis` | 1 | floor down. The lens face is relieved to an 83.7 mm circle so the M65 lens helicoid seats on the cookie. On the logo side a 3 mm post rises from the logo window's sill to 6 mm over the floor, where the wall would be, so the tray cannot slide into the window |
-| `lid` | 1 | outer face down. Two screw holes, at the +Y corners, to match the chassis |
-| `display_mount` | 1 pair | rails on their flat face |
+| `lid` | 1 | outer face down. Two screw holes, at the +Y corners, to match the chassis. Six 2.2 mm blind holes, 5 deep, in the top take the trigger stack's M2.5 standoffs |
 | `fxp_tray` | 1 | floor down |
 | `stem` | 1 (with an M62 helicoid) | cookie flange on the bed, boss up |
 | `stem_m65` | 1 (with the M65 helicoid) | cookie flange on the bed, boss up. Thread start turned 90° counter-clockwise facing the cookie (`STEM_W_CLOCK`), so the bottomed Nikkor-W has its shutter controls on top |
@@ -192,7 +191,7 @@ plate and print time than the 90 mm squares they replace.
    in, floor down, and its wall closes both slots. One retention post stands on the
    plate frame in the dead corner between the cameras; the other stands on
    the inactive beam under the −X wall, so the lid forks are not in the cup
-   walls and not on the monitor-rail screws. Both go up through the lid.
+   walls. Both go up into the lid.
 6. **Cookies into their rebates.** Each of the three port cookies drops
    straight into a blind pocket in its face, closed all the way round, and
    stops against the chamber wall behind it. **Four M3 × 12 countersunk** per
@@ -216,9 +215,14 @@ plate and print time than the 90 mm squares they replace.
    cookie rebate at nut height, so the −Y edge is held by the lid lip. It sits on an unbroken rim
    and its edges should be flush with the chassis on all four sides — the
    cookie pockets are blind and do not break the top. Check the forks have
-   captured the tray posts before you tighten. Six M3 holes with nut traps
-   under the lid take the `display_mount` rails (same easel as the other
-   bodies).
+   captured the tray posts before you tighten. The trigger stack goes on
+   top, jacks toward R (left, standing behind T). Bottom up it is the Zero W
+   with its 2×20 header in from underneath, then the trigger board on the
+   header. Thread four 10 mm M2.5 male-female standoffs into the inner four
+   blind holes and screw the Zero to them. Its header tails clear the lid
+   by about 4 mm. The two holes on the board's far edge are optional. They
+   take standoffs from the lid up to the board, about 20 mm, so it does not
+   rock on the header.
 9. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Bolt each
    cradle to its camera pad with four M3 × 16, heads sunk into the plinth top
    and nuts under the base. The cradles are bare plinths — nothing stands up

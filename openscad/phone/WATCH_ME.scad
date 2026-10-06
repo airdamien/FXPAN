@@ -21,9 +21,9 @@ PART = "assembly"; // [assembly, pm17_cradle, pm17_shoe, duo_tray_cased, duo_tra
 $fn = 48;
 
 // --- shoe foot, ISO 518 ------------------------------------------------------
-FOOT_W = 18.0;   // across the shoe; the slot is 18.6
+FOOT_W = 18.3;   // across the shoe; the slot is 18.6
 FOOT_L = 18.0;   // along the slide
-FOOT_T = 1.9;    // under the rail lips
+FOOT_T = 2.05;   // under the rail lips. 1.9 rattled on the D800
 NECK_W = 12.0;   // between the lips, 12.5 apart
 NECK_H = 2.4;
 PLAT_H = 4.0;

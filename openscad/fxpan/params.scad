@@ -556,6 +556,20 @@ LID_NUT_DROP = 12;
 LID_SCREW_A  = 43.7;
 LID_SCREW_B  = 37.0;
 
+// Trigger stack on the lid top, bottom up: the Zero W's 2×20 header (in from
+// underneath), the Zero, the trigger board on the header. Standoffs thread
+// into blind holes, their jacks pointing +X (left, standing behind T).
+// Board coordinates are KiCad's, x right and y down, from gpio_trigger.
+TRIG_EDGE      = [14, 14, 79.2, 69.45];   // Edge.Cuts x0, y0, x1, y1
+TRIG_ZERO_HOLES = [[17.33, 17.28], [75.33, 17.28],
+                   [17.33, 40.28], [75.33, 40.28]];
+TRIG_HAT_HOLES  = [[17.33, 66.28], [75.33, 66.28]];  // past the Zero
+TRIG_JACKS     = [[19.95, 38.05], [19.95, 26.35]];  // J1 T, J2 R
+TRIG_EDGE_IN   = 3;    // jack edge in from the lid's +X edge
+TRIG_PILOT_D   = 2.2;  // the M2.5 standoff thread cuts its own
+TRIG_HOLE_DEEP = 5;
+TRIG_STANDOFF  = 10;   // under the Zero, over its header tails
+
 // --- base and cradles ------------------------------------------------------
 // A D800 is ~1 kg. The bayonet locates; the base carries.
 TRIPOD_INSERT_D = 8.1;
