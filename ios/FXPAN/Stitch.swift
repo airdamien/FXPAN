@@ -266,66 +266,66 @@ enum Stitcher {
         return image
     }
 
-    /// Match the overlap by darkening the brighter body, one scale per channel. Scaling up clips highlights.
+    /// Match the overlap in horizontal bands. One scale for the whole frame follows the trees and yellows the sky.
     private static func matched(_ r: CGImage, to t: CGImage, overlap: Double) -> (t: CGImage, r: CGImage) {
         let width = 480
         let th = max(1, t.height * width / max(1, t.width))
         let tb = bitmap(sized(t, to: width, height: th))
         let rb = bitmap(sized(r, to: width, height: th))
         let ol = max(4, min(tb.w - 1, Int((Double(tb.w) * overlap).rounded())))
-        var sumT = [0.0, 0.0, 0.0]
-        var sumR = [0.0, 0.0, 0.0]
-        var n = 0
-        let rows = min(tb.h, rb.h)
-        for y in stride(from: 0, to: rows, by: 2) {
+        var rows = Array(repeating: Hugin.ToneAcc(), count: Hugin.ToneFit.bands)
+        let rowCount = min(tb.h, rb.h)
+        for y in stride(from: 0, to: rowCount, by: 2) {
+            let b = min(Hugin.ToneFit.bands - 1, y * Hugin.ToneFit.bands / max(1, rowCount))
             for x in 0..<ol {
                 let ti = (y * tb.w + x) * 4
                 let ri = (y * rb.w + (rb.w - ol + x)) * 4
-                var usable = true
+                var clipped = false
+                var dark = false
                 for c in 0..<3 {
-                    if tb.px[ti + c] < 16 || tb.px[ti + c] > 240 || rb.px[ri + c] < 16 || rb.px[ri + c] > 240 {
-                        usable = false
-                    }
+                    let rv = rb.px[ri + c]
+                    let tv = tb.px[ti + c]
+                    if rv >= 252 || tv >= 252 { clipped = true }
+                    if rv < 12 || tv < 12 { dark = true }
                 }
-                if !usable { continue }
+                if clipped {
+                    rows[b].clipped += 1
+                    continue
+                }
+                if dark { continue }
                 for c in 0..<3 {
-                    sumT[c] += Double(tb.px[ti + c])
-                    sumR[c] += Double(rb.px[ri + c])
+                    rows[b].sumR[c] += Double(rb.px[ri + c])
+                    rows[b].sumT[c] += Double(tb.px[ti + c])
                 }
-                n += 1
+                rows[b].n += 1
             }
         }
-        guard n > 40 else { return (t, r) }
-        var gT = [1.0, 1.0, 1.0]
-        var gR = [1.0, 1.0, 1.0]
-        for c in 0..<3 {
-            let tm = sumT[c] / Double(n)
-            let rm = sumR[c] / Double(n)
-            guard rm > 4, tm > 4 else { continue }
-            let scale = tm / rm
-            guard scale >= 0.40, scale <= 2.50, abs(scale - 1) > 0.008 else { continue }
-            if scale < 1 { gR[c] = scale } else { gT[c] = 1 / scale }
-        }
-        guard gR.contains(where: { $0 < 0.999 }) || gT.contains(where: { $0 < 0.999 }) else { return (t, r) }
-        if gR.contains(where: { $0 < 0.999 }) {
-            print(String(format: "FXPAN balance R ×%.3f %.3f %.3f", gR[0], gR[1], gR[2]))
-        }
-        if gT.contains(where: { $0 < 0.999 }) {
-            print(String(format: "FXPAN balance T ×%.3f %.3f %.3f", gT[0], gT[1], gT[2]))
-        }
-        return (scaled(t, by: gT), scaled(r, by: gR))
+        let fit = Hugin.ToneFit.make(rows)
+        guard fit.moves else { return (t, r) }
+        let sky = fit.scaleR[0]
+        let skyT = fit.scaleT[0]
+        print(String(format: "FXPAN balance sky R ×%.3f %.3f %.3f T ×%.3f %.3f %.3f", sky[0], sky[1], sky[2], skyT[0], skyT[1], skyT[2]))
+        return (toned(t, fit, bodyR: false), toned(r, fit, bodyR: true))
     }
 
-    private static func scaled(_ image: CGImage, by scale: [Double]) -> CGImage {
-        if scale.allSatisfy({ abs($0 - 1) < 0.001 }) { return image }
-        let ci = CIImage(cgImage: image).applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: scale[0], y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: scale[1], z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: scale[2], w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
-        ])
-        let ctx = CIContext(options: [.workingColorSpace: NSNull()])
-        return ctx.createCGImage(ci, from: ci.extent) ?? image
+    private static func toned(_ image: CGImage, _ fit: Hugin.ToneFit, bodyR: Bool) -> CGImage {
+        let table = bodyR ? fit.scaleR : fit.scaleT
+        if table.allSatisfy({ $0.allSatisfy { $0 > 0.999 } }) { return image }
+        var b = bitmap(image)
+        for y in 0..<b.h {
+            let s = bodyR ? fit.scales(y: y, height: b.h).r : fit.scales(y: y, height: b.h).t
+            guard s.contains(where: { $0 < 0.999 }) else { continue }
+            let row = y * b.w * 4
+            for x in 0..<b.w {
+                let i = row + x * 4
+                for c in 0..<3 where s[c] < 0.999 {
+                    let v = Double(b.px[i + c])
+                    let out = v * s[c]
+                    if out < v { b.px[i + c] = UInt8(min(255, max(0, out.rounded()))) }
+                }
+            }
+        }
+        return b.image()
     }
 
     static func preview(t: CGImage, r: CGImage, rig: Rig, squeeze: Double, maxWidth: Int) -> CGImage? {
