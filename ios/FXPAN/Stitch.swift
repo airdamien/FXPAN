@@ -792,7 +792,14 @@ enum Stitcher {
             if abs(sat - 1) > 0.01 {
                 ci = ci.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: sat])
             }
-            if let g = base.gain {
+            if let mix = base.mix {
+                ci = ci.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: mix.r.0, y: mix.r.1, z: mix.r.2, w: 0),
+                    "inputGVector": CIVector(x: mix.g.0, y: mix.g.1, z: mix.g.2, w: 0),
+                    "inputBVector": CIVector(x: mix.b.0, y: mix.b.1, z: mix.b.2, w: 0),
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+                ])
+            } else if let g = base.gain {
                 ci = ci.applyingFilter("CIColorMatrix", parameters: [
                     "inputRVector": CIVector(x: g.0, y: 0, z: 0, w: 0),
                     "inputGVector": CIVector(x: 0, y: g.1, z: 0, w: 0),

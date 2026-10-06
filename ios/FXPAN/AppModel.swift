@@ -493,6 +493,65 @@ final class AppModel {
         ingest()
     }
 
+    /// Delete every set, or only those from before today. Protected sets stay.
+    func deleteShots(beforeToday: Bool) {
+        let today = Self.dayString(Date())
+        var removed = 0
+        var spared = 0
+        var cancelStitch = false
+        for shot in shots {
+            if beforeToday {
+                guard let day = Self.day(of: shot.stamp), day < today else { continue }
+            }
+            if protectedStamps.contains(shot.stamp) {
+                spared += 1
+                continue
+            }
+            droppedStamps.insert(shot.stamp)
+            stitchQueue.removeAll { $0 == shot.stamp }
+            stitchWaiting.remove(shot.stamp)
+            if stitchingStamp == shot.stamp { cancelStitch = true }
+            CaptureIndex.delete(stamp: shot.stamp)
+            notes[shot.stamp] = nil
+            if reviewStamp == shot.stamp { reviewStamp = nil }
+            route.removeAll {
+                if case .shot(let stamp) = $0 { return stamp == shot.stamp }
+                return false
+            }
+            removed += 1
+        }
+        if cancelStitch {
+            stitchStop.cancel()
+            stitchPiece?.cancel()
+        }
+        guard removed > 0 else {
+            note(spared > 0 ? "Protected" : (beforeToday ? "Nothing older than today" : "No sets yet"), bad: spared > 0)
+            return
+        }
+        persist()
+        reloadShots()
+        ingest()
+        if spared > 0 {
+            note("Deleted \(removed) · \(spared) protected", bad: false)
+        } else {
+            note("Deleted \(removed)", bad: false)
+        }
+    }
+
+    private static func day(of stamp: String) -> String? {
+        let digits = stamp.filter(\.isNumber)
+        guard digits.count >= 8 else { return nil }
+        return String(digits.prefix(8))
+    }
+
+    private static func dayString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyyMMdd"
+        return f.string(from: date)
+    }
+
     /// The stitcher may already be holding this pair. Drop the result instead of writing it back.
     private func discard(_ stamp: String) -> Bool {
         guard droppedStamps.contains(stamp) else { return false }

@@ -477,6 +477,8 @@ struct DimPage<Controls: View, Panel: View>: View {
     @Environment(\.halfOpen) private var halfOpen
     var title: String
     var crumb: String?
+    /// Keep the picture in place and scroll only the controls under it.
+    var stickPanel: Bool = false
     @ViewBuilder var controls: () -> Controls
     @ViewBuilder var panel: () -> Panel
 
@@ -504,12 +506,16 @@ struct DimPage<Controls: View, Panel: View>: View {
             .padding(.bottom, 6)
             Group {
                 if halfOpen {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            panel()
-                            controls()
+                    if stickPanel {
+                        stuck()
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                panel()
+                                controls()
+                            }
+                            .padding(.bottom, 24)
                         }
-                        .padding(.bottom, 24)
                     }
                 } else {
                     ViewThatFits(in: .horizontal) {
@@ -519,12 +525,16 @@ struct DimPage<Controls: View, Panel: View>: View {
                             panel()
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                panel().frame(minHeight: 180)
-                                controls()
+                        if stickPanel {
+                            stuck()
+                        } else {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    panel().frame(minHeight: 180)
+                                    controls()
+                                }
+                                .padding(.bottom, 24)
                             }
-                            .padding(.bottom, 24)
                         }
                     }
                 }
@@ -532,6 +542,21 @@ struct DimPage<Controls: View, Panel: View>: View {
             .padding(.horizontal, 12)
         }
         .id(usb)
+    }
+
+    /// The picture keeps the panorama's shape at the top. The controls take the rest of the screen and scroll.
+    private func stuck() -> some View {
+        VStack(spacing: 12) {
+            Color.black
+                .aspectRatio(Catalog.nativeAspect, contentMode: .fit)
+                .overlay { panel() }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS))
+            ScrollView {
+                controls()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 24)
+            }
+        }
     }
 }
 
@@ -1076,6 +1101,7 @@ struct ReviewOverlay: View {
     @Environment(AppModel.self) private var model
     var shot: ShotFiles
     @State private var apple = "off"
+    @State private var confirmDelete = false
 
     private var previewLook: LookSet {
         var look = LookSet()
@@ -1102,7 +1128,11 @@ struct ReviewOverlay: View {
                 }
                 HStack(spacing: 12) {
                     PressChip(title: "Keep", on: true) { model.reviewStamp = nil }
-                    PressChip(title: "Delete", filled: false) { model.deleteShot(shot.stamp) }
+                    PressChip(title: "Delete", filled: false) { confirmDelete = true }
+                        .confirmationDialog("Delete this set?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                            Button("Delete", role: .destructive) { model.deleteShot(shot.stamp) }
+                            Button("Cancel", role: .cancel) {}
+                        }
                     PressChip(title: "Playback", filled: false) {
                         model.reviewStamp = nil
                         model.go(.shot(shot.stamp))

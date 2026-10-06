@@ -303,11 +303,20 @@ struct LookScreen: View {
         let look = model.photo.look
         DimPage(title: "Look", controls: {
             VStack(spacing: 10) {
-                RowBlock(title: "Base", value: LookBook.name(look), hint: look.base == "apple" ? "Local tone and noise on the NEF, then vibrance and a light sharpen. A JPEG gets that finish in Core Image." : "") {
+                RowBlock(title: "Base", value: LookBook.names.first { $0.0 == look.base }?.1 ?? "Off", hint: LookBook.names.contains { $0.0 == look.base } ? LookBook.note(look) : "") {
                     ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: look.base) { value in
                         model.edit {
                             $0.look.base = value
                             $0.look.id = value
+                        }
+                    }
+                }
+                RowBlock(title: "Film", value: LookBook.films.first { $0.0 == look.base }?.1 ?? "Off", hint: LookBook.films.contains { $0.0 == look.base } ? LookBook.note(look) : "A hue map and a tone curve, the way a medium-format body recalls a film stock.") {
+                    ChipRow(options: [("off", "Off")] + LookBook.films.map { ($0.0, $0.1) }, selected: LookBook.films.contains { $0.0 == look.base } ? look.base : "off") { value in
+                        let next = LookBook.pickFilm(look.base, value)
+                        model.edit {
+                            $0.look.base = next
+                            $0.look.id = next
                         }
                     }
                 }
@@ -571,18 +580,39 @@ struct ModesScreen: View {
 
 struct PlaybackScreen: View {
     @Environment(AppModel.self) private var model
+    @State private var confirmAll = false
+    @State private var confirmOlder = false
+
     var body: some View {
         DimPage(title: "Playback", controls: {
             if model.shots.isEmpty {
                 Text("No sets yet").foregroundStyle(Theme.dim).padding(.top, 24)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
-                    ForEach(model.shots) { shot in
-                        card(shot)
-                            .onTapGesture { model.go(.shot(shot.stamp)) }
-                            .onLongPressGesture(minimumDuration: 0.35) {
-                                model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        PressChip(title: "Delete all", filled: false) { confirmAll = true }
+                            .confirmationDialog("Delete every set?", isPresented: $confirmAll, titleVisibility: .visible) {
+                                Button("Delete all", role: .destructive) { model.deleteShots(beforeToday: false) }
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("Protected sets stay.")
                             }
+                        PressChip(title: "Older than today", filled: false) { confirmOlder = true }
+                            .confirmationDialog("Delete sets from before today?", isPresented: $confirmOlder, titleVisibility: .visible) {
+                                Button("Delete older", role: .destructive) { model.deleteShots(beforeToday: true) }
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("Protected sets stay.")
+                            }
+                    }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
+                        ForEach(model.shots) { shot in
+                            card(shot)
+                                .onTapGesture { model.go(.shot(shot.stamp)) }
+                                .onLongPressGesture(minimumDuration: 0.35) {
+                                    model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+                                }
+                        }
                     }
                 }
             }
@@ -630,6 +660,7 @@ struct ShotScreen: View {
     @State private var styleGrain = "off"
     @State private var styleFilter = "none"
     @State private var styleApple = "off"
+    @State private var confirmDelete = false
 
     private var previewLook: LookSet {
         var look = LookSet()
@@ -645,7 +676,7 @@ struct ShotScreen: View {
         let shot = model.shots.first { $0.stamp == stamp }
         let choices = parts(shot)
         let selected = choices.contains(where: { $0.0 == part }) ? part : (choices.first?.0 ?? "pano")
-        DimPage(title: shot?.name ?? stamp, crumb: "Playback", controls: {
+        DimPage(title: shot?.name ?? stamp, crumb: "Playback", stickPanel: true, controls: {
             VStack(alignment: .leading, spacing: 12) {
                 ChipRow(options: choices, selected: selected) { part = $0 }
                 if let shot {
@@ -669,8 +700,15 @@ struct ShotScreen: View {
                         Button("Cancel") { model.cancelStitch() }
                             .buttonStyle(PlainChip())
                     }
-                    Button("Delete") { model.deleteShot(stamp); model.back() }
+                    Button("Delete") { confirmDelete = true }
                         .buttonStyle(PlainChip())
+                        .confirmationDialog("Delete this set?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                            Button("Delete", role: .destructive) {
+                                model.deleteShot(stamp)
+                                model.back()
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        }
                 }
                 ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: model.photo.drive.engine) { value in
                     model.restitch(stamp, engine: value)
@@ -683,6 +721,7 @@ struct ShotScreen: View {
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
                 ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: styleBase) { styleBase = $0 }
+                ChipRow(options: [("off", "Off")] + LookBook.films.map { ($0.0, $0.1) }, selected: LookBook.films.contains { $0.0 == styleBase } ? styleBase : "off") { styleBase = LookBook.pickFilm(styleBase, $0) }
                 if LookBook.isMono(previewLook) {
                     ChipRow(options: LookBook.filters.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleFilter) { styleFilter = $0 }
                 }

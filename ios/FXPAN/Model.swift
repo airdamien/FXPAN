@@ -290,10 +290,18 @@ enum Catalog {
 }
 
 enum LookBook {
+    /// Output channel as weights of input red, green, and blue. This is the hue map a film simulation uses.
+    struct Mix {
+        var r: (Double, Double, Double)
+        var g: (Double, Double, Double)
+        var b: (Double, Double, Double)
+    }
+
     struct Base {
         var sat: Double
         var curve: Double
         var gain: (Double, Double, Double)?
+        var mix: Mix? = nil
         var mono: Bool
     }
 
@@ -303,11 +311,33 @@ enum LookBook {
         ("neutral", "Neutral", "Flat, to grade"),
         ("vivid", "Vivid", "Saturated"),
         ("landscape", "Landscape", "Greens and blues"),
-        ("chrome", "Chrome", "Muted, hard tone"),
+        ("chrome", "Chrome", "Muted slide, hard tone"),
         ("mono", "Mono", "Black and white"),
+    ]
+
+    /// The same kind of set a GFX body offers. Each one is a hue map and a tone curve, tuned to that stock.
+    static let films: [(String, String, String)] = [
+        ("provia", "Provia", "Standard slide. A little richer than as shot"),
+        ("velvia", "Velvia", "Vivid slide. Deep greens and blues, hard tone"),
+        ("astia", "Astia", "Soft slide. Holds skin, long highlights"),
+        ("reala", "Reala", "Natural color negative. Slightly warm"),
+        ("neghi", "Neg Hi", "Portrait negative, a bit of contrast"),
+        ("negstd", "Neg Std", "Portrait negative, flatter"),
+        ("classicneg", "Classic Neg", "Consumer negative. Warm, a little green"),
+        ("nostalgic", "Nostalgic", "Amber highlights, faded shadows"),
+        ("eterna", "Eterna", "Cinema. Flat, quiet color"),
+        ("bleach", "Bleach", "Flat color, steep tone"),
+        ("acros", "Acros", "Hard black and white"),
     ]
     static let filters = ["none", "yellow", "orange", "red", "green"]
     static let grains = ["off", "weak", "strong"]
+
+    /// Off, or a second tap on the active film, returns to Standard.
+    static func pickFilm(_ current: String, _ value: String) -> String {
+        let on = films.contains { $0.0 == current }
+        if value == "off" || (on && value == current) { return on ? "standard" : current }
+        return value
+    }
     static let steps = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
 
     static func base(_ id: String) -> Base {
@@ -315,9 +345,42 @@ enum LookBook {
         case "neutral": return Base(sat: 0.86, curve: -1.5, gain: nil, mono: false)
         case "vivid": return Base(sat: 1.35, curve: 1.5, gain: nil, mono: false)
         case "landscape": return Base(sat: 1.18, curve: 1, gain: (1, 1.05, 1.06), mono: false)
-        case "chrome": return Base(sat: 0.78, curve: 2.2, gain: nil, mono: false)
+        case "chrome": return Base(sat: 0.76, curve: 2.2, gain: nil, mix: Mix(
+            r: (0.98, 0.03, -0.02), g: (-0.03, 0.96, 0.04), b: (-0.04, 0.08, 1.04)
+        ), mono: false)
         case "mono": return Base(sat: 0, curve: 1.2, gain: nil, mono: true)
         case "apple": return Base(sat: 1, curve: 0, gain: nil, mono: false)
+        case "provia": return Base(sat: 1.08, curve: 0.8, gain: nil, mix: Mix(
+            r: (1.02, 0.00, -0.01), g: (-0.01, 1.05, -0.01), b: (-0.01, 0.00, 1.05)
+        ), mono: false)
+        case "velvia": return Base(sat: 1.22, curve: 2.4, gain: nil, mix: Mix(
+            r: (1.22, -0.14, 0.02), g: (-0.04, 1.30, -0.12), b: (-0.06, -0.16, 1.30)
+        ), mono: false)
+        case "astia": return Base(sat: 0.94, curve: -0.9, gain: nil, mix: Mix(
+            r: (1.06, 0.03, 0.00), g: (0.01, 0.98, 0.00), b: (0.00, 0.02, 0.90)
+        ), mono: false)
+        case "reala": return Base(sat: 1.05, curve: 0.4, gain: nil, mix: Mix(
+            r: (1.05, 0.01, 0.00), g: (0.00, 1.02, 0.00), b: (0.00, 0.02, 0.95)
+        ), mono: false)
+        case "neghi": return Base(sat: 0.92, curve: 1.1, gain: nil, mix: Mix(
+            r: (1.06, 0.01, 0.00), g: (0.00, 1.00, 0.00), b: (0.00, 0.02, 0.93)
+        ), mono: false)
+        case "negstd": return Base(sat: 0.86, curve: -0.7, gain: nil, mix: Mix(
+            r: (1.04, 0.02, 0.00), g: (0.01, 0.99, 0.00), b: (0.00, 0.02, 0.94)
+        ), mono: false)
+        case "classicneg": return Base(sat: 0.90, curve: -0.3, gain: nil, mix: Mix(
+            r: (1.12, 0.02, -0.02), g: (0.05, 1.02, 0.00), b: (0.00, 0.07, 0.86)
+        ), mono: false)
+        case "nostalgic": return Base(sat: 1.08, curve: -0.5, gain: nil, mix: Mix(
+            r: (1.16, 0.04, 0.00), g: (0.02, 1.00, 0.00), b: (-0.02, 0.03, 0.80)
+        ), mono: false)
+        case "eterna": return Base(sat: 0.70, curve: -2.4, gain: nil, mix: Mix(
+            r: (0.98, 0.02, 0.00), g: (0.01, 1.00, 0.02), b: (0.00, 0.04, 1.02)
+        ), mono: false)
+        case "bleach": return Base(sat: 0.55, curve: 2.8, gain: nil, mix: Mix(
+            r: (0.96, 0.02, 0.00), g: (0.00, 0.98, 0.03), b: (0.00, 0.05, 1.08)
+        ), mono: false)
+        case "acros": return Base(sat: 0, curve: 1.8, gain: nil, mono: true)
         default: return Base(sat: 1, curve: 0, gain: nil, mono: false)
         }
     }
@@ -347,7 +410,7 @@ enum LookBook {
     static func isMono(_ look: LookSet) -> Bool { base(look.base).mono }
 
     static func name(_ look: LookSet) -> String {
-        names.first { $0.0 == look.base }?.1 ?? "Standard"
+        (names + films).first { $0.0 == look.base }?.1 ?? "Standard"
     }
 
     static func savedTitle(_ look: LookSet) -> String {
@@ -361,7 +424,7 @@ enum LookBook {
     }
 
     static func note(_ look: LookSet) -> String {
-        names.first { $0.0 == look.base }?.2 ?? ""
+        (names + films).first { $0.0 == look.base }?.2 ?? ""
     }
 
     static func tweaks(_ look: LookSet) -> [String] {
@@ -379,7 +442,7 @@ enum LookBook {
     static func identity(_ look: LookSet) -> Bool {
         if look.base == "apple" { return false }
         let b = base(look.base)
-        return !b.mono && abs(b.sat - 1) < 0.01 && b.gain == nil && b.curve == 0
+        return !b.mono && abs(b.sat - 1) < 0.01 && b.gain == nil && b.mix == nil && b.curve == 0
             && look.color == 0 && look.highlight == 0 && look.shadow == 0 && look.grain == "off"
             && (look.apple.isEmpty || look.apple == "off")
     }
