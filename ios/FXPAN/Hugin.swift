@@ -802,92 +802,127 @@ enum Hugin {
         return Canvas(r: r, t: t, w: cw, h: ch)
     }
 
-    /// Match red, green, and blue on the pixels that land on top of each other.
-    /// A scale alone meets the average: shadows on one body stay hot and the highlights go the other way.
-    /// Fit a slope and a black level per channel, and only darken, so a highlight is never pushed past what that body recorded.
-    private static func balancePair(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int) {
+    struct ToneAcc {
         var sumR = [0.0, 0.0, 0.0]
         var sumT = [0.0, 0.0, 0.0]
-        var rr = [0.0, 0.0, 0.0]
-        var rt = [0.0, 0.0, 0.0]
         var n = 0.0
+        var clipped = 0.0
+    }
+
+    /// Per-band scales, each at most 1, so a body is only darkened.
+    struct ToneFit {
+        static let bands = 12
+        var scaleR: [[Double]]
+        var scaleT: [[Double]]
+
+        var moves: Bool {
+            let live = { (rows: [[Double]]) in rows.contains { $0.contains { $0 < 0.988 } } }
+            return live(scaleR) || live(scaleT)
+        }
+
+        func scales(y: Int, height: Int) -> (r: [Double], t: [Double]) {
+            let pos = (Double(y) + 0.5) / Double(max(1, height)) * Double(Self.bands) - 0.5
+            let i0 = min(Self.bands - 1, max(0, Int(floor(pos))))
+            let i1 = min(Self.bands - 1, i0 + 1)
+            let f = min(1, max(0, pos - Double(i0)))
+            var r = [0.0, 0.0, 0.0]
+            var t = [0.0, 0.0, 0.0]
+            for c in 0..<3 {
+                r[c] = scaleR[i0][c] * (1 - f) + scaleR[i1][c] * f
+                t[c] = scaleT[i0][c] * (1 - f) + scaleT[i1][c] * f
+            }
+            return (r, t)
+        }
+
+        static func make(_ rows: [ToneAcc]) -> ToneFit {
+            let n = rows.count
+            var scaleR = Array(repeating: [1.0, 1.0, 1.0], count: n)
+            var scaleT = Array(repeating: [1.0, 1.0, 1.0], count: n)
+            var seen = Array(repeating: false, count: n)
+            for b in 0..<n {
+                let a = rows[b]
+                guard a.n > 30 else { continue }
+                seen[b] = true
+                for c in 0..<3 {
+                    let rm = a.sumR[c] / a.n
+                    let tm = a.sumT[c] / a.n
+                    guard rm > 4, tm > 4 else { continue }
+                    let ratio = tm / rm
+                    guard ratio >= 0.40, ratio <= 2.50, abs(ratio - 1) > 0.012 else { continue }
+                    if ratio < 1 { scaleR[b][c] = ratio } else { scaleT[b][c] = 1 / ratio }
+                }
+            }
+            func chroma(_ s: [Double]) -> Double { (s.max() ?? 1) - (s.min() ?? 1) }
+            func neutral(_ b: Int) -> Bool { chroma(scaleR[b]) < 0.05 && chroma(scaleT[b]) < 0.05 }
+            for b in 0..<n where !seen[b] {
+                let highlight = rows[b].clipped > 20 && rows[b].clipped > rows[b].n * 3
+                var best: Int?
+                var bestD = Int.max
+                for i in 0..<n where seen[i] {
+                    if highlight && !neutral(i) { continue }
+                    let d = abs(i - b)
+                    if d < bestD { bestD = d; best = i }
+                }
+                if let best {
+                    scaleR[b] = scaleR[best]
+                    scaleT[b] = scaleT[best]
+                }
+            }
+            return ToneFit(scaleR: scaleR, scaleT: scaleT)
+        }
+    }
+
+    /// Match red, green, and blue where the frames land on top of each other, one band of rows at a time.
+    /// A single scale fit on the whole overlap follows the trees and then pulls the blue out of the sky.
+    /// Each band darkens whichever body is brighter there, and a clipped sky keeps a neutral match instead of the trees' color.
+    private static func balancePair(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int) {
+        var rows = Array(repeating: ToneAcc(), count: ToneFit.bands)
         for y in stride(from: 0, to: h, by: 4) {
+            let b = min(ToneFit.bands - 1, y * ToneFit.bands / max(1, h))
             for x in stride(from: 0, to: w, by: 4) {
                 let i = (y * w + x) * 4
                 guard r[i + 3] > 32, t[i + 3] > 32 else { continue }
-                var usable = true
+                var clipped = false
+                var dark = false
                 for c in 0..<3 {
                     let rv = r[i + c]
                     let tv = t[i + c]
-                    if rv < 16 || rv > 240 || tv < 16 || tv > 240 { usable = false }
+                    if rv >= 252 || tv >= 252 { clipped = true }
+                    if rv < 12 || tv < 12 { dark = true }
                 }
-                if !usable { continue }
+                if clipped {
+                    rows[b].clipped += 1
+                    continue
+                }
+                if dark { continue }
                 for c in 0..<3 {
-                    let rv = Double(r[i + c])
-                    let tv = Double(t[i + c])
-                    sumR[c] += rv
-                    sumT[c] += tv
-                    rr[c] += rv * rv
-                    rt[c] += rv * tv
+                    rows[b].sumR[c] += Double(r[i + c])
+                    rows[b].sumT[c] += Double(t[i + c])
                 }
-                n += 1
+                rows[b].n += 1
             }
         }
-        guard n > 200 else { return }
-        var slope = [1.0, 1.0, 1.0]
-        var offset = [0.0, 0.0, 0.0]
-        var onT = [false, false, false]
-        var live = [false, false, false]
-        for c in 0..<3 {
-            guard sumR[c] > 1 else { continue }
-            let meanGain = sumT[c] / sumR[c]
-            guard meanGain >= 0.40, meanGain <= 2.50 else { continue }
-            var g = meanGain
-            var b = 0.0
-            let det = rr[c] * n - sumR[c] * sumR[c]
-            if det > 1 {
-                let ag = (rt[c] * n - sumR[c] * sumT[c]) / det
-                let ab = (rr[c] * sumT[c] - sumR[c] * rt[c]) / det
-                if ag >= 0.50, ag <= 1.80, abs(ab) <= 40 {
-                    let mid = meanGain >= 1 ? (128 - ab) / ag : ag * 128 + ab
-                    if mid < 127 {
-                        g = ag
-                        b = ab
-                    }
-                }
+        let fit = ToneFit.make(rows)
+        guard fit.moves else { return }
+        let sky = fit.scaleR[0]
+        let skyT = fit.scaleT[0]
+        print(String(format: "FXPAN balance sky R ×%.3f %.3f %.3f T ×%.3f %.3f %.3f", sky[0], sky[1], sky[2], skyT[0], skyT[1], skyT[2]))
+        for y in 0..<h {
+            let s = fit.scales(y: y, height: h)
+            let row = y * w * 4
+            for x in 0..<w {
+                let i = row + x * 4
+                if r[i + 3] > 32 { darken(&r, i, s.r) }
+                if t[i + 3] > 32 { darken(&t, i, s.t) }
             }
-            if abs(meanGain - 1) <= 0.008, abs(b) < 1.5 { continue }
-            slope[c] = g
-            offset[c] = b
-            onT[c] = meanGain >= 1
-            live[c] = true
         }
-        guard live.contains(true) else { return }
-        func line(_ wantT: Bool) -> String {
-            (0..<3).map { c in
-                guard live[c], onT[c] == wantT else { return "·" }
-                return String(format: "×%.3f%+.1f", slope[c], offset[c])
-            }.joined(separator: " ")
-        }
-        let tLine = line(true)
-        let rLine = line(false)
-        if tLine.contains("×") { print("FXPAN balance T \(tLine)") }
-        if rLine.contains("×") { print("FXPAN balance R \(rLine)") }
-        curve(&t, slope, offset, onT, live, pullT: true)
-        curve(&r, slope, offset, onT, live, pullT: false)
     }
 
-    /// `pullT` maps T down onto R with `(v − offset) / slope`. The other way maps R down onto T.
-    private static func curve(_ px: inout [UInt8], _ slope: [Double], _ offset: [Double], _ onT: [Bool], _ live: [Bool], pullT: Bool) {
-        for i in stride(from: 0, to: px.count, by: 4) {
-            guard px[i + 3] > 32 else { continue }
-            for c in 0..<3 where live[c] && onT[c] == pullT {
-                let v = Double(px[i + c])
-                let out = pullT ? (v - offset[c]) / slope[c] : slope[c] * v + offset[c]
-                if out < v {
-                    px[i + c] = UInt8(min(255, max(0, out.rounded())))
-                }
-            }
+    private static func darken(_ px: inout [UInt8], _ i: Int, _ scale: [Double]) {
+        for c in 0..<3 where scale[c] < 0.999 {
+            let v = Double(px[i + c])
+            let out = v * scale[c]
+            if out < v { px[i + c] = UInt8(min(255, max(0, out.rounded()))) }
         }
     }
 
