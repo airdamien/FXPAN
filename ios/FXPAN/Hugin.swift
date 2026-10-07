@@ -925,6 +925,16 @@ enum Hugin {
         let sky = fit.scaleR[0]
         let skyT = fit.scaleT[0]
         print(String(format: "FXPAN balance sky R ×%.3f %.3f %.3f T ×%.3f %.3f %.3f", sky[0], sky[1], sky[2], skyT[0], skyT[1], skyT[2]))
+        var scaleR = [Float](repeating: 1, count: h * 3)
+        var scaleT = [Float](repeating: 1, count: h * 3)
+        for y in 0..<h {
+            let s = fit.scales(y: y, height: h)
+            for c in 0..<3 {
+                scaleR[y * 3 + c] = Float(s.r[c])
+                scaleT[y * 3 + c] = Float(s.t[c])
+            }
+        }
+        if BlendGPU.darken(&r, &t, w: w, h: h, scaleR: scaleR, scaleT: scaleT) { return }
         for y in 0..<h {
             let s = fit.scales(y: y, height: h)
             let row = y * w * 4
@@ -962,6 +972,8 @@ enum Hugin {
 
     private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?) throws -> [UInt8]? {
         try StitchGate.check(stop)
+        if let gpu = BlendGPU.multiband(r: r, t: t, w: w, h: h, bands: bands) { return gpu }
+        print("FXPAN blend metal missed, using the CPU")
         let weight = seam(r, t, w, h)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for c in 0..<3 {
