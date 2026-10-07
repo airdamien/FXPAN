@@ -196,7 +196,14 @@ enum Hugin {
         let x0 = max(0, min(img.w - 1, x0))
         let w = max(8, min(img.w - x0, width))
         let strip = cropX(img, from: x0, width: w)
-        var keys = try describe(try detect(strip, stop: stop) { _ in true }, on: strip, stop: stop)
+        let keysFound: [KP]
+        if let gpu = SiftGPU.find(pixels: strip.p, w: strip.w, h: strip.h) {
+            keysFound = gpu.map { KP(x: $0.x, y: $0.y, sigma: $0.sigma, angle: $0.angle, response: $0.response, d: $0.d) }
+        } else {
+            print("FXPAN sift metal missed, using the CPU")
+            keysFound = try describe(try detect(strip, stop: stop) { _ in true }, on: strip, stop: stop)
+        }
+        var keys = keysFound
         if x0 != 0 {
             for i in keys.indices { keys[i].x += Float(x0) }
         }
@@ -433,6 +440,17 @@ enum Hugin {
 
     private static func match(left: [KP], right: [KP], height: Int) -> [(l: KP, r: KP)]? {
         let gate = Float(height) * 0.35
+        if let ranked = SiftGPU.rank(
+            leftY: left.map(\.y), leftD: left.flatMap(\.d),
+            rightY: right.map(\.y), rightD: right.flatMap(\.d), gate: gate
+        ) {
+            var pairs: [(l: KP, r: KP)] = []
+            for (qi, row) in ranked.enumerated() {
+                guard let who = row.index, row.best < 0.64 * row.second else { continue }
+                pairs.append((left[who], right[qi]))
+            }
+            return pairs
+        }
         var pairs: [(l: KP, r: KP)] = []
         for q in right {
             var best = Float.greatestFiniteMagnitude
