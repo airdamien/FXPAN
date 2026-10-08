@@ -45,6 +45,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private(set) var slots: [Role: BodyState] = [.t: BodyState(), .r: BodyState()]
     private(set) var detected: [DetectedCamera] = []
     private(set) var frames: [Role: UIImage] = [:]
+    /// When each live frame was requested from its body, for measuring how old the picture on screen is.
+    private(set) var frameAsked: [Role: CFAbsoluteTime] = [:]
     private(set) var live = false
     private(set) var line = "No bodies on USB"
     var controlAuthorized = true
@@ -209,13 +211,17 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
                 publish()
                 return
             }
-            var up: [String] = []
-            var down: [String] = []
-            for (index, link) in bodies.enumerated() {
-                if index > 0 { try? await Task.sleep(nanoseconds: 700_000_000) }
-                let name = role(of: link.token)?.rawValue ?? link.model
-                if await link.enterLive() { up.append(name) } else { down.append(name) }
+            let started: [(String, Bool)] = await withTaskGroup(of: (String, Bool).self) { group in
+                for link in bodies {
+                    let name = role(of: link.token)?.rawValue ?? link.model
+                    group.addTask { @MainActor in (name, await link.enterLive()) }
+                }
+                var rows: [(String, Bool)] = []
+                for await row in group { rows.append(row) }
+                return rows
             }
+            let up = started.filter(\.1).map(\.0).sorted()
+            let down = started.filter { !$0.1 }.map(\.0).sorted()
             guard !up.isEmpty else {
                 line = "Live view refused"
                 publish()
@@ -224,27 +230,25 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             live = true
             liveLine = down.isEmpty ? "Live" : "Live · \(down.joined(separator: ", ")) refused"
             publish()
+            let polled = bodies.filter(\.inLive)
             livePoll = Task { [weak self] in
-                guard let self else { return }
-                while self.live, !Task.isCancelled {
-                    let snapshot = self.links.values.filter(\.inLive).sorted { self.sideRank($0) < self.sideRank($1) }
-                    if snapshot.isEmpty { break }
-                    // Each body has its own session, so the two GetLiveView calls run together.
-                    let got: [(NikonLink, UIImage?)] = await withTaskGroup(of: (NikonLink, UIImage?).self) { group in
-                        for link in snapshot {
-                            group.addTask { @MainActor in (link, await link.nextFrame()) }
-                        }
-                        var rows: [(NikonLink, UIImage?)] = []
-                        for await row in group { rows.append(row) }
-                        return rows
-                    }
-                    if !self.live || Task.isCancelled { break }
-                    for (link, image) in got {
-                        if let image {
-                            self.deliver(link, image)
-                        } else if self.frames.isEmpty, !link.liveNote.isEmpty {
-                            self.liveLine = link.liveNote
-                            self.publish()
+                // Each body polls on its own loop, so a slow reply from one never holds back the other's next frame.
+                await withTaskGroup(of: Void.self) { group in
+                    for link in polled {
+                        group.addTask { @MainActor [weak self] in
+                            while let self, self.live, link.inLive, !Task.isCancelled {
+                                let image = await link.nextFrame()
+                                if !self.live || Task.isCancelled { break }
+                                if let image {
+                                    self.deliver(link, image)
+                                    continue
+                                }
+                                if self.frames.isEmpty, !link.liveNote.isEmpty {
+                                    self.liveLine = link.liveNote
+                                    self.publish()
+                                }
+                                try? await Task.sleep(nanoseconds: 30_000_000)
+                            }
                         }
                     }
                 }
@@ -253,9 +257,18 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             live = false
             let poll = livePoll
             livePoll = nil
-            for link in bodies { await link.stopLive() }
+            await Self.each(bodies) { await $0.stopLive() }
             await poll?.value
             publish()
+        }
+    }
+
+    /// Run the same step on every body at once. Each body has its own session and command chain.
+    private static func each(_ links: [NikonLink], _ work: @escaping @MainActor (NikonLink) async -> Void) async {
+        await withTaskGroup(of: Void.self) { group in
+            for link in links {
+                group.addTask { @MainActor in await work(link) }
+            }
         }
     }
 
@@ -268,6 +281,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         realFrames[who] = image
         guard !simulate else { return }
         frames[who] = image
+        frameAsked[who] = link.frameAsked
         onChange?()
     }
 
@@ -335,25 +349,25 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
         let bodies = links.values.filter { role(of: $0.token) != nil }
         guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
-        var armed: [(NikonLink, Role)] = []
-        for link in bodies {
-            guard let who = role(of: link.token) else { continue }
-            try await link.armSync(photo)
-            armed.append((link, who))
+        let armed: [(NikonLink, Role)] = bodies.compactMap { link in role(of: link.token).map { (link, $0) } }
+        var armFailure: Error?
+        await Self.each(armed.map(\.0)) { link in
+            do { try await link.armSync(photo) } catch { armFailure = armFailure ?? error }
         }
+        if let armFailure { throw armFailure }
         usbHeld = true
         defer { usbHeld = false }
-        for row in armed { await row.0.closeForSync() }
+        await Self.each(armed.map(\.0)) { await $0.closeForSync() }
         try await Task.sleep(nanoseconds: 800_000_000)
         let reply: String
         do {
             reply = try await SyncLink.fire(photo)
         } catch {
-            for row in armed { try? await row.0.open() }
+            await Self.each(armed.map(\.0)) { try? await $0.open() }
             throw error
         }
         try await Task.sleep(nanoseconds: 200_000_000)
-        for row in armed { try? await row.0.open() }
+        await Self.each(armed.map(\.0)) { try? await $0.open() }
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
@@ -964,6 +978,7 @@ final class NikonLink {
     }
 
     private(set) var liveNote = ""
+    private(set) var frameAsked: CFAbsoluteTime = 0
     private var liveMisses = 0
 
     private var liveClock: (count: Int, total: Double, worst: Double, since: CFAbsoluteTime) = (0, 0, 0, 0)
@@ -975,7 +990,7 @@ final class NikonLink {
         liveClock.worst = max(liveClock.worst, seconds)
         guard liveClock.count >= 30 else { return }
         let wall = CFAbsoluteTimeGetCurrent() - liveClock.since
-        Trace.line(String(format: "FXPAN %@ live %.1f fps, ptp avg %.0f ms max %.0f ms, %d KB", model,
+        Trace.line(String(format: "FXPAN %@ %@ live %.1f fps, ptp avg %.0f ms max %.0f ms, %d KB", model, String(token.suffix(4)),
                      Double(liveClock.count) / max(wall, 0.001), liveClock.total / Double(liveClock.count) * 1000, liveClock.worst * 1000, bytes >> 10))
         liveClock = (0, 0, 0, 0)
     }
@@ -998,6 +1013,7 @@ final class NikonLink {
                 print("FXPAN \(model) frame \(Int(image.size.width))x\(Int(image.size.height))")
             }
             liveNote = "ok"
+            frameAsked = started
             return image
         }
         if reply.code == 0xA00B {
