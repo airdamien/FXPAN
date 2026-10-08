@@ -36,6 +36,7 @@ struct FXPANApp: App {
         setvbuf(stdout, nil, _IOLBF, 0)
         FontBook.register()
         UIDevice.current.isBatteryMonitoringEnabled = true
+        Disk.mirrorLatest()
     }
 
     var body: some Scene {

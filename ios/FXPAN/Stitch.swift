@@ -162,6 +162,7 @@ enum Stitcher {
             if files.fileExists(atPath: tNef.path), files.fileExists(atPath: rNef.path) {
                 note?("Developing T")
                 let apple = photo.look.base == "apple"
+                let began = CFAbsoluteTimeGetCurrent()
                 guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens, apple: apple) else {
                     throw PTPError.message("Could not develop T")
                 }
@@ -169,9 +170,13 @@ enum Stitcher {
                 guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens, apple: apple) else {
                     throw PTPError.message("Could not develop R")
                 }
-                print("FXPAN ciraw \(t.width)x\(t.height) lens \(photo.drive.cirawLens) apple \(apple)")
+                let size = { (url: URL) in ((try? files.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0) >> 20 }
+                Trace.line(String(format: "FXPAN ciraw T %dx%d from %d MB, R %dx%d from %d MB, %.1f s, lens %@ apple %@",
+                                  t.width, t.height, size(tNef), r.width, r.height, size(rNef), CFAbsoluteTimeGetCurrent() - began,
+                                  photo.drive.cirawLens ? "on" : "off", apple ? "on" : "off"))
                 return (t, r, "ciraw")
             }
+            Trace.line("FXPAN ciraw skipped, NEF T \(files.fileExists(atPath: tNef.path)) R \(files.fileExists(atPath: rNef.path))")
             note?("No NEF, using the JPEG")
         }
         note?("Reading the pair")

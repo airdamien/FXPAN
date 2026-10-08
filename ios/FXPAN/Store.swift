@@ -58,6 +58,26 @@ enum Disk {
         }
     }
 
+    /// devicectl can only read Library, Documents and tmp, and the app-group Captures folder sits outside them.
+    /// Copy the newest set into Application Support/Inspect so it can be pulled off the phone.
+    static func mirrorLatest() {
+        let files = FileManager.default
+        let src = captures
+        guard let names = try? files.contentsOfDirectory(atPath: src.path) else { return }
+        let stamps = names.compactMap { name -> String? in
+            guard name.hasPrefix("P_"), name.hasSuffix(".json") else { return nil }
+            return String(name.dropFirst(2).dropLast(5))
+        }
+        guard let stamp = stamps.max() else { return }
+        let dest = support.appendingPathComponent("Inspect", isDirectory: true)
+        try? files.removeItem(at: dest)
+        try? files.createDirectory(at: dest, withIntermediateDirectories: true)
+        for name in names where name.contains(stamp) {
+            try? files.copyItem(at: src.appendingPathComponent(name), to: dest.appendingPathComponent(name))
+        }
+        Trace.line("FXPAN inspect copied \(names.filter { $0.contains(stamp) }.sorted().joined(separator: " "))")
+    }
+
     static func load() -> Persisted {
         let url = support.appendingPathComponent("state.json")
         guard let data = try? Data(contentsOf: url),
