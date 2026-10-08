@@ -356,11 +356,21 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         for row in armed { try? await row.0.open() }
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
-        for row in armed {
-            do {
-                out[row.1] = try await row.0.takeRAM(stamp: stamp, role: row.1)
-            } catch {
-                failures.append(error.localizedDescription)
+        await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
+            for row in armed {
+                group.addTask {
+                    do {
+                        return .success((row.1, try await row.0.takeRAM(stamp: stamp, role: row.1)))
+                    } catch {
+                        return .failure(error)
+                    }
+                }
+            }
+            for await result in group {
+                switch result {
+                case .success(let pair): out[pair.0] = pair.1
+                case .failure(let error): failures.append(error.localizedDescription)
+                }
             }
         }
         if out.isEmpty {
@@ -666,6 +676,24 @@ enum FrameBlur {
     }
 }
 
+/// PTP timing lines in Application Support/FXPAN/ptp-trace.txt. Console output is lost while the phone sits on the camera hub.
+enum Trace {
+    private static let url = Disk.support.appendingPathComponent("ptp-trace.txt")
+
+    static func line(_ text: String) {
+        print(text)
+        let stamp = String(format: "%.3f ", Date().timeIntervalSince1970)
+        guard let data = (stamp + text + "\n").data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+}
+
 private final class PTPSink: NSObject {
     var finish: ((Data, Data, Error?) -> Void)?
 
@@ -678,11 +706,16 @@ private final class Gate: @unchecked Sendable {
     private let lock = NSLock()
     private var done = false
     func run(_ body: () -> Void) {
+        guard claim() else { return }
+        body()
+    }
+
+    func claim() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        if done { return }
+        if done { return false }
         done = true
-        body()
+        return true
     }
 }
 
@@ -933,15 +966,31 @@ final class NikonLink {
     private(set) var liveNote = ""
     private var liveMisses = 0
 
+    private var liveClock: (count: Int, total: Double, worst: Double, since: CFAbsoluteTime) = (0, 0, 0, 0)
+
+    private func clockFrame(_ seconds: Double, bytes: Int) {
+        if liveClock.count == 0 { liveClock.since = CFAbsoluteTimeGetCurrent() }
+        liveClock.count += 1
+        liveClock.total += seconds
+        liveClock.worst = max(liveClock.worst, seconds)
+        guard liveClock.count >= 30 else { return }
+        let wall = CFAbsoluteTimeGetCurrent() - liveClock.since
+        Trace.line(String(format: "FXPAN %@ live %.1f fps, ptp avg %.0f ms max %.0f ms, %d KB", model,
+                     Double(liveClock.count) / max(wall, 0.001), liveClock.total / Double(liveClock.count) * 1000, liveClock.worst * 1000, bytes >> 10))
+        liveClock = (0, 0, 0, 0)
+    }
+
     func nextFrame() async -> UIImage? {
         guard inLive else { return nil }
         let reply: PTP.Reply
+        let started = CFAbsoluteTimeGetCurrent()
         do {
             reply = try await transact(PTP.Op.getLiveView.rawValue, timeout: 6)
         } catch {
             noteLive("\(model) live \(error.localizedDescription)")
             return nil
         }
+        clockFrame(CFAbsoluteTimeGetCurrent() - started, bytes: reply.raw.count)
         let blob = PTP.jpeg(in: reply.data) ?? PTP.jpeg(in: reply.raw)
         if let blob, blob.count > 64, let image = UIImage(data: blob) {
             liveMisses += 1
@@ -977,8 +1026,14 @@ final class NikonLink {
     /// Point the release at camera RAM and empty what is already parked there.
     /// The body hands RAM frames back oldest first, so a leftover would be saved as the new shot.
     func armSync(_ photo: Photo) async throws {
+        try await ensureSession()
         try await aimRAM(photo)
         await drainRAM()
+    }
+
+    private func ensureSession() async throws {
+        if sessionUp && device.hasOpenSession { return }
+        try await open()
     }
 
     private func aimRAM(_ photo: Photo) async throws {
@@ -1002,116 +1057,170 @@ final class NikonLink {
         sessionUp = false
     }
 
-    /// Download the frame the 10-pin just put in camera RAM, then free that slot.
+    // MARK: Camera RAM
+    //
+    // libgphoto2 camera_nikon_capture and its Nikon event loop are the reference:
+    // ObjectAddedInSDRAM (0xC101) or ObjectAdded (0x4002) names the new frame, and a parameter of 0 means handle 0xFFFF0001.
+    // The host reads ObjectInfo, then the object. In burst and NEF+JPEG the firmware hands the next file out on that same handle,
+    // either once the read finishes or once the host deletes it, so the slot is checked again after each step.
+    // ParentObject 0 marks a SDRAM object. DeleteObject releases it, with 0x90C3 as the Nikon fallback.
+
+    private struct RAMFile: Equatable {
+        var handle: UInt32
+        var format: UInt16
+        var size: UInt32
+        var parent: UInt32
+        var name: String
+        var inRAM: Bool { parent == 0 || handle == PTP.sdramHandle || handle == PTP.sdramHandle2 }
+    }
+
+    /// Download every file this release put in camera RAM. NEF+JPEG is two objects, read one after the other.
     func takeRAM(stamp: String, role: Role) async throws -> Grabbed {
-        let deadline = Date().addingTimeInterval(12)
-        var handles: [UInt32] = []
-        while Date() < deadline {
-            handles = await queuedRAM()
-            if !handles.isEmpty { break }
-            try? await Task.sleep(nanoseconds: 200_000_000)
-        }
-        if handles.isEmpty { throw PTPError.message("\(role.rawValue) no frame in camera RAM") }
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
-        for handle in await queuedRAM() where !handles.contains(handle) {
-            handles.append(handle)
-        }
-        print("FXPAN \(model) ram \(handles.map { String(format: "%08X", $0) }.joined(separator: " "))")
-        let grabbed = try await save(handles: handles, stamp: stamp, role: role)
-        for handle in handles {
-            _ = try? await transact(PTP.Op.deleteObject.rawValue, params: [handle], timeout: 8)
-        }
-        await clearRAM()
-        return grabbed
-    }
-
-    /// Drop parked RAM frames so the next event is the shot we just took.
-    private func drainRAM() async {
-        var emptied = 0
-        for _ in 0..<6 {
-            let handles = await queuedRAM()
-            if handles.isEmpty { break }
+        try await ensureSession()
+        let expect = await expectedFiles()
+        var jpegURL: URL?
+        var nefURL: URL?
+        var got: [RAMFile] = []
+        var freed: [RAMFile] = []
+        var failed: [RAMFile] = []
+        var misses: [String] = []
+        let start = Date()
+        var firstAt: Date?
+        while true {
+            if let expect, got.count >= expect { break }
+            if let firstAt {
+                if Date().timeIntervalSince(firstAt) > (expect == nil ? 2 : 10) { break }
+            } else if Date().timeIntervalSince(start) > 20 {
+                break
+            }
+            var handles: [UInt32] = []
+            for handle in await ramEvents() + [PTP.sdramHandle, PTP.sdramHandle2] where !handles.contains(handle) {
+                handles.append(handle)
+            }
+            var read = false
             for handle in handles {
-                guard let file = try? await pullObject(handle),
-                      file.ok, !file.data.isEmpty else { continue }
-                writeRecovered(file.data, index: emptied)
-                emptied += 1
-                _ = try? await transact(PTP.Op.deleteObject.rawValue, params: [handle], timeout: 8)
-            }
-        }
-        if emptied > 0 { print("FXPAN \(model) cleared \(emptied) old RAM frame(s)") }
-    }
-
-    /// Delete whatever is still parked in camera RAM after the shot has been saved.
-    private func clearRAM() async {
-        for handle in await ramObjectHandles() {
-            _ = try? await transact(PTP.Op.deleteObject.rawValue, params: [handle], timeout: 8)
-        }
-    }
-
-    /// Handles on fixed or removable RAM. The card is never listed, so a full card cannot stall the shot.
-    private func ramObjectHandles() async -> [UInt32] {
-        guard let storages = try? await transact(PTP.Op.getStorageIDs.rawValue), storages.ok else { return [] }
-        var out: [UInt32] = []
-        for id in Self.words(storages.data) {
-            guard let info = try? await transact(PTP.Op.getStorageInfo.rawValue, params: [id], timeout: 4),
-                  info.ok, info.data.count >= 2 else { continue }
-            let kind = info.data.u16(0)
-            guard kind == 0x0003 || kind == 0x0004 else { continue }
-            guard let reply = try? await transact(PTP.Op.getObjectHandles.rawValue, params: [id, 0, 0xFFFF_FFFF], timeout: 8),
-                  reply.ok else { continue }
-            for handle in Self.words(reply.data) where !out.contains(handle) {
-                out.append(handle)
-            }
-        }
-        return out
-    }
-
-    private func queuedRAM() async -> [UInt32] {
-        var out = await ramObjectHandles()
-        let cards = await cardStorages()
-        var noted = false
-        for _ in 0..<8 {
-            guard let ev = try? await transact(PTP.Op.getEvent.rawValue, timeout: 2), ev.ok else { break }
-            let events = Self.events(ev.data)
-            if events.isEmpty {
-                if !noted, ev.data.count > 2 {
-                    noted = true
-                    print("FXPAN \(model) events \(Self.eventBrief(ev.data))")
+                guard let info = await ramInfo(handle) else { continue }
+                if got.contains(info) {
+                    if !freed.contains(info) {
+                        freed.append(info)
+                        await release(info)
+                    }
+                    continue
+                }
+                if failed.filter({ $0 == info }).count >= 2 { continue }
+                print(String(format: "FXPAN %@ ram %08X fmt %04X %u bytes %@", model, handle, info.format, info.size, info.name))
+                let data = try await readObject(info)
+                guard data.count == Int(info.size) else {
+                    failed.append(info)
+                    misses.append(String(format: "%08X %d of %u", handle, data.count, info.size))
+                    continue
+                }
+                try keep(data, stamp: stamp, role: role, jpegURL: &jpegURL, nefURL: &nefURL)
+                got.append(info)
+                if firstAt == nil { firstAt = Date() }
+                read = true
+                if let now = await ramInfo(handle), now == info {
+                    freed.append(info)
+                    await release(info)
                 }
                 break
             }
-            for event in events {
-                guard await isRAM(event, cards: cards) else { continue }
-                if !out.contains(event.param) { out.append(event.param) }
+            if !read { try? await Task.sleep(nanoseconds: 150_000_000) }
+        }
+        print("FXPAN \(model) ram kept jpeg=\(jpegURL != nil) nef=\(nefURL != nil) expect=\(expect.map(String.init) ?? "?") \(String(format: "%.1fs", Date().timeIntervalSince(start)))")
+        if jpegURL == nil && nefURL == nil {
+            let why = misses.isEmpty ? "no frame in camera RAM" : "short read \(misses.joined(separator: ", "))"
+            throw PTPError.message("\(role.rawValue) \(why)")
+        }
+        await emptyRAM()
+        return Grabbed(jpeg: jpegURL, nef: nefURL)
+    }
+
+    /// Nikon Compression 0x5004, as libgphoto2 lists it: 0–2 JPEG, 3 TIFF, 4 NEF, 5–7 NEF plus a JPEG.
+    private func expectedFiles() async -> Int? {
+        guard let v = await value(.compression) else { return nil }
+        switch v {
+        case 0...4: return 1
+        case 5...7: return 2
+        default: return nil
+        }
+    }
+
+    /// One Nikon GetEvent. The frame handles it names, with parameter 0 read as 0xFFFF0001.
+    private func ramEvents() async -> [UInt32] {
+        guard let ev = try? await transact(PTP.Op.getEvent.rawValue, timeout: 4), ev.ok else { return [] }
+        let batch = Self.events(ev.data)
+        guard !batch.isEmpty else { return [] }
+        print("FXPAN \(model) events \(Self.eventBrief(ev.data))")
+        var out: [UInt32] = []
+        for event in batch {
+            switch event.code {
+            case PTP.addedInRAM, PTP.objectAdded, PTP.requestTransfer:
+                out.append(event.param == 0 ? PTP.sdramHandle : event.param)
+            default:
+                break
             }
         }
         return out
     }
 
-    /// Fixed/removable ROM is the card. RAM storages stay out of this set.
-    private func cardStorages() async -> Set<UInt32> {
-        guard let storages = try? await transact(PTP.Op.getStorageIDs.rawValue), storages.ok else { return [] }
-        var cards: Set<UInt32> = []
-        for id in Self.words(storages.data) {
-            guard let info = try? await transact(PTP.Op.getStorageInfo.rawValue, params: [id], timeout: 4),
-                  info.ok, info.data.count >= 2 else {
-                cards.insert(id)
-                continue
-            }
-            let kind = info.data.u16(0)
-            if kind == 0x0001 || kind == 0x0002 { cards.insert(id) }
-        }
-        return cards
+    /// ObjectInfo: StorageID @0, format @4, compressed size @8, ParentObject @38, filename @52. GetObjectInfo fails on an empty slot.
+    private func ramInfo(_ handle: UInt32) async -> RAMFile? {
+        guard let reply = try? await transact(PTP.Op.getObjectInfo.rawValue, params: [handle], timeout: 6),
+              reply.ok, reply.data.count >= 53 else { return nil }
+        let data = reply.data
+        let format = data.u16(4)
+        let size = data.u32(8)
+        guard format != 0x3001, size > 0 else { return nil }
+        var reader = PTP.Reader(data: data)
+        reader.i = 52
+        let name = reader.ptpString() ?? ""
+        return RAMFile(handle: handle, format: format, size: size, parent: data.u32(38), name: name)
     }
 
-    private func isRAM(_ event: PTPEvent, cards: Set<UInt32>) async -> Bool {
-        if event.code == PTP.addedInRAM { return true }
-        guard event.code == PTP.objectAdded else { return false }
-        guard let info = try? await transact(PTP.Op.getObjectInfo.rawValue, params: [event.param], timeout: 4),
-              info.ok, info.data.count >= 4 else { return false }
-        let storage = info.data.u32(0)
-        return !cards.contains(storage)
+    /// Release a frame that is still the one we saved. When the twin has already moved into the handle, it stays.
+    private func release(_ info: RAMFile) async {
+        guard info.inRAM else { return }
+        let gone = try? await transact(PTP.Op.deleteObject.rawValue, params: [info.handle, 0], timeout: 8)
+        var line = String(format: "FXPAN %@ release %08X delete %@", model, info.handle, Self.hex(gone?.code ?? 0))
+        if let gone, !gone.ok, gone.code != 0x2009, gone.code != 0x2013 {
+            let cancel = try? await transact(PTP.Op.deleteSDRAM.rawValue, params: [info.handle], timeout: 8)
+            line += " cancel " + Self.hex(cancel?.code ?? 0)
+        }
+        print(line)
+    }
+
+    /// 0x90C3 with parameter 0 deletes every SDRAM image. Only used once this shot's files are saved, so the body leaves transfer.
+    private func emptyRAM() async {
+        let one = await ramInfo(PTP.sdramHandle)
+        let two = one == nil ? await ramInfo(PTP.sdramHandle2) : nil
+        guard one != nil || two != nil else { return }
+        let wiped = try? await transact(PTP.Op.deleteSDRAM.rawValue, params: [0], timeout: 8)
+        print("FXPAN \(model) ram wipe \(Self.hex(wiped?.code ?? 0))")
+        await settle(minimum: 0, seconds: 3)
+    }
+
+    /// Empty frames parked in camera RAM before a new release. They go to recovered_ram, so a leftover is never saved as the new shot.
+    private func drainRAM() async {
+        _ = await ramEvents()
+        var emptied = 0
+        var seen: [RAMFile] = []
+        for _ in 0..<8 {
+            var parked = await ramInfo(PTP.sdramHandle)
+            if parked == nil { parked = await ramInfo(PTP.sdramHandle2) }
+            guard let info = parked else { break }
+            if seen.contains(info) {
+                await emptyRAM()
+                break
+            }
+            seen.append(info)
+            if let data = try? await readObject(info), data.count == Int(info.size) {
+                writeRecovered(data, index: emptied)
+                emptied += 1
+            }
+            await release(info)
+        }
+        if emptied > 0 { print("FXPAN \(model) cleared \(emptied) old RAM frame(s)") }
     }
 
     private func writeRecovered(_ data: Data, index: Int) {
@@ -1123,15 +1232,16 @@ final class NikonLink {
     }
 
     func shoot(stamp: String, role: Role, photo: Photo) async throws -> Grabbed {
+        try await ensureSession()
         await stopLive()
         try await aimRAM(photo)
         await drainRAM()
         await settle(minimum: 0.4, seconds: 4)
-        var reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 25)
+        var reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
         print("FXPAN \(model) captureRAM \(Self.hex(reply.code))")
         if reply.code == 0x2019 {
             await settle(minimum: 1.5, seconds: 12)
-            reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 25)
+            reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
             print("FXPAN \(model) captureRAM2 \(Self.hex(reply.code))")
         }
         if !reply.ok {
@@ -1142,37 +1252,75 @@ final class NikonLink {
         return try await takeRAM(stamp: stamp, role: role)
     }
 
-    private func save(handles: [UInt32], stamp: String, role: Role) async throws -> Grabbed {
-        var jpegURL: URL?
-        var nefURL: URL?
-        for handle in handles.reversed() {
-            if jpegURL != nil && nefURL != nil { break }
-            let file = try await pullObject(handle)
-            guard file.ok, !file.data.isEmpty else { continue }
-            if file.data.starts(with: [0xFF, 0xD8]) {
-                let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")
-                try file.data.write(to: url, options: .atomic)
-                jpegURL = url
-            } else {
-                let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).nef")
-                try file.data.write(to: url, options: .atomic)
-                nefURL = url
-                if jpegURL == nil, let jpg = PTP.jpeg(in: file.data), jpg.count > 20_000 {
-                    let preview = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")
-                    try jpg.write(to: preview, options: .atomic)
-                    jpegURL = preview
-                }
-            }
+    /// A JPEG starts with FF D8. Anything else from this slot is the NEF. The embedded preview fills in only when the body did not also send a JPEG.
+    private func keep(_ data: Data, stamp: String, role: Role, jpegURL: inout URL?, nefURL: inout URL?) throws {
+        if data.starts(with: [0xFF, 0xD8]) {
+            let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")
+            try data.write(to: url, options: .atomic)
+            jpegURL = url
+            return
         }
-        if jpegURL == nil && nefURL == nil { throw PTPError.message("\(role.rawValue) file was empty") }
-        return Grabbed(jpeg: jpegURL, nef: nefURL)
+        let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).nef")
+        try data.write(to: url, options: .atomic)
+        nefURL = url
+        let preview = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).jpg")
+        if jpegURL == nil, !FileManager.default.fileExists(atPath: preview.path),
+           let jpg = PTP.jpeg(in: data), jpg.count > 20_000 {
+            try jpg.write(to: preview, options: .atomic)
+            jpegURL = preview
+        }
     }
 
-    private func pullObject(_ handle: UInt32) async throws -> PTP.Reply {
+    /// ImageCapture returned an empty buffer when one GetObject was the whole frame. GetPartialObject (0x101B: handle, offset, max bytes) in pieces comes through.
+    /// The piece halves on an empty reply, and the size that worked carries over to the next file.
+    private var pieceBytes: UInt32 = 8 << 20
+
+    private func readObject(_ info: RAMFile) async throws -> Data {
         let started = CFAbsoluteTimeGetCurrent()
-        let file = try await transact(PTP.Op.getObject.rawValue, params: [handle], timeout: 60)
-        if file.ok { noteTransfer(bytes: file.data.count, seconds: CFAbsoluteTimeGetCurrent() - started) }
-        return file
+        var blob = Data()
+        blob.reserveCapacity(Int(info.size))
+        while blob.count < Int(info.size) {
+            let offset = UInt32(blob.count)
+            let ask = min(pieceBytes, info.size - offset)
+            let part = try await transact(PTP.Op.getPartial.rawValue, params: [info.handle, offset, ask], timeout: 30, endSession: true)
+            let bytes = Self.objectPayload(part.raw)
+            if part.ok, !bytes.isEmpty {
+                blob.append(bytes.prefix(Int(info.size) - blob.count))
+                continue
+            }
+            if offset == 0, part.code == 0x2005 {
+                return try await readWhole(info, started: started)
+            }
+            guard part.ok, pieceBytes > 128 << 10 else {
+                print(String(format: "FXPAN %@ read %08X stopped @%u %@", model, info.handle, offset, Self.hex(part.code)))
+                break
+            }
+            pieceBytes /= 2
+            print("FXPAN \(model) read piece \(pieceBytes >> 10) KB")
+        }
+        let seconds = CFAbsoluteTimeGetCurrent() - started
+        noteTransfer(bytes: blob.count, seconds: seconds)
+        print(String(format: "FXPAN %@ read %08X %d bytes %.2fs piece %u KB", model, info.handle, blob.count, seconds, pieceBytes >> 10))
+        return blob
+    }
+
+    /// GetObject (0x1009) for a body that does not support GetPartialObject.
+    private func readWhole(_ info: RAMFile, started: CFAbsoluteTime) async throws -> Data {
+        let file = try await transact(PTP.Op.getObject.rawValue, params: [info.handle], timeout: 90, endSession: true)
+        guard file.ok else { return Data() }
+        let bytes = Self.objectPayload(file.raw)
+        noteTransfer(bytes: bytes.count, seconds: CFAbsoluteTimeGetCurrent() - started)
+        return bytes
+    }
+
+    /// A real file must not be trimmed just because four bytes in the middle look like a PTP header.
+    private static func objectPayload(_ raw: Data) -> Data {
+        guard raw.count >= 12, raw.u16(4) == 2 else { return raw }
+        let code = raw.u16(6)
+        guard code == PTP.Op.getObject.rawValue || code == PTP.Op.getPartial.rawValue else { return raw }
+        let declared = Int(raw.u32(0))
+        guard declared >= 12, declared <= raw.count else { return raw }
+        return raw.subdata(in: 12..<declared)
     }
 
     /// USB 2 cannot deliver 55 MB/s of payload. A short transfer is not long enough to call a slow link.
@@ -1231,12 +1379,22 @@ final class NikonLink {
         return format(v)
     }
 
-    private func transact(_ code: UInt16, params: [UInt32] = [], out: Data? = nil, timeout: Double = 8) async throws -> PTP.Reply {
+    /// A poll that runs long must not close the session. Closing it is what turns a busy body into "Camera did not answer" on the next read.
+    /// A file transfer that stalls still closes the session, because that is the command the body is stuck inside.
+    private var pollStalled = false
+
+    private func transact(_ code: UInt16, params: [UInt32] = [], out: Data? = nil, timeout: Double = 8, endSession: Bool = false) async throws -> PTP.Reply {
+        if pollStalled {
+            pollStalled = false
+            Trace.line("FXPAN \(model) reopening the session after a slow reply")
+            await abortSession()
+            try await ensureSession()
+        }
         let transaction = txn
         txn &+= 1
         let command = PTP.command(code: code, transaction: transaction, params: params)
         return try await enqueue {
-            try await self.roundTrip(command, out: out, timeout: timeout)
+            try await self.roundTrip(command, out: out, timeout: timeout, endSession: endSession)
         }
     }
 
@@ -1255,14 +1413,18 @@ final class NikonLink {
     }
 
     private var sink: PTPSink?
+    /// ImageCapture does not retain the delegate. Keep it until the callback, including after a timeout.
+    private var heldSinks: [PTPSink] = []
 
-    private func roundTrip(_ command: Data, out: Data?, timeout: Double) async throws -> PTP.Reply {
+    private func roundTrip(_ command: Data, out: Data?, timeout: Double, endSession: Bool) async throws -> PTP.Reply {
         let device = self.device
         let sink = PTPSink()
         self.sink = sink
-        return try await withCheckedThrowingContinuation { cont in
+        heldSinks.append(sink)
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<PTP.Reply, Error>) in
             let gate = Gate()
-            sink.finish = { data, response, error in
+            sink.finish = { [weak self] data, response, error in
+                self?.heldSinks.removeAll { $0 === sink }
                 gate.run {
                     if let error {
                         cont.resume(throwing: error)
@@ -1278,10 +1440,30 @@ final class NikonLink {
                 didSendCommand: #selector(PTPSink.didSendPTPCommand(_:inData:response:error:contextInfo:)),
                 contextInfo: nil
             )
-            Task {
+            Task { @MainActor in
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                gate.run { cont.resume(throwing: PTPError.timeout) }
+                guard gate.claim() else { return }
+                let op = command.count >= 8 ? String(format: "%04X", command.u16(6)) : "?"
+                if endSession {
+                    Trace.line("FXPAN \(self.model) ptp \(op) stalled, closing the session so the body can leave transfer")
+                    await self.abortSession()
+                } else {
+                    Trace.line("FXPAN \(self.model) ptp \(op) slow, leaving the session up")
+                    self.pollStalled = true
+                }
+                self.heldSinks.removeAll { $0 === sink }
+                cont.resume(throwing: PTPError.timeout)
             }
+        }
+    }
+
+    /// Drop the USB session. A body stuck sending a file only returns to idle when this command is abandoned, not when another opcode is stacked on top.
+    private func abortSession() async {
+        sessionUp = false
+        inLive = false
+        guard device.hasOpenSession else { return }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            device.requestCloseSession(options: nil) { _ in cont.resume() }
         }
     }
 
@@ -1309,7 +1491,7 @@ final class NikonLink {
             if i + 6 > data.count { break }
             let code = data.u16(i)
             let param = data.u32(i + 2)
-            if param != 0 { out.append(PTPEvent(code: code, param: param)) }
+            out.append(PTPEvent(code: code, param: param))
             i += 6
         }
         return out
