@@ -748,9 +748,11 @@ final class AppModel {
                 let aim = self.focusAt
                 let hold = aim == nil ? self.focusBox : nil
                 let best = self.heldBest
+                let started = CFAbsoluteTimeGetCurrent()
                 let made = await Task.detached(priority: .userInitiated) {
                     Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim, hold: hold, holdBest: best)
                 }.value
+                self.clockPreview(CFAbsoluteTimeGetCurrent() - started, look: LookBook.identity(photo.look) ? "none" : photo.look.base, aid: photo.focus.aid)
                 if self.playingFocus { continue }
                 if let image = made.image {
                     self.preview = image
@@ -764,6 +766,22 @@ final class AppModel {
             self.previewBusy = false
             if self.previewDirty { self.schedulePreview() }
         }
+    }
+
+    private var previewClock: (count: Int, total: Double, worst: Double, since: CFAbsoluteTime) = (0, 0, 0, 0)
+
+    private func clockPreview(_ seconds: Double, look: String, aid: String) {
+        guard camera.live else { return }
+        if previewClock.count == 0 { previewClock.since = CFAbsoluteTimeGetCurrent() }
+        previewClock.count += 1
+        previewClock.total += seconds
+        previewClock.worst = max(previewClock.worst, seconds)
+        guard previewClock.count >= 30 else { return }
+        let wall = CFAbsoluteTimeGetCurrent() - previewClock.since
+        Trace.line(String(format: "FXPAN preview %.1f fps, build avg %.0f ms max %.0f ms, look %@ aid %@",
+                          Double(previewClock.count) / max(wall, 0.001), previewClock.total / Double(previewClock.count) * 1000,
+                          previewClock.worst * 1000, look, aid))
+        previewClock = (0, 0, 0, 0)
     }
 
     private struct PreviewMade {

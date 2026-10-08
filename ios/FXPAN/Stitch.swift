@@ -657,18 +657,25 @@ enum Stitcher {
         }
     }
 
+    /// One context for every grade. Building a CIContext per live-view frame cost more than the grade itself.
+    private static let gradeContext = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
+
     static func grade(_ image: CGImage, look: LookSet, fromRaw: Bool = false) -> CGImage {
         let image = vision(image, effect: look.apple)
         let w = image.width
         let h = image.height
+        let ciCtx = gradeContext
+        var prepared = apple(CIImage(cgImage: image), effect: look.apple)
+        if look.base == "apple" { prepared = phone(prepared, fromRaw: fromRaw) }
+        if w * h <= 4_000_000 {
+            let extent = CGRect(x: 0, y: 0, width: w, height: h)
+            return ciCtx.createCGImage(lookImage(prepared, look: look).cropped(to: extent), from: extent) ?? image
+        }
         let cs = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
             data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
             space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return image }
-        let ciCtx = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
-        var prepared = apple(CIImage(cgImage: image), effect: look.apple)
-        if look.base == "apple" { prepared = phone(prepared, fromRaw: fromRaw) }
         let band = 192
         var top = 0
         while top < h {

@@ -33,6 +33,7 @@ struct FXPANApp: App {
     @State private var model = AppModel()
 
     init() {
+        setvbuf(stdout, nil, _IOLBF, 0)
         FontBook.register()
         UIDevice.current.isBatteryMonitoringEnabled = true
     }

@@ -16,8 +16,10 @@ enum PTP {
         case getPropDesc = 0x1014
         case getProp = 0x1015
         case setProp = 0x1016
+        case getPartial = 0x101B
         case captureSDRAM = 0x90C0
         case changeMode = 0x90C2
+        case deleteSDRAM = 0x90C3
         case getEvent = 0x90C7
         case deviceReady = 0x90C8
         case startLiveView = 0x9201
@@ -39,8 +41,14 @@ enum PTP {
     }
 
     static let objectAdded: UInt16 = 0x4002
-    /// Nikon ObjectAddedInSDRAM. The card uses 0x4002, so a sync download that follows 0x4002 saves an old card file.
+    /// The body is in transfer mode and will stay there until the host reads this handle.
+    static let requestTransfer: UInt16 = 0x4009
+    static let captureDone: UInt16 = 0x400D
+    /// Nikon ObjectAddedInSDRAM. A parameter of 0 means the file is at 0xFFFF0001, not "no object".
     static let addedInRAM: UInt16 = 0xC101
+    static let captureDoneRAM: UInt16 = 0xC102
+    static let sdramHandle: UInt32 = 0xFFFF0001
+    static let sdramHandle2: UInt32 = 0xFFFF0002
 
     struct Reply {
         var code: UInt16
