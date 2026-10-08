@@ -26,10 +26,36 @@ enum Disk {
         return dir
     }
 
+    static let sharedGroup = "group.com.nikonduals.fxpan"
+    private static var movedCaptures = false
+
+    /// Finished stitches and their source frames. The app group lets Print Layout open the same folder.
     static var captures: URL {
-        let dir = support.appendingPathComponent("Captures", isDirectory: true)
+        let dir = sharedCaptures()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        movePrivateCaptures(into: dir)
         return dir
+    }
+
+    private static func sharedCaptures() -> URL {
+        if let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: sharedGroup) {
+            return base.appendingPathComponent("Captures", isDirectory: true)
+        }
+        return support.appendingPathComponent("Captures", isDirectory: true)
+    }
+
+    private static func movePrivateCaptures(into dest: URL) {
+        guard !movedCaptures else { return }
+        movedCaptures = true
+        let old = support.appendingPathComponent("Captures", isDirectory: true)
+        guard old.standardizedFileURL.path != dest.standardizedFileURL.path else { return }
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: old.path) else { return }
+        for name in names {
+            let src = old.appendingPathComponent(name)
+            let target = dest.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: target.path) { continue }
+            try? FileManager.default.moveItem(at: src, to: target)
+        }
     }
 
     static func load() -> Persisted {
