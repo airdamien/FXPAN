@@ -1,6 +1,6 @@
 // Path-length shim rings — stack behind imported F-mount if needed for focus match.
 
-include <params.scad>
+include <../../../openscad/params.scad>
 
 module shim_ring(t) {
     difference() {

@@ -1,186 +1,162 @@
-# Bill of materials — Nikon Dual T
+# Bill of materials — FXPAN, Nikkor-W
 
-Path target: **PATH_TOTAL ≈ 173.5 mm** with current defaults (`D_LENS_TO_KNIFE=55`, `D_KNIFE_TO_MOUNT=72`). See [OPTICS.md](OPTICS.md). Buy **first-surface** mirrors only.
+This is the camera as built. Two D800 bodies, upright, behind a Nikkor-W
+180 mm f/5.6 in a Copal No. 1. Focus is the M65 helicoid on the lens, not a
+helicoid on each camera. The iPhone runs the app. The Pi Zero only fires
+the shutters.
 
-## Optics (order these)
+![Rig](docs/build/rig.jpg)
 
-| Qty | Item | Why | Link |
-|-----|------|-----|------|
-| 2 | **50×50 mm first-surface mirror** (enhanced Al or protected Ag) | Field splitter at 45° | [Edmund 50×50 mm Silver 4–6λ](https://www.edmundoptics.com/p/50-x-50mm-silver-4-6lambda-mirror/31994/) · cheaper DIY: [Amazon “first surface mirror” search](https://www.amazon.com/s?k=first+surface+mirror+50mm) · craft sheet to cut: [Amazon 6×8" front surface sheet](https://www.amazon.com/s?k=front+surface+mirror+6x8) |
-| 1 | **M42–M42 focusing helicoid** (12–19 mm) | Fine focus on stem | [Fotasy 12–19 mm](https://www.amazon.com/Fotasy-Helicord-Focusing-Helicoid-Extention/dp/B01N5V1QAC) · [Pixco 12–19 mm](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01IGGQR7Y) |
-| 1 | **Longer M42 helicoid or M42 extension tubes** (optional stack) | Extra travel if infinity is short | [Amazon M42 helicoid 25–55](https://www.amazon.com/s?k=M42+focusing+helicoid+25-55) · [M42 extension tube set](https://www.amazon.com/s?k=M42+extension+tube+set) |
-| 1 | **M39→M42 adapter** (if using enlarger lens) | Enlarger lenses are often M39 | Printed `elnikkor_adapter` (L39×26 TPI) for the El-Nikkor 50/2.8 Japan, or [Amazon M39 to M42](https://www.amazon.com/s?k=M39+to+M42+adapter) |
-| 1 | **El-Nikkor 50 mm f/2.8** (you have this) | Stand-in taking lens — close-up only on this path | Rear is **L39 × 26 TPI**. Print `elnikkor_adapter`. |
+| | |
+| --- | --- |
+| Frame | 64.80 × 23.9 mm, 2.711:1, 13248 × 4912, 65.1 MP |
+| Overlap | 20% |
+| Taking lens | Nikkor-W 180/5.6, flange distance 178.8 mm on this stack |
+| Plate | Edmund 50 × 75 × 1.0 mm, **75 across the fold** |
+| Aperture | f/8 to f/22. Corners are clean from f/8.4 |
+| Viewfinder | iPhone, FXPAN app |
+| Release | 10-pin, both bodies together, then the frames come off USB from camera RAM |
 
-## Cameras / sync
+Drawings and the measured arm lengths: [openscad/fxpan/README.md](openscad/fxpan/README.md).
+Why the plate is this rectangle: [openscad/fxpan/PLAN.md](openscad/fxpan/PLAN.md).
+Export: `./export_fxpan.sh`.
 
-| Qty | Item | Link |
-|-----|------|------|
-| 2 | Nikon D7000 bodies (no lenses) | (you have these) |
-| 2 | **Fotodiox Nikon F reverse ring, 52 mm** | [Fotodiox reverse adapter](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) (pick **52 mm**; screws into the printed 52×0.75 mouths) |
-| 1 | MC-DC2-compatible remote | [Kiwifotos MC-DC2](https://www.amazon.com/Kiwifotos-MC-DC2-Remote-Shutter-Release/dp/B071D9Y331) |
-| 1 | Dual-camera sync path | Prefer [FlashZebra #0236](http://flashzebra.com/products/0236/) (2.5 mm TRS, splitter-ready) + [FlashZebra #0216](https://flashzebra.com/products/0216/index.shtml) Y (or Amazon [MyCableMart 3-conductor](https://www.amazon.com/dp/B0C7WHDT5P) / [Wideskall 2.5 mm stereo](https://www.amazon.com/dp/B01CRXGEDY)) + **2×** 2.5 mm→DC2 pigtails ([LGSHOP N10-DC2](https://www.amazon.com/dp/B076FV2WDB) · [HAPPYTOPSTAR](https://www.amazon.com/dp/B08ZJ3GD7T)). Must be **2.5 mm TRS (3-pole)**, not 3.5 mm and not 4-pole TRRS. |
-| 1 | 10.1″ Pi HDMI touch (HAMTYSAN HCIK101V.CC) | Field UI. Ghost + drawings in [`docs/monitor/`](docs/monitor/). | [Amazon B0B9M5SCG4](https://www.amazon.com/dp/B0B9M5SCG4) |
+Earlier bodies, including the EL-Nikkor D7000 kits, are in
+[archive/](archive/EARLIER.md).
 
-## Print / hardware
+## Optics
 
-| Qty | Item | Link |
-|-----|------|------|
-| 1 spool | PETG or ABS (not brittle PLA for bayonets) | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
-| ~20 | M3 heat-set inserts | [Amazon M3 heat set inserts](https://www.amazon.com/s?k=M3+heat+set+inserts) |
-| ~36 | M3×8–20 socket screws | 12 for the three port cookies (4 each). 4× M3×20 lid-to-body (nuts under the stem / T plates). 6× M3×16 lid → `display_mount` (3 per rail). 6× M3 through the Wormfingers back into the rails (3 per rail). [Amazon M3 socket screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
-| 16 | M3 hex nuts | 12 in the tube-wall traps. 4 slide into the lid-corner slots (stem / T plates cover them). [Amazon M3 hex nuts](https://www.amazon.com/s?k=M3+hex+nuts) |
-| 4 | M3×25 + nuts | Wormfingers case sandwich. Comes with their Printables note. |
-| 6 | M3 set screws (mirror tip/tilt) | [Amazon M3 set screws](https://www.amazon.com/s?k=M3+set+screw+kit) |
-| 1 | **1/4-20 heat-set insert**, short **6.4 mm** | Floor well Ø8.1 mm. Iron in from the bed face after printing. Do not punch through. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
-| 1 | 1/4-20 camera screw | Into that insert (tripod / clamp) | [Amazon 1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
-| 1 | Flocking sheet or flat black paint | [Amazon camera flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
+| Qty | Item | Why |
+| --- | --- | --- |
+| 1 | **Nikkor-W 180 mm f/5.6**, Copal No. 1 | The taking lens. 5×7 coverage, so the 64.80 mm stitch is inside the circle. Rear thread is the Copal ring, not M62. Used, search `nikkor-w 180mm f/5.6`. |
+| 1 | **Pixco M65×1 helicoid, 17–31 mm** | Focus. Male into `stem_m65`, `stem_nw_m65` into the front. Infinity is about 1 mm out from collapsed. [Pixco 17–31](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01N1GOL39). |
+| 1 | **Edmund #37201**, stock 35-947. 50 × 75 × **1.0 mm** 50R/50T, S2 broadband AR | 75 mm goes **across the fold**. At 45° that presents 53.03 mm; the frame needs 44.39 mm at f/5.6. The black dot is S1 and faces the lens. Do not cut it. [Edmund #37201](https://www.edmundoptics.com/p/50-x-75mm-50-50rt-vis-plate-beamsplitter/37201/). |
+| 0 | Edmund **#17536**, the 50 × 75 × **3 mm** plate | Same page, same price, wrong thickness. It will not enter the slot, and the tilt astigmatism needs f/16. Check the thickness on the box. |
 
-## Print export cheatsheet
+The EL-Nikkor 180/5.6N and its M62 helicoid are a different stem
+(`stem` + `stem_el180_inf`). They are not on this camera. Their parts stay
+listed in [openscad/fxpan/bom.md](openscad/fxpan/bom.md).
 
-`./export_stls.sh` writes print STLs under [`stls/`](stls/) by fork. Those files are committed.
+## Cameras, phone, sync
 
-| Flag / wrapper | Out | Mouth (`ARM_MOUNT=0` / `arm_*_f`) |
-|----------------|-----|-----------------------------------|
-| (none) | `stls/v/` | 52×0.75 F reverse / printed F |
-| `--bsplit` | `stls/bsplit/` | 52×0.75 F reverse / printed F |
-| `--hybrid` | `stls/hybrid/` | 52×0.75 F reverse / printed F |
-| `--fxpan` / `./export_fxpan.sh` | `stls/fxpan/` | 52×0.75 F reverse / printed F. **Its own buy list:** [`openscad/fxpan/bom.md`](openscad/fxpan/bom.md) — a 50 × 75 plate with the 75 across the fold, not the 50 mm square below |
-| `--shadowgraph` / `./export_shadowgraph.sh` | `stls/hybrid_shadowgraph/` | 52×0.75 F reverse / printed F; shadowgraph R tube |
-| `--efhybrid` / `./export_efhybrid.sh` | `stls/EFhybrid/` | **58×0.75** EF reverse / printed EF |
-| `--ehybrid` / `./export_ehybrid.sh` | `stls/Ehybrid/` | **52×0.75** E reverse / printed E |
+| Qty | Item | Why |
+| --- | --- | --- |
+| 2 | **Nikon D800**, no lens | 36 × 23.9 mm, 46.5 mm register. Both sit upright. |
+| 2 | **Memory card**, CF or SD, any size that the body accepts | A D800 with Slot empty release lock set will ignore the 10-pin when the slot is empty. USB capture still works with no card, because that command writes to camera RAM directly. The 10-pin does not. Put a card in each body. The app still downloads the new frame from RAM. |
+| 1 | **iPhone** running FXPAN | Live view, exposure, the 10-pin release, and the stitch. The screen replaces the Pi touch display. Build and install from [ios/](ios/). |
+| 1 | Printed phone tray | [openscad/phone/WATCH_ME.scad](openscad/phone/WATCH_ME.scad). `./export_stls.sh --phone` writes `stls/phone/`. The 17 Pro Max cradle is `pm17_cradle` + `pm17_shoe`, one M3×16 and a nut. |
+| 1 | **USB hub** the phone can see both bodies through | One session per D800. The phone has to drop both sessions before the 10-pin will fire, then open them again to download. |
+| 1 | **Raspberry Pi Zero W** | USB gadget at 10.55.0.1. The phone sends `FIRE` to port 2323. Setup: [pi0w/README.md](pi0w/README.md). |
+| 1 | **FXPAN trigger board** on the Zero's header | Four 4N35 optocouplers, two 3.5 mm jacks. Parts and the PCBWay zip: [gpio_trigger/bom.md](gpio_trigger/bom.md). |
+| 2 | **3.5 mm TRS male to Nikon 10-pin male** | One per body. 3-pole, not TRRS. [Keabroir](https://www.amazon.com/dp/B0CYHL1B7F). |
 
-Or set `PART` and F6:
+![The app](docs/build/ios.jpg)
 
-- `chassis` — junction box only (print floor on the bed)
-- `stem` / `arm_l` / `arm_r` / `arm_t` — tube + flange (print the square flange on the bed)
-- `lid` — chamber lid
-- `mirror_tray` / `bs_tray` / `hybrid_tray` — splitter cartridge
-- `brace` — hybrid tripod plate (print floor on the bed; insert from the bed)
-- `shims` — 0.2 / 0.5 / 1.0 mm focus rings
-- `elnikkor_adapter` — male M42 → female L39×26 TPI (print the M42 male on the bed)
+The app's Drive screen is where Release is set. **Sync** closes USB, pulses
+the board (100 ms focus, then 300 ms shutter), and downloads both frames
+from camera RAM. **USB** fires over PTP and does not use the 10-pin.
 
-`--bsplit` parts: `chassis` / `stem` / `arm_r` (reflect, +X) / `arm_t` (transmit, +Y, shorter by `bs_t_comp`) / `lid` / `bs_tray` / `shims` / `elnikkor_adapter`
+## Print
 
-`--hybrid` / `--hybrid-shift` / `--efhybrid` / `--ehybrid` parts: `chassis` / `stem` / `arm_r` / `arm_t` / `lid` / `hybrid_tray` / `brace` (D7000 hybrids) / `shims` / `elnikkor_adapter`. `--hybrid-shift` also writes `*_inner` / `*_outer` for PETG lining + PCTG shell. Drop the whole 50×50×1 plate into the slot (S1 toward the lens). Do not cut it.
+`./export_fxpan.sh` writes `stls/fxpan/`. This build uses these parts.
+PETG or ABS, not PLA. The mouths and the cookie screws carry the bodies.
 
-`--shadowgraph` parts: same list, but tubes are not toed. T is conjugate (`▲ T shadowgraph`). R is the longer razor-slot tube (`▲ R shadowgraph`). Do not swap them. Bench setup and Kraken plates: [README — Shadowgraph](README.md#shadowgraph).
+| Part | Qty | On the bed |
+| --- | --- | --- |
+| `ringgauge` | 1, before the arms | flat. Thread a reverse ring into each step. Keep the tightest that runs down by hand, and put that clearance in `F_REV_CLEAR` if you print ring mouths. |
+| `chassis` | 1 | floor down. The lens face is opened to an 83.7 mm circle so the M65 helicoid can sit on the cookie. |
+| `lid` | 1 | outer face down. Two M3 holes at the +Y corners. Six blind M2.5 holes on top take the Zero's standoffs. |
+| `fxp_tray` | 1 | floor down. |
+| `stem_m65` | 1 | cookie on the bed, boss up. Thread start is clocked so the Copal controls come out on top. |
+| `stem_nw_m65` | 1 | Copal board up, male down on a raft. |
+| `arm_r_wl`, `arm_t_wl` | 1 each | cookie on the bed, printed F up. Fixed registers 23.00 mm (R) and 22.62 mm (T), so both bodies peak at the same helicoid setting. |
+| `base` | 1 | flat. Tripod insert and screw heads from the bed. |
+| `cradle_r`, `cradle_t` | 1 each | flat. |
+| `baffle` | 2 sheets | flat. One arm's rings per sheet. |
+| `shims` | 1 sheet | flat. 0.2, 0.5, 1.0 mm. |
 
-## 50/50 plate fork (optional)
+Logo inlays are optional. They drop into the chassis pocket as separate
+filaments: gold FX, off-white PAN, red outline and 65MP, grey spec line.
+The file names are `chassis_logo_*` in `stls/fxpan/`.
 
-Same cameras and stem hardware. One [Edmund 50×50 mm 50R/50T plate](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) (#43-359, 1 mm, S2 uncoated) **instead of** two first-surface mirrors. Both bodies get the same image at half the light — not a stitch. AR-backed 50×50 is [#45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/) (3 mm, ~$263).
+## Hardware
 
-## Hybrid pano — D7000
+| Qty | Item |
+| --- | --- |
+| 12 | M3×12 countersunk, and 12 M3 nuts. Four per cookie, into the wall traps. |
+| 2 | M3×20, and 2 M3 nuts. Lid to the chassis, +Y corners. Nuts go in before the tray. |
+| 8 | M3×16, and 8 M3 nuts. Four per cradle, heads in the plinth, nuts under the base. |
+| 2 | 1/4-20 heat-set insert, 6.4 mm long. One in the base, one in the chassis floor. Iron them in from the bed face. [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces). |
+| 1 | 1/4-20 knurled thumbscrew. Chassis onto the base. |
+| 2 | 1/4-20 × 25 mm. Up through the base and the cradle into each body. Check the socket depth before you tighten. |
+| 1 | 1/4-20 tripod screw, into the base insert. The tripod is not in the chassis. |
+| 4 | M2.5 × 10 mm male-female standoffs. Zero to the lid, header tails toward the lid. |
+| 1 | Flocking, or flat black paint, in the chamber, the tray, both bores, and both F throats. The throats are unlined on purpose. A liner there vignettes. |
 
-Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Export with `./export_stls.sh --hybrid`. Print `chassis` (floor on the bed), `stem`, `arm_r`, `arm_t`, `lid`, `hybrid_tray`, `brace` (floor on the bed), `shims`, `elnikkor_adapter` (M42 male on the bed). Countryside: [`docs/kraken/el135_scene.png`](docs/kraken/el135_scene.png). Brace is sized for the **72 mm** 135/180 arms.
+`arm_r_wl` and `arm_t_wl` are printed F-mounts. The cradles carry the
+weight. The bayonet only takes the twist. Metal 52 mm reverse-ring mouths
+(`arm_r`, `arm_t`, Fotodiox 52 mm F) keep the real 44 mm throat and are the
+f/8.4 path. This rig's arms are the printed ones.
 
-### Assembly
+## Assembly
 
-1. Box floor on the bed; tubes flange-on-bed; **brace** floor on the bed. Black PETG/ABS. Iron a **1/4-20×6.4** heat-set into the **chassis** floor well and another into the **brace** well, both from the bed face. Do not punch through. Tripod goes in the brace, not the box.
-2. Drop the uncut 50×50×1 into the tray from +Z, **S1 toward the lens**. Roof pegs sit past the plate edge so it drops in. Seat the tray in the box corners. Lid forks over the two posts.
-3. **Lid Pi holes are not threaded.** They are Ø2.3 mm, 2.5 mm deep, 1.5 mm floor. Drive **M2.5×6 thread-forming** screws from the outside. Do not punch through, and do not slice them as through-holes.
-4. Flanges are engraved **▲ R** (side, +X) and **▲ T** (back, +Y). Bolt with the arrow at the top (box floor down) so the toe points at the lens. Do not swap the arms — T is shorter (`bs_t_comp`).
-5. Nuts in the wall traps; 4× M3 per cookie. Screw a 52 mm **F** reverse ring into each mouth; bayonet the D7000s. Or print `arm_*_f` (`ARM_MOUNT=1`) and dry-fit the printed F; add `F_MOUNT_CLOCK` if the first print locks 90° off.
-6. Helicoid + `elnikkor_adapter` + **EL-Nikkor 135/5.6** on the stem for a **~0.61 m** subject. The 50/2.8 and the F 50/1.8 are close-up only. The F 50 stem takes the **54 mm / 2 mm-cookie** camera tubes (`arm_*_s` / `arm_*_sf`), not the 72 mm 135/180 pair. Landscape infinity is the **180**, not a shorter stem.
-7. Shim one arm until both live-views are sharp on the same subject without touching the helicoid. MC-DC2 Y-lead for sync.
-8. Both bodies **upright**. Bolt `brace` from below: one 1/4-20 up into the box insert, two 1/4-20s through the **slots** into the D7000 bases. The plate is solid with hex cutouts. Iron the tripod insert at the **centroid**. Mount the tripod there, not in the box.
+1. Heat-set the 1/4-20 insert into the base, and the other into the chassis floor, both from the bed face.
+2. Flock the chamber, the tray, both bores, and both F throats.
+3. Push the baffle rings in from the camera mouth, `fxp_bf1` first. They are numbered. Do not shuffle them. Reprint the set if you change `FSTOP`.
+4. Plate into the tray. **Black dot toward the lens. 75 mm horizontal, 50 mm up.** The other way round, the stitch crosses 35 mm of glass and clips until f/11. Press it straight down between the centring ribs. A scrap of 1.75 mm filament through each 2 mm hole on the cheeks keeps it from lifting.
+5. M3 nuts into the two lid slots, then the tray. The tray closes the slots.
+6. Cookies into their pockets. **▲ R** with the R mark on the chassis, **▲ T** with T. Four M3×12 countersunk each. The stem cookie is stamped `fxp_stem`.
+7. Lid on with two M3×20. The trigger stack sits on top, jacks toward R. Zero underneath, board on the 2×20 header, four standoffs into the lid.
+8. Chassis onto the base with the thumbscrew. Cradles on with four M3×16 each.
+9. Bodies. Start each 1/4-20 × 25 through the slot and leave it loose. Bayonet the body, then tighten the screw where the body landed. Do not pull the body onto the mount with the screw.
+10. Lens. M65 helicoid into `stem_m65` until the body sits on the cookie. `stem_nw_m65` into the helicoid. Copal controls on top.
 
-Kraken for the 135: [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png) · [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png) (~14 cm object stitch at 0.61 m, 1.7× one DX). You already have the D7000s and the 50/2.8 (close-up only).
+Both bodies need a card before the first synced release.
 
-The 90 mm box plus the D7000 46.5 mm register is already **~136 mm** before any tube or mount. A 135 cannot reach infinity on this chassis (floor is ~150 mm with L39 + reverse rings). Infinity needs **f ≈ PATH_TOTAL ≈ 174 mm**.
+## Alignment
 
-| Qty | Item | Why | Link |
-|-----|------|-----|------|
-| 1 | **Edmund 50×50×1 mm 50R/50T** #43-359 | Fits the printed tray. **S2 uncoated** — the S2 ghosts in the stitch. Do not cut it. | [Edmund #43-359](https://www.edmundoptics.com/p/50-x-50mm-50r50t-plate-beamsplitter/4985/) |
-| 1 | **Edmund 50×50×3 mm 50R/50T VIS** #45-854 (optional) | Same 50/50 on S1, **S2 AR** Ravg ≤1% 400–700 nm (black-dot S1). **~$263**. 3 mm, not 1 mm — will not drop into the current tray; needs a thicker slot and ~3× `bs_t_comp`. Edmund does not sell a 50×50×1 mm with S2 AR. | [Edmund #45-854](https://www.edmundoptics.com/p/50-x-50mm-50r50t-vis-plate-beamsplitter/6281/) |
-| 1 | **EL-Nikkor 135 mm f/5.6** | Taking lens at **~0.61 m**. 4×5 circle covers the 42.5 mm stitch. **L39×26 TPI**. Used often **$80–150**. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+135mm+f%2F5.6) · [Amazon](https://www.amazon.com/s?k=el-nikkor+135mm) |
-| 1 | **EL-Nikkor 180 mm f/5.6** (or Componon-S / Rodagon 180) | Landscape **infinity** on this path. Rack the 12–19 mm helicoid out **~6.5 mm** (173.5 → 180). 5×7 circle. Barrel is **62 mm**, not L39. Used often **$200–500**, scarcer than the 135. | [eBay](https://www.ebay.com/sch/i.html?_nkw=el-nikkor+180mm+f%2F5.6) · [Componon-S 180](https://www.ebay.com/sch/i.html?_nkw=componon-s+180) · [Rodagon 180](https://www.ebay.com/sch/i.html?_nkw=rodagon+180) |
-| 1 | **M62×1 helicoid** 17–31 mm | Fine focus for the **180**. Male into `stem_el180`, female for the lens. Until it ships, print `el180_adapter` (same 17 mm collapsed length). | Search **M62 focusing helicoid 17-31**. An M65×1 17–31 ([Pixco](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01N1GOL39)) needs the flangeless lens adapter below, and a reprinted M65 boss. Amazon has no M65×1↔M62×1 ring. |
-| 1 | **M65×1 male to M62×1 female, flangeless** (only with the M65 helicoid) | Lens end only. Added length **0 mm**. Until it arrives, print `m65_ring` from `openscad/fxpan/` — that stand-in adds 8 mm, so closest focus is about 4.5 m. | [RafCamera, flangeless, 0 mm](https://rafcamera.com/adapter-m65x1m-to-m62x1f-flangeless) |
-| 1 | Printed `el180_adapter` | Male M62 into the stem nut, female M62 for the 180. Same stack as the helicoid at **17 mm**. | export `PART=el180_adapter` |
-| 1 | Printed `elnikkor_adapter` | Male M42 into the helicoid, female L39 for the **135** (or the 50) | export `PART=elnikkor_adapter` |
-| 1 | **M42–M42 helicoid** 12–19 mm | Fine focus for the **135** only. | [Fotasy 12–19](https://www.amazon.com/Fotasy-Helicord-Focusing-Helicoid-Extention/dp/B01N5V1QAC) · [Pixco 12–19](https://www.amazon.com/Pixco-Adjustable-Focusing-Helicoid-Shooting/dp/B01IGGQR7Y) |
-| 1 | **M42 extension tubes** (optional) | If the 180 is still short of infinity at helicoid max, stack 5–10 mm. If the 135 is short of 0.61 m, same tubes. | [M42 extension tube set](https://www.amazon.com/s?k=M42+extension+tube+set) |
-| 2 | **Fotodiox Nikon F reverse ring, 52 mm** | Arms are 52×0.75 | [Fotodiox 52 mm](https://www.amazon.com/Fotodiox-Reverse-Adapter-Compatible-Cameras/dp/B001G4NBSC) |
-| 1 | Dual-camera sync | Same as the V | [FlashZebra #0236](http://flashzebra.com/products/0236/) + [#0216](https://flashzebra.com/products/0216/index.shtml) + 2× [2.5 mm→DC2](https://www.amazon.com/dp/B076FV2WDB) |
-| 1 spool | PETG or ABS | Chassis + tray | [Amazon PETG](https://www.amazon.com/s?k=PETG+filament+1.75) |
-| 16 | M3 hex nuts + 12× M3×10–16 + 4× M3×20 | 12 in the port cookies. 4 lid-corner nuts (slide in from stem / T, plates cover the slots) with M3×20 through the lid | [M3 nuts](https://www.amazon.com/s?k=M3+hex+nuts) · [M3 screws](https://www.amazon.com/s?k=M3+socket+head+cap+screw+assortment) |
-| 4 | M2.5×6 thread-forming | Blind Pi holes in the lid (58×49 HAT). Do not punch through. | [M2.5 screws](https://www.amazon.com/s?k=M2.5+6mm+screw) |
-| 2 | **1/4-20 heat-set**, short 6.4 mm | Chassis floor + **centroid** well in `brace`. Ø8.1. Iron in from the bed face. | [CNC Kitchen 1/4-20×6.4](https://cnckitchenus.store/products/heat-set-insert-1-4-20x6-4-camera-thread-short-version-20-pieces) · [Amazon](https://www.amazon.com/s?k=1/4-20+heat+set+insert) |
-| 3 | 1/4-20 × **16–25 mm** | From below: brace → box insert, brace → each D7000 (slots). | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
-| 1 | 1/4-20 tripod screw | Into the **brace** insert (not the box). | [1/4-20 camera screw](https://www.amazon.com/s?k=1%2F4-20+camera+screw) |
-| 1 | Flocking or matte black + fuzzy skin on the tray | Kill bounce inside the cartridge | [flocking paper](https://www.amazon.com/s?k=camera+flocking+paper) |
+Focus, then roll, then the overlap. The numbers below are from this rig,
+not from the drawing.
 
-A 150 mm EL-Nikkor / Rodagon / Componon-S focuses at **~1.1 m** on this path. Infinity is the **180** (helicoid +6.5 mm), not a shorter stem and not the 135.
+**Focus.** Collapse the M65 helicoid. Open it until a distant edge peaks on
+T. That is about a millimetre. Check R on the Focus screen at that same
+setting. The arms were reprinted so the two peaks meet: T at 17.81 mm of
+helicoid (cookie face to lens face) and R at 20.38 mm on the first prints,
+so R's arm is 23.00 mm and T's is 22.62 mm. If a later print does not meet,
+the difference in helicoid height is how far to move R's arm. Set
+`W_LENS_FOCUS_T`, `W_LENS_FOCUS_R`, and `W_WL_PRINTED_R`, and reprint
+`arm_r_wl`.
 
-## Hybrid shift — D7000 (no tube toe)
+**Roll.** A level horizon on both. The seam is horizontal, so relative roll
+is a wedge. `STEM_W_CLOCK` is 90°, which puts the Copal controls on top.
+Body roll is the printed F clock. `F_MOUNT_CLOCK` if a body comes up on its
+side.
 
-Open [`openscad/hybrid_shift/WATCH_ME.scad`](openscad/hybrid_shift/WATCH_ME.scad). Export with `./export_stls.sh --hybrid-shift`. For **D800 FX**, set `FX_MODE = 1` in the customizer (or `./export_hybrid_shift_fx.sh`) → `stls/hybrid_shift_fx/`; reuse stem and tools from the DX shift kit, not the DX tray. FX overlap **36%**, shift **~11.5 mm**, stitch **~59.0 mm / 59 MP**. Camera tubes are **square**; cookies sit on the cube faces and the bores sit `sensor_shift()` off center. Print `*_inner` in PETG or CF-PETG and `*_outer` in PCTG (lining 1.6 mm). Or print the unsplit `chassis` / `arm_r` / `arm_t` / `lid` / `stem` in one dark filament. FX parts read **FX CHASSIS / FX ARM R / FX ARM T / FX LID / FX BRACE / FX TRAY**. Flanges stay **▲ R** / **▲ T** at the top — there is no toe to aim. Brace holes follow the shifted 1/4-20s. Cartridge and PETG liners: same Bambu fuzzy skin (`None (Allow Paint)`, thickness 0.3 mm, point distance 0.8 mm) — see [README — Shift kit](README.md#shift-kit-stls/hybrid_shift/).
+**Field.** Shoot something with detail across the frame and stitch it. The
+app's overlap starts at 20%. Match will find the real overlap. Far from 20%
+means a cookie is in the wrong port.
 
-## EF hybrid — 5D Mark III
+The longer version, including the camera-helicoid arms (`arm_r_hw`,
+`arm_t_hw`) and the direct nose (`stem_nw_direct`), is in the
+[FXPAN README](openscad/fxpan/README.md#alignment).
 
-Same L, same uncut plate, same stem (helicoid + 135 + adapter). Bodies are two **5D Mark III** (36×24, EF, 44 mm). `PATH_TOTAL` ≈ **171 mm**; the 135 focuses at **~0.64 m**. Stitch ≈ **64.8 mm / 21.5° / ~10368×3840**.
+## What the simulation says
 
-Open [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad). Export with `./export_stls.sh --efhybrid` or `./export_efhybrid.sh`. Countryside: [`docs/kraken/el135_d7000_5d3.png`](docs/kraken/el135_d7000_5d3.png).
+![Fold](docs/kraken/fxpan_paths.png)
 
-Print the same part list as the D7000 hybrid. Shared buy list too: plate, 135, helicoid, adapter, PETG, M3, lid screws, Pi screws, 1/4-20 heat-set, flocking. Swap the cameras and the mouths.
+![Frames at f/5.6. The corners fall off. The long axis does not.](docs/kraken/fxpan_frames.png)
 
-### Buy (delta)
+![Stitch at f/11](docs/kraken/fxpan_pano.png)
 
-| Qty | Item | Why | Link |
-|-----|------|-----|------|
-| 2 | Canon **5D Mark III** bodies (no lenses) | FF windows, 44 mm register | (you have these, or buy used) |
-| 2 | **Fotodiox Canon EF reverse ring, 58 mm** | Mouths are **58×0.75**. A 52 mm ring will not start. | [Fotodiox 58 mm EOS](https://www.amazon.com/Fotodiox-Reverse-Adapter-Mounting-Threads/dp/B001G4PA36) |
-| 1 | Dual **N3** shutter | 5D III is N3, not MC-DC2 | [Canon N3 release](https://www.amazon.com/s?k=canon+n3+shutter+release) · [N3 Y-splitter](https://www.amazon.com/s?k=canon+n3+dual+shutter) |
+![Margins](docs/kraken/fxpan_margins.png)
 
-`cam/` is D7000 USB only. Fire the 5Ds from the N3 lead.
+![How wide a front anamorphic would make the same lens](docs/kraken/fxpan_anamorph_scene.png)
 
-### Assembly
+`python kraken/fxpan_paths.py` ray-traces the body and fails if the geometry
+drifts from these pictures.
 
-Same tray / lid / Pi holes / flange arrows as the D7000 hybrid.
+## Pictures from the camera
 
-1. Print floor-down / flange-on-bed. Black PETG/ABS. Iron the **1/4-20×6.4** heat-set into the floor from the bed face.
-2. Plate in from +Z, **S1 toward the lens**. Lid forks over the posts.
-3. **▲ R** on +X, **▲ T** on +Y, arrow up. T is shorter. Do not swap the arms.
-4. Screw the **58 mm EF** reverse rings into the mouths; bayonet the 5Ds. No lens on the EF mounts — iris is on the 135.
-5. Or print `arm_r_f` / `arm_t_f` (`ARM_MOUNT=1`). Dry-fit a 5D. If the lock is 90° off, add `EF_MOUNT_CLOCK`. If the lugs are stiff, ease `EF_LUG_SWEEP` / `EF_LUG_OD`.
-6. Helicoid + adapter + 135. Subject ~0.64 m, not infinity.
-7. Shim one arm until both live-views match without touching the helicoid. N3 Y-lead for sync.
+![Field](docs/build/field.jpg)
 
-## E hybrid — Sony α7
-
-Same L, same plate, same stem. Bodies are two **α7** (ILCE-7; 35.8×23.9, E, **18 mm**). Fold is still 55+72, so `PATH_TOTAL` is **145 mm**. The 135 focuses at **~2 m**, not 0.61 m. Stitch ≈ **64.4 mm / 25° / ~10800×4000**.
-
-Open [`openscad/Ehybrid/WATCH_ME.scad`](openscad/Ehybrid/WATCH_ME.scad). Export with `./export_stls.sh --ehybrid` or `./export_ehybrid.sh`. Countryside: [`docs/kraken/el135_d7000_a7.png`](docs/kraken/el135_d7000_a7.png).
-
-Print the same part list. Shared buy list is the D7000 hybrid minus the F rings and MC-DC2 lead.
-
-### Buy (delta)
-
-| Qty | Item | Why | Link |
-|-----|------|-----|------|
-| 2 | Sony **α7** bodies (no lenses) | FF windows, 18 mm register | (ILCE-7 / later E FF; CIPA box is the first A7) |
-| 2 | **Fotodiox Sony E reverse ring, 52 mm** | Mouths are **52×0.75** — same *thread* as the Nikon hybrid, **E bayonet**, not F. A Nikon F reverse ring will not take an A7. | [Fotodiox 52 mm E](https://www.amazon.com/Fotodiox-Filter-Thread-Reverse-Adapter/dp/B0054ENYI2) |
-| 1 | Dual **Multi Terminal** shutter | First A7 is Multi Terminal, not N3 / MC-DC2 | [Sony Multi Terminal release](https://www.amazon.com/s?k=sony+multi+terminal+shutter+release) · [RM-VPR1](https://www.amazon.com/s?k=sony+RM-VPR1) |
-
-`cam/` is D7000 USB only. Fire the A7s from the Multi Terminal lead.
-
-### Assembly
-
-Same tray / lid / Pi holes / flange arrows as the other L forks.
-
-1. Print floor-down / flange-on-bed. Black PETG/ABS. Do not print the bayonet in PLA. Iron the **1/4-20×6.4** heat-set into the floor from the bed face.
-2. Plate in from +Z, **S1 toward the lens**. Lid forks over the posts.
-3. **▲ R** on +X, **▲ T** on +Y, arrow up. T is shorter. Do not swap the arms.
-4. Screw the **52 mm E** reverse rings into the mouths; bayonet the A7s. No lens on the E mounts.
-5. Or print `arm_r_f` / `arm_t_f` (`ARM_MOUNT=1`). Dry-fit an A7. If the lock is 90° off, add `E_MOUNT_CLOCK`. If the lugs are stiff, ease `E_LUG_SWEEP` / `E_LUG_OD`.
-6. Helicoid + adapter + 135. Subject **~2 m**. A chart at 0.61 m will not focus.
-7. Turn **IBIS off**. Shim one arm until both live-views match without touching the helicoid.
-
-## Notes
-
-- Coatings face the **lens**; glass sits behind (toward +Y). Wrong way = ghosts and blocked camera tunnels.
-- Short 12–19 mm helicoid is for **fine** focus; fixed chassis length sets most of the register. Stack tubes if you cannot reach the working distance.
-- Hybrid mouths: D7000 = 52 mm **F** reverse ring; 5D III = 58 mm **EF**; α7 = 52 mm **E**. Same 52×0.75 thread on Nikon and Sony is not the same ring.
-- Tune `F_REV_STACK` / `EF_REV_STACK` / `E_REV_STACK` if the working distance is long or short.
-- Floor is a Ø8.1 mm well for a **1/4-20×6.4** heat-set, not a printed thread. Iron from the bed face; leave the 1.2 mm keep so it stays blind.
+![The same field, printed, and a second stitch of the tree line](docs/build/prints.jpg)

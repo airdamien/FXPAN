@@ -19,7 +19,7 @@ Edit distances in [`openscad/params.scad`](openscad/params.scad). Keep **L and R
 - One-piece **V cartridge** joins at the **middle** (knife at origin); arms run toward the blank **back wall** (+Y).
 - Coatings face **out from the V**. Cartridge stays inside the chamber; floor pockets locate it; lid forks slot over two posts (`SHOW_LID=1`).
 - Right blade → +X camera; left blade → −X camera.
-- **Stitch overlap** (`OVERLAP_FRAC`, default **0.20**): arm cookies stay **flat** on the cube faces; each tube is toed toward the lens by `arm_toe()` so the camera looks across the knife. Each glass is shifted inward by `overlap_cross()/2` so there is coating on that line of sight. That is ~4.7 mm / ~1000 px on a D7000. A hard V still cannot put the *same* full-brightness rays on both sensors — the extra strip is the crossed-glass + pupil-split seam, not a 50/50 cube. Stitch is **1.6×** one DX (~37.8 mm / 12.4°). Countryside: [`docs/kraken/el135_v_scene.png`](docs/kraken/el135_v_scene.png) · vs hybrid: [`docs/kraken/el135_v_hybrid.png`](docs/kraken/el135_v_hybrid.png). Tune `OVERLAP_FRAC` in [`openscad/params.scad`](openscad/params.scad).
+- **Stitch overlap** (`OVERLAP_FRAC`, default **0.20**): arm cookies stay **flat** on the cube faces; each tube is toed toward the lens by `arm_toe()` so the camera looks across the knife. Each glass is shifted inward by `overlap_cross()/2` so there is coating on that line of sight. That is ~4.7 mm / ~1000 px on a D7000. A hard V still cannot put the *same* full-brightness rays on both sensors — the extra strip is the crossed-glass + pupil-split seam, not a 50/50 cube. Stitch is **1.6×** one DX (~37.8 mm / 12.4°). Countryside: [`docs/kraken/el135_v_scene.png`](../docs/kraken/el135_v_scene.png) · vs hybrid: [`docs/kraken/el135_v_hybrid.png`](../docs/kraken/el135_v_hybrid.png). Tune `OVERLAP_FRAC` in [`openscad/params.scad`](openscad/params.scad).
 
 ## Equal-path rule
 
@@ -55,7 +55,7 @@ A knife in the converging beam splits the **pupil**, not the picture — both bo
 
 One uncut 50×50 plate at the origin (same seat as bsplit): reflect → +X, transmit → +Y. Both unique halves are ~1 stop down.
 
-Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). On `PATH_TOTAL=173.5` it focuses at **~608 mm** (m≈0.29). Stitch is ~149 mm of object / 42.5 mm on the sensors (~1.7× one DX). The 50/2.8 you have is close-up only (~73 mm). Infinity on this chassis is an **EL-Nikkor / Componon / Rodagon 180** (helicoid out ~6.5 mm; **+7.2 mm** at 50 m so path is **180.7 mm**). The 135 cannot get there — the 90 mm box plus the D7000 register already exceed 135 mm. 180 at 50 m is the same ~13.4° stitch on **~12 m** of object. See [`docs/kraken/el135_frames.png`](docs/kraken/el135_frames.png), [`docs/kraken/el135_pano.png`](docs/kraken/el135_pano.png), [`docs/kraken/el180_frames.png`](docs/kraken/el180_frames.png), and [`docs/kraken/el180_scene.png`](docs/kraken/el180_scene.png).
+Taking lens: **EL-Nikkor 135 mm f/5.6** (L39, 4×5 coverage, ~$80–150 used). On `PATH_TOTAL=173.5` it focuses at **~608 mm** (m≈0.29). Stitch is ~149 mm of object / 42.5 mm on the sensors (~1.7× one DX). The 50/2.8 you have is close-up only (~73 mm). Infinity on this chassis is an **EL-Nikkor / Componon / Rodagon 180** (helicoid out ~6.5 mm; **+7.2 mm** at 50 m so path is **180.7 mm**). The 135 cannot get there — the 90 mm box plus the D7000 register already exceed 135 mm. 180 at 50 m is the same ~13.4° stitch on **~12 m** of object. See [`docs/kraken/el135_frames.png`](../docs/kraken/el135_frames.png), [`docs/kraken/el135_pano.png`](../docs/kraken/el135_pano.png), [`docs/kraken/el180_frames.png`](../docs/kraken/el180_frames.png), and [`docs/kraken/el180_scene.png`](../docs/kraken/el180_scene.png).
 
 Open [`openscad/hybrid/WATCH_ME.scad`](openscad/hybrid/WATCH_ME.scad). Verify with [`kraken/hybrid_paths.py`](kraken/hybrid_paths.py) (`ratio` must be ≥ 1.6). Export with `./export_stls.sh --hybrid`.
 
@@ -71,11 +71,11 @@ Same L and plate, but `field_toe() = 0`: both bodies see the same DX frame. T is
 
 ## EF hybrid (pano L: toed 5D Mark III + one 50/50 plate)
 
-Same L and the same uncut 50×50 plate. Bodies are Canon **5D Mark III** (36×24 mm, EF, **44.0 mm** register). `sensor_shift()` ≈ **14.4 mm**, stitch ≈ **64.8 mm / 1.8×** one FF frame. `PATH_TOTAL` ≈ **171 mm**. Tube mouth is **58×0.75** for an EF reversing ring, or `ARM_MOUNT=1` for a printed male EF. Open [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad). Export with `./export_stls.sh --efhybrid`. Countryside compare: [`docs/kraken/el135_d7000_5d3.png`](docs/kraken/el135_d7000_5d3.png) (D7000 stitch ~14° / 8.9k px vs 5D Mk III ~21.5° / 10.4k px).
+Same L and the same uncut 50×50 plate. Bodies are Canon **5D Mark III** (36×24 mm, EF, **44.0 mm** register). `sensor_shift()` ≈ **14.4 mm**, stitch ≈ **64.8 mm / 1.8×** one FF frame. `PATH_TOTAL` ≈ **171 mm**. Tube mouth is **58×0.75** for an EF reversing ring, or `ARM_MOUNT=1` for a printed male EF. Open [`openscad/EFhybrid/WATCH_ME.scad`](openscad/EFhybrid/WATCH_ME.scad). Export with `./export_stls.sh --efhybrid`. Countryside compare: [`docs/kraken/el135_d7000_5d3.png`](../docs/kraken/el135_d7000_5d3.png) (D7000 stitch ~14° / 8.9k px vs 5D Mk III ~21.5° / 10.4k px).
 
 ## E hybrid (pano L: toed α7 + one 50/50 plate)
 
-Same L, Sony **α7** (35.8×23.9 mm, E, **18.0 mm** register). `PATH_TOTAL` ≈ **145 mm**, so the 135/5.6 focuses at **~2 m** (not 0.61 m). Stitch ≈ **64.4 mm / 1.8×** one FF frame, ~**25°**. Open [`openscad/Ehybrid/WATCH_ME.scad`](openscad/Ehybrid/WATCH_ME.scad). Export with `./export_stls.sh --ehybrid`. Countryside: [`docs/kraken/el135_d7000_a7.png`](docs/kraken/el135_d7000_a7.png).
+Same L, Sony **α7** (35.8×23.9 mm, E, **18.0 mm** register). `PATH_TOTAL` ≈ **145 mm**, so the 135/5.6 focuses at **~2 m** (not 0.61 m). Stitch ≈ **64.4 mm / 1.8×** one FF frame, ~**25°**. Open [`openscad/Ehybrid/WATCH_ME.scad`](openscad/Ehybrid/WATCH_ME.scad). Export with `./export_stls.sh --ehybrid`. Countryside: [`docs/kraken/el135_d7000_a7.png`](../docs/kraken/el135_d7000_a7.png).
 
 ## What will not work
 

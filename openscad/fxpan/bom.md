@@ -1,8 +1,13 @@
 # Bill of materials — FXPAN 65
 
-Two D800 bodies behind one EL-Nikkor 180/5.6N and a **50 × 75 × 1 mm** 50/50
-plate at 45°. Stitch is 64.80 × 23.9 mm, 2.711:1, 65.1 MP. Path is
-**179.5 … 193.5 mm** with infinity at 17.5 mm of helicoid travel.
+The camera as built is the Nikkor-W stack. Its buy list and assembly are
+[../../bom.md](../../bom.md). This file is the longer list: the EL-Nikkor
+180/5.6N stem, the plate substitutions, and the anamorphic clamps.
+
+Two D800 bodies behind one taking lens and a **50 × 75 × 1 mm** 50/50 plate
+at 45°. Stitch is 64.80 × 23.9 mm, 2.711:1, 65.1 MP. On the EL-Nikkor the
+path is **179.5 … 193.5 mm**, infinity at 17.5 mm of M62 helicoid travel.
+The Nikkor-W's flange is 178.8 mm and it focuses on the M65 helicoid.
 
 Working aperture is **f/8 to f/22**, corner-to-corner clean from f/8.4. Two
 line items decide whether you get even that. Get them right and the rest is

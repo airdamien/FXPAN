@@ -3,7 +3,7 @@
 // Inward faces are sawtoothed so stray light dies instead of bouncing.
 
 include <params.scad>
-include <../lib/part_stamp.scad>
+include <../../../openscad/lib/part_stamp.scad>
 
 CARTRIDGE_WALL = 4.5;
 POST_W         = 8.0;

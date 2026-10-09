@@ -1,8 +1,13 @@
 # FXPAN 65
 
-A clean-sheet FX panoramic body: two D800 bodies behind one EL-Nikkor 180/5.6N
-and a 50 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one
-half of the field and the two frames stitch to
+The camera as built uses the **Nikkor-W 180/5.6** in a Copal 1, on `stem_m65`
+plus the M65 helicoid and `stem_nw_m65`, with `arm_r_wl` / `arm_t_wl`. Buy
+list and the assembly order for that stack: [../../bom.md](../../bom.md).
+
+The body was drawn around an EL-Nikkor 180/5.6N on an M62 helicoid. That stem
+still exports. The plate, the shift, and the stitch are the same either way:
+two D800 bodies behind a 50 × 75 × 1 mm 50/50 plate at 45°. Each sensor takes
+one half of the field and the two frames stitch to
 
 **64.80 × 23.9 mm · 2.711:1 · 13248 × 4912 · 65.1 MP**
 
