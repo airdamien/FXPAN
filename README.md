@@ -60,6 +60,8 @@ The mouths are printed F. The lens is the Nikkor-W.
 
 ![The Nikkor-W and the trigger board, from the lens side.](docs/build/assembly-lens.png)
 
+![The built trigger board. Blue is focus, red is shutter, one pair for each body.](docs/build/trigger.jpg)
+
 ## What the two frames become
 
 ![Field, stitched](docs/build/field.jpg)

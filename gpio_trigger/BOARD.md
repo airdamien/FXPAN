@@ -14,6 +14,8 @@ Regenerate everything: `python3 gen_cad.py`
 
 ## PCB
 
+![The built trigger board. Blue is focus, red is shutter, one pair for each body.](../docs/build/trigger.jpg)
+
 The KiCad board is routed and stays inside the Raspberry Pi 4 outline. Both TRS jacks face out the **pin-1** end, away from Ethernet, with the plug mouth at that edge so a chassis wall can meet them. The right edge stops short of the USB and Ethernet jacks. Four 2.7 mm holes (H1–H4) match the Pi’s M2.5 standoffs. Solder the 2×20 female socket on the **bottom**. Pin 1 (square pad) meets Pi pin 1. Gerbers are in `fab/pcbway/`.
 
 JP1 (focus) and JP2 (shutter) ship with pads 1–2 bridged, so both cameras follow pin 38 and pin 40. To drive camera B on its own pins, cut that bridge and solder pad 2 to pad 3. J1 stays on pin 38 / pin 40.
