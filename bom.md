@@ -13,7 +13,7 @@ the shutters.
 | Overlap | 20% |
 | Taking lens | Nikkor-W 180/5.6, flange distance 178.8 mm on this stack |
 | Plate | Edmund 50 × 75 × 1.0 mm, **75 across the fold** |
-| Aperture | f/8 to f/22. Corners are clean from f/8.4 |
+| Aperture | f/5.6 to f/22. The lens covers the stitch wide open. Extreme corners are fully lit from f/8.4; at f/5.6 they still pass most of the light |
 | Viewfinder | iPhone, FXPAN app |
 | Release | 10-pin, both bodies together, then the frames come off USB from camera RAM |
 

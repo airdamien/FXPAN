@@ -31,6 +31,11 @@ PLATE_RIB_LEAD = 4.0;    // taper at the top so the glass finds the gap
 POST_OUT       = 4.5;
 FORK_CLEAR     = 0.4;
 FORK_LEN       = 10.0;
+// Exploded assembly. The cartridge rises clear of the chassis. The lid's
+// forks reach FORK_LEN down into the cup, so the lid has to rise past the
+// cartridge rim by that much, then a gap, or the two parts occupy each other.
+function tray_explode_z() = BOX_Z / 2 + 40;
+function lid_explode_z()  = tray_explode_z() + FORK_LEN + 18;
 SLIP           = 0.4;
 SKIRT_T        = 3.4;
 SKIRT_H        = 8.0;
