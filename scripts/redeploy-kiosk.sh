@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Push cam/ to the kiosk Pi and restart web.py + Chromium.
 #   ./scripts/redeploy-kiosk.sh
-#   ./scripts/redeploy-kiosk.sh airdamien@192.0.2.10
-#   ./scripts/redeploy-kiosk.sh airdamien@192.0.2.10 --web-only
+#   ./scripts/redeploy-kiosk.sh user@pi
+#   ./scripts/redeploy-kiosk.sh user@pi --web-only
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="${1:-airdamien@192.0.2.10}"
-shift || true
+# shellcheck source=pi-target.sh
+source "$ROOT/scripts/pi-target.sh"
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  TARGET="$1"
+  shift
+else
+  TARGET="$(pi_target)"
+fi
 
 "$ROOT/scripts/deploy-kiosk.sh" "$TARGET" "$@"
 

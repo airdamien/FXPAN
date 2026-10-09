@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # From the Mac: rsync cam/ to a Pi and install the D12600 kiosk.
-#   ./scripts/setup-pi-remote.sh airdamien@192.0.2.10
+#   ./scripts/setup-pi-remote.sh user@pi
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="${1:-airdamien@192.0.2.10}"
+# shellcheck source=pi-target.sh
+source "$ROOT/scripts/pi-target.sh"
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  TARGET="$1"
+  shift
+else
+  TARGET="$(pi_target)"
+fi
 START=1
-for arg in "${@:2}"; do
+for arg in "$@"; do
   case "$arg" in
     --no-start) START=0 ;;
     -h|--help)

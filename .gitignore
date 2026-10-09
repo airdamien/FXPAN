@@ -32,4 +32,6 @@ cam/fxos/__pycache__/
 cam/fxos/state.json
 cam/fxos/state.tmp
 captures/
+scripts/pi.target
+scripts/github-replace.txt
 

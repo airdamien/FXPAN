@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Push cam/ to the Pi. If the kiosk loop is up, restart web.py + Chromium.
 #   ./scripts/deploy-kiosk.sh
-#   ./scripts/deploy-kiosk.sh airdamien@192.0.2.10
-#   ./scripts/deploy-kiosk.sh airdamien@192.0.2.10 --web-only   # skip Chromium bounce
-#   ./scripts/deploy-kiosk.sh airdamien@192.0.2.10 --no-restart
+#   ./scripts/deploy-kiosk.sh user@pi
+#   ./scripts/deploy-kiosk.sh user@pi --web-only   # skip Chromium bounce
+#   ./scripts/deploy-kiosk.sh user@pi --no-restart
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="${1:-airdamien@192.0.2.10}"
-shift || true
+# shellcheck source=pi-target.sh
+source "$ROOT/scripts/pi-target.sh"
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  TARGET="$1"
+  shift
+else
+  TARGET="$(pi_target)"
+fi
 RESTART=1
 BOUNCE=full
 for arg in "$@"; do

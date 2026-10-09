@@ -2036,8 +2036,8 @@ class Wifi(unittest.TestCase):
             "ssid": "Home",
             "ip": "192.0.2.10",
         }
-        wifi._default_gateway = lambda: "10.50.0.1"
-        wifi._ping = lambda host: host == "10.50.0.1"
+        wifi._default_gateway = lambda: "192.0.2.1"
+        wifi._ping = lambda host: host == "192.0.2.1"
         self.addCleanup(lambda: setattr(wifi, "status", old_status))
         self.addCleanup(lambda: setattr(wifi, "_default_gateway", old_gw))
         self.addCleanup(lambda: setattr(wifi, "_ping", old_ping))
@@ -2072,7 +2072,7 @@ class Wifi(unittest.TestCase):
             }
 
         wifi.status = fake_status
-        wifi._default_gateway = lambda: "10.50.0.1"
+        wifi._default_gateway = lambda: "192.0.2.1"
         wifi._ping = lambda host: False
         wifi._reconnect_station = lambda ssid, psk: reconnects.append((ssid, psk))
         self.addCleanup(lambda: setattr(wifi, "status", old_status))
