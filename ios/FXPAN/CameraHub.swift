@@ -354,20 +354,30 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         await Self.each(armed.map(\.0)) { link in
             do { try await link.armSync(photo) } catch { armFailure = armFailure ?? error }
         }
-        if let armFailure { throw armFailure }
+        if let armFailure {
+            Trace.line("FXPAN sync arm failed: \(armFailure.localizedDescription)")
+            throw armFailure
+        }
+        let began = CFAbsoluteTimeGetCurrent()
+        func since() -> String { String(format: "%.2f s", CFAbsoluteTimeGetCurrent() - began) }
+        Trace.line("FXPAN sync armed \(armed.map { "\($0.1.rawValue) \($0.0.token.suffix(4))" }.joined(separator: ", "))")
         usbHeld = true
         defer { usbHeld = false }
         await Self.each(armed.map(\.0)) { await $0.closeForSync() }
+        Trace.line("FXPAN sync USB closed at \(since()), still open: \(armed.filter { $0.0.device.hasOpenSession }.map(\.1.rawValue))")
         try await Task.sleep(nanoseconds: 800_000_000)
         let reply: String
         do {
             reply = try await SyncLink.fire(photo)
         } catch {
+            Trace.line("FXPAN sync fire failed at \(since()): \(error.localizedDescription)")
             await Self.each(armed.map(\.0)) { try? await $0.open() }
             throw error
         }
+        Trace.line("FXPAN sync fired at \(since()), board said \(reply), hold \(SyncLink.hold(photo)) ms")
         try await Task.sleep(nanoseconds: 200_000_000)
         await Self.each(armed.map(\.0)) { try? await $0.open() }
+        Trace.line("FXPAN sync USB reopened at \(since())")
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
@@ -387,10 +397,10 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
                 }
             }
         }
+        Trace.line("FXPAN sync downloaded \(out.keys.map(\.rawValue).sorted()) at \(since()), failures: \(failures)")
         if out.isEmpty {
             throw PTPError.message(failures.first ?? "Sync pulsed, no file came back")
         }
-        print("FXPAN sync \(reply)")
         await refreshStatus()
         return out
     }
@@ -1061,16 +1071,24 @@ final class NikonLink {
         }
     }
 
+    /// Always ask ImageCapture to close. Its open-session flag can read false while PTP still runs, and a body left held by USB ignores the 10-pin.
     func closeForSync() async {
         inLive = false
-        guard device.hasOpenSession else {
-            sessionUp = false
-            return
-        }
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            device.requestCloseSession(options: nil) { _ in cont.resume() }
+        let wasOpen = device.hasOpenSession
+        let began = CFAbsoluteTimeGetCurrent()
+        let outcome: String = await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
+            let gate = Gate()
+            device.requestCloseSession(options: nil) { error in
+                gate.run { cont.resume(returning: error.map { "error \($0.localizedDescription)" } ?? "closed") }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                gate.run { cont.resume(returning: "no reply in 3 s") }
+            }
         }
         sessionUp = false
+        Trace.line(String(format: "FXPAN %@ %@ close for sync: flag said %@, %@ in %.2f s, flag now %@", model, String(token.suffix(4)),
+                          wasOpen ? "open" : "closed", outcome, CFAbsoluteTimeGetCurrent() - began, device.hasOpenSession ? "open" : "closed"))
     }
 
     // MARK: Camera RAM
@@ -1402,7 +1420,7 @@ final class NikonLink {
     private func transact(_ code: UInt16, params: [UInt32] = [], out: Data? = nil, timeout: Double = 8, endSession: Bool = false) async throws -> PTP.Reply {
         if pollStalled {
             pollStalled = false
-            Trace.line("FXPAN \(model) reopening the session after a slow reply")
+            Trace.line("FXPAN \(model) \(token.suffix(4)) reopening the session after a slow reply")
             await abortSession()
             try await ensureSession()
         }
@@ -1461,10 +1479,10 @@ final class NikonLink {
                 guard gate.claim() else { return }
                 let op = command.count >= 8 ? String(format: "%04X", command.u16(6)) : "?"
                 if endSession {
-                    Trace.line("FXPAN \(self.model) ptp \(op) stalled, closing the session so the body can leave transfer")
+                    Trace.line("FXPAN \(self.model) \(self.token.suffix(4)) ptp \(op) stalled, closing the session so the body can leave transfer")
                     await self.abortSession()
                 } else {
-                    Trace.line("FXPAN \(self.model) ptp \(op) slow, leaving the session up")
+                    Trace.line("FXPAN \(self.model) \(self.token.suffix(4)) ptp \(op) slow, leaving the session up")
                     self.pollStalled = true
                 }
                 self.heldSinks.removeAll { $0 === sink }
