@@ -9,16 +9,16 @@
 // =============================================================================
 
 include <params.scad>
-include <../lib/threads.scad>
-include <../lib/part_stamp.scad>
+include <../../../openscad/lib/threads.scad>
+include <../../../openscad/lib/part_stamp.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
-use <../d7000_body.scad>
-use <../taking_lens.scad>
-use <../f_mount_male.scad>
-use <../pi4_body.scad>
-use <../monitor/display_mount.scad>
-use <../monitor/monitor.scad>
+use <../../../openscad/d7000_body.scad>
+use <../../../openscad/taking_lens.scad>
+use <../../../openscad/f_mount_male.scad>
+use <../../../openscad/pi4_body.scad>
+use <../../../openscad/monitor/display_mount.scad>
+use <../../../openscad/monitor/monitor.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]

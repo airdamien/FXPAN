@@ -8,11 +8,11 @@
 // =============================================================================
 
 include <params.scad>
-include <../lib/threads.scad>
+include <../../../openscad/lib/threads.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
 use <5dmk3_body.scad>
-use <../taking_lens.scad>
+use <../../../openscad/taking_lens.scad>
 use <ef_mount_male.scad>
 
 /* [View] */

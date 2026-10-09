@@ -1,58 +1,57 @@
 // =============================================================================
-// Ehybrid/WATCH_ME.scad  — pano L: one 50/50 plate, toed FF Sony α7
+// WATCH_ME.scad  — KEEP THIS OPEN (Automatic Reload and Preview)
 // =============================================================================
-// Each camera looks at a different half of a stitch_w() image (field_toe).
-// Lens −Y. Plate at origin: R → +X, T → +Y. Open this file.
-// ARM_MOUNT 0 = female 52×0.75 (E reverse ring); 1 = printed E bayonet.
-// E_MOUNT_CLOCK: add if the first E-print locks 90° off.
+// Junction box + 3 bolt-on tubes (print flange on the bed, bolt onto the flat wall).
+// Flanges sit on the cube faces. Arm tubes toe toward the lens.
+// ARM_MOUNT 0 = female 52×0.75 + nut pocket; 1 = printed F-bayonet (clocked).
+// F_MOUNT_CLOCK: add if the first F-print locks 90° off.
+// 50/50 plate fork (same full frame): openscad/bsplit/WATCH_ME.scad
+// Hybrid pano L (toed DX + one 50/50 plate): openscad/hybrid/WATCH_ME.scad
 // =============================================================================
 
-include <params.scad>
-include <../lib/threads.scad>
-use <hybrid_tray.scad>
+include <../../../openscad/params.scad>
+include <../../../openscad/lib/threads.scad>
+use <../../../openscad/f_mount_male.scad>
+use <mirror_tray.scad>
 use <shims.scad>
-use <a7_body.scad>
-use <../taking_lens.scad>
-use <e_mount_male.scad>
+use <../../../openscad/d7000_body.scad>
+use <../../../openscad/taking_lens.scad>
 
 /* [View] */
-SHOW_LID = 1; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:show]
 SHOW_LENS = 0; // [0:hide, 1:show]
 
 /* [Mount] */
-ARM_MOUNT = 0; // [0:reverse ring, 1:integrated E]
-E_MOUNT_CLOCK = 0;
+ARM_MOUNT = 0; // [0:reverse ring, 1:integrated F]
+F_MOUNT_CLOCK = 0;
 
 screw_resolution = $preview ? 0.6 : 0.25;
 
 ex = EXPLODED ? 55 : 0;
+MOUNT_PEG = 4;
 LID_T     = 4;
 LID_LIP   = 3;
 LID_GAP   = 0.3;
-// Inset from the outer wall. 4 put the Ø3.2 hole on the lip recess (no bite).
-LID_SCREW = 2.5;
-// Raspberry Pi HAT holes (58×49). Blind from the outer face so the lid stays light-tight.
-// Board centered; USB/ethernet toward blank −X. M2.5 thread-forming, 1.5 mm floor.
-PI_HOLE_D = 2.3;
-PI_HOLE_Z = 2.5;
-function pi_holes() = [
-    [42.5 - 3.5,  3.5 - 28],
-    [42.5 - 61.5, 3.5 - 28],
-    [42.5 - 3.5,  52.5 - 28],
-    [42.5 - 61.5, 52.5 - 28]
-];
+LID_SCREW = 4;            // inset from the outer edge (was 8: holes sat on the inner wall)
 
-function mount_stack()       = ARM_MOUNT ? E_FMOUNT_STACK : E_REV_STACK;
-function stem_tube_len()     = D_LENS_TO_PLATE - JUNCTION_BOX / 2;
-function reflect_tube_len()  = D_PLATE_TO_MOUNT - mount_stack() - JUNCTION_BOX / 2;
-function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
+function mount_stack()   = ARM_MOUNT ? F_FMOUNT_STACK : F_REV_STACK;
+function stem_tube_len() = D_LENS_TO_KNIFE - JUNCTION_BOX / 2;
+function arm_tube_len()  = D_KNIFE_TO_MOUNT - mount_stack() - JUNCTION_BOX / 2;
 
 module helicoid_nut(h = HELICOID_LEN) {
     ScrewHole(HELICOID_MAJOR, h, pitch = HELICOID_PITCH, tolerance = HELICOID_TOL)
         cylinder(h = h, d = HELICOID_MAJOR + 14);
 }
 
+module arm_cradle_solid() {
+    translate([0, -TUBE_OD / 2 - 12, -8])
+        difference() {
+            cube([24, 12, 10], center = true);
+            cylinder(h = 20, d = 5.6, center = true);
+        }
+}
+
+// Local port frame: z=0 is the outer face, +Z is outward (away from box).
 module port_screws() {
     for (a = [45, 135, 225, 315])
         rotate([0, 0, a])
@@ -65,74 +64,30 @@ module port_flange() {
         cube([PORT_PATCH, PORT_PATCH, PORT_PATCH_T], center = true);
 }
 
-// Engraved on the camera-side face (print flange on the bed).
-// kind "R": local −X is world +Z. kind "T": local −Y is world +Z.
-module flange_marks(kind) {
-    t = 0.8;
-    e = PORT_PATCH / 2 - 3.4;
-    module stamp(letter) {
-        translate([-4.6, 0])
-            polygon([[0, 2.6], [-1.7, -1.4], [1.7, -1.4]]);
-        translate([3.2, 0])
-            text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
-                 halign = "center", valign = "center");
-    }
-    translate([0, 0, PORT_PATCH_T - t])
-        linear_extrude(t + 0.15) {
-            if (kind == "R")
-                translate([-e, 0])
-                    rotate(90)
-                        stamp("R");
-            else
-                translate([0, -e])
-                    rotate(180)
-                        stamp("T");
-        }
-}
-
 module hex_nut_cut() {
     cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
 }
 
 // Camera-end rectangle for an M3 nut; radial 3.2 hole so a set screw
-// pinches the reverse ring. az is flange-mark up (R: 180, T: −90).
-module rev_lock_cuts(out_len, az = 180) {
-    z0 = out_len - E_REV_LEN / 2;
-    r_mid = (TUBE_ID + TUBE_OD) / 4;
-    nw = 5.5 + 0.2;
-    nt = 2.4 + 0.2;
-    floor_z = z0 - 5.5 / 2 - 0.2;
-    rotate([0, 0, az]) {
-        translate([0, 0, z0])
-            rotate([0, 90, 0])
-                cylinder(h = TUBE_OD / 2 + 1, d = PORT_SCREW_D);
-        translate([r_mid, 0, (out_len + floor_z) / 2])
-            cube([nt, nw, out_len - floor_z + 0.2], center = true);
-    }
-}
+// pinches the reverse ring. az=180 is local −X (world +Z on the +X arm).
 
+// Place children in each port's local frame (outer face at the cube surface).
 module at_stem() {
     translate([0, -JUNCTION_BOX / 2, 0])
         rotate([90, 0, 0])
             children();
 }
 
-module at_reflect() {
-    translate([JUNCTION_BOX / 2, 0, 0])
-        rotate([0, 90, 0])
-            children();
-}
-
-module at_transmit() {
-    translate([0, JUNCTION_BOX / 2, 0])
-        rotate([-90, 0, 0])
+module at_arm(side) {
+    translate([side * JUNCTION_BOX / 2, 0, 0])
+        rotate([0, side * 90, 0])
             children();
 }
 
 module at_each_port() {
     at_stem() children();
-    at_reflect() children();
-    at_transmit() children();
+    at_arm(1) children();
+    at_arm(-1) children();
 }
 
 module box_bore() {
@@ -168,6 +123,7 @@ module box_fastener_cuts() {
         port_screws() {
             translate([0, 0, -WALL - 0.2])
                 cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+            // hex opens to the inner face; stays inside the remaining wall
             translate([0, 0, -WALL - 0.05])
                 hex_nut_cut();
         }
@@ -182,27 +138,28 @@ module part_junction() {
     }
 }
 
-module along_tube(rx = 0, ry = 0) {
+// Cookie stays in XY. Tube leans `toe` deg about +X (world −Y / toward the lens).
+module along_tube(toe = 0) {
     translate([0, 0, PORT_PATCH_T])
-        rotate([rx, ry, 0])
+        rotate([toe, 0, 0])
             children();
 }
 
-module port_tube_solid(out_len, rx = 0, ry = 0) {
+module port_tube_solid(out_len, toe = 0) {
     difference() {
         union() {
             port_flange();
-            along_tube(rx, ry)
+            along_tube(toe)
                 cylinder(h = out_len, d = TUBE_OD);
-            if (rx != 0 || ry != 0)
+            if (toe != 0)
                 translate([0, 0, PORT_PATCH_T])
                     hull() {
                         cylinder(h = 0.2, d = TUBE_OD);
-                        rotate([rx, ry, 0])
+                        rotate([toe, 0, 0])
                             cylinder(h = 0.2, d = TUBE_OD);
                     }
         }
-        along_tube(rx, ry)
+        along_tube(toe)
             translate([0, 0, -PORT_PATCH_T - 2])
                 cylinder(h = PORT_PATCH_T + out_len + 4, d = TUBE_ID);
         port_screws()
@@ -219,6 +176,7 @@ module part_stem() {
     }
 }
 
+// Male M42 → female L39×26 TPI for the El-Nikkor 50/2.8. Print male-down.
 module part_elnikkor_adapter() {
     h1 = EL_M42_LEN;
     h2 = EL_ADAPTER_HEX;
@@ -244,50 +202,40 @@ module part_elnikkor_adapter() {
                 cylinder(h = 28, d = 47.5);
 }
 
-module part_camera_tube(out_len, rx = 0, ry = 0, mark = "") {
+module part_arm(side = 1) {
+    toe = arm_toe();
     color("SlateGray")
     difference() {
-        port_tube_solid(out_len, rx, ry);
+        port_tube_solid(arm_tube_len(), toe);
         if (ARM_MOUNT == 0)
-            along_tube(rx, ry) {
-                translate([0, 0, out_len - E_REV_LEN])
-                    ScrewThread(1.01 * E_REV_MAJOR + 1.25 * E_REV_TOL,
-                                E_REV_LEN + 0.3,
-                                pitch = E_REV_PITCH, tolerance = E_REV_TOL);
-                rev_lock_cuts(out_len, mark == "T" ? -90 : 180);
+            along_tube(toe) {
+                translate([0, 0, arm_tube_len() - F_REV_LEN])
+                    f_rev_thread_cut();
+                rev_lock_cuts(arm_tube_len(), side > 0 ? 180 : 0);
+                f_pin_line_cut(arm_tube_len(), side > 0 ? 180 : 0);
             }
-        if (mark != "")
-            flange_marks(mark);
     }
     if (ARM_MOUNT)
         color("Goldenrod")
-            along_tube(rx, ry)
-                translate([0, 0, out_len])
-                    e_mount_on_tube((mark == "T" ? -90 : 0) + E_MOUNT_CLOCK);
+            along_tube(toe)
+                translate([0, 0, arm_tube_len()])
+                    // Raw forks at +X. Pin is 90° left of up (+X arm −X, −X arm +X).
+                    f_mount_on_tube((side > 0 ? -90 : 90) + F_MOUNT_CLOCK);
     else if ($preview && !SHOW_BODIES)
         color("Goldenrod", 0.55)
-            along_tube(rx, ry)
-                translate([0, 0, out_len])
+            along_tube(toe)
+                translate([0, 0, arm_tube_len()])
                     difference() {
-                        cylinder(h = E_REV_STACK, d = 62);
+                        cylinder(h = F_REV_STACK, d = 62);
                         translate([0, 0, -0.1])
-                            cylinder(h = E_REV_STACK + 0.2, d = E_BORE);
+                            cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
                     }
-}
-
-module pi_mount_cuts() {
-    for (p = pi_holes()) {
-        translate([p[0], p[1], LID_T - PI_HOLE_Z])
-            cylinder(h = PI_HOLE_Z + 0.2, d = PI_HOLE_D);
-        translate([p[0], p[1], LID_T - 0.7])
-            cylinder(h = 0.8, d1 = PI_HOLE_D, d2 = 4.0);
-    }
 }
 
 module part_lid() {
     s = JUNCTION_BOX;
     color("DarkSlateGray")
-    translate([0, 0, s / 2 + ex * 0.4]) {
+    translate([0, 0, s / 2 + (SHOW_LID ? 0 : 0) + ex * 0.4]) {
         difference() {
             union() {
                 translate([0, 0, LID_T / 2])
@@ -301,18 +249,26 @@ module part_lid() {
             for (x = [-1, 1], y = [-1, 1])
                 translate([x * (s / 2 - LID_SCREW), y * (s / 2 - LID_SCREW), -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
-            pi_mount_cuts();
         }
     }
 }
 
-module ghost_body_at() {
+module ghost_body(side = 1) {
     if ($preview && SHOW_GHOSTS)
         color("black", 0.12)
-            along_tube()
-                translate([0, 0, D_PLATE_TO_MOUNT - JUNCTION_BOX / 2
-                                 + 15 + BODY_D / 2 + ex])
-                    cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
+            at_arm(side)
+                along_tube(arm_toe())
+                    translate([0, 0, arm_tube_len() + mount_stack() + 15 + BODY_D / 2 + ex])
+                        cube([BODY_W * 0.8, BODY_H * 0.7, BODY_D], center = true);
+}
+
+module camera_body(side = 1) {
+    if (SHOW_BODIES)
+        color("DimGray", 0.92)
+            at_arm(side)
+                along_tube(arm_toe())
+                    translate([0, 0, arm_tube_len() + (ARM_MOUNT ? F_FMOUNT_STACK : 0) + ex])
+                        d7000_body(side > 0 ? -90 : 90);
 }
 
 module taking_lens_at() {
@@ -325,23 +281,27 @@ module taking_lens_at() {
                     taking_lens();
 }
 
-module camera_body_at(out_len, rx = 0, ry = 0, roll = 0) {
-    if (SHOW_BODIES)
-        color("DimGray", 0.92)
-            along_tube(rx, ry)
-                translate([0, 0, out_len + (ARM_MOUNT ? E_FMOUNT_STACK : 0) + ex])
-                    body_a7(roll);
+module ghost_lens() {
+    if ($preview && SHOW_GHOSTS && !SHOW_LENS)
+        color("black", 0.2)
+            translate([0, -D_LENS_TO_KNIFE - STEM_FLANGE_T - HELICOID_LEN - 20 - ex, 0])
+                rotate([90, 0, 0]) {
+                    cylinder(h = 35, d1 = 52, d2 = 48);
+                    translate([0, 0, 35])
+                        cylinder(h = 8, d = 56);
+                }
 }
 
 module optical_axis_guides() {
     if ($preview)
         color("gold", 0.45) {
             rotate([90, 0, 0])
-                cylinder(h = D_LENS_TO_PLATE + 2, d = 1.0);
-            rotate([0, 90, 0])
-                cylinder(h = D_PLATE_TO_MOUNT + 2, d = 1.0);
-            rotate([-90, 0, 0])
-                cylinder(h = D_PLATE_TO_MOUNT + 2, d = 1.0);
+                cylinder(h = D_LENS_TO_KNIFE + 2, d = 1.0);
+            for (side = [-1, 1])
+                at_arm(side)
+                    along_tube(arm_toe())
+                        translate([0, 0, -JUNCTION_BOX / 2])
+                            cylinder(h = D_KNIFE_TO_MOUNT + 2, d = 1.0);
         }
 }
 
@@ -357,34 +317,25 @@ module assembly() {
                          + (EXPLODED ? ex * 1.4 : 0)])
             part_elnikkor_adapter();
 
-    at_reflect()
-        translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    for (side = [-1, 1])
+        at_arm(side)
+            translate([0, 0, EXPLODED ? ex : 0])
+                part_arm(side);
 
-    at_transmit()
-        translate([0, 0, EXPLODED ? ex : 0])
-            part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    mirror_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0;
+    mirror_pair(show_mirrors = $preview, explode_z = mirror_z);
 
-    hybrid_pair(show_glass = $preview,
-                explode_z = EXPLODED ? (JUNCTION_BOX / 2 + 40) : 0);
-
-    if (SHOW_LID)
-        part_lid();
-
-    at_reflect() {
-        ghost_body_at();
-        camera_body_at(reflect_tube_len(), rx = -field_toe(), roll = -90);
-    }
-    at_transmit() {
-        ghost_body_at();
-        camera_body_at(transmit_tube_len(), ry = -field_toe(), roll = 180);
-    }
+    ghost_body(-1);
+    ghost_body(1);
+    camera_body(-1);
+    camera_body(1);
+    ghost_lens();
     taking_lens_at();
     optical_axis_guides();
-    echo(str("Ehybrid L: A7 FF 50x50x1 S1 toward lens; ARM_MOUNT=", ARM_MOUNT,
-             " (", ARM_MOUNT ? "integrated E" : "52mm E reverse ring", ")"));
-    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  stitch_w=", stitch_w(),
-             " mm  field_toe=", field_toe(), " deg"));
+    echo(str("Bolt-on tubes: 4× M3 at 45°; ARM_MOUNT=", ARM_MOUNT,
+             " (", ARM_MOUNT ? "integrated F" : "reverse ring", ")"));
+    echo(str("PATH_TOTAL=", PATH_TOTAL, " mm  OVERLAP_FRAC=", OVERLAP_FRAC,
+             "  arm_toe=", arm_toe(), " deg"));
 }
 
 module export_part() {
@@ -392,18 +343,20 @@ module export_part() {
         part_junction();
     else if (PART == "stem")
         part_stem();
+    else if (PART == "arm_l")
+        part_arm(-1);
     else if (PART == "arm_r")
-        part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
-    else if (PART == "arm_t")
-        part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+        part_arm(1);
     else if (PART == "shims")
         shim_set();
+    else if (PART == "f_mount")
+        f_mount_male_solid(boss = 0);
     else if (PART == "elnikkor_adapter")
         part_elnikkor_adapter();
     else if (PART == "lid")
         part_lid();
-    else if (PART == "hybrid_tray")
-        hybrid_cartridge(show_glass = false);
+    else if (PART == "mirror_tray")
+        mirror_L_cartridge(show_mirrors = false);
     else
         assembly();
 }

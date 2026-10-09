@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Export printable STLs.
-#   ./export_stls.sh [part ...]              panorama V → stls/v/
-#   ./export_stls.sh --bsplit [part ...]     50/50 plate → stls/bsplit/
-#   ./export_stls.sh --hybrid-shift [part ...] shifted-DX pano L → stls/hybrid_shift/
-#   ./export_stls.sh --hybrid-shift-fx [part ...] shifted-FX D800 → stls/hybrid_shift_fx/
+# Export printable STLs. The current camera is ./export_fxpan.sh.
+#   ./export_stls.sh [part ...]              panorama V → archive/stls/v/
+#   ./export_stls.sh --bsplit [part ...]     50/50 plate → archive/stls/bsplit/
+#   ./export_stls.sh --hybrid-shift [part ...] shifted-DX pano L → archive/stls/hybrid_shift/
+#   ./export_stls.sh --hybrid-shift-fx [part ...] shifted-FX D800 → archive/stls/hybrid_shift_fx/
 #   ./export_stls.sh --fxpan [part ...]      FXPAN 65 (75 mm plate) → stls/fxpan/
-#   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → stls/hybrid_shadowgraph/
-#   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → stls/EFhybrid/
-#   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → stls/Ehybrid/
+#   ./export_stls.sh --shadowgraph [part ...] same-image T / shadowgraph R → archive/stls/hybrid_shadowgraph/
+#   ./export_stls.sh --efhybrid [part ...]   FF 5D III EF pano L → archive/stls/EFhybrid/
+#   ./export_stls.sh --ehybrid [part ...]    FF A7 E pano L → archive/stls/Ehybrid/
 #   ./export_stls.sh --monitor               easel rails + case back + sunshade → stls/monitor/
 #   ./export_stls.sh --isco [part ...]       EL180 + ISCO attachment → stls/isco/
 #   ./export_stls.sh --tools                 bench tools → stls/tools/
@@ -26,31 +26,31 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")" && pwd)
-scad=$root/openscad/WATCH_ME.scad
-out=$root/stls/v
+scad=$root/archive/openscad/v/WATCH_ME.scad
+out=$root/archive/stls/v
 default_parts=(chassis stem arm_l arm_l_f arm_r arm_r_f lid mirror_tray shims elnikkor_adapter focus_sled focus_anchor)
 fx_extra=()
 tail_note="print chassis floor-down; tubes flange-on-bed (F-bayonet up); brace floor-down (insert from the bed); *_inner = PETG lining, *_outer = PCTG shell; display_mount rails on their flat face; case_back outer-back down; focus_sled −X chevron on the bed."
 
 if [[ "${1:-}" == "--bsplit" ]]; then
     shift
-    scad=$root/openscad/bsplit/WATCH_ME.scad
-    out=$root/stls/bsplit
+    scad=$root/archive/openscad/bsplit/WATCH_ME.scad
+    out=$root/archive/stls/bsplit
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid bs_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--hybrid" ]]; then
     shift
-    scad=$root/openscad/hybrid/WATCH_ME.scad
-    out=$root/stls/hybrid
+    scad=$root/archive/openscad/hybrid/WATCH_ME.scad
+    out=$root/archive/stls/hybrid
     default_parts=(chassis stem stem_f50 arm_r arm_r_f arm_t arm_t_f arm_r_s arm_r_sf arm_t_s arm_t_sf lid display_mount case_back sunshade hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--hybrid-shift" ]]; then
     shift
-    scad=$root/openscad/hybrid_shift/WATCH_ME.scad
-    out=$root/stls/hybrid_shift
+    scad=$root/archive/openscad/hybrid_shift/WATCH_ME.scad
+    out=$root/archive/stls/hybrid_shift
     default_parts=(chassis chassis_inner chassis_outer chassis_logo stem stem_inner stem_outer stem_el180 stem_el180_inner stem_el180_outer arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer display_mount case_back sunshade hybrid_tray brace shims elnikkor_adapter el180_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--hybrid-shift-fx" ]]; then
     shift
-    scad=$root/openscad/hybrid_shift/WATCH_ME.scad
-    out=$root/stls/hybrid_shift_fx
+    scad=$root/archive/openscad/hybrid_shift/WATCH_ME.scad
+    out=$root/archive/stls/hybrid_shift_fx
     fx_extra=(-D "FX_MODE=1")
     default_parts=(chassis chassis_inner chassis_outer chassis_logo chassis_logo_fx chassis_logo_word chassis_logo_mp chassis_logo_rule chassis_logo_spec arm_r arm_r_inner arm_r_outer arm_r_f arm_r_f_inner arm_r_f_outer arm_t arm_t_inner arm_t_outer arm_t_f arm_t_f_inner arm_t_f_outer lid lid_inner lid_outer brace hybrid_tray stem_el180_inf stem_el180_inf_inner stem_el180_inf_outer)
 elif [[ "${1:-}" == "--fxpan" ]]; then
@@ -61,8 +61,8 @@ elif [[ "${1:-}" == "--fxpan" ]]; then
     tail_note="FXPAN 65: print ringgauge FIRST and set F_REV_CLEAR from it — the M52 mouth is the one fit this body cannot recover from. Then chassis floor-down; arms flange-on-bed (camera mouth up); lid outer face down; tray floor-down; base and cradles flat (inserts and screw heads from the bed); baffles and gauge flat. *_inner = PETG lining, *_outer = PCTG shell; chassis_logo_* drop into the chassis pocket as separate filaments."
 elif [[ "${1:-}" == "--shadowgraph" ]]; then
     shift
-    scad=$root/openscad/hybrid_shadowgraph/WATCH_ME.scad
-    out=$root/stls/hybrid_shadowgraph
+    scad=$root/archive/openscad/hybrid_shadowgraph/WATCH_ME.scad
+    out=$root/archive/stls/hybrid_shadowgraph
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid display_mount case_back sunshade hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--monitor" ]]; then
     shift
@@ -71,13 +71,13 @@ elif [[ "${1:-}" == "--monitor" ]]; then
     default_parts=(display_mount case_back sunshade)
 elif [[ "${1:-}" == "--efhybrid" ]]; then
     shift
-    scad=$root/openscad/EFhybrid/WATCH_ME.scad
-    out=$root/stls/EFhybrid
+    scad=$root/archive/openscad/EFhybrid/WATCH_ME.scad
+    out=$root/archive/stls/EFhybrid
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--ehybrid" ]]; then
     shift
-    scad=$root/openscad/Ehybrid/WATCH_ME.scad
-    out=$root/stls/Ehybrid
+    scad=$root/archive/openscad/Ehybrid/WATCH_ME.scad
+    out=$root/archive/stls/Ehybrid
     default_parts=(chassis stem arm_r arm_r_f arm_t arm_t_f lid hybrid_tray shims elnikkor_adapter focus_sled focus_anchor)
 elif [[ "${1:-}" == "--isco" ]]; then
     shift

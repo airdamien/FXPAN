@@ -21,17 +21,17 @@ STEM = 0; // [0:EL-Nikkor 135, 1:F-mount 50, 2:EL-Nikkor 180]
 ARMS = 0; // [0:72 mm 135/180, 1:54 mm F 50]
 
 include <params.scad>
-include <../lib/threads.scad>
-include <../lib/part_stamp.scad>
+include <../../../openscad/lib/threads.scad>
+include <../../../openscad/lib/part_stamp.scad>
 use <hybrid_tray.scad>
 use <shims.scad>
-use <../d7000_body.scad>
-use <../taking_lens.scad>
-use <../f_mount_male.scad>
-use <../f_mount_female.scad>
-use <../pi4_body.scad>
-use <../monitor/display_mount.scad>
-use <../monitor/monitor.scad>
+use <../../../openscad/d7000_body.scad>
+use <../../../openscad/taking_lens.scad>
+use <../../../openscad/f_mount_male.scad>
+use <../../../openscad/f_mount_female.scad>
+use <../../../openscad/pi4_body.scad>
+use <../../../openscad/monitor/display_mount.scad>
+use <../../../openscad/monitor/monitor.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]

@@ -3,7 +3,7 @@
 // Coatings on the OUTSIDE of the V (toward the cameras).
 // Lid forks drop over two posts to retain the cartridge.
 
-include <params.scad>
+include <../../../openscad/params.scad>
 
 CARTRIDGE_WALL = 4.5;
 KNIFE_W        = 2.0;
