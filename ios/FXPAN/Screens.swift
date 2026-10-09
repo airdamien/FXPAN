@@ -998,11 +998,22 @@ struct SystemScreen: View {
                 .tint(Theme.gold)
                 .padding(12)
                 .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+                Toggle(isOn: Binding(get: { model.canon }, set: { model.setCanon($0) })) {
+                    VStack(alignment: .leading) {
+                        Text("Canon").font(Theme.font(16, weight: .medium))
+                        Text("One EOS. Live view, shutter, and the file copy.").font(Theme.font(12)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .tint(Theme.gold)
+                .padding(12)
+                .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
             }
         }, panel: {
             VStack(alignment: .leading, spacing: 8) {
                 Text(model.camera.line).font(Theme.font(16, weight: .medium))
-                Text("T sees through the plate, R off its face.")
+                Text(model.canon
+                     ? "USB connection set to photo import. The card is left alone. A CR3 is saved beside the JPEG."
+                     : "T sees through the plate, R off its face.")
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
             }
         })
@@ -1094,16 +1105,20 @@ struct CamerasScreen: View {
         let _ = model.cameraRevision
         DimPage(title: "Cameras", crumb: "System", controls: {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Tap T or R on each body. A real serial is remembered across a replug. A run of zeros is ignored and that body is paired by its USB port.")
+                Text(model.canon
+                     ? "One Canon on USB. Live view and the shutter use remote control. Turn Canon off to use the Nikon pair."
+                     : "Tap T or R on each body. A real serial is remembered across a replug. A run of zeros is ignored and that body is paired by its USB port.")
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
                 if model.camera.detected.isEmpty && !model.simulate {
-                    Text(model.camera.controlAuthorized ? "Plug both bodies into a powered hub. USB mode MTP/PTP." : "Allow camera control in Settings.")
+                    Text(model.camera.controlAuthorized
+                         ? (model.canon ? "Plug the EOS in. USB connection: photo import / remote control." : "Plug both bodies into a powered hub. USB mode MTP/PTP.")
+                         : "Allow camera control in Settings.")
                         .font(Theme.font(15))
                         .foregroundStyle(Theme.ink2)
                 }
                 ForEach(model.camera.detected) { cam in
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(cam.model.isEmpty ? "Nikon" : cam.model).font(Theme.font(16, weight: .medium))
+                        Text(cam.model.isEmpty ? (model.canon ? "Canon" : "Nikon") : cam.model).font(Theme.font(16, weight: .medium))
                         Text(cam.serial.isEmpty ? "No serial · USB port \(cam.token.drop { $0 != "-" }.dropFirst())" : "#\(cam.serial)")
                             .font(Theme.font(12)).foregroundStyle(Theme.dim)
                         if !cam.link.isEmpty {
@@ -1111,19 +1126,23 @@ struct CamerasScreen: View {
                                 .font(Theme.font(12, weight: .medium))
                                 .foregroundStyle(Theme.ink2)
                         }
-                        HStack {
-                            PressChip(title: "T", on: cam.role == .t, filled: false) { model.pair(cam.token, role: .t) }
-                            PressChip(title: "R", on: cam.role == .r, filled: false) { model.pair(cam.token, role: .r) }
+                        if !model.canon {
+                            HStack {
+                                PressChip(title: "T", on: cam.role == .t, filled: false) { model.pair(cam.token, role: .t) }
+                                PressChip(title: "R", on: cam.role == .r, filled: false) { model.pair(cam.token, role: .r) }
+                            }
                         }
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(cam.role == nil ? Theme.hair : Theme.gold, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(cam.role == nil && !model.canon ? Theme.hair : Theme.gold, lineWidth: 1))
                 }
-                HStack {
-                    PressChip(title: "Swap T and R", filled: false) { model.swap() }
-                    PressChip(title: "Clear", filled: false) { model.clearPair(.t); model.clearPair(.r) }
+                if !model.canon {
+                    HStack {
+                        PressChip(title: "Swap T and R", filled: false) { model.swap() }
+                        PressChip(title: "Clear", filled: false) { model.clearPair(.t); model.clearPair(.r) }
+                    }
                 }
             }
         }, panel: {
@@ -1133,7 +1152,7 @@ struct CamerasScreen: View {
                     .tracking(1.1)
                     .foregroundStyle(Theme.dim)
                 seat(.t)
-                seat(.r)
+                if !model.canon { seat(.r) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         })
@@ -1142,12 +1161,12 @@ struct CamerasScreen: View {
     private func seat(_ role: Role) -> some View {
         let s = model.camera.slots[role] ?? BodyState()
         let tint = role == .t ? Theme.transmit : Theme.reflect
-        let name = s.model.isEmpty ? "Nikon" : s.model
+        let name = s.model.isEmpty ? (model.canon ? "Canon" : "Nikon") : s.model
         let state = s.online ? "On USB" : (s.paired ? "Paired, off USB" : "Open")
         let exposure = [s.program, s.iso, s.shutter, s.fstop.isEmpty ? "" : "f/\(s.fstop)"].filter { !$0.isEmpty }
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text(role.rawValue)
+                Text(model.canon ? "EOS" : role.rawValue)
                     .font(Theme.font(28, weight: .medium))
                     .foregroundStyle(tint)
                 Text(state)
