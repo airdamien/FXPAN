@@ -9,6 +9,8 @@ XPan is 65 × 24 mm at 2.708:1. Working aperture is f/8 to f/22, corner to
 corner clean from f/8.4. The iPhone is the viewfinder and the stitcher. A
 Pi Zero on the lid pulses both 10-pin remotes together.
 
+![Assembled. Nikkor-W to the left, a D800 on each arm, trigger board on the lid.](docs/build/assembly.png)
+
 ![The rig: two D800s, the trigger board, the iPhone](docs/build/rig.jpg)
 
 Buy list, print list, and assembly: [bom.md](bom.md).
@@ -16,6 +18,22 @@ The model, the measured focus numbers, and the long alignment notes:
 [openscad/fxpan/README.md](openscad/fxpan/README.md).
 
 ![FXPAN on the iPhone](docs/build/ios.jpg)
+
+## How it goes together
+
+The plate is in the tray, coating toward the lens, 75 mm across the fold.
+The two arms leave the box at a right angle. The base carries both bodies.
+The mouths are printed F. The lens is the Nikkor-W.
+
+![Mid-build. One body on, the Nikkor-W in the stem, the trigger board on the lid.](docs/build/mid.jpg)
+
+![Lid off. The blue plate is the 50 × 75 mm splitter.](docs/build/assembly-open.png)
+
+![Pulled apart: lens, stem, arms, tray, lid, base.](docs/build/assembly-exploded.png)
+
+![From above. One lens, two bodies.](docs/build/assembly-plan.png)
+
+![The Nikkor-W and the trigger board, from the lens side.](docs/build/assembly-lens.png)
 
 ## What the two frames become
 

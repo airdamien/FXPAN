@@ -63,7 +63,6 @@ PETG or ABS, not PLA. The mouths and the cookie screws carry the bodies.
 
 | Part | Qty | On the bed |
 | --- | --- | --- |
-| `ringgauge` | 1, before the arms | flat. Thread a reverse ring into each step. Keep the tightest that runs down by hand, and put that clearance in `F_REV_CLEAR` if you print ring mouths. |
 | `chassis` | 1 | floor down. The lens face is opened to an 83.7 mm circle so the M65 helicoid can sit on the cookie. |
 | `lid` | 1 | outer face down. Two M3 holes at the +Y corners. Six blind M2.5 holes on top take the Zero's standoffs. |
 | `fxp_tray` | 1 | floor down. |
@@ -73,7 +72,6 @@ PETG or ABS, not PLA. The mouths and the cookie screws carry the bodies.
 | `base` | 1 | flat. Tripod insert and screw heads from the bed. |
 | `cradle_r`, `cradle_t` | 1 each | flat. |
 | `baffle` | 2 sheets | flat. One arm's rings per sheet. |
-| `shims` | 1 sheet | flat. 0.2, 0.5, 1.0 mm. |
 
 Logo inlays are optional. They drop into the chassis pocket as separate
 filaments: gold FX, off-white PAN, red outline and 65MP, grey spec line.
@@ -94,11 +92,13 @@ The file names are `chassis_logo_*` in `stls/fxpan/`.
 | 1 | Flocking, or flat black paint, in the chamber, the tray, both bores, and both F throats. The throats are unlined on purpose. A liner there vignettes. |
 
 `arm_r_wl` and `arm_t_wl` are printed F-mounts. The cradles carry the
-weight. The bayonet only takes the twist. Metal 52 mm reverse-ring mouths
-(`arm_r`, `arm_t`, Fotodiox 52 mm F) keep the real 44 mm throat and are the
-f/8.4 path. This rig's arms are the printed ones.
+weight. The bayonet only takes the twist.
 
 ## Assembly
+
+![Lid off, plate in the tray.](docs/build/assembly-open.png)
+
+![The same parts pulled apart.](docs/build/assembly-exploded.png)
 
 1. Heat-set the 1/4-20 insert into the base, and the other into the chassis floor, both from the bed face.
 2. Flock the chamber, the tray, both bores, and both F throats.
@@ -136,8 +136,7 @@ side.
 app's overlap starts at 20%. Match will find the real overlap. Far from 20%
 means a cookie is in the wrong port.
 
-The longer version, including the camera-helicoid arms (`arm_r_hw`,
-`arm_t_hw`) and the direct nose (`stem_nw_direct`), is in the
+The measured arm lengths and the reprint numbers are in the
 [FXPAN README](openscad/fxpan/README.md#alignment).
 
 ## What the simulation says
