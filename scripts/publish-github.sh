@@ -71,4 +71,6 @@ for old in olds:
 if failed:
     sys.exit(1)
 PY
-git push "$REMOTE" master
+git fetch "$REMOTE" main
+git push --force-with-lease="refs/heads/main:$(git rev-parse FETCH_HEAD)" \
+  "$REMOTE" master:main
