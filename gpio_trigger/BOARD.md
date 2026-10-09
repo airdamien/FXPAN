@@ -14,7 +14,9 @@ Regenerate everything: `python3 gen_cad.py`
 
 ## PCB
 
-![The built trigger board. Blue is focus, red is shutter, one pair for each body.](../docs/build/trigger.jpg)
+![The built trigger board. Blue is focus, red is shutter, one pair for each body. USB release does not need it.](../docs/build/trigger.jpg)
+
+The board is optional. USB release on the phone fires both bodies and downloads the frames. This board is the 10-pin path, when both shutters should open from the remotes.
 
 The KiCad board is routed and stays inside the Raspberry Pi 4 outline. Both TRS jacks face out the **pin-1** end, away from Ethernet, with the plug mouth at that edge so a chassis wall can meet them. The right edge stops short of the USB and Ethernet jacks. Four 2.7 mm holes (H1–H4) match the Pi’s M2.5 standoffs. Solder the 2×20 female socket on the **bottom**. Pin 1 (square pad) meets Pi pin 1. Gerbers are in `fab/pcbway/`.
 
