@@ -20,7 +20,29 @@ Buy list, print list, and assembly: [bom.md](bom.md).
 The model, the measured focus numbers, and the long alignment notes:
 [openscad/fxpan/README.md](openscad/fxpan/README.md).
 
-![FXPAN on the iPhone](docs/build/ios.jpg)
+![The phone on the camera.](docs/build/ios.jpg)
+
+## On the phone
+
+Landscape on an iPhone 17 Pro Max, in simulate mode.
+
+![Home. The stitch on the left, the shutter on the right, six controls along the bottom.](docs/ios/home.png)
+
+![Frame. Format, guide lines, and whether the edges clip to the overlap.](docs/ios/frame.png)
+
+![Light. Mode, ISO, and shutter for both bodies.](docs/ios/light.png)
+
+![Focus. Peaking, loupe, or range.](docs/ios/focus.png)
+
+![Look. The base, the film stocks, and the color step.](docs/ios/look.png)
+
+![Drive. USB, or the 10-pin sync.](docs/ios/drive.png)
+
+![White balance.](docs/ios/wb.png)
+
+Partly folded on an iPhone Duo. The picture and the last shots stay above the hinge. The controls and the shutter sit below it.
+
+![Half open.](docs/ios/duo-folded.png)
 
 ## How it goes together
 
@@ -71,3 +93,32 @@ python kraken/fxpan_scene.py    # the countryside above
 
 The D7000 hybrid, the V, the shifted kits, the 5D and α7 forks, and their
 export scripts are in [archive/](archive/EARLIER.md). They are not this camera.
+
+## Credits
+
+The D800s in the assembly pictures are mariusimv's approximate model,
+[Thingiverse #4815092](https://www.thingiverse.com/thing:4815092).
+
+The printed F mouths start from Archive-663's Nikon mount,
+[CC BY-NC-SA 4.0](https://github.com/Archive-663/lensMounts).
+
+The metric threads are Ryan A. Colyer's `threads.scad`,
+[CC0](https://www.thingiverse.com/thing:1686322).
+
+The earlier D7000 ghost and the stand-in lens barrel are José Pedro's
+Nikon DSLR,
+[Printables #1733741](https://www.printables.com/model/1733741-nikon-dslr-camera-model-3d-printable),
+CC BY-NC-SA 4.0.
+
+The monitor case is Wormfingers' HAMTYSAN 10.1 enclosure,
+[Printables #1041827](https://www.printables.com/model/1041827-hamtysan-101-touchscreen-enclosure),
+CC BY 4.0.
+
+The Pi 4 in those older pictures is a Printables mesh, lined up to
+[Raspberry Pi's mechanical drawing](https://datasheets.raspberrypi.com/rpi4/raspberry-pi-4-mechanical-drawing.pdf).
+
+The countryside in the anamorphic figure is
+[Radek Hloch, CC BY-SA 4.0](https://commons.wikimedia.org/wiki/File:Landscape_of_Tuscany_3.jpg).
+
+The app is set in Jost, SIL Open Font License 1.1,
+[The Jost Project Authors](https://github.com/indestructible-type/Jost).
