@@ -15,7 +15,7 @@ the shutters.
 | Plate | Edmund 50 × 75 × 1.0 mm, **75 across the fold** |
 | Aperture | f/5.6 to f/22. The lens covers the stitch wide open. Extreme corners are fully lit from f/8.4; at f/5.6 they still pass most of the light |
 | Viewfinder | iPhone, FXPAN app |
-| Release | 10-pin, both bodies together, then the frames come off USB from camera RAM |
+| Release | USB is enough. The trigger board is optional and pulses both 10-pin remotes together. Either way the frames come off USB from camera RAM |
 
 Drawings and the measured arm lengths: [openscad/fxpan/README.md](openscad/fxpan/README.md).
 Why the plate is this rectangle: [openscad/fxpan/PLAN.md](openscad/fxpan/PLAN.md).
@@ -43,7 +43,7 @@ listed in [openscad/fxpan/bom.md](openscad/fxpan/bom.md).
 | --- | --- | --- |
 | 2 | **Nikon D800**, no lens | 36 × 23.9 mm, 46.5 mm register. Both sit upright. |
 | 2 | **Memory card**, CF or SD, any size that the body accepts | A D800 with Slot empty release lock set will ignore the 10-pin when the slot is empty. USB capture still works with no card, because that command writes to camera RAM directly. The 10-pin does not. Put a card in each body. The app still downloads the new frame from RAM. |
-| 1 | **iPhone** running FXPAN | Live view, exposure, the 10-pin release, and the stitch. The screen replaces the Pi touch display. Build and install from [ios/](ios/). |
+| 1 | **iPhone** running FXPAN | Live view, exposure, USB or 10-pin release, and the stitch. The screen replaces the Pi touch display. Build and install from [ios/](ios/). |
 | 1 | Printed phone tray | [openscad/phone/WATCH_ME.scad](openscad/phone/WATCH_ME.scad). `./export_stls.sh --phone` writes `stls/phone/`. The 17 Pro Max cradle is `pm17_cradle` + `pm17_shoe`, one M3×16 and a nut. |
 | 1 | **USB hub** the phone can see both bodies through | One session per D800. The phone has to drop both sessions before the 10-pin will fire, then open them again to download. |
 | 1 | **Raspberry Pi Zero W** | USB gadget at 10.55.0.1. The phone sends `FIRE` to port 2323. Setup: [pi0w/README.md](pi0w/README.md). |

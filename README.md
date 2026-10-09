@@ -9,8 +9,8 @@ XPan is 65 × 24 mm at 2.708:1. It is shot from f/5.6 to f/22. The
 Nikkor-W covers the stitch wide open. The 44 mm mouths fully clear the
 extreme corners from f/8.4; at f/5.6 those corners still pass most of the
 light, and the long axis stays clean. The iPhone is the viewfinder and the
-stitcher. A
-Pi Zero on the lid pulses both 10-pin remotes together.
+stitcher, and it can release both bodies over USB. A Pi Zero and the trigger
+board are optional. They pulse both 10-pin remotes together.
 
 ![Assembled. Nikkor-W to the left, a D800 on each arm, trigger board on the lid.](docs/build/assembly.png)
 
@@ -60,7 +60,9 @@ The mouths are printed F. The lens is the Nikkor-W.
 
 ![The Nikkor-W and the trigger board, from the lens side.](docs/build/assembly-lens.png)
 
-![The built trigger board. Blue is focus, red is shutter, one pair for each body.](docs/build/trigger.jpg)
+The board is optional. USB release fires both bodies and brings the frames back. The board is the 10-pin path: blue is focus, red is shutter, one pair for each body.
+
+![The built trigger board. Blue is focus, red is shutter, one pair for each body. USB release does not need it.](docs/build/trigger.jpg)
 
 ## What the two frames become
 
