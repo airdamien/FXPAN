@@ -44,6 +44,12 @@ Partly folded on an iPhone Duo. The picture and the last shots stay above the hi
 
 ![Half open.](docs/ios/duo-folded.png)
 
+## A Canon, as a try
+
+System has a Canon switch. It stays off until you turn it on. One body, not the pair, and not the stitch.
+
+The camera's USB connection is photo import / remote control. Live view, the shutter, and the copy use that body. The JPEG shows in the roll. A CR3 is saved beside it. The file stays on the card. Turn the switch off and the Nikon pair is back.
+
 ## How it goes together
 
 The plate is in the tray, coating toward the lens, 75 mm across the fold.

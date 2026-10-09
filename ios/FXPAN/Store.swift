@@ -16,6 +16,8 @@ struct Persisted: Codable {
     var appleOn: [String]? = nil
     /// Nil means the GPU warp stays on, including saves from before the switch existed.
     var metalWarp: Bool? = nil
+    /// One Canon body. The Nikon pair stays unused while this is on.
+    var canon: Bool = false
 }
 
 enum Disk {

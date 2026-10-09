@@ -3,6 +3,34 @@ import Foundation
 enum PTP {
     static let ok: UInt16 = 0x2001
     static let nikonVendor: Int = 0x04B0
+    static let canonVendor: Int = 0x04A9
+
+    /// EOS remote control. The R5 fires from these, then names the new file in GetEvent.
+    enum Canon: UInt16 {
+        case setRemoteMode = 0x9114
+        case setEventMode = 0x9115
+        case getEvent = 0x9116
+        case setProp = 0x9110
+        case setUILock = 0x911B
+        case remoteReleaseOn = 0x9128
+        case remoteReleaseOff = 0x9129
+        case startViewfinder = 0x9151
+        case endViewfinder = 0x9152
+        case viewfinder = 0x9153
+    }
+
+    /// EOS EVF output device. 0 off, 1 camera screen, 2 this phone, 3 both.
+    static let canonEVFOutput: UInt16 = 0xD1B0
+    /// EOS EVF mode. 1 is on.
+    static let canonEVFMode: UInt16 = 0xD1B1
+
+    /// ObjectAddedEx, RequestObjectTransfer, and the 64-bit forms of both.
+    static let canonFileEvents: Set<UInt32> = [0xC181, 0xC183, 0xC1A7, 0xC1A9]
+
+    struct CanonEvent {
+        var code: UInt32
+        var words: [UInt32]
+    }
 
     enum Op: UInt16 {
         case getDeviceInfo = 0x1001
@@ -124,6 +152,26 @@ enum PTP {
         }
         let payload = a.count >= b.count ? a : b
         return Reply(code: ok, params: [], data: dataset(payload), raw: payload)
+    }
+
+    /// Canon GetEvent is a run of records: uint32 length, uint32 code, then uint32 parameters.
+    static func canonEvents(_ data: Data) -> [CanonEvent] {
+        var i = 0
+        var out: [CanonEvent] = []
+        while i + 8 <= data.count && out.count < 32 {
+            let len = Int(data.u32(i))
+            if len < 8 || i + len > data.count { break }
+            let code = data.u32(i + 4)
+            var words: [UInt32] = []
+            var j = i + 8
+            while j + 4 <= i + len && words.count < 8 {
+                words.append(data.u32(j))
+                j += 4
+            }
+            out.append(CanonEvent(code: code, words: words))
+            i += len
+        }
+        return out
     }
 
     static func jpeg(in data: Data) -> Data? {

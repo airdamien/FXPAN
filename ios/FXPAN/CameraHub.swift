@@ -1,5 +1,6 @@
 import CoreImage
 import ImageCaptureCore
+import ImageIO
 import UIKit
 
 struct BodyState: Equatable {
@@ -41,6 +42,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     var simulate = false {
         didSet { publish(); if simulate { installSim() } else { frames = realFrames } }
     }
+    /// Accept a Canon and fire that one body. Nikon sessions are dropped while this is on.
+    var canonMode = false
 
     private(set) var slots: [Role: BodyState] = [.t: BodyState(), .r: BodyState()]
     private(set) var detected: [DetectedCamera] = []
@@ -183,7 +186,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     }
 
     func apply(_ photo: Photo) async {
-        guard !simulate, photo.exposes, !usbHeld, !idling else { return }
+        guard !simulate, !canonMode, photo.exposes, !usbHeld, !idling else { return }
         await withTaskGroup(of: Void.self) { group in
             for link in links.values where role(of: link.token) != nil {
                 group.addTask { try? await link.apply(photo) }
@@ -313,6 +316,9 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             return out
         }
         await setLive(false)
+        if canonMode {
+            return try await captureCanon(stamp: stamp)
+        }
         if photo.drive.release == "sync" {
             return try await captureSync(stamp: stamp, photo: photo)
         }
@@ -403,6 +409,39 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         }
         await refreshStatus()
         return out
+    }
+
+    /// One Canon. Remote release, then copy whatever the body just wrote. The card copy is left in place.
+    private func captureCanon(stamp: String) async throws -> [Role: Grabbed] {
+        guard let link = links.values.first(where: { role(of: $0.token) != nil }) ?? links.values.first else {
+            throw PTPError.message("No Canon on USB")
+        }
+        let got = try await link.canonShoot(stamp: stamp)
+        await refreshStatus()
+        return [.t: got]
+    }
+
+    /// Drop the current sessions and look again. Nikon pairing on disk is left as it was.
+    func setCanonMode(_ on: Bool) async {
+        if live { await setLive(false) }
+        canonMode = on
+        for link in Array(links.values) {
+            await link.closeForSync()
+        }
+        links.removeAll()
+        detected = []
+        if on {
+            pairT = ""
+            pairR = ""
+        } else {
+            let pair = Disk.loadPair()
+            pairT = Self.kept(pair.t)
+            pairR = Self.kept(pair.r)
+        }
+        publish()
+        for device in seenDevices() {
+            adopt(device)
+        }
     }
 
     // MARK: - Browser
@@ -497,8 +536,9 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         if links[id] != nil { return }
         let vendor = Int(camera.usbVendorID)
         let name = camera.name ?? ""
-        if vendor != 0 && vendor != PTP.nikonVendor && !name.lowercased().contains("nikon") { return }
+        guard wants(vendor: vendor, name: name) else { return }
         let link = NikonLink(device: camera)
+        link.canonBody = canonMode
         camera.delegate = self
         links[id] = link
         seat()
@@ -507,17 +547,17 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             if self.idling { return }
             do {
                 try await link.open()
-                if let vendorOK = link.info.flatMap({ $0.model.lowercased().contains("nikon") ? true : nil }),
-                   vendor != PTP.nikonVendor && vendorOK == false {
-                    self.links[id] = nil
-                    return
-                }
-                if vendor != PTP.nikonVendor && vendor != 0 {
-                    let model = link.info?.model.lowercased() ?? name.lowercased()
-                    if !model.contains("nikon") && !name.lowercased().contains("nikon") {
+                let model = (link.info?.model ?? name).lowercased()
+                if self.canonMode {
+                    if vendor != PTP.canonVendor && !model.contains("canon") && !name.lowercased().contains("canon") {
                         self.links[id] = nil
+                        self.publish()
                         return
                     }
+                } else if vendor != PTP.nikonVendor && vendor != 0 && !model.contains("nikon") && !name.lowercased().contains("nikon") {
+                    self.links[id] = nil
+                    self.publish()
+                    return
                 }
                 self.claimRoles()
                 self.seat()
@@ -532,6 +572,18 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         }
     }
 
+    private func wants(vendor: Int, name: String) -> Bool {
+        let folded = name.lowercased()
+        if canonMode {
+            if vendor == PTP.canonVendor || folded.contains("canon") { return true }
+            if vendor == 0 && folded.isEmpty { return true }
+            return false
+        }
+        if vendor == PTP.canonVendor || folded.contains("canon") { return false }
+        if vendor != 0 && vendor != PTP.nikonVendor && !folded.contains("nikon") { return false }
+        return true
+    }
+
     private static func kept(_ saved: String) -> String {
         if saved.hasPrefix("usb-") { return saved }
         return PTP.usable(saved)
@@ -539,6 +591,12 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
 
     /// Seat every connected body. A saved port that is not plugged in is dropped, then open roles fill in USB order.
     private func claimRoles() {
+        if canonMode {
+            let loose = links.values.filter { !$0.token.isEmpty }.sorted { sideRank($0) < sideRank($1) }
+            pairT = loose.first?.token ?? ""
+            pairR = ""
+            return
+        }
         let tokens = Set(links.values.map(\.token))
         if !pairT.isEmpty && !tokens.contains(pairT) { pairT = "" }
         if !pairR.isEmpty && !tokens.contains(pairR) { pairR = "" }
@@ -629,6 +687,17 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             next[who] = link.state(role: who, paired: true)
         }
         slots = next
+        if canonMode {
+            if let link = links.values.first(where: \.sessionUp) ?? links.values.first {
+                slots[.t] = link.state(role: .t, paired: true)
+                line = link.sessionUp ? "\(link.model) on USB" : "Canon seen"
+            } else {
+                line = controlAuthorized ? "No Canon on USB" : line
+            }
+            onChange?()
+            onSeat?()
+            return
+        }
         let online = Role.allCases.filter { slots[$0]?.online == true }
         if live {
             line = liveLine
@@ -768,6 +837,8 @@ final class Arrivals {
 final class NikonLink {
     let device: ICCameraDevice
     let id: String
+    /// EOS remote control. Nikon property reads and the card catalog stay off.
+    var canonBody = false
     private(set) var info: PTP.DeviceInfo?
     private var props: [UInt16: PTP.PropDesc] = [:]
     private var txn: UInt32 = 1
@@ -837,7 +908,11 @@ final class NikonLink {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
                 // Tether first. A full card catalog walks every file and the PTP pipe times out behind it.
                 let tether = ICSessionOptions(rawValue: "ICEnumerationPrioritizeTethering")
-                device.requestOpenSession(options: [tether: true]) { error in
+                var options: [ICSessionOptions: Any] = [tether: true]
+                if self.canonBody {
+                    options[ICSessionOptions(rawValue: "ICEnumerationPrioritizeSpeed")] = true
+                }
+                device.requestOpenSession(options: options) { error in
                     if let error { cont.resume(throwing: error) } else { cont.resume() }
                 }
             }
@@ -848,6 +923,10 @@ final class NikonLink {
         }
         info = parsed
         sessionUp = true
+        if canonBody {
+            await canonArm()
+            return
+        }
         for prop in [PTP.Prop.battery, .compression, .whiteBalance, .fNumber, .exposureTime, .program, .iso, .isoAuto, .recordingMedia, .isoAutoHi] {
             guard parsed.properties.contains(prop.rawValue) else { continue }
             if let descReply = try? await transact(PTP.Op.getPropDesc.rawValue, params: [UInt32(prop.rawValue)]),
@@ -859,6 +938,7 @@ final class NikonLink {
     }
 
     func readExposure() async {
+        if canonBody { return }
         exposure.iso = await text(.iso) { Catalog.isAuto(self.exposure.iso) ? "Auto" : String($0) } ?? exposure.iso
         if let auto = await value(.isoAuto), auto != 0 { exposure.iso = "Auto" }
         exposure.shutter = await text(.exposureTime) { Self.formatShutter($0) } ?? exposure.shutter
@@ -892,6 +972,7 @@ final class NikonLink {
     /// StartLiveView answers 2019 while the mirror is still moving, and also when live view is already up.
     /// Reissuing it keeps the body busy, so wait on DeviceReady and try a frame before tearing the mode down.
     func enterLive() async -> Bool {
+        if canonBody { return await canonEnterLive() }
         inLive = true
         do {
             if await pullFrame() != nil { return true }
@@ -1007,6 +1088,7 @@ final class NikonLink {
 
     func nextFrame() async -> UIImage? {
         guard inLive else { return nil }
+        if canonBody { return await canonNextFrame() }
         let reply: PTP.Reply
         let started = CFAbsoluteTimeGetCurrent()
         do {
@@ -1044,6 +1126,11 @@ final class NikonLink {
 
     func stopLive() async {
         inLive = false
+        if canonBody {
+            _ = await canonProp(PTP.canonEVFOutput, 0)
+            _ = try? await transact(PTP.Canon.endViewfinder.rawValue, timeout: 3)
+            return
+        }
         _ = try? await transact(PTP.Op.endLiveView.rawValue, timeout: 4)
         _ = try? await transact(PTP.Op.changeMode.rawValue, params: [0], timeout: 4)
         await settle(minimum: 1.2, seconds: 8)
@@ -1265,6 +1352,230 @@ final class NikonLink {
         try? data.write(to: url, options: .atomic)
     }
 
+    /// Remote control, so the body stops offering the card as a drive.
+    private func canonArm() async {
+        let remote = try? await transact(PTP.Canon.setRemoteMode.rawValue, params: [1], timeout: 5)
+        let events = try? await transact(PTP.Canon.setEventMode.rawValue, params: [1], timeout: 5)
+        Trace.line("FXPAN canon arm remote \(Self.hex(remote?.code)) event \(Self.hex(events?.code))")
+        _ = try? await transact(PTP.Canon.getEvent.rawValue, timeout: 2)
+    }
+
+    /// 12-byte EOS property write: length, code, value. Opcode 0x9110, no command parameters.
+    private func canonProp(_ code: UInt16, _ value: UInt32) async -> UInt16 {
+        var data = Data()
+        data.appendLE(UInt32(12))
+        data.appendLE(UInt32(code))
+        data.appendLE(value)
+        let reply = try? await transact(PTP.Canon.setProp.rawValue, out: data, timeout: 4)
+        Trace.line(String(format: "FXPAN canon prop %04X=%u %@", code, value, Self.hex(reply?.code)))
+        return reply?.code ?? 0
+    }
+
+    private func canonEnterLive() async -> Bool {
+        inLive = true
+        await canonArm()
+        _ = await canonProp(PTP.canonEVFMode, 1)
+        var out = await canonProp(PTP.canonEVFOutput, 3)
+        if out != PTP.ok { out = await canonProp(PTP.canonEVFOutput, 2) }
+        _ = try? await transact(PTP.Canon.startViewfinder.rawValue, timeout: 4)
+        if await canonNextFrame() != nil { return true }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        if await canonNextFrame() != nil { return true }
+        inLive = false
+        liveNote = "Canon live view refused"
+        Trace.line("FXPAN canon live refused output \(Self.hex(out))")
+        return false
+    }
+
+    private var canonViewArgs: [UInt32] = [0x0020_0000, 0, 0]
+
+    private func canonNextFrame() async -> UIImage? {
+        let started = CFAbsoluteTimeGetCurrent()
+        let reply: PTP.Reply
+        do {
+            reply = try await transact(PTP.Canon.viewfinder.rawValue, params: canonViewArgs, timeout: 3)
+        } catch {
+            noteLive("\(model) live \(error.localizedDescription)")
+            return nil
+        }
+        if reply.code == 0x2006 || reply.code == 0x201D, !canonViewArgs.isEmpty {
+            canonViewArgs = []
+            return await canonNextFrame()
+        }
+        if reply.code == 0x2019 {
+            _ = try? await transact(PTP.Canon.getEvent.rawValue, timeout: 2)
+            noteLive("\(model) live busy")
+            return nil
+        }
+        let blob = reply.data.count >= 8 ? reply.data : reply.raw
+        guard let jpeg = Self.canonLiveJPEG(blob), jpeg.count > 64, let image = UIImage(data: jpeg) else {
+            let head = blob.prefix(12).map { String(format: "%02X", $0) }.joined()
+            noteLive("\(model) live \(blob.count)b \(String(format: "%04X", reply.code)) \(head)")
+            return nil
+        }
+        clockFrame(CFAbsoluteTimeGetCurrent() - started, bytes: jpeg.count)
+        liveNote = "ok"
+        frameAsked = started
+        return image
+    }
+
+    /// Viewfinder payload is length, type, bytes. Type 1 and 11 are the JPEG.
+    private static func canonLiveJPEG(_ data: Data) -> Data? {
+        var i = 0
+        while i + 8 <= data.count {
+            let len = Int(data.u32(i))
+            if len < 8 || i + len > data.count { break }
+            let type = data.u32(i + 4)
+            if type == 1 || type == 11 || type == 9 {
+                let payload = data.subdata(in: (i + 8)..<(i + len))
+                if payload.starts(with: [0xFF, 0xD8]) { return payload }
+            }
+            i += len
+        }
+        return PTP.jpeg(in: data)
+    }
+
+    /// EOS remote release, then copy the new file. The copy on the card is left there.
+    func canonShoot(stamp: String) async throws -> Grabbed {
+        try await ensureSession()
+        let wasLive = inLive
+        if wasLive { await stopLive() }
+        await canonArm()
+        for _ in 0..<2 {
+            guard let ev = try? await transact(PTP.Canon.getEvent.rawValue, timeout: 3), ev.ok else { continue }
+            let blob = ev.data.count >= 8 ? ev.data : ev.raw
+            if !blob.isEmpty { Trace.line("FXPAN canon drain \(Self.canonBrief(blob))") }
+        }
+        let half = try? await transact(PTP.Canon.remoteReleaseOn.rawValue, params: [1, 0], timeout: 8)
+        Trace.line("FXPAN canon half \(Self.hex(half?.code))")
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        var fired = try await transact(PTP.Canon.remoteReleaseOn.rawValue, params: [2, 0], timeout: 12)
+        Trace.line("FXPAN canon full \(Self.hex(fired.code))")
+        if !fired.ok {
+            fired = try await transact(PTP.Canon.remoteReleaseOn.rawValue, params: [3, 0], timeout: 12)
+            Trace.line("FXPAN canon full3 \(Self.hex(fired.code))")
+        }
+        if !fired.ok {
+            fired = try await transact(PTP.Op.initiateCapture.rawValue, params: [0, 0], timeout: 20)
+            Trace.line("FXPAN canon initiate \(Self.hex(fired.code))")
+        }
+        var handles: [UInt32] = []
+        let start = Date()
+        while handles.isEmpty && Date().timeIntervalSince(start) < 18 {
+            if let ev = try? await transact(PTP.Canon.getEvent.rawValue, timeout: 4) {
+                let blob = ev.data.count >= 8 ? ev.data : ev.raw
+                Trace.line("FXPAN canon event \(Self.hex(ev.code)) \(Self.canonBrief(blob))")
+                if ev.ok { handles = await canonHandles(in: blob) }
+            }
+            if handles.isEmpty { try? await Task.sleep(nanoseconds: 200_000_000) }
+        }
+        _ = try? await transact(PTP.Canon.remoteReleaseOff.rawValue, params: [2], timeout: 4)
+        _ = try? await transact(PTP.Canon.remoteReleaseOff.rawValue, params: [1], timeout: 4)
+        guard fired.ok || !handles.isEmpty else {
+            throw PTPError.message("Canon did not fire \(Self.hex(fired.code))")
+        }
+        guard !handles.isEmpty else { throw PTPError.message("Canon fired, no file came back") }
+        var jpegURL: URL?
+        var rawURL: URL?
+        var seen = Set<UInt32>()
+        let extra = Date()
+        while Date().timeIntervalSince(extra) < 6 {
+            for handle in handles where !seen.contains(handle) {
+                seen.insert(handle)
+                guard let info = await ramInfo(handle) else { continue }
+                Trace.line(String(format: "FXPAN canon file %08X fmt %04X %u %@", handle, info.format, info.size, info.name))
+                let data = try await readObject(info)
+                let expect = Int(info.size)
+                let close = expect > 0 && abs(data.count - expect) <= 32 && Self.looksLikePicture(data)
+                guard data.count == expect || close else {
+                    throw PTPError.message(String(format: "Canon short read %d of %u", data.count, info.size))
+                }
+                try keepCanon(data, stamp: stamp, jpegURL: &jpegURL, rawURL: &rawURL)
+            }
+            if jpegURL != nil && rawURL != nil { break }
+            if let ev = try? await transact(PTP.Canon.getEvent.rawValue, timeout: 3), ev.ok {
+                let blob = ev.data.count >= 8 ? ev.data : ev.raw
+                let more = await canonHandles(in: blob).filter { !seen.contains($0) }
+                if more.isEmpty { break }
+                handles.append(contentsOf: more)
+            } else {
+                break
+            }
+        }
+        guard jpegURL != nil || rawURL != nil else { throw PTPError.message("Canon file did not copy") }
+        Trace.line("FXPAN canon kept jpeg=\(jpegURL != nil) raw=\(rawURL != nil)")
+        return Grabbed(jpeg: jpegURL, nef: rawURL)
+    }
+
+    private func canonHandles(in data: Data) async -> [UInt32] {
+        var found: [UInt32] = []
+        for event in PTP.canonEvents(data) where PTP.canonFileEvents.contains(event.code) {
+            for word in event.words.prefix(4) where word != 0 && !found.contains(word) {
+                if await ramInfo(word) != nil {
+                    found.append(word)
+                    break
+                }
+            }
+        }
+        return found
+    }
+
+    private static func canonBrief(_ data: Data) -> String {
+        let events = PTP.canonEvents(data)
+        if events.isEmpty {
+            return data.prefix(24).map { String(format: "%02X", $0) }.joined()
+        }
+        return events.prefix(6).map { event in
+            let word = event.words.first.map { String(format: "%08X", $0) } ?? "-"
+            return String(format: "%08X:%@", event.code, word)
+        }.joined(separator: " ")
+    }
+
+    private static func looksLikePicture(_ data: Data) -> Bool {
+        if data.starts(with: [0xFF, 0xD8]) { return true }
+        if data.count >= 8, String(data: data.subdata(in: 4..<8), encoding: .ascii) == "ftyp" { return true }
+        if data.starts(with: Data([0x49, 0x49, 0x2A, 0x00])) || data.starts(with: Data([0x4D, 0x4D, 0x00, 0x2A])) { return true }
+        return false
+    }
+
+    /// JPEG lands as T_stamp.jpg. A CR3 or CR2 is saved beside it, with a JPEG preview when the body sent raw only.
+    private func keepCanon(_ data: Data, stamp: String, jpegURL: inout URL?, rawURL: inout URL?) throws {
+        let ext: String
+        if data.starts(with: [0xFF, 0xD8]) {
+            ext = "jpg"
+        } else if data.count >= 8, String(data: data.subdata(in: 4..<8), encoding: .ascii) == "ftyp" {
+            ext = "cr3"
+        } else if data.starts(with: Data([0x49, 0x49, 0x2A, 0x00])) || data.starts(with: Data([0x4D, 0x4D, 0x00, 0x2A])) {
+            ext = "cr2"
+        } else {
+            ext = "bin"
+        }
+        let url = Disk.captures.appendingPathComponent("T_\(stamp).\(ext)")
+        try data.write(to: url, options: .atomic)
+        if ext == "jpg" {
+            jpegURL = url
+            return
+        }
+        rawURL = url
+        let preview = Disk.captures.appendingPathComponent("T_\(stamp).jpg")
+        if jpegURL == nil, !FileManager.default.fileExists(atPath: preview.path), Self.canonPreview(data, to: preview) {
+            jpegURL = preview
+        }
+    }
+
+    private static func canonPreview(_ data: Data, to url: URL) -> Bool {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
+        let opts: [CFString: Any] = [
+            kCGImageSourceThumbnailMaxPixelSize: 1600,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return false }
+        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        return CGImageDestinationFinalize(dest)
+    }
+
     func shoot(stamp: String, role: Role, photo: Photo) async throws -> Grabbed {
         try await ensureSession()
         await stopLive()
@@ -1418,7 +1729,7 @@ final class NikonLink {
     private var pollStalled = false
 
     private func transact(_ code: UInt16, params: [UInt32] = [], out: Data? = nil, timeout: Double = 8, endSession: Bool = false) async throws -> PTP.Reply {
-        if pollStalled {
+        if pollStalled && !canonBody {
             pollStalled = false
             Trace.line("FXPAN \(model) \(token.suffix(4)) reopening the session after a slow reply")
             await abortSession()
@@ -1478,12 +1789,14 @@ final class NikonLink {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 guard gate.claim() else { return }
                 let op = command.count >= 8 ? String(format: "%04X", command.u16(6)) : "?"
-                if endSession {
+                if endSession && !self.canonBody {
                     Trace.line("FXPAN \(self.model) \(self.token.suffix(4)) ptp \(op) stalled, closing the session so the body can leave transfer")
                     await self.abortSession()
-                } else {
+                } else if !self.canonBody {
                     Trace.line("FXPAN \(self.model) \(self.token.suffix(4)) ptp \(op) slow, leaving the session up")
                     self.pollStalled = true
+                } else {
+                    Trace.line("FXPAN \(self.model) \(self.token.suffix(4)) ptp \(op) slow, session stays open")
                 }
                 self.heldSinks.removeAll { $0 === sink }
                 cont.resume(throwing: PTPError.timeout)
@@ -1499,16 +1812,6 @@ final class NikonLink {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             device.requestCloseSession(options: nil) { _ in cont.resume() }
         }
-    }
-
-    private static func words(_ data: Data) -> [UInt32] {
-        guard data.count >= 4 else { return [] }
-        let n = min(Int(data.u32(0)), (data.count - 4) / 4)
-        var out: [UInt32] = []
-        for i in 0..<n {
-            out.append(data.u32(4 + i * 4))
-        }
-        return out
     }
 
     private struct PTPEvent {

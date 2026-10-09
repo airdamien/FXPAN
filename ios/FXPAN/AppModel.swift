@@ -58,6 +58,8 @@ final class AppModel {
     var focusPlace: FocusPlace = .both
     var playingFocus = false
     var simulate = false
+    /// One Canon on USB. Picture and transfer only. The Nikon pair is left alone.
+    var canon = false
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
     /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
@@ -107,11 +109,14 @@ final class AppModel {
         appleOn = state.appleOn
         metalWarp = state.metalWarp ?? true
         simulate = state.simulate
+        canon = state.canon
+        if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
         }
         if addApple || (adoptHugin && photo.drive.engine == "hugin") { persist() }
-        camera.simulate = state.simulate
+        camera.simulate = simulate
+        camera.canonMode = canon
         camera.onChange = { [weak self] in
             self?.cameraRevision += 1
             self?.ingest()
@@ -198,7 +203,23 @@ final class AppModel {
     func setSimulate(_ on: Bool) {
         simulate = on
         camera.simulate = on
+        if on, canon {
+            canon = false
+            Task { await camera.setCanonMode(false) }
+        }
         persist()
+        ingest()
+    }
+
+    func setCanon(_ on: Bool) {
+        canon = on
+        if on, simulate {
+            simulate = false
+            camera.simulate = false
+        }
+        persist()
+        Task { await camera.setCanonMode(on) }
+        note(on ? "Canon · one body" : "Nikon pair", bad: false)
         ingest()
     }
 
@@ -997,6 +1018,7 @@ final class AppModel {
         state.idleChosen = idleChosen
         state.appleOn = appleOn
         state.metalWarp = metalWarp
+        state.canon = canon
         Disk.save(state)
     }
 
