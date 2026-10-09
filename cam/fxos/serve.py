@@ -453,7 +453,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--proxy", default="", help="forward /api/* to a running web.py, e.g. http://10.50.0.190:8787")
+    ap.add_argument("--proxy", default="", help="forward /api/* to a running web.py, e.g. http://192.0.2.10:8787")
     ap.add_argument("--real-stitch", action="store_true",
                     help="sim: run pano.py's stitcher on the sim captures instead of the quick fake")
     args = ap.parse_args(argv)

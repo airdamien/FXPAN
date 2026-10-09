@@ -845,7 +845,7 @@ class Rig:
 
     # --- /api/* dispatch -----------------------------------------------------------
     def meta(self, port):
-        url = f"http://10.50.0.190:{port}/"
+        url = f"http://192.0.2.10:{port}/"
         return {
             "lab": f"http://127.0.0.1:{port}/lab", "phone": url, "urls": [url],
             "pair": dict(self.pair), "live": self.live_snapshot(),
@@ -863,7 +863,7 @@ class Rig:
         return {"available": True, "value": self.bright, "max": 100, "bus": 1}
 
     def wifi(self, networks=None):
-        url = "http://10.50.0.190:8790/"
+        url = "http://192.0.2.10:8790/"
         nets = networks if networks is not None else []
         if self.wifi_mode == "ap":
             return {"available": True, "mode": "ap", "ssid": "", "ap_ssid": "FXPAN",

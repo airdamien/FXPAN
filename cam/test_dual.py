@@ -1975,7 +1975,7 @@ class Wifi(unittest.TestCase):
         if "DEVICE,TYPE,STATE" in args:
             return "wlan0:wifi:connected\n"
         if "IP4.ADDRESS" in args:
-            return "IP4.ADDRESS:10.50.0.190/24\n"
+            return "IP4.ADDRESS:192.0.2.10/24\n"
         if "--active" in args:
             return "Home:wifi:wlan0\n"
         if "-g" in args and "802-11-wireless.ssid" in args:
@@ -2008,7 +2008,7 @@ class Wifi(unittest.TestCase):
         self.assertTrue(any("connect" in a and "Cafe" in a for a in self.calls))
         self.assertFalse(any("password" in a for a in self.calls))
         self.assertEqual(out["ssid"], "Home")
-        self.assertIn("10.50.0.190", out["url"])
+        self.assertIn("192.0.2.10", out["url"])
         saved = json.loads(wifi.PATH.read_text())["saved"]
         self.assertEqual(saved[0]["ssid"], "Cafe")
         self.assertEqual(saved[0]["psk"], "")
@@ -2034,10 +2034,10 @@ class Wifi(unittest.TestCase):
             "available": True,
             "mode": "station",
             "ssid": "Home",
-            "ip": "10.50.0.190",
+            "ip": "192.0.2.10",
         }
-        wifi._default_gateway = lambda: "10.50.0.1"
-        wifi._ping = lambda host: host == "10.50.0.1"
+        wifi._default_gateway = lambda: "192.0.2.1"
+        wifi._ping = lambda host: host == "192.0.2.1"
         self.addCleanup(lambda: setattr(wifi, "status", old_status))
         self.addCleanup(lambda: setattr(wifi, "_default_gateway", old_gw))
         self.addCleanup(lambda: setattr(wifi, "_ping", old_ping))
@@ -2062,17 +2062,17 @@ class Wifi(unittest.TestCase):
                     "available": True,
                     "mode": "station",
                     "ssid": "Home",
-                    "ip": "10.50.0.190",
+                    "ip": "192.0.2.10",
                 }
             return {
                 "available": True,
                 "mode": "station",
                 "ssid": "Home",
-                "ip": "10.50.0.190",
+                "ip": "192.0.2.10",
             }
 
         wifi.status = fake_status
-        wifi._default_gateway = lambda: "10.50.0.1"
+        wifi._default_gateway = lambda: "192.0.2.1"
         wifi._ping = lambda host: False
         wifi._reconnect_station = lambda ssid, psk: reconnects.append((ssid, psk))
         self.addCleanup(lambda: setattr(wifi, "status", old_status))
