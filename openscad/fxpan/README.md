@@ -12,10 +12,11 @@ takes one half of the field and the two frames stitch to
 
 XPan is 65 × 24 mm at 2.708:1, so the aspect is within 0.1%.
 
-**Working aperture is f/8 to f/22.** At f/5.6 the four corners lose light
-while the panorama's long axis stays clean, so it reads as corner shading.
-The mouths on this camera are the printed F bayonets. Stop down and the
-corners come back. The plate is not what limits the frame.
+**Shot from f/5.6 to f/22.** The Nikkor-W covers the stitch wide open.
+f/8.4 is the stop where a 44 mm mouth passes the last corner ray. At f/5.6
+that corner still gets most of the pupil and the long axis gets all of it,
+which is a mild shade, not a dark corner. The printed mouths are bored to
+the same 44 mm. The plate is not what limits the frame.
 
 Open [`WATCH_ME.scad`](WATCH_ME.scad) and read the console. It echoes the
 optical budget, marks anything that clips, and tells you how many baffle

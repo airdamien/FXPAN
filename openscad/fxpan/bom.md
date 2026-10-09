@@ -9,9 +9,9 @@ at 45°. Stitch is 64.80 × 23.9 mm, 2.711:1, 65.1 MP. On the EL-Nikkor the
 path is **179.5 … 193.5 mm**, infinity at 17.5 mm of M62 helicoid travel.
 The Nikkor-W's flange is 178.8 mm and it focuses on the M65 helicoid.
 
-Working aperture is **f/8 to f/22**, corner-to-corner clean from f/8.4. Two
-line items decide whether you get even that. Get them right and the rest is
-fasteners.
+The stitch is shot from **f/5.6 to f/22**. The Nikkor-W covers it wide
+open. f/8.4 is only the stop where the 44 mm mouth passes the last corner
+ray. The two items below are what change that, and the rest is fasteners.
 
 Nothing on this list needs measuring except your own cameras: the F register
 stands 16 mm off the chassis face so a D800's front panel, which reaches
@@ -223,9 +223,10 @@ the apertures stop matching `params.scad`.
 
 ## Notes
 
-- **f/8 and narrower.** Corner-to-corner clean from f/8.4. At f/5.6 the four
-  corners sit at 0.84 while the panorama's long axis stays clean, so it reads
-  as corner shading. A 180 mm enlarger lens is happiest at f/8–f/11 anyway.
+- **f/5.6 is usable.** The extreme corners sit at 0.84 of full illumination
+  and the long axis stays at 1.00, so it reads as a mild shade. f/8.4 is
+  where the last corner ray clears the 44 mm mouth. That number is the
+  mount, not the Nikkor-W.
 
 - **S1 faces the lens** — the face with the black dot. Backwards puts the glass path on the
   reflect leg while the T arm's 0.303 mm compensation is still shortening the

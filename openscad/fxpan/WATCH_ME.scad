@@ -85,6 +85,7 @@ FSTOP = 11; // [5.6, 8, 11, 16, 22]
 
 screw_resolution = $preview ? 0.6 : 0.25;
 ex = EXPLODED ? 55 : 0;
+lid_lift = EXPLODED ? lid_explode_z() : 0;
 
 // -----------------------------------------------------------------------------
 // tags — every part in this body is fxp_*
@@ -1844,7 +1845,7 @@ module isco_on_body() {
 module lid_lining_mask() {
     s = BOX_XY;
     L = INNER_LINING;
-    translate([0, 0, BOX_Z / 2 + ex * 0.4])
+    translate([0, 0, BOX_Z / 2 + lid_lift])
         translate([0, 0, (-40 + L) / 2])
             cube([s + 4, s + 4, 40 + L], center = true);
 }
@@ -1909,14 +1910,14 @@ module part_lid() {
     color("DarkSlateGray")
     mm_split() {
     difference() {
-        translate([0, 0, BOX_Z / 2 + ex * 0.4]) {
+        translate([0, 0, BOX_Z / 2 + lid_lift]) {
             linear_extrude(LID_T)
                 round_rect(out, out, PORT_BOSS_R);
             translate([0, 0, -LID_LIP / 2 + 0.01])
                 lid_align_lip();
             lid_retain_tabs(lip = LID_LIP);
         }
-        translate([0, 0, BOX_Z / 2 + ex * 0.4]) {
+        translate([0, 0, BOX_Z / 2 + lid_lift]) {
             for (p = lid_screws())
                 translate([p[0], p[1], -LID_LIP - 1])
                     cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
@@ -2380,17 +2381,17 @@ module assembly() {
     }
 
     fxp_pair(show_glass = $preview,
-             explode_z = EXPLODED ? (BOX_Z / 2 + 40) : 0,
+             explode_z = EXPLODED ? tray_explode_z() : 0,
              sh = sensor_shift(),
              tag = fxp_tag("tray"));
 
     if (SHOW_LID)
         part_lid();
     if (SHOW_TRIGGER && $preview)
-        translate([0, 0, BOX_Z / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)])
+        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift])
             trigger_stack_ghost();
     if (SHOW_MONITOR || SHOW_PI)
-        translate([0, 0, BOX_Z / 2 + LID_T + (EXPLODED ? ex * 0.4 : 0)]) {
+        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift]) {
             if (SHOW_MONITOR)
                 display_mount();
             monitor_easel() {

@@ -5,8 +5,11 @@ beamsplitter sends each body half of the field. The stitch is
 
 **64.80 × 23.9 mm · 2.711:1 · 13248 × 4912 · 65.1 MP**
 
-XPan is 65 × 24 mm at 2.708:1. Working aperture is f/8 to f/22, corner to
-corner clean from f/8.4. The iPhone is the viewfinder and the stitcher. A
+XPan is 65 × 24 mm at 2.708:1. It is shot from f/5.6 to f/22. The
+Nikkor-W covers the stitch wide open. The 44 mm mouths fully clear the
+extreme corners from f/8.4; at f/5.6 those corners still pass most of the
+light, and the long axis stays clean. The iPhone is the viewfinder and the
+stitcher. A
 Pi Zero on the lid pulses both 10-pin remotes together.
 
 ![Assembled. Nikkor-W to the left, a D800 on each arm, trigger board on the lid.](docs/build/assembly.png)
