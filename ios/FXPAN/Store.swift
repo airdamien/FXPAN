@@ -136,6 +136,10 @@ struct ShotFiles: Identifiable, Equatable {
     var nefR: URL?
     var pano: URL?
     var ana: URL?
+    /// The stitched panorama movie, and the two camera clips.
+    var movie: URL?
+    var movT: URL?
+    var movR: URL?
     var id: String { stamp }
     var ready: Bool { t != nil && r != nil }
 
@@ -240,6 +244,9 @@ enum CaptureIndex {
                 if shot.nefR != nil { row.nefR = shot.nefR }
                 if shot.pano != nil { row.pano = shot.pano }
                 if shot.ana != nil { row.ana = shot.ana }
+                if shot.movie != nil { row.movie = shot.movie }
+                if shot.movT != nil { row.movT = shot.movT }
+                if shot.movR != nil { row.movR = shot.movR }
                 by[shot.stamp] = row
             }
         }
@@ -256,6 +263,9 @@ enum CaptureIndex {
         if stem.hasPrefix("P_"), ext == "jpg" || ext == "jpeg" {
             return ShotFiles(stamp: String(stem.dropFirst(2)), pano: url)
         }
+        if stem.hasPrefix("P_"), ext == "mov" || ext == "mp4" {
+            return ShotFiles(stamp: String(stem.dropFirst(2)), movie: url)
+        }
         guard stem.count > 2, stem.dropFirst(1).hasPrefix("_") else { return nil }
         let role = stem.prefix(1)
         let stamp = String(stem.dropFirst(2))
@@ -265,6 +275,8 @@ enum CaptureIndex {
             if role == "T" { row.nefT = url } else { row.nefR = url }
         } else if ext == "jpg" || ext == "jpeg" {
             if role == "T" { row.t = url } else { row.r = url }
+        } else if ext == "mov" || ext == "mp4" {
+            if role == "T" { row.movT = url } else { row.movR = url }
         } else {
             return nil
         }

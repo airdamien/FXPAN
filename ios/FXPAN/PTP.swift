@@ -53,6 +53,9 @@ enum PTP {
         case startLiveView = 0x9201
         case endLiveView = 0x9202
         case getLiveView = 0x9203
+        case startMovie = 0x920A
+        case endMovie = 0x920B
+        case changeApplication = 0x9435
     }
 
     enum Prop: UInt16 {

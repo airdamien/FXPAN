@@ -23,6 +23,9 @@ struct StitchReport: Codable {
     var sec: Double?
     /// `ciraw` when the pair was developed from the NEFs.
     var develop: String?
+    /// Video only: seconds R started after T, and the frame offset the stitch used.
+    var startGap: Double?
+    var lag: Int?
 }
 
 typealias StitchNote = @Sendable (String) -> Void

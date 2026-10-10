@@ -86,11 +86,13 @@ struct DriveSet: Equatable {
     var ciraw: Bool = false
     /// Apple lens correction on the raw develop. Off keeps the overlap geometry already tuned.
     var cirawLens: Bool = false
+    /// Record both bodies, then stitch the clips. Off is a still.
+    var movie: Bool = false
 }
 
 extension DriveSet: Codable {
     private enum CodingKeys: String, CodingKey {
-        case release, save, quality, timer, review, autoStitch, engine, ciraw, cirawLens
+        case release, save, quality, timer, review, autoStitch, engine, ciraw, cirawLens, movie
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +106,7 @@ extension DriveSet: Codable {
         engine = try c.decodeIfPresent(String.self, forKey: .engine) ?? "hugin"
         ciraw = try c.decodeIfPresent(Bool.self, forKey: .ciraw) ?? false
         cirawLens = try c.decodeIfPresent(Bool.self, forKey: .cirawLens) ?? false
+        movie = try c.decodeIfPresent(Bool.self, forKey: .movie) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -117,6 +120,7 @@ extension DriveSet: Codable {
         try c.encode(engine, forKey: .engine)
         try c.encode(ciraw, forKey: .ciraw)
         try c.encode(cirawLens, forKey: .cirawLens)
+        try c.encode(movie, forKey: .movie)
     }
 }
 
@@ -550,6 +554,7 @@ enum Seed {
 
         return [
             appleMode(),
+            videoMode(),
             NamedMode(id: "landscape", name: "Landscape", photo: landscape),
             NamedMode(id: "street", name: "Street", photo: street),
             NamedMode(id: "ana2", name: "Ana 2×", photo: ana),
@@ -571,5 +576,18 @@ enum Seed {
         photo.drive.ciraw = true
         photo.wb = "Auto"
         return NamedMode(id: "apple", name: "Apple", photo: photo)
+    }
+
+    /// Both bodies record. The phone matches the clips and stitches a panorama movie.
+    static func videoMode() -> NamedMode {
+        var photo = Photo()
+        photo.light.iso = "400"
+        photo.light.shutter = "1/60"
+        photo.light.fstop = "8"
+        photo.drive.movie = true
+        photo.drive.timer = 0
+        photo.drive.autoStitch = true
+        photo.drive.engine = "blend"
+        return NamedMode(id: "video", name: "Video", photo: photo)
     }
 }

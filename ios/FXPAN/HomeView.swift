@@ -228,12 +228,16 @@ struct HomeView: View {
     private var shutterButton: some View {
         Button { Task { await model.fire() } } label: {
             ZStack {
-                Circle().stroke(model.shooting ? Theme.red : Theme.hair2, lineWidth: 2)
+                Circle().stroke(model.recording || model.shooting ? Theme.red : Theme.hair2, lineWidth: 2)
                 Circle()
-                    .fill(online ? Theme.red : Color(hex: 0x5A2020))
+                    .fill(online || model.recording ? Theme.red : Color(hex: 0x5A2020))
                     .padding(6)
-                    .scaleEffect(model.shooting ? 0.92 : 1)
-                if model.photo.drive.timer > 0 && !model.shooting {
+                    .scaleEffect(model.shooting && !model.recording ? 0.92 : 1)
+                if model.recording {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(.white)
+                        .frame(width: 22, height: 22)
+                } else if model.photo.drive.timer > 0 && !model.shooting {
                     Text("\(model.photo.drive.timer)s")
                         .font(Theme.font(11, weight: .semibold))
                         .foregroundStyle(.white)
@@ -241,8 +245,8 @@ struct HomeView: View {
             }
             .frame(width: 76, height: 76)
         }
-        .accessibilityLabel("Release")
-        .disabled(!online && !model.simulate)
+        .accessibilityLabel(model.recording ? "Stop" : (model.photo.drive.movie ? "Record" : "Release"))
+        .disabled((!online && !model.simulate && !model.recording) || (model.shooting && !model.recording))
     }
 
     private var liveButton: some View {
