@@ -58,6 +58,8 @@ final class AppModel {
     var focusPlace: FocusPlace = .both
     var playingFocus = false
     var simulate = false
+    /// Both Nikons are recording. The shutter stops the clips and stitches them.
+    var recording = false
     /// One Canon on USB. Picture and transfer only. The Nikon pair is left alone.
     var canon = false
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
@@ -100,6 +102,11 @@ final class AppModel {
         modes = state.modes
         let addApple = !modes.contains { $0.id == "apple" }
         if addApple { modes.insert(Seed.appleMode(), at: 0) }
+        let addVideo = !modes.contains { $0.id == "video" }
+        if addVideo {
+            let at = modes.first?.id == "apple" ? 1 : 0
+            modes.insert(Seed.videoMode(), at: min(at, modes.count))
+        }
         activeModeID = state.activeModeID
         rig = state.rig
         notes = state.shots
@@ -114,7 +121,7 @@ final class AppModel {
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
         }
-        if addApple || (adoptHugin && photo.drive.engine == "hugin") { persist() }
+        if addApple || addVideo || (adoptHugin && photo.drive.engine == "hugin") { persist() }
         camera.simulate = simulate
         camera.canonMode = canon
         camera.onChange = { [weak self] in
@@ -295,6 +302,7 @@ final class AppModel {
     }
 
     func toggleLive() async {
+        if recording { return }
         await camera.setLive(!camera.live)
         ingest()
     }
@@ -453,6 +461,14 @@ final class AppModel {
     }
 
     func fire() async {
+        if photo.drive.movie && !canon {
+            if recording {
+                await finishMovie()
+            } else if !shooting {
+                await beginMovie()
+            }
+            return
+        }
         if shooting { return }
         shooting = true
         ingest()
@@ -490,6 +506,77 @@ final class AppModel {
         }
         shooting = false
         countdown = nil
+        ingest()
+    }
+
+    private func beginMovie() async {
+        if photo.drive.timer > 0 {
+            for s in stride(from: photo.drive.timer, through: 1, by: -1) {
+                countdown = s
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            countdown = nil
+        }
+        do {
+            try await camera.startMovie(photo)
+            recording = true
+            note("Recording", bad: false)
+        } catch {
+            recording = false
+            note(error.localizedDescription, bad: true)
+        }
+        ingest()
+    }
+
+    private func finishMovie() async {
+        shooting = true
+        recording = false
+        let stamp = CaptureIndex.stampNow()
+        stitchLabel = "Stopping"
+        ingest()
+        do {
+            let clips = try await camera.stopMovie(stamp: stamp)
+            guard let t = clips[.t], let r = clips[.r] else { throw PTPError.message("Need both clips") }
+            try await stitchVideo(stamp: stamp, t: t, r: r, gap: camera.movieGap)
+            notes[stamp] = ShotNote(modeName: activeMode?.name ?? "Video", look: LookBook.name(photo.look), squeeze: photo.frame.squeeze)
+            persist()
+            reloadShots()
+            note(stamp, bad: false)
+        } catch {
+            note(error.localizedDescription, bad: true)
+        }
+        shooting = false
+        stitchLabel = nil
+        countdown = nil
+        ingest()
+    }
+
+    private func stitchVideo(stamp: String, t: URL, r: URL, gap: Double?) async throws {
+        let movie = Disk.captures.appendingPathComponent("P_\(stamp).mov")
+        let poster = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
+        try await PanoVideo.make(t: t, r: r, movie: movie, poster: poster, rig: rig, gap: gap) { [weak self] text in
+            Task { @MainActor in self?.stitchLabel = text }
+        }
+    }
+
+    /// Run the clip stitch again from the two camera movies already on the phone.
+    func restitchVideo(_ stamp: String) async {
+        guard !shooting, !recording,
+              let shot = shots.first(where: { $0.stamp == stamp }),
+              let t = shot.movT, let r = shot.movR else { return }
+        shooting = true
+        stitchLabel = "Stitching"
+        ingest()
+        do {
+            let saved = PanoVideo.savedGap(movie: Disk.captures.appendingPathComponent("P_\(stamp).mov"))
+            try await stitchVideo(stamp: stamp, t: t, r: r, gap: saved)
+            reloadShots()
+            note("Stitched \(stamp)", bad: false)
+        } catch {
+            note(error.localizedDescription, bad: true)
+        }
+        shooting = false
+        stitchLabel = nil
         ingest()
     }
 
@@ -1054,7 +1141,7 @@ final class AppModel {
     }
 
     private func idleDown() async {
-        if shooting {
+        if shooting || recording {
             armIdle()
             return
         }

@@ -44,6 +44,30 @@ Partly folded on an iPhone Duo. The picture and the last shots stay above the hi
 
 ![Half open.](docs/ios/duo-folded.png)
 
+## Panoramic video
+
+Drive chooses Still or Video. Video records both D800s, copies both clips
+to the phone, lines the frames up, and stitches a panorama movie. The
+shutter starts the recording and stops it. Each body writes a MOV on its
+card, and that copy stays.
+
+Both bodies are set up together. The record command then goes to both at
+once, and the stop does the same. The phone keeps the few milliseconds
+between the two starts, matches how the picture moves in each clip, and
+drops the leading frames from the body that started first. Stitch again
+runs that match and the stitch a second time.
+
+Exposure is manual and shared: ISO, shutter, and aperture. Aperture is
+written with live view down, which is when a D800 will take it. The bodies
+are back on stills before the next frame.
+
+One pair of frames sets the overlap, the warp, the crop, and the tone.
+Every later frame uses that fit, with a multiband blend. A weak overlap
+fit uses the rig's feather for the whole clip.
+
+Playback plays the panorama, and each body's clip on its own. Share,
+protect, delete, and Stitch again are there.
+
 ## A Canon, as a try
 
 System has a Canon switch. It stays off until you turn it on. One body, not the pair, and not the stitch.

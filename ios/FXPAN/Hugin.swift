@@ -678,8 +678,15 @@ enum Hugin {
         var h: Int
     }
 
-    private static func warp(t: RGBA, r: RGBA, fit: Fit, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> Canvas? {
-        let w = t.w, h = t.h
+    fileprivate struct Geometry {
+        var x0: Double
+        var y0: Double
+        var cw: Int
+        var ch: Int
+        var mt: Affine
+    }
+
+    private static func geometry(w: Int, h: Int, fit: Fit) -> Geometry? {
         let corners = [(0.0, 0.0), (Double(w), 0), (Double(w), Double(h)), (0, Double(h))]
         var xs: [Double] = []
         var ys: [Double] = []
@@ -693,9 +700,19 @@ enum Hugin {
         let cw = Int(ceil(maxX) - x0)
         let ch = Int(ceil(maxY) - y0)
         if cw < 16 || ch < 16 || cw > w * 3 || ch > h * 2 { return nil }
-        let pixels = cw * ch
-        if pixels > 80_000_000 { return nil }
+        if cw * ch > 80_000_000 { return nil }
         let mt = Affine(a: fit.m.a, b: fit.m.b, tx: fit.m.tx - x0, ty: fit.m.ty - y0)
+        return Geometry(x0: x0, y0: y0, cw: cw, ch: ch, mt: mt)
+    }
+
+    private static func warp(t: RGBA, r: RGBA, fit: Fit, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> Canvas? {
+        guard let g = geometry(w: t.w, h: t.h, fit: fit) else { return nil }
+        return try warp(t: t, r: r, g: g, metal: metal, note: note, stop: stop)
+    }
+
+    private static func warp(t: RGBA, r: RGBA, g: Geometry, metal: Bool, note: StitchNote?, stop: StitchStop?) throws -> Canvas? {
+        let x0 = g.x0, y0 = g.y0, cw = g.cw, ch = g.ch, mt = g.mt
+        let pixels = cw * ch
         if metal, let gpu = WarpGPU.frames(r: r, t: t, x0: x0, y0: y0, cw: cw, ch: ch, mt: mt) {
             return Canvas(r: gpu.r, t: gpu.t, w: cw, h: ch)
         }
@@ -742,7 +759,31 @@ enum Hugin {
         return (chan(0), chan(1), chan(2))
     }
 
+    fileprivate struct Box {
+        var x0: Int
+        var y0: Int
+        var w: Int
+        var h: Int
+    }
+
     private static func crop(_ canvas: Canvas) -> Canvas {
+        guard let box = cropBox(canvas) else { return canvas }
+        return cut(canvas, box)
+    }
+
+    private static func cut(_ canvas: Canvas, _ box: Box) -> Canvas {
+        var r = [UInt8](repeating: 0, count: box.w * box.h * 4)
+        var t = [UInt8](repeating: 0, count: box.w * box.h * 4)
+        for y in 0..<box.h {
+            let s = ((box.y0 + y) * canvas.w + box.x0) * 4
+            let d = y * box.w * 4
+            r.replaceSubrange(d..<(d + box.w * 4), with: canvas.r[s..<(s + box.w * 4)])
+            t.replaceSubrange(d..<(d + box.w * 4), with: canvas.t[s..<(s + box.w * 4)])
+        }
+        return Canvas(r: r, t: t, w: box.w, h: box.h)
+    }
+
+    private static func cropBox(_ canvas: Canvas) -> Box? {
         let w = canvas.w, h = canvas.h
         var opaque = [Bool](repeating: false, count: w)
         var top = [Int](repeating: 0, count: w)
@@ -764,7 +805,7 @@ enum Hugin {
             }
         }
         let cols = opaque.enumerated().filter { $0.element }.map { $0.offset }
-        guard let firstCol = cols.first, let lastCol = cols.last, lastCol > firstCol else { return canvas }
+        guard let firstCol = cols.first, let lastCol = cols.last, lastCol > firstCol else { return nil }
         var x0 = firstCol
         var x1 = lastCol
         var heights: [Int] = []
@@ -808,16 +849,68 @@ enum Hugin {
         }
         let cw = x1 - x0 + 1
         let ch = y1 - y0
-        if cw < 16 || ch < 16 { return canvas }
-        var r = [UInt8](repeating: 0, count: cw * ch * 4)
-        var t = [UInt8](repeating: 0, count: cw * ch * 4)
-        for y in 0..<ch {
-            let s = ((y0 + y) * w + x0) * 4
-            let d = y * cw * 4
-            r.replaceSubrange(d..<(d + cw * 4), with: canvas.r[s..<(s + cw * 4)])
-            t.replaceSubrange(d..<(d + cw * 4), with: canvas.t[s..<(s + cw * 4)])
+        if cw < 16 || ch < 16 { return nil }
+        return Box(x0: x0, y0: y0, w: cw, h: ch)
+    }
+
+    // MARK: - Video
+
+    /// One fit for a whole clip. The rig does not move, so the warp, crop, and tone are solved on one pair and reused.
+    struct Locked {
+        fileprivate var g: Geometry
+        fileprivate var box: Box
+        var fit: Fit
+        var scaleR: [Float]
+        var scaleT: [Float]
+        var bands: Int
+        var useBands: Bool
+        var width: Int { box.w }
+        var height: Int { box.h }
+    }
+
+    static func lock(t: CGImage, r: CGImage, overlap: Double, balance: Bool) throws -> Locked? {
+        let tr = rgba(from: t)
+        let rr = rgba(from: r)
+        guard tr.w == rr.w, tr.h == rr.h, tr.w > 32, tr.h > 32 else { return nil }
+        guard let fit = try align(t: tr, r: rr, overlap: overlap),
+              let g = geometry(w: tr.w, h: tr.h, fit: fit),
+              let canvas = try warp(t: tr, r: rr, g: g, metal: true, note: nil, stop: nil),
+              let box = cropBox(canvas) else { return nil }
+        let cropped = cut(canvas, box)
+        var scaleR: [Float] = []
+        var scaleT: [Float] = []
+        if balance, let scales = toneScales(cropped.r, cropped.t, cropped.w, cropped.h) {
+            scaleR = scales.r
+            scaleT = scales.t
         }
-        return Canvas(r: r, t: t, w: cw, h: ch)
+        let bands = bandCount(overlapPx: Int((fit.overlap * Double(tr.w)).rounded()))
+        return Locked(
+            g: g, box: box, fit: fit, scaleR: scaleR, scaleT: scaleT,
+            bands: bands, useBands: memoryAllowsBands(w: box.w, h: box.h)
+        )
+    }
+
+    /// Warp, crop, tone, and blend one pair with the clip's fit.
+    static func frame(t: CGImage, r: CGImage, locked: Locked) -> CGImage? {
+        let tr = rgba(from: t)
+        let rr = rgba(from: r)
+        guard tr.w == rr.w, tr.h == rr.h,
+              let canvas = try? warp(t: tr, r: rr, g: locked.g, metal: true, note: nil, stop: nil),
+              canvas.w == locked.g.cw, canvas.h == locked.g.ch else { return nil }
+        var cropped = cut(canvas, locked.box)
+        let w = cropped.w, h = cropped.h
+        if !locked.scaleR.isEmpty {
+            applyTone(&cropped.r, &cropped.t, w, h, scaleR: locked.scaleR, scaleT: locked.scaleT)
+        }
+        let px: [UInt8]?
+        if locked.useBands {
+            px = (try? multiband(r: cropped.r, t: cropped.t, w: w, h: h, bands: locked.bands, stop: nil))
+                ?? feather(r: cropped.r, t: cropped.t, w: w, h: h)
+        } else {
+            px = feather(r: cropped.r, t: cropped.t, w: w, h: h)
+        }
+        guard let px else { return nil }
+        return cgImage(rgba: px, w: w, h: h)
     }
 
     struct ToneAcc {
@@ -894,6 +987,26 @@ enum Hugin {
     /// A single scale fit on the whole overlap follows the trees and then pulls the blue out of the sky.
     /// Each band darkens whichever body is brighter there, and a clipped sky keeps a neutral match instead of the trees' color.
     private static func balancePair(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int) {
+        guard let scales = toneScales(r, t, w, h) else { return }
+        applyTone(&r, &t, w, h, scaleR: scales.r, scaleT: scales.t)
+    }
+
+    private static func applyTone(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int, scaleR: [Float], scaleT: [Float]) {
+        if BlendGPU.darken(&r, &t, w: w, h: h, scaleR: scaleR, scaleT: scaleT) { return }
+        for y in 0..<h {
+            let sr = (0..<3).map { Double(scaleR[y * 3 + $0]) }
+            let st = (0..<3).map { Double(scaleT[y * 3 + $0]) }
+            let row = y * w * 4
+            for x in 0..<w {
+                let i = row + x * 4
+                if r[i + 3] > 32 { darken(&r, i, sr) }
+                if t[i + 3] > 32 { darken(&t, i, st) }
+            }
+        }
+    }
+
+    /// Per-row scales for each body, or nil when the overlap already matches.
+    private static func toneScales(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int) -> (r: [Float], t: [Float])? {
         var rows = Array(repeating: ToneAcc(), count: ToneFit.bands)
         for y in stride(from: 0, to: h, by: 4) {
             let b = min(ToneFit.bands - 1, y * ToneFit.bands / max(1, h))
@@ -921,7 +1034,7 @@ enum Hugin {
             }
         }
         let fit = ToneFit.make(rows)
-        guard fit.moves else { return }
+        guard fit.moves else { return nil }
         let sky = fit.scaleR[0]
         let skyT = fit.scaleT[0]
         print(String(format: "FXPAN balance sky R ×%.3f %.3f %.3f T ×%.3f %.3f %.3f", sky[0], sky[1], sky[2], skyT[0], skyT[1], skyT[2]))
@@ -934,16 +1047,7 @@ enum Hugin {
                 scaleT[y * 3 + c] = Float(s.t[c])
             }
         }
-        if BlendGPU.darken(&r, &t, w: w, h: h, scaleR: scaleR, scaleT: scaleT) { return }
-        for y in 0..<h {
-            let s = fit.scales(y: y, height: h)
-            let row = y * w * 4
-            for x in 0..<w {
-                let i = row + x * 4
-                if r[i + 3] > 32 { darken(&r, i, s.r) }
-                if t[i + 3] > 32 { darken(&t, i, s.t) }
-            }
-        }
+        return (scaleR, scaleT)
     }
 
     private static func darken(_ px: inout [UInt8], _ i: Int, _ scale: [Double]) {

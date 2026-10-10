@@ -1,3 +1,4 @@
+import AVKit
 import ImageIO
 import SwiftUI
 
@@ -364,7 +365,8 @@ struct DriveScreen: View {
         DimPage(title: "Drive", controls: {
             if halfOpen {
                 VStack(alignment: .leading, spacing: 8) {
-                    pair(releaseBlock(fill: rowFill, compact: true), timerBlock(fill: rowFill))
+                    pair(releaseBlock(fill: rowFill, compact: true), movieBlock(fill: rowFill))
+                    pair(timerBlock(fill: rowFill), saveBlock(fill: rowFill))
                     pair(
                         fileBlock.background {
                             GeometryReader { geo in
@@ -373,7 +375,7 @@ struct DriveScreen: View {
                         },
                         developBlock(fill: rowFill, compact: true)
                     )
-                    pair(saveBlock(fill: rowFill), reviewBlock(fill: rowFill))
+                    pair(reviewBlock(fill: rowFill), EmptyView())
                     pair(stitchBlock(fill: rowFill), engineBlock(fill: rowFill))
                     if drive.ciraw {
                         pair(lensBlock(fill: rowFill, compact: true), overlapNote(fill: rowFill))
@@ -383,6 +385,7 @@ struct DriveScreen: View {
             } else {
                 VStack(spacing: 10) {
                     releaseBlock().task { await model.probeSync() }
+                    movieBlock()
                     saveBlock()
                     fileBlock
                     developBlock()
@@ -416,6 +419,15 @@ struct DriveScreen: View {
         HStack(alignment: .top, spacing: 8) {
             leading.frame(maxWidth: .infinity, alignment: .top)
             trailing.frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func movieBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Movie", value: drive.movie ? "Video" : "Still", hint: "Video records both bodies, matches the frames, and stitches a panorama clip. The shutter starts it and stops it.", fillHeight: fill) {
+            ChipRow(options: [("0", "Still"), ("1", "Video")], selected: drive.movie ? "1" : "0") { value in
+                model.edit { $0.drive.movie = value == "1" }
+            }
         }
     }
 
@@ -573,6 +585,7 @@ struct ModesScreen: View {
     private func modeLine(_ mode: NamedMode) -> String {
         let p = mode.photo
         var line = "\(Catalog.format(p.frame.squeeze).1) · \(Catalog.fmtISO(p.light.iso)) · \(LookBook.name(p.look))"
+        if p.drive.movie { line += " · Video" }
         if p.drive.ciraw { line += " · CIRAW" }
         return line
     }
@@ -637,6 +650,7 @@ struct PlaybackScreen: View {
     private func state(_ shot: ShotFiles) -> String {
         if shot.stamp == model.stitchingStamp && shot.pano == nil { return model.stitchLabel ?? "Stitching" }
         if model.stitchWaiting.contains(shot.stamp) && shot.pano == nil { return "Queued" }
+        if shot.movie != nil { return "Video" }
         if shot.pano != nil {
             let report = FrameFacts.report(shot.stamp)
             let mp = FrameFacts.output(shot, report: report)
@@ -674,6 +688,7 @@ struct ShotScreen: View {
 
     var body: some View {
         let shot = model.shots.first { $0.stamp == stamp }
+        let isVideo = shot.map(Self.isVideo) ?? false
         let choices = parts(shot)
         let selected = choices.contains(where: { $0.0 == part }) ? part : (choices.first?.0 ?? "pano")
         DimPage(title: shot?.name ?? stamp, crumb: "Playback", stickPanel: true, controls: {
@@ -682,16 +697,29 @@ struct ShotScreen: View {
                 if let shot {
                     let report = FrameFacts.report(stamp)
                     fact("Status", status(shot))
-                    fact("Size", FrameFacts.size(shot, report: report))
-                    fact("Output", FrameFacts.output(shot, report: report))
-                    fact("Time", report?.sec.map(FrameFacts.formatSec) ?? "—")
-                    fact("Stitch", FrameFacts.stitch(report))
-                    fact("T", FrameFacts.exposure(shot.t))
-                    fact("R", FrameFacts.exposure(shot.r))
+                    if isVideo {
+                        if let report {
+                            fact("Size", "\(report.width) × \(report.height)")
+                        }
+                        fact("Length", report?.sec.map { String(format: "%.1f s", $0) } ?? "—")
+                        fact("Stitch", FrameFacts.stitch(report))
+                        if let gap = report?.startGap {
+                            fact("Start gap", String(format: "%+.0f ms", gap * 1000))
+                        }
+                    } else {
+                        fact("Size", FrameFacts.size(shot, report: report))
+                        fact("Output", FrameFacts.output(shot, report: report))
+                        fact("Time", report?.sec.map(FrameFacts.formatSec) ?? "—")
+                        fact("Stitch", FrameFacts.stitch(report))
+                        fact("T", FrameFacts.exposure(shot.t))
+                        fact("R", FrameFacts.exposure(shot.r))
+                    }
                 }
                 if let note = model.notes[stamp] {
                     fact("Mode", note.modeName.isEmpty ? "—" : note.modeName)
-                    fact("Look", note.look.isEmpty ? "Standard" : note.look)
+                    if !isVideo {
+                        fact("Look", note.look.isEmpty ? "Standard" : note.look)
+                    }
                 }
                 HStack {
                     Button(model.protectedStamps.contains(stamp) ? "Unlock" : "Protect") { model.protect(stamp) }
@@ -710,51 +738,66 @@ struct ShotScreen: View {
                             Button("Cancel", role: .cancel) {}
                         }
                 }
-                ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: model.photo.drive.engine) { value in
-                    model.restitch(stamp, engine: value)
-                }
-                ChipRow(options: [("jpeg", "JPEG"), ("ciraw", "CIRAW")], selected: model.photo.drive.ciraw ? "ciraw" : "jpeg") { value in
-                    model.edit { $0.drive.ciraw = value == "ciraw" }
-                    model.restitch(stamp)
-                }
-                Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
-                    .font(Theme.font(12))
-                    .foregroundStyle(Theme.dim)
-                ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: styleBase) { styleBase = $0 }
-                ChipRow(options: [("off", "Off")] + LookBook.films.map { ($0.0, $0.1) }, selected: LookBook.films.contains { $0.0 == styleBase } ? styleBase : "off") { styleBase = LookBook.pickFilm(styleBase, $0) }
-                if LookBook.isMono(previewLook) {
-                    ChipRow(options: LookBook.filters.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleFilter) { styleFilter = $0 }
-                }
-                ChipRow(options: LookBook.grains.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleGrain) { styleGrain = $0 }
-                ForEach(AppleBook.groups) { group in
-                    let chips = AppleBook.options(model.appleEnabled, group: group.id, current: styleApple)
-                    if !chips.isEmpty {
-                        Text(group.viewer)
-                            .font(Theme.font(12))
-                            .foregroundStyle(Theme.dim)
-                        ChipRow(options: chips, selected: styleApple) { pickApple($0) }
+                if shot?.movT != nil && shot?.movR != nil {
+                    Button(model.shooting ? (model.stitchLabel ?? "Stitching") : "Stitch again") {
+                        Task { await model.restitchVideo(stamp) }
                     }
+                    .buttonStyle(PlainChip())
+                    .disabled(model.shooting || model.recording)
+                    Text("Fits the overlap on a few frames, then warps and blends every frame the way a still is stitched.")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
+                } else {
+                    ChipRow(options: Catalog.engines.map { ($0.0, $0.1) }, selected: model.photo.drive.engine) { value in
+                        model.restitch(stamp, engine: value)
+                    }
+                    ChipRow(options: [("jpeg", "JPEG"), ("ciraw", "CIRAW")], selected: model.photo.drive.ciraw ? "ciraw" : "jpeg") { value in
+                        model.edit { $0.drive.ciraw = value == "ciraw" }
+                        model.restitch(stamp)
+                    }
+                    Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
                 }
-                Button(model.savingStyle == stamp ? "Saving" : "Save look") {
-                    model.saveStyle(stamp, look: previewLook)
+                if !isVideo {
+                    ChipRow(options: LookBook.names.map { ($0.0, $0.1) }, selected: styleBase) { styleBase = $0 }
+                    ChipRow(options: [("off", "Off")] + LookBook.films.map { ($0.0, $0.1) }, selected: LookBook.films.contains { $0.0 == styleBase } ? styleBase : "off") { styleBase = LookBook.pickFilm(styleBase, $0) }
+                    if LookBook.isMono(previewLook) {
+                        ChipRow(options: LookBook.filters.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleFilter) { styleFilter = $0 }
+                    }
+                    ChipRow(options: LookBook.grains.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selected: styleGrain) { styleGrain = $0 }
+                    ForEach(AppleBook.groups) { group in
+                        let chips = AppleBook.options(model.appleEnabled, group: group.id, current: styleApple)
+                        if !chips.isEmpty {
+                            Text(group.viewer)
+                                .font(Theme.font(12))
+                                .foregroundStyle(Theme.dim)
+                            ChipRow(options: chips, selected: styleApple) { pickApple($0) }
+                        }
+                    }
+                    Button(model.savingStyle == stamp ? "Saving" : "Save look") {
+                        model.saveStyle(stamp, look: previewLook)
+                    }
+                    .buttonStyle(GoldButton())
+                    .disabled(model.savingStyle != nil || model.upscaleLabel != nil || shot?.pano == nil)
+                    Button(model.upscaleLabel ?? "Upscale") {
+                        model.upscale(stamp)
+                    }
+                    .buttonStyle(GoldButton())
+                    .disabled(model.upscaleLabel != nil || model.savingStyle != nil || shot?.pano == nil)
+                    Text("Save look writes this style onto the panorama. Upscale runs Real-ESRGAN on the subject, in overlapping tiles, and scales the rest of the frame to match. Another tap starts from the original.")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
                 }
-                .buttonStyle(GoldButton())
-                .disabled(model.savingStyle != nil || model.upscaleLabel != nil || shot?.pano == nil)
-                Button(model.upscaleLabel ?? "Upscale") {
-                    model.upscale(stamp)
-                }
-                .buttonStyle(GoldButton())
-                .disabled(model.upscaleLabel != nil || model.savingStyle != nil || shot?.pano == nil)
-                Text("Save look writes this style onto the panorama. Upscale runs Real-ESRGAN on the subject, in overlapping tiles, and scales the rest of the frame to match. Another tap starts from the original.")
-                    .font(Theme.font(12))
-                    .foregroundStyle(Theme.dim)
                 if let url = shareURL(shot, part: selected) {
                     ShareLink(item: url) { Text("Share") }
                         .buttonStyle(GoldButton())
                 }
             }
         }, panel: {
-            if let shot {
+            if let shot, isVideo {
+                ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: 1, generation: model.stitchGeneration, look: LookSet())
+            } else if let shot {
                 ShotPart(shot: shot, part: selected, rig: model.rig, squeeze: model.photo.frame.squeeze, generation: model.stitchGeneration, look: previewLook)
                     .onLongPressGesture(minimumDuration: 0.35) {
                         model.peep(file(shot, part: selected), title: shot.name)
@@ -779,10 +822,20 @@ struct ShotScreen: View {
         model.stageApple(stamp, id)
     }
 
+    static func isVideo(_ shot: ShotFiles) -> Bool {
+        shot.movie != nil || shot.movT != nil || shot.movR != nil
+    }
+
     private func parts(_ shot: ShotFiles?) -> [(String, String)] {
         guard let shot else { return [("pano", "Pano")] }
         var rows: [(String, String)] = []
-        if shot.pano != nil || shot.ready { rows.append(("pano", "Pano")) }
+        if Self.isVideo(shot) {
+            if shot.movie != nil { rows.append(("pano", "Pano")) }
+            if shot.movR != nil { rows.append(("r", "R")) }
+            if shot.movT != nil { rows.append(("t", "T")) }
+            return rows.isEmpty ? [("pano", "Pano")] : rows
+        }
+        if shot.movie != nil || shot.pano != nil || shot.ready { rows.append(("pano", "Pano")) }
         if shot.ana != nil { rows.append(("ana", "Ana")) }
         if shot.r != nil { rows.append(("r", "R")) }
         if shot.t != nil { rows.append(("t", "T")) }
@@ -792,6 +845,7 @@ struct ShotScreen: View {
     private func status(_ shot: ShotFiles) -> String {
         if shot.stamp == model.stitchingStamp { return model.stitchLabel ?? "Stitching" }
         if model.stitchWaiting.contains(shot.stamp) { return "Queued" }
+        if shot.movie != nil { return "Video" }
         if shot.pano != nil { return "Stitched" }
         if shot.ready { return "Not stitched" }
         return shot.t == nil ? "T missing" : "R missing"
@@ -804,10 +858,10 @@ struct ShotScreen: View {
     private func file(_ shot: ShotFiles?, part: String) -> URL? {
         guard let shot else { return nil }
         switch part {
-        case "t": return shot.t
-        case "r": return shot.r
+        case "t": return shot.t ?? shot.movT
+        case "r": return shot.r ?? shot.movR
         case "ana": return shot.ana
-        default: return shot.pano ?? shot.ana ?? shot.t
+        default: return shot.movie ?? shot.pano ?? shot.ana ?? shot.t
         }
     }
 
@@ -920,10 +974,20 @@ struct ShotPart: View {
     var generation: Int
     var look: LookSet
     @State private var image: UIImage?
+    @State private var player: AVPlayer?
 
     var body: some View {
         ZStack {
-            if let image {
+            if let url = videoURL {
+                VideoPlayer(player: player)
+                    .task(id: Self.revision(url)) {
+                        player?.pause()
+                        let next = AVPlayer(url: url)
+                        player = next
+                        next.play()
+                    }
+                    .onDisappear { player?.pause() }
+            } else if let image {
                 Image(uiImage: image).resizable().scaledToFit()
             }
         }
@@ -938,6 +1002,20 @@ struct ShotPart: View {
                 Self.load(shot, part: part, rig: rig, squeeze: squeeze, look: look)
             }.value
         }
+    }
+
+    private var videoURL: URL? {
+        switch part {
+        case "ana": return nil
+        case "t": return shot.t == nil ? shot.movT : nil
+        case "r": return shot.r == nil ? shot.movR : nil
+        default: return shot.movie
+        }
+    }
+
+    private static func revision(_ url: URL) -> String {
+        let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return "\(url.path)#\(modified)"
     }
 
     private var token: String {

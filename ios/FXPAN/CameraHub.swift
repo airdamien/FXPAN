@@ -411,6 +411,88 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return out
     }
 
+    /// Live view, then movie-to-card on every paired body. The poll stops so it does not fight the recording.
+    func startMovie(_ photo: Photo) async throws {
+        if simulate { return }
+        guard !canonMode else { throw PTPError.message("Video is the Nikon pair") }
+        let bodies = links.values.filter { role(of: $0.token) != nil }
+        guard bodies.count >= 2 else { throw PTPError.message("Video needs both bodies") }
+        await setLive(true)
+        guard live else { throw PTPError.message("Movie needs live view") }
+        livePoll?.cancel()
+        livePoll = nil
+        movieGap = nil
+        let seated: [(NikonLink, Role)] = bodies.compactMap { link in role(of: link.token).map { (link, $0) } }
+        await withTaskGroup(of: Void.self) { group in
+            for (link, who) in seated {
+                group.addTask { @MainActor in await link.prepareMovie(photo, role: who) }
+            }
+        }
+        var starts: [Role: CFAbsoluteTime] = [:]
+        var failure: Error?
+        await withTaskGroup(of: (Role, Result<CFAbsoluteTime, Error>).self) { group in
+            for (link, who) in seated {
+                group.addTask { @MainActor in
+                    do { return (who, .success(try await link.fireMovie())) } catch { return (who, .failure(error)) }
+                }
+            }
+            for await (who, result) in group {
+                switch result {
+                case .success(let at): starts[who] = at
+                case .failure(let error): failure = failure ?? error
+                }
+            }
+        }
+        if let failure {
+            for (link, who) in seated where starts[who] != nil { await link.cancelMovie() }
+            for (link, _) in seated { await link.leaveMovieMode() }
+            live = false
+            await setLive(true)
+            throw failure
+        }
+        if let t = starts[.t], let r = starts[.r] {
+            movieGap = r - t
+            Trace.line(String(format: "FXPAN movie start gap R-T %+.0f ms", (r - t) * 1000))
+        }
+    }
+
+    /// Seconds R started after T on the last recording. The stitch searches around this.
+    private(set) var movieGap: Double?
+
+    /// Stop both recordings, copy the clips, and leave live view.
+    func stopMovie(stamp: String) async throws -> [Role: URL] {
+        if simulate { return try PanoVideo.sample(stamp: stamp) }
+        let seated: [(NikonLink, Role)] = links.values.compactMap { link in role(of: link.token).map { (link, $0) } }
+        var ended: [Role: Result<[UInt32], Error>] = [:]
+        await withTaskGroup(of: (Role, Result<[UInt32], Error>).self) { group in
+            for (link, who) in seated {
+                group.addTask { @MainActor in
+                    do {
+                        let params = try await link.endRecording()
+                        return (who, .success(await link.movieEvents(params)))
+                    } catch { return (who, .failure(error)) }
+                }
+            }
+            for await (who, result) in group { ended[who] = result }
+        }
+        var out: [Role: URL] = [:]
+        var failures: [String] = []
+        for (link, who) in seated {
+            do {
+                guard let result = ended[who] else { continue }
+                let params = try result.get()
+                out[who] = try await link.endMovie(stamp: stamp, role: who, params: params)
+            } catch {
+                failures.append(error.localizedDescription)
+            }
+        }
+        await setLive(false)
+        guard out[.t] != nil, out[.r] != nil else {
+            throw PTPError.message(failures.first ?? "A clip did not come back")
+        }
+        return out
+    }
+
     /// One Canon. Remote release, then copy whatever the body just wrote. The card copy is left in place.
     private func captureCanon(stamp: String) async throws -> [Role: Grabbed] {
         guard let link = links.values.first(where: { role(of: $0.token) != nil }) ?? links.values.first else {
@@ -844,6 +926,11 @@ final class NikonLink {
     private var txn: UInt32 = 1
     private var chain: Task<Void, Never>?
     private(set) var inLive = false
+    /// True after a movie-mode command was accepted. Stills send the matching off command.
+    private var movieArmed = false
+    /// Both movie-mode commands were refused, so later stills skip them.
+    private var movieGateDead = false
+    private var savedSelector: UInt8?
     private(set) var sessionUp = false
     private(set) var linkLabel = ""
     private var exposure = BodyState()
@@ -1124,6 +1211,343 @@ final class NikonLink {
         print("FXPAN \(text)")
     }
 
+    private var movieWhy = ""
+
+    /// Drop photo live view, enter movie mode, and set the exposure. The start is a separate step so both bodies go together.
+    func prepareMovie(_ photo: Photo, role: Role) async {
+        if inLive {
+            _ = try? await transact(PTP.Op.endLiveView.rawValue, timeout: 3)
+            _ = try? await transact(PTP.Op.changeMode.rawValue, params: [0], timeout: 3)
+            await settle(minimum: 0.4, seconds: 3)
+            inLive = false
+        }
+        _ = try? await set(.recordingMedia, 0)
+        _ = await ramEvents()
+        moviesBefore = Set(await movieHandles())
+        await setStillExposure(photo)
+        _ = await movieProhibit()
+        await armMovie()
+        movieWhy = await movieProhibit()
+        await reopenLive()
+        await matchMovieExposure(photo, role: role)
+    }
+
+    /// Start the card recording. Returns the midpoint of the command, which is the best guess at the first frame.
+    func fireMovie() async throws -> CFAbsoluteTime {
+        let sent = CFAbsoluteTimeGetCurrent()
+        let reply = try await transact(PTP.Op.startMovie.rawValue, timeout: 10)
+        let back = CFAbsoluteTimeGetCurrent()
+        Trace.line(String(format: "FXPAN %@ movie start %@ in %.0f ms", model, Self.hex(reply.code), (back - sent) * 1000))
+        guard reply.ok else {
+            let again = await movieProhibit()
+            let detail = (again.isEmpty || again == "clear") ? movieWhy : again
+            if reply.code == 0xA004, !detail.isEmpty, detail != "clear" {
+                throw PTPError.message("\(model) did not start movie A004 · \(detail)")
+            }
+            throw PTPError.message("\(model) did not start movie \(Self.hex(reply.code))")
+        }
+        return (sent + back) / 2
+    }
+
+    /// Movie live view keeps its own meter. Manual movie settings, then the same ISO and shutter on both bodies.
+    /// Aperture only moves with live view down, so this runs before movie live view starts.
+    private func setStillExposure(_ photo: Photo) async {
+        let light = photo.light
+        try? await set(.program, Self.programCode("M"))
+        try? await set(.isoAuto, 0)
+        try? await set(.isoAutoHi, 0)
+        if let iso = Catalog.isoValue(light.iso) {
+            try? await set(.iso, UInt64(iso))
+        }
+        if let shutter = Catalog.shutterTenThousandths(light.bulb ? "bulb" : light.shutter) {
+            try? await set(.exposureTime, UInt64(shutter))
+        }
+        if let aperture = Catalog.fNumberHundredths(light.fstop) {
+            try? await set(.fNumber, UInt64(aperture))
+        }
+    }
+
+    private func matchMovieExposure(_ photo: Photo, role: Role) async {
+        let light = photo.light
+        let manual = await putProp(0xD0A6, Data([1]))
+        _ = await putProp(0xD1AB, PTP.encode(0, type: 0x0004))
+        _ = await putProp(0x5010, PTP.encode(0, type: 0x0004))
+        let isoWant = UInt64(Catalog.isoValue(light.iso) ?? 400)
+        let shutWant = UInt64(Self.packedShutter(light.bulb ? "bulb" : light.shutter) ?? 0x0001_003C)
+        let isoSet = await writeDescribed(0xD1AA, want: isoWant)
+        let shutSet = await writeDescribed(0xD1A8, want: shutWant)
+        let stillISO = await value(.iso) ?? 0
+        let stillF = await value(.fNumber) ?? 0
+        let program = await value(.program) ?? 0
+        let movieISO = await readU32(0xD1AA)
+        let movieShut = await readU32(0xD1A8)
+        let movieF = await readPropData(0xD1A9).map { $0.count >= 2 ? UInt32($0[$0.startIndex]) | (UInt32($0[$0.startIndex + 1]) << 8) : 0 } ?? 0
+        Trace.line(String(format: "FXPAN %@ movie exp manual %@ program %u still iso %u f %u movie iso %@->%u shut %@->%@ f %u",
+                          role.rawValue, Self.hex(manual), program, stillISO, stillF,
+                          Self.hex(isoSet), movieISO, Self.hex(shutSet), Self.shutterLabel(movieShut), movieF))
+    }
+
+    /// Use the camera's own list and width. A raw 1/10000s number is rejected for the movie shutter.
+    private func writeDescribed(_ code: UInt16, want: UInt64) async -> UInt16 {
+        let desc = await propDesc(code)
+        let type = desc?.dataType ?? 0x0006
+        if code == 0xD1A8 {
+            let list = (desc?.enums ?? []).prefix(24).map { Self.shutterLabel(UInt32($0)) }.joined(separator: " ")
+            Trace.line(String(format: "FXPAN %@ movie shutter type %04X list %@", model, type, list))
+            let exact = await putProp(code, PTP.encode(want, type: type))
+            if exact == PTP.ok, UInt64(await readU32(code)) == want { return exact }
+        }
+        var chosen = want
+        if let enums = desc?.enums, !enums.isEmpty {
+            if code == 0xD1A8 {
+                let target = Self.shutterSeconds(UInt32(want))
+                chosen = enums.min { abs(Self.shutterSeconds(UInt32($0)) - target) < abs(Self.shutterSeconds(UInt32($1)) - target) } ?? want
+            } else {
+                chosen = PTP.nearest(want, in: enums) ?? want
+            }
+        }
+        if desc?.writable == false {
+            Trace.line(String(format: "FXPAN %@ prop %04X read only, current %u", model, code, desc?.current ?? 0))
+            return 0xA005
+        }
+        return await putProp(code, PTP.encode(chosen, type: type))
+    }
+
+    private func propDesc(_ code: UInt16) async -> PTP.PropDesc? {
+        guard let reply = try? await transact(PTP.Op.getPropDesc.rawValue, params: [UInt32(code)], timeout: 4),
+              reply.ok, let desc = PTP.parsePropDesc(reply.data) else { return nil }
+        return desc
+    }
+
+    private func readU32(_ code: UInt16) async -> UInt32 {
+        guard let data = await readPropData(code), data.count >= 4 else { return 0 }
+        return UInt32(data[data.startIndex])
+            | (UInt32(data[data.startIndex + 1]) << 8)
+            | (UInt32(data[data.startIndex + 2]) << 16)
+            | (UInt32(data[data.startIndex + 3]) << 24)
+    }
+
+    /// Movie shutter is numerator in the high half and denominator in the low half. 1/60 is 0x0001003C.
+    private static func packedShutter(_ text: String) -> UInt32? {
+        if text.lowercased() == "bulb" { return 0xFFFF_FFFF }
+        let parts = text.split(separator: "/").map(String.init)
+        if parts.count == 2, let n = UInt32(parts[0]), let d = UInt32(parts[1]), d > 0 {
+            return (n << 16) | d
+        }
+        if let sec = UInt32(text.filter(\.isNumber)), sec > 0 {
+            return (sec << 16) | 1
+        }
+        return nil
+    }
+
+    private static func shutterSeconds(_ value: UInt32) -> Double {
+        if value == 0xFFFF_FFFF { return 60 }
+        let n = Double(value >> 16)
+        let d = Double(value & 0xFFFF)
+        if n == 0 { return Double(value) / 10_000 }
+        if d == 0 { return n }
+        return n / d
+    }
+
+    private static func shutterLabel(_ value: UInt32) -> String {
+        if value == 0xFFFF_FFFF { return "bulb" }
+        let n = value >> 16
+        let d = value & 0xFFFF
+        if n == 0 { return String(value) }
+        if d <= 1 { return "\(n)s" }
+        return "\(n)/\(d)"
+    }
+
+    private func putProp(_ code: UInt16, _ data: Data) async -> UInt16 {
+        let reply = try? await transact(PTP.Op.setProp.rawValue, params: [UInt32(code)], out: data, timeout: 4)
+        return reply?.code ?? 0
+    }
+
+    /// The D800 omits these from device info. Send them anyway, and remember when one lands.
+    private func armMovie() async {
+        let change = try? await transact(PTP.Op.changeApplication.rawValue, params: [1], timeout: 4)
+        Trace.line("FXPAN \(model) application opcode 1 \(Self.hex(change?.code))")
+        let prop = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1F0], out: Data([1]), timeout: 4)
+        Trace.line("FXPAN \(model) application prop 1 \(Self.hex(prop?.code))")
+        if change?.ok == true || prop?.ok == true {
+            movieArmed = true
+            movieGateDead = false
+        }
+        if let current = await readU8(0xD1A6) {
+            Trace.line("FXPAN \(model) live view selector \(current)")
+            if current != 1 {
+                let set = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1A6], out: Data([1]), timeout: 4)
+                Trace.line("FXPAN \(model) live view selector 1 \(Self.hex(set?.code))")
+                if set?.ok == true {
+                    savedSelector = current
+                    movieArmed = true
+                }
+            }
+        } else {
+            Trace.line("FXPAN \(model) live view selector unread")
+        }
+    }
+
+    /// Photo mode again. Stills and the movie download both need this, or the card stays hidden.
+    func leaveMovieMode() async {
+        guard movieArmed || savedSelector != nil || !movieGateDead else { return }
+        if let savedSelector {
+            let set = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1A6], out: Data([savedSelector]), timeout: 4)
+            Trace.line("FXPAN \(model) live view selector \(savedSelector) \(Self.hex(set?.code))")
+            self.savedSelector = nil
+        }
+        let change = try? await transact(PTP.Op.changeApplication.rawValue, params: [0], timeout: 4)
+        let prop = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1F0], out: Data([0]), timeout: 4)
+        Trace.line("FXPAN \(model) application mode off opcode \(Self.hex(change?.code)) prop \(Self.hex(prop?.code))")
+        movieArmed = false
+        movieGateDead = true
+    }
+
+    private func movieProhibit() async -> String {
+        guard let data = await readPropData(0xD0A4) else {
+            Trace.line("FXPAN \(model) movie prohibit unread")
+            return ""
+        }
+        let hex = data.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
+        guard data.count >= 4 else {
+            Trace.line("FXPAN \(model) movie prohibit \(hex)")
+            return ""
+        }
+        let bits = UInt32(data[data.startIndex])
+            | (UInt32(data[data.startIndex + 1]) << 8)
+            | (UInt32(data[data.startIndex + 2]) << 16)
+            | (UInt32(data[data.startIndex + 3]) << 24)
+        let text = Self.prohibitText(bits)
+        Trace.line(String(format: "FXPAN %@ movie prohibit %08X %@", model, bits, text))
+        return text
+    }
+
+    private static func prohibitText(_ bits: UInt32) -> String {
+        if bits == 0 { return "clear" }
+        var parts: [String] = []
+        if bits & (1 << 14) != 0 { parts.append("not in movie mode") }
+        if bits & (1 << 13) != 0 { parts.append("live view lever is on stills") }
+        if bits & (1 << 12) != 0 { parts.append("enlarged live view") }
+        if bits & (1 << 11) != 0 { parts.append("card protected") }
+        if bits & (1 << 10) != 0 { parts.append("already recording") }
+        if bits & (1 << 9) != 0 { parts.append("buffer not empty") }
+        if bits & (1 << 3) != 0 { parts.append("card full") }
+        if bits & (1 << 2) != 0 { parts.append("card not formatted") }
+        if bits & (1 << 1) != 0 { parts.append("card error") }
+        if bits & (1 << 0) != 0 { parts.append("no card") }
+        let known: UInt32 = (1 << 14) | (1 << 13) | (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 3) | (1 << 2) | (1 << 1) | 1
+        let rest = bits & ~known
+        if rest != 0 { parts.append(String(format: "%08X", rest)) }
+        return parts.joined(separator: ", ")
+    }
+
+    private func readU8(_ code: UInt16) async -> UInt8? {
+        guard let data = await readPropData(code), let byte = data.first else { return nil }
+        return byte
+    }
+
+    private func readPropData(_ code: UInt16) async -> Data? {
+        guard let reply = try? await transact(PTP.Op.getProp.rawValue, params: [UInt32(code)], timeout: 4), reply.ok else { return nil }
+        return reply.data
+    }
+
+    /// Leave photo live view and come back after the movie mode change.
+    private func reopenLive() async {
+        _ = try? await transact(PTP.Op.endLiveView.rawValue, timeout: 3)
+        _ = try? await transact(PTP.Op.changeMode.rawValue, params: [0], timeout: 3)
+        await settle(minimum: 0.6, seconds: 4)
+        _ = try? await transact(PTP.Op.changeMode.rawValue, params: [1], timeout: 4)
+        await settle(minimum: 0.6, seconds: 4)
+        let started = try? await transact(PTP.Op.startLiveView.rawValue, timeout: 8)
+        Trace.line("FXPAN \(model) movie live \(Self.hex(started?.code))")
+        await settle(minimum: 0.4, seconds: 4)
+        inLive = true
+    }
+
+    func cancelMovie() async {
+        _ = try? await transact(PTP.Op.endMovie.rawValue, timeout: 8)
+    }
+
+    /// End the recording and copy the new movie. The card copy stays.
+    /// Stop the card recording only. The copy is a second step so both bodies stop together.
+    func endRecording() async throws -> [UInt32] {
+        var reply = try await transact(PTP.Op.endMovie.rawValue, timeout: 20)
+        Trace.line("FXPAN \(model) movie end \(Self.hex(reply.code))")
+        if reply.code == 0x2019 {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            reply = try await transact(PTP.Op.endMovie.rawValue, timeout: 20)
+            Trace.line("FXPAN \(model) movie end2 \(Self.hex(reply.code))")
+        }
+        return reply.params
+    }
+
+    /// Leaving movie mode drops a pending ObjectAdded, so the event is read first and the card list backs it up.
+    func movieEvents(_ params: [UInt32]) async -> [UInt32] {
+        var candidates = params.filter { $0 != 0 }
+        let start = Date()
+        while candidates.isEmpty && Date().timeIntervalSince(start) < 6 {
+            let found = await ramEvents()
+            if found.isEmpty {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            } else {
+                candidates = found
+            }
+        }
+        return candidates
+    }
+
+    func endMovie(stamp: String, role: Role, params: [UInt32]) async throws -> URL {
+        var candidates = await movieEvents(params)
+        await leaveMovieMode()
+        if candidates.isEmpty {
+            candidates = await newMovies()
+            Trace.line("FXPAN \(model) movie event missing, card list \(candidates.count)")
+        }
+        for handle in candidates.reversed() {
+            guard let info = await ramInfo(handle) else { continue }
+            let name = info.name.lowercased()
+            if name.hasSuffix(".jpg") || name.hasSuffix(".nef") || info.format == 0x3801 { continue }
+            Trace.line(String(format: "FXPAN %@ movie %08X fmt %04X %u %@", model, handle, info.format, info.size, info.name))
+            let data = try await readObject(info)
+            guard Self.looksLikeMovie(data) else { continue }
+            let url = Disk.captures.appendingPathComponent("\(role.rawValue)_\(stamp).mov")
+            try data.write(to: url, options: .atomic)
+            return url
+        }
+        throw PTPError.message("\(role.rawValue) movie did not appear")
+    }
+
+    private var moviesBefore: Set<UInt32> = []
+
+    /// Card handles for MOV files. Nikon handles climb, so the newest sort last.
+    private func movieHandles() async -> [UInt32] {
+        guard let reply = try? await transact(PTP.Op.getObjectHandles.rawValue, params: [0xFFFF_FFFF, 0x300D, 0], timeout: 10),
+              reply.ok, reply.data.count >= 4 else { return [] }
+        let d = reply.data
+        func u32(_ at: Int) -> UInt32 {
+            UInt32(d[d.startIndex + at]) | UInt32(d[d.startIndex + at + 1]) << 8 | UInt32(d[d.startIndex + at + 2]) << 16 | UInt32(d[d.startIndex + at + 3]) << 24
+        }
+        let count = Int(u32(0))
+        guard d.count >= 4 + count * 4 else { return [] }
+        return (0..<count).map { u32(4 + $0 * 4) }.sorted()
+    }
+
+    private func newMovies() async -> [UInt32] {
+        let start = Date()
+        while Date().timeIntervalSince(start) < 8 {
+            let fresh = await movieHandles().filter { !moviesBefore.contains($0) }
+            if !fresh.isEmpty { return Array(fresh.suffix(1)) }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
+        return []
+    }
+
+    private static func looksLikeMovie(_ data: Data) -> Bool {
+        guard data.count > 12 else { return false }
+        let brand = String(data: data.subdata(in: 4..<8), encoding: .ascii) ?? ""
+        return ["ftyp", "wide", "moov", "mdat", "free"].contains(brand)
+    }
+
     func stopLive() async {
         inLive = false
         if canonBody {
@@ -1131,6 +1555,7 @@ final class NikonLink {
             _ = try? await transact(PTP.Canon.endViewfinder.rawValue, timeout: 3)
             return
         }
+        await leaveMovieMode()
         _ = try? await transact(PTP.Op.endLiveView.rawValue, timeout: 4)
         _ = try? await transact(PTP.Op.changeMode.rawValue, params: [0], timeout: 4)
         await settle(minimum: 1.2, seconds: 8)
