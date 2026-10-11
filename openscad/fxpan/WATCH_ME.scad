@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -46,6 +46,7 @@ SHOW_BODIES = 0; // [0:hide, 1:D800]
 SHOW_LENS = 0; // [0:hide, 1:show]
 SHOW_LENS_MARKS = 0; // [0:hide, 1:pupils and focal plane]
 SHOW_BASE = 1; // [0:hide, 1:show]
+BASE_GRIP = 0; // [0:base, 1:base with hand grip]
 SHOW_AXES = 1; // [0:hide, 1:show]
 
 /* [Camera] */
@@ -547,17 +548,22 @@ module floor_tray_lip() {
         cube([TRAY_STOP_T, span, z1 - z0]);
 }
 
-// [x, y, azimuth of the slot from the nut back into the chamber].
-function lid_screws() = [
-    [ LID_SCREW_A, LID_SCREW_B, 180],
-    [-LID_SCREW_B, LID_SCREW_A, 270]
-];
+// [x, y, azimuth of the slot from the nut to its mouth, slot length].
+// The +Y pair open into the chamber; the -Y pair into the stem rebate.
 function lid_nut_r() = PORT_NUT_AF / cos(30) / 2;
 function lid_nut_slot() = LID_SCREW_A - (BOX_XY / 2 - WALL) + lid_nut_r() + 0.3;
+function lid_front_slot() =
+    LID_FRONT_X - (stem_plate_w() + PORT_SLOT_CLEAR) / 2 + lid_nut_r() + 0.3;
+function lid_screws() = [
+    [ LID_SCREW_A,  LID_SCREW_B,  180, lid_nut_slot()],
+    [-LID_SCREW_B,  LID_SCREW_A,  270, lid_nut_slot()],
+    [ LID_FRONT_X, -LID_FRONT_Y,  180, lid_front_slot()],
+    [-LID_FRONT_X, -LID_FRONT_Y,    0, lid_front_slot()]
+];
 
-// M3 hex fed from the chamber, flats on the slot walls so it cannot turn.
-// Its far end is the screw axis; the tray wall closes the mouth. Roof
-// stays solid so the lid screw can clamp.
+// M3 hex fed sideways, flats on the slot walls so it cannot turn. Its far
+// end is the screw axis; the tray wall or the stem cookie closes the mouth.
+// Roof stays solid so the lid screw can clamp.
 module lid_body_fastener_cuts() {
     nut_z = BOX_Z / 2 - LID_NUT_DROP;
     for (p = lid_screws()) {
@@ -566,7 +572,7 @@ module lid_body_fastener_cuts() {
         translate([p[0], p[1], nut_z])
             rotate([0, 0, p[2]])
                 hull()
-                    for (x = [0, lid_nut_slot()])
+                    for (x = [0, p[3]])
                         translate([x, 0, 0])
                             cylinder(h = PORT_NUT_T + 0.25, r = lid_nut_r(),
                                      $fn = 6, center = true);
@@ -1919,8 +1925,15 @@ module part_lid() {
         }
         translate([0, 0, BOX_Z / 2 + lid_lift]) {
             for (p = lid_screws())
-                translate([p[0], p[1], -LID_LIP - 1])
-                    cylinder(h = LID_T + LID_LIP + 2, d = 3.2);
+                translate([p[0], p[1], 0]) {
+                    translate([0, 0, -LID_LIP - 1])
+                        cylinder(h = LID_T + LID_LIP + 2, d = PORT_SCREW_D);
+                    csk = (LID_CSK_D - PORT_SCREW_D) / 2;
+                    translate([0, 0, LID_T - csk - 0.2])
+                        cylinder(h = csk + 0.01, d1 = PORT_SCREW_D, d2 = LID_CSK_D);
+                    translate([0, 0, LID_T - 0.2])
+                        cylinder(h = 1, d = LID_CSK_D);
+                }
             trig_lid_holes();
             plate_stamp(fxp_tag("lid"), s, LID_T, STAMP_DEPTH, 5.0);
             difference() {
@@ -2056,10 +2069,23 @@ module base_blank() {
 }
 
 module part_base() {
-    q = base_tripod_xy();
     color("SlateGray")
     difference() {
         base_blank();
+        base_mount_cuts();
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                base_hex_cuts_2d();
+        translate([base_stamp_xy().x, base_stamp_xy().y, BASE_T - STAMP_DEPTH])
+            rotate(135)
+                part_stamp_cut(fxp_tag("base"));
+    }
+}
+
+// Screws, slots, nut traps and the tripod insert.
+module base_mount_cuts() {
+    q = base_tripod_xy();
+    union() {
         // Chassis 1/4-20 through the origin pad.
         translate([0, 0, -0.2])
             cylinder(h = BASE_T + 0.4, d = BASE_SCREW_D);
@@ -2094,12 +2120,191 @@ module part_base() {
                      d = TRIPOD_INSERT_D);
             cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
         }
+    }
+}
+
+// Base with a hand grip. The plain base's mounts on a wider plate, out past
+// the chassis on the −X side, across from R, so the rig stands on its own,
+// with an upright grip at the tip for the right hand, long way forward (−Y).
+// The front lip runs square to the chassis, straight off the R puck's front
+// edge. Between R and T one curve runs from R's side to T's, through the
+// plain base's tripod pad. On the −X side the T arm is carried out to the
+// puck's width and the back edge sweeps onto it ahead of T's handgrip, clear
+// of its battery door and the battery coming out. Name and date are on the
+// front lip. The index finger lies over a recessed shutter switch at the
+// top front; its wires run down the grip and out under the base.
+GRIP_XY     = [-108, -14.4];
+GRIP_W      = 32;      // across, X
+GRIP_D      = 44;      // fore and aft, Y
+GRIP_H      = 105;     // over the base top
+GRIP_DOME   = 10;
+GRIP_FLARE  = 6;       // wider at the root
+GRIP_PLATE  = 12;      // plate margin round the grip root
+GRIP_BACK_Y = 40;      // back edge's corner on the T arm's −X side
+GRIP_SWEEP_Y = 95;     // sweep lands on the T arm here; any higher and it
+                       // swings under T's battery door hinge at x −22.5
+GRIP_FOOT_FILLET = 15; // grip foot into the front lip
+GRIP_RT_R   = 65;      // R-to-T curve. Larger runs it under R's battery door
+                       // hinge; smaller crowds the tripod insert.
+GRIP_TRIPOD_KEEP = 7;  // solid ring round the tripod insert
+GRIP_STAMP_X = 25;     // along the front lip
+GRIP_RIM    = 5;       // solid edge round the hex field
+// Shutter switch, default a 12 × 12 tactile. Seat is measured in from the
+// grip's front-most point. Behind it, room for leads not yet trimmed.
+SW_W        = 12.4;
+SW_H        = 12.4;
+SW_SEAT     = 5.8;
+SW_DROP     = 20;      // switch centre under the grip top
+SW_LEAD     = 9;
+SW_LEAD_D   = 10;
+SW_WIRE_D   = 6;
+SW_RUN_X    = -30;     // underside wire groove ends here, by the chassis
+SW_RUN_T    = 3.5;
+
+module grip_ellipse_2d(grow = 0) {
+    scale([GRIP_W / 2 + grow, GRIP_D / 2 + grow]) circle(1, $fn = 96);
+}
+
+module base_footprint_2d() {
+    offset(BASE_WEB / 2)
+        polygon(base_web_pts());
+    circle(d = BASE_PAD_D);
+    base_cam_pad_2d("R");
+    base_cam_pad_2d("T");
+    translate(base_tripod_xy()) circle(d = BASE_PAD_D);
+}
+
+function unit2(v) = v / norm(v);
+
+// Round-off for a concave corner v whose edges leave along u1 and u2; t is
+// the run along each edge to where the arc lands.
+module corner_fillet_2d(v, u1, u2, t) {
+    th = acos(u1 * u2);
+    c  = v + unit2(u1 + u2) * (t / cos(th / 2));
+    difference() {
+        polygon([v, v + u1 * t, v + u2 * t]);
+        translate(c) circle(t * tan(th / 2), $fn = 360);
+    }
+}
+
+function grip_foot_ab() = [GRIP_W / 2 + GRIP_FLARE + GRIP_PLATE,
+                           GRIP_D / 2 + GRIP_FLARE + GRIP_PLATE];
+// Upper tangent from v to the grip foot, as a direction.
+function grip_back_dir(v) =
+    let (ab = grip_foot_ab(),
+         az = min([for (i = [0:719])
+                     let (f = i / 2,
+                          d = GRIP_XY + [ab.x * cos(f), ab.y * sin(f)] - v)
+                         (atan2(d.y, d.x) + 360) % 360]))
+        [cos(az), sin(az)];
+
+module grip_plate_raw_2d() {
+    r  = base_r_xy();
+    t  = base_t_xy();
+    pr = BASE_PAD_D / 2;
+    xl = t.x - pr;
+    yf = r.y - pr;
+    vb = [xl, GRIP_BACK_Y];
+    base_footprint_2d();
+    translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+    translate([GRIP_XY.x, yf]) square([r.x - GRIP_XY.x, 2 * pr]);
+    translate([xl, 0]) square([2 * pr, t.y]);
+    intersection() {
+        hull() {
+            translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+            polygon([vb, [xl, 0], [xl - 0.01, 0]]);
+        }
+        translate([-500, yf]) square(1000);
+    }
+    corner_fillet_2d(vb, grip_back_dir(vb), [0, 1], GRIP_SWEEP_Y - GRIP_BACK_Y);
+}
+
+function grip_rt_corner() = [base_t_xy().x + BASE_PAD_D / 2,
+                             base_r_xy().y + BASE_PAD_D / 2];
+
+// Neither puck reaches past the R-to-T corner, so everything beyond it goes
+// and the curve is put back.
+module grip_plate_2d() {
+    v = grip_rt_corner();
+    difference() {
+        union() {
+            grip_plate_raw_2d();
+            intersection() {
+                offset(r = -GRIP_FOOT_FILLET) offset(r = GRIP_FOOT_FILLET)
+                    grip_plate_raw_2d();
+                translate([GRIP_XY.x, GRIP_XY.y - 80]) square([80, 80]);
+            }
+        }
+        translate(v) square(500);
+    }
+    corner_fillet_2d(v, [1, 0], [0, 1], GRIP_RT_R);
+}
+
+module grip_hex_cuts_2d() {
+    cell = BASE_HEX_CELL;
+    intersection() {
+        difference() {
+            offset(-GRIP_RIM) grip_plate_2d();
+            circle(d = BASE_PAD_D + 4);
+            base_cam_pad_2d("R", 4);
+            base_cam_pad_2d("T", 4);
+            translate(base_tripod_xy())
+                circle(d = TRIPOD_INSERT_D + 2 * GRIP_TRIPOD_KEEP);
+            translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+        }
+        for (j = [-6:24], i = [-14:24])
+            translate([(i + (j % 2) * 0.5) * cell, j * cell * sin(60)])
+                rotate(30)
+                    circle(d = BASE_HEX_D, $fn = 6);
+    }
+}
+
+module grip_handle() {
+    translate([GRIP_XY.x, GRIP_XY.y, BASE_T - 0.01])
+        hull() {
+            linear_extrude(0.01) grip_ellipse_2d(GRIP_FLARE);
+            translate([0, 0, GRIP_FLARE + 2])
+                linear_extrude(0.01) grip_ellipse_2d();
+            translate([0, 0, GRIP_H - GRIP_DOME])
+                scale([GRIP_W / 2, GRIP_D / 2, GRIP_DOME])
+                    sphere(1, $fn = 64);
+        }
+}
+
+module grip_switch_cuts() {
+    z  = BASE_T + GRIP_H - SW_DROP;
+    y0 = GRIP_XY.y - GRIP_D / 2;
+    yf = y0 + SW_SEAT;
+    yw = yf + SW_LEAD_D / 2;
+    translate([GRIP_XY.x, 0, 0]) {
+        translate([-SW_W / 2, y0 - 1, z - SW_H / 2])
+            cube([SW_W, yf - y0 + 1, SW_H]);
+        translate([-SW_LEAD / 2, yf - 0.01, z - SW_LEAD / 2])
+            cube([SW_LEAD, SW_LEAD_D, SW_LEAD]);
+        translate([0, yw, -0.2])
+            cylinder(h = z + 0.2, d = SW_WIRE_D, $fn = 32);
+    }
+    // Under the plate so the leads aren't pinched when the rig stands.
+    translate([GRIP_XY.x, yw - SW_WIRE_D / 2, -0.2])
+        cube([SW_RUN_X - GRIP_XY.x, SW_WIRE_D, SW_RUN_T + 0.2]);
+}
+
+module part_base_grip() {
+    color("SlateGray")
+    difference() {
+        union() {
+            linear_extrude(BASE_T) grip_plate_2d();
+            grip_handle();
+        }
+        base_mount_cuts();
         translate([0, 0, -0.2])
             linear_extrude(BASE_T + 0.4)
-                base_hex_cuts_2d();
-        translate([base_stamp_xy().x, base_stamp_xy().y, BASE_T - STAMP_DEPTH])
-            rotate(135)
-                part_stamp_cut(fxp_tag("base"));
+                grip_hex_cuts_2d();
+        grip_switch_cuts();
+        translate([GRIP_STAMP_X, base_r_xy().y - BASE_PAD_D / 2 + STAMP_DEPTH,
+                   BASE_T / 2])
+            rotate([90, 0, 0])
+                part_stamp_cut(fxp_tag("base_grip"));
     }
 }
 
@@ -2158,7 +2363,7 @@ module part_cradle(mark = "R") {
 module base_at() {
     if (SHOW_BASE) {
         translate([0, 0, base_z()])
-            part_base();
+            if (BASE_GRIP) part_base_grip(); else part_base();
         for (mark = ["R", "T"]) {
             p = base_pad_xy(mark);
             translate([p.x, p.y, base_z() + BASE_T])
@@ -2639,6 +2844,8 @@ module export_part() {
                       tag = fxp_tag("tray"));
     else if (PART == "base")
         part_base();
+    else if (PART == "base_grip")
+        part_base_grip();
     else if (PART == "cradle_r")
         part_cradle("R");
     else if (PART == "cradle_t")

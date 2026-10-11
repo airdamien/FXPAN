@@ -76,7 +76,7 @@ a millimetre.
 | part | quantity | bed orientation |
 | --- | --- | --- |
 | `chassis` | 1 | floor down. The lens face is relieved to an 83.7 mm circle so the M65 helicoid seats on the cookie. On the logo side a 3 mm post rises from the logo window's sill to 6 mm over the floor, so the tray cannot slide into the window |
-| `lid` | 1 | outer face down. Two screw holes, at the +Y corners, match the chassis. Six 2.2 mm blind holes, 5 deep, take the trigger stack's M2.5 standoffs |
+| `lid` | 1 | outer face down. Four countersunk M3 holes, one in each corner, match the chassis. Six 2.2 mm blind holes, 5 deep, take the trigger stack's M2.5 standoffs |
 | `fxp_tray` | 1 | floor down |
 | `stem_m65` | 1 | cookie flange on the bed, boss up. Thread start turned 90° counter-clockwise facing the cookie (`STEM_W_CLOCK`), so the bottomed Nikkor-W has its shutter controls on top |
 | `stem_nw_m65` | 1 | Copal board up, male down on a raft |
@@ -133,25 +133,34 @@ stem**.
    the same amount off each rib.
 
 5. **Lid nuts, then the tray.** Push an M3 nut into each of the two slots
-   under the rim in the +Y corners, until it stops on the screw axis. Then
-   the tray goes in, floor down, and its wall closes both slots. The
+   12 mm under the rim in the +Y corners until it stops on the screw axis.
+   Then the tray goes in, floor down, and its wall closes both slots. The
    retention posts go up into the lid.
+
+   The two lens-side lid nuts go in from the front, before the stem cookie.
+   In each top corner of the stem rebate, a slot opens sideways 12 mm under
+   the rim. Push a nut in until it stops on the screw axis. The stem cookie
+   closes both slots in the next step.
 6. **Cookies into their rebates.** Four M3 × 12 countersunk per cookie. The
    screws are the only thing holding a cookie in. The arm cookies read
    **▲ R FXP** and **▲ T FXP**; the chassis carries the same mark beside
    each pocket. The stem cookie is stamped `fxp_stem`.
-7. **Lid** with two M3 × 20 into the +Y corner nuts. Edges flush with the
-   chassis. The trigger stack goes on top, jacks toward R. Bottom up it is
-   the Zero W with its header in from underneath, then the trigger board on
-   the header. Four 10 mm M2.5 male-female standoffs into the inner four
-   blind holes.
-8. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Each
+7. **Reverse rings.** Nut in each arm-mouth lug first, then thread the ring
+   on. Clock each ring to the engraved radial at the body lock-pin azimuth
+   and set the two M3 × 6 grubs on the barrel before a body goes on.
+8. **Lid** with four M3 × 20 countersunk screws, one into each corner nut.
+   Snug the two lens-side screws first, then the +Y pair, so the front cannot
+   lift. Edges flush with the chassis. The trigger stack goes on top, jacks
+   toward R. Bottom up it is the Zero W with its header in from underneath,
+   then the trigger board on the header. Four 10 mm M2.5 male-female
+   standoffs into the inner four blind holes.
+9. **Base.** Chassis onto the origin pad with a 1/4-20 thumbscrew. Each
    cradle gets four M3 × 16, heads in the plinth, nuts under the base.
-9. **Bodies.** Start the 1/4-20 × 25 up through the slot and leave it loose.
-   Bayonet the body onto the printed F, then tighten the screw where the
-   body landed. Do not pull the body onto the mount with the screw. The
-   plinth takes the weight. The bayonet takes the twist.
-10. **Lens.** M65 helicoid into `stem_m65` until its body sits on the cookie.
+10. **Bodies.** Start the 1/4-20 × 25 up through the slot and leave it loose.
+    Bayonet the body onto the printed F, then tighten the screw where the
+    body landed. Do not pull the body onto the mount with the screw. The
+    plinth takes the weight. The bayonet takes the twist.
+11. **Lens.** M65 helicoid into `stem_m65` until its body sits on the cookie.
     `stem_nw_m65` into the front. The helicoid body is 82.67 mm across, wider
     than the cookie's 80 mm rebate, which is why the chassis face is opened
     to 83.7 mm. Copal controls on top. Both bodies need a card before a
