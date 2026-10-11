@@ -549,12 +549,17 @@ LID_GAP      = 0.5;
 LID_CAP      = 5;
 LID_SCREW    = 5;
 LID_NUT_DROP = 12;
-// Lid screws at the two +Y corners only: at nut height every other corner
-// is cookie rebate. Each nut sits in full wall just past the chamber corner,
-// across the wall by A and along it by B, so its slot opens into the chamber
-// and the tray closes it.
+// Lid screws at the two +Y corners: each nut sits in full wall just past the
+// chamber corner, across the wall by A and along it by B, so its slot opens
+// into the chamber and the tray closes it.
 LID_SCREW_A  = 43.7;
 LID_SCREW_B  = 37.0;
+// Two more at the lens-side corners, in the solid column between the stem
+// cookie rebate and the side wall's. Their slots open sideways into the stem
+// rebate and the stem cookie closes them.
+LID_FRONT_X  = 42.0;
+LID_FRONT_Y  = 45.5;
+LID_CSK_D    = 6.4;    // M3 countersunk head, 90°
 
 // Trigger stack on the lid top, bottom up: the Zero W's 2×20 header (in from
 // underneath), the Zero, the trigger board on the header. Standoffs thread
