@@ -2083,8 +2083,7 @@ module part_base() {
 }
 
 // Screws, slots, nut traps and the tripod insert.
-module base_mount_cuts() {
-    q = base_tripod_xy();
+module base_mount_cuts(q = base_tripod_xy()) {
     union() {
         // Chassis 1/4-20 through the origin pad.
         translate([0, 0, -0.2])
@@ -2125,7 +2124,7 @@ module base_mount_cuts() {
 
 // Base with a hand grip. The plain base's mounts on a wider plate, out past
 // the chassis on the −X side, across from R, so the rig stands on its own,
-// with an upright grip at the tip for the right hand, long way forward (−Y).
+// with an organic grip at the tip for the right hand, long way forward (−Y).
 // The front lip runs square to the chassis, straight off the R puck's front
 // edge. Between R and T one curve runs from R's side to T's, through the
 // plain base's tripod pad. On the −X side the T arm is carried out to the
@@ -2136,9 +2135,9 @@ module base_mount_cuts() {
 GRIP_XY     = [-108, -14.4];
 GRIP_W      = 32;      // across, X
 GRIP_D      = 44;      // fore and aft, Y
-GRIP_H      = 105;     // over the base top
-GRIP_DOME   = 10;
+GRIP_H      = 114;     // over the base top, including the round crown
 GRIP_FLARE  = 6;       // wider at the root
+GRIP_N      = 192;     // points around each grip section, ~0.6 mm on the hand
 GRIP_PLATE  = 12;      // plate margin round the grip root
 GRIP_BACK_Y = 40;      // back edge's corner on the T arm's −X side
 GRIP_SWEEP_Y = 95;     // sweep lands on the T arm here; any higher and it
@@ -2147,6 +2146,9 @@ GRIP_FOOT_FILLET = 15; // grip foot into the front lip
 GRIP_RT_R   = 65;      // R-to-T curve. Larger runs it under R's battery door
                        // hinge; smaller crowds the tripod insert.
 GRIP_TRIPOD_KEEP = 7;  // solid ring round the tripod insert
+// Tripod insert in line with the chassis screw, out in the plate's full depth
+// rather than by the R-to-T curve. Same X as the plain base's balance point.
+function grip_tripod_xy() = [base_tripod_xy().x, 0];
 GRIP_STAMP_X = 25;     // along the front lip
 GRIP_RIM    = 5;       // solid edge round the hex field
 // Shutter switch, default a 12 × 12 tactile. Seat is measured in from the
@@ -2154,7 +2156,7 @@ GRIP_RIM    = 5;       // solid edge round the hex field
 SW_W        = 12.4;
 SW_H        = 12.4;
 SW_SEAT     = 5.8;
-SW_DROP     = 20;      // switch centre under the grip top
+SW_DROP     = 29;      // switch centre under the grip top
 SW_LEAD     = 9;
 SW_LEAD_D   = 10;
 SW_WIRE_D   = 6;
@@ -2248,7 +2250,7 @@ module grip_hex_cuts_2d() {
             circle(d = BASE_PAD_D + 4);
             base_cam_pad_2d("R", 4);
             base_cam_pad_2d("T", 4);
-            translate(base_tripod_xy())
+            translate(grip_tripod_xy())
                 circle(d = TRIPOD_INSERT_D + 2 * GRIP_TRIPOD_KEEP);
             translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
         }
@@ -2259,33 +2261,114 @@ module grip_hex_cuts_2d() {
     }
 }
 
+// Hand profile, skinned rather than hulled so the finger hollows stay concave.
+// +X is the thumb (toward the rig), −Y is the fingers, +Y is the palm.
+// The root is the flare ellipse, so it still sits in the plate foot.
+function grip_sstep(t) = let (u = min(1, max(0, t))) u * u * (3 - 2 * u);
+function grip_bell(z, c, s) = exp(-pow((z - c) / s, 2));
+function grip_neck(z) = grip_sstep(z / 14);
+// Positive recesses the finger face. The negative bell is the lip under the
+// index finger.
+function grip_groove(z) =
+    3.6 * grip_bell(z, 42, 5.2) +
+    4.0 * grip_bell(z, 58, 5.2) +
+    3.8 * grip_bell(z, 73, 5.0) -
+    1.8 * grip_bell(z, 81, 4.2);
+function grip_oy(z) = 15 * grip_sstep((z - 8) / 82) + 2.4 * grip_bell(z, 30, 16);
+function grip_ox(z) = 1.8 * grip_bell(z, 68, 18);
+function grip_ax(z) =
+    let (hand = 15.5 + 2.6 * grip_bell(z, 32, 16) + 1.8 * grip_bell(z, 68, 16))
+        22 * (1 - grip_neck(z)) + hand * grip_neck(z);
+function grip_ay(z) =
+    let (hand = 18.5 + 6.5 * grip_bell(z, 30, 14))
+        28 * (1 - grip_neck(z)) + hand * grip_neck(z);
+// One round crown over the whole top. k is 1 at the shoulder and 0 at the peak.
+GRIP_CROWN_Z = 93;
+function grip_crown_k(z) =
+    let (u = (z - GRIP_CROWN_Z) / (GRIP_H - GRIP_CROWN_Z))
+        u <= 0 ? 1 : sqrt(max(0, 1 - min(max(u, 0), 1) * min(max(u, 0), 1)));
+function grip_thumb(z) = 6.0 * grip_bell(z, 66, 15);
+function grip_pt_raw(z, ang) =
+    let (c = cos(ang), s = sin(ang),
+         n = 2 + (s > 0 ? 1.2 * grip_sstep((z - 10) / 22) : 0),
+         e = 2 / n,
+         x = grip_ax(z) * (c == 0 ? 0 : sign(c) * pow(abs(c), e)),
+         y = grip_ay(z) * (s == 0 ? 0 : sign(s) * pow(abs(s), e)))
+        [x + grip_thumb(z) * pow(max(0, c), 1.6) + grip_ox(z),
+         y + grip_groove(z) * pow(max(0, -s), 1.5) + grip_oy(z)];
+function grip_pt(z, ang) =
+    let (p = grip_pt_raw(min(z, GRIP_CROWN_Z), ang),
+         c = [grip_ox(GRIP_CROWN_Z), grip_oy(GRIP_CROWN_Z)],
+         k = grip_crown_k(z))
+        z <= GRIP_CROWN_Z ? p : c + (p - c) * k;
+function grip_front(z) = grip_pt(z, 270).y;
+
 module grip_handle() {
-    translate([GRIP_XY.x, GRIP_XY.y, BASE_T - 0.01])
-        hull() {
-            linear_extrude(0.01) grip_ellipse_2d(GRIP_FLARE);
-            translate([0, 0, GRIP_FLARE + 2])
-                linear_extrude(0.01) grip_ellipse_2d();
-            translate([0, 0, GRIP_H - GRIP_DOME])
-                scale([GRIP_W / 2, GRIP_D / 2, GRIP_DOME])
-                    sphere(1, $fn = 64);
-        }
+    body_n = 150;
+    dome_n = 48;
+    z0 = -0.4;
+    dome_h = GRIP_H - GRIP_CROWN_Z;
+    c = [grip_ox(GRIP_CROWN_Z), grip_oy(GRIP_CROWN_Z)];
+    // Cap rings follow the curve, so the peak is not a stack of flat slices.
+    zs = concat(
+        [for (i = [0:body_n]) z0 + (GRIP_CROWN_Z - z0) * i / body_n],
+        [for (i = [1:dome_n])
+            GRIP_CROWN_Z + dome_h * sin(i * 88 / dome_n)]);
+    nring = len(zs);
+    verts = concat(
+        [for (zi = [0:nring - 1], i = [0:GRIP_N - 1])
+            let (z = zs[zi],
+                 p = grip_pt(max(0, z), i * 360 / GRIP_N))
+                [p.x, p.y, z]],
+        [[c.x, c.y, GRIP_H]]);
+    apex = nring * GRIP_N;
+    steps = nring - 1;
+    // Rings run counter-clockwise from above. OpenSCAD wants faces clockwise
+    // from the outside. The crown closes on one peak instead of a flat cap.
+    faces = concat(
+        [for (zi = [0:steps - 1], i = [0:GRIP_N - 1])
+            let (a = zi * GRIP_N + i,
+                 b = zi * GRIP_N + (i + 1) % GRIP_N,
+                 c = (zi + 1) * GRIP_N + (i + 1) % GRIP_N,
+                 d = (zi + 1) * GRIP_N + i)
+                [a, b, c, d]],
+        [for (i = [1:GRIP_N - 2]) [0, i + 1, i]],
+        [for (i = [0:GRIP_N - 1])
+            let (b = steps * GRIP_N)
+                [apex, b + i, b + (i + 1) % GRIP_N]]);
+    translate([GRIP_XY.x, GRIP_XY.y, BASE_T])
+        polyhedron(verts, faces, convexity = 12);
 }
 
+// Pocket follows the slant of the front face, so the switch sits at an even
+// depth. The bore follows the rake down to the plate.
 module grip_switch_cuts() {
-    z  = BASE_T + GRIP_H - SW_DROP;
-    y0 = GRIP_XY.y - GRIP_D / 2;
-    yf = y0 + SW_SEAT;
-    yw = yf + SW_LEAD_D / 2;
-    translate([GRIP_XY.x, 0, 0]) {
-        translate([-SW_W / 2, y0 - 1, z - SW_H / 2])
-            cube([SW_W, yf - y0 + 1, SW_H]);
-        translate([-SW_LEAD / 2, yf - 0.01, z - SW_LEAD / 2])
-            cube([SW_LEAD, SW_LEAD_D, SW_LEAD]);
-        translate([0, yw, -0.2])
-            cylinder(h = z + 0.2, d = SW_WIRE_D, $fn = 32);
+    zsw = GRIP_H - SW_DROP;
+    z0  = zsw - SW_H / 2;
+    y0  = grip_front(z0);
+    y1  = grip_front(z0 + SW_H);
+    len = norm([y1 - y0, SW_H]);
+    ang = atan2(y1 - y0, SW_H);
+    translate([GRIP_XY.x, GRIP_XY.y, BASE_T]) {
+        translate([0, y0, z0])
+            rotate([-ang, 0, 0]) {
+                translate([-SW_W / 2, -1, 0])
+                    cube([SW_W, SW_SEAT + 1, len]);
+                translate([-SW_LEAD / 2, SW_SEAT - 0.01, (len - SW_LEAD) / 2])
+                    cube([SW_LEAD, SW_LEAD_D, SW_LEAD]);
+            }
+        hull() {
+            translate([0, 0, -0.2])
+                cylinder(h = 0.01, d = SW_WIRE_D, $fn = 24);
+            translate([0,
+                       y0 + (SW_SEAT + SW_LEAD_D / 2) * cos(ang)
+                          + (len / 2) * sin(ang),
+                       z0 - (SW_SEAT + SW_LEAD_D / 2) * sin(ang)
+                          + (len / 2) * cos(ang)])
+                cylinder(h = 0.01, d = SW_WIRE_D, $fn = 24);
+        }
     }
-    // Under the plate so the leads aren't pinched when the rig stands.
-    translate([GRIP_XY.x, yw - SW_WIRE_D / 2, -0.2])
+    translate([GRIP_XY.x, GRIP_XY.y - SW_WIRE_D / 2, -0.2])
         cube([SW_RUN_X - GRIP_XY.x, SW_WIRE_D, SW_RUN_T + 0.2]);
 }
 
@@ -2296,7 +2379,7 @@ module part_base_grip() {
             linear_extrude(BASE_T) grip_plate_2d();
             grip_handle();
         }
-        base_mount_cuts();
+        base_mount_cuts(grip_tripod_xy());
         translate([0, 0, -0.2])
             linear_extrude(BASE_T + 0.4)
                 grip_hex_cuts_2d();

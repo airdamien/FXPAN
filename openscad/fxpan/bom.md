@@ -161,6 +161,7 @@ not the M62 helicoid — a kilo of glass on the printed boss is how it fails.
 |-----|------|-----|------|
 | 2 | **Nikon D800** bodies, no lenses | 36 × 23.9 mm, 7360 × 4912, 46.5 mm register. Both sit **upright and landscape** — the seam is horizontal and `cam/pano.py` requires it. | (you have these) |
 | 1 | **10-pin dual release** | The D800 uses the **10-pin** remote terminal, not MC-DC2 — a lead from the D7000 bodies will not fit. Both shutters have to fire together or the stitch tears on anything moving. | [10-pin Y splitter](https://www.ebay.com/sch/i.html?_nkw=nikon+10+pin+dual+camera+shutter+release) · [MC-30A](https://www.amazon.com/s?k=Nikon+MC-30A) |
+| 1 | **12 × 12 mm tactile switch**, through-hole, momentary | Only for `base_grip`. The pocket in the grip's front face is 12.4 × 12.4 mm and 5.8 mm deep, with room behind it for leads that have not been trimmed. Two wires run down the grip and out under the plate to a GPIO input on the trigger board. | [12×12 tactile](https://www.amazon.com/s?k=12x12+tactile+push+button+switch+through+hole) |
 
 `cam/` is D7000 USB only. Fire the D800s from the 10-pin lead and pull the
 files afterwards.
