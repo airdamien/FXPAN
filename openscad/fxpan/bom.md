@@ -161,7 +161,7 @@ not the M62 helicoid — a kilo of glass on the printed boss is how it fails.
 |-----|------|-----|------|
 | 2 | **Nikon D800** bodies, no lenses | 36 × 23.9 mm, 7360 × 4912, 46.5 mm register. Both sit **upright and landscape** — the seam is horizontal and `cam/pano.py` requires it. | (you have these) |
 | 1 | **10-pin dual release** | The D800 uses the **10-pin** remote terminal, not MC-DC2 — a lead from the D7000 bodies will not fit. Both shutters have to fire together or the stitch tears on anything moving. | [10-pin Y splitter](https://www.ebay.com/sch/i.html?_nkw=nikon+10+pin+dual+camera+shutter+release) · [MC-30A](https://www.amazon.com/s?k=Nikon+MC-30A) |
-| 1 | **12 × 12 mm tactile switch**, through-hole, momentary | Only for `base_grip`. The pocket in the grip's front face is 12.4 × 12.4 mm and 5.8 mm deep, with room behind it for leads that have not been trimmed. Two wires run down the grip and out under the plate to a GPIO input on the trigger board. | [12×12 tactile](https://www.amazon.com/s?k=12x12+tactile+push+button+switch+through+hole) |
+| 1 | **12 × 12 mm tactile switch**, through-hole, momentary | Only for `base_grip`. The pocket is 14 × 14 mm and 8 mm deep, with a wider mouth, and room behind it for leads that have not been trimmed. Two wires run down the grip, out through the sole, and along the underside to a GPIO input on the trigger board. | [12×12 tactile](https://www.amazon.com/s?k=12x12+tactile+push+button+switch+through+hole) |
 
 `cam/` is D7000 USB only. Fire the D800s from the 10-pin lead and pull the
 files afterwards.
@@ -195,7 +195,7 @@ build.
 | `stem_nw_m65` | the M62 Nikkor-W nose, on the M65 helicoid | Same Copal board, M65 male, **0 mm** added. Do not put the W on `m65_ring`. |
 | `el180_adapter` | the M62 helicoid, keeping short `stem` | Two-piece stand-in: printed male into the 8 mm boss. Prefer `stem_el180_inf`. |
 | `arm_r_f` / `arm_t_f` (`ARM_MOUNT = 1`) | the 52 mm reverse rings | Archive-663 male F. The lip is the mesh as shipped (40 mm). Plastic lugs still should not carry a D800 — the cradles take the weight. Dry-fit clocking with `F_MOUNT_CLOCK`. |
-| `arm_r_focus` | `arm_r_fw`, and the R helicoid on the Nikkor-W | Same printed F and the same R cookie as `arm_r_fw`, including the W 8 mm, then 0.77 mm shorter so the bayonet is in focus when `arm_t_fw` is. Stamped `fxp_rw_focus`. |
+| `arm_r_focus` | `arm_t_focus` | Printed F, Nikkor-W. R is 0.77 mm shorter than `arm_r_fw` so it focuses with `arm_t_focus` (the same tube as `arm_t_fw`). Stamped `fxp_rw_focus`. |
 | `arm_r_wl` / `arm_t_wl` | the camera helicoids, focusing the Nikkor-W on its M65 lens helicoid | Printed F, no rings and no camera helicoids. Registers 23.00 (R) and 22.62 (T): T from the field infinity on `stem_nw_direct` less the 16.58 mm lens helicoid, R from where the first prints peaked on the lens helicoid. Use with `stem_m65` + M65 helicoid + `stem_nw_m65`. |
 | `arm_r_hw` / `arm_t_hw` | `arm_r_focus` / `arm_t_fw` and the shims | Nikkor-W. Needs the **M52-female / M42-male 17–31 helicoid** above and a **metal M52-to-F ring**, two of each. Cookie is the M42 female. The male's tip bottoms on a lip in the cookie; the body floats 0.4 mm off the face. On the measured 1.93 mm ring, collapsed is 25.51: R dials out 1.72 to focus, T 2.19. |
 
