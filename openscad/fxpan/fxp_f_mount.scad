@@ -194,6 +194,65 @@ module rev_lock_cut_one(out_len, az) {
     }
 }
 
+// Light-facing sleeve through the whole mount: 40 mm hole from the back of
+// the peg to the front of the bayonet. The barrel is only 1.15 mm thick, so
+// the sleeve passes inside it. Cutting that cylinder out of the mesh splits
+// the bayonet into slivers, so the outer only loses the lip, which opens to
+// the sleeve. A shoulder behind the lip seats in the peg bore. The pin
+// recess (r 23.7) is outside all of this. grow moves the outside radius.
+module f_mount_light_mask(back_extra = 0, grow = 0) {
+    z0 = -F_PEG_H - back_extra - 0.15;
+    z1 = F_STL_ZMAX + 0.15;
+    nose = F_STL_THROAT + 2 * INNER_LINING + 2 * grow;
+    difference() {
+        union() {
+            translate([0, 0, z0])
+                cylinder(h = z1 - z0, d = nose);
+            translate([0, 0, z0])
+                cylinder(h = -z0 + 0.05, d = F_BORE - 0.3 + 2 * grow);
+        }
+        translate([0, 0, z0 - 0.2])
+            cylinder(h = z1 - z0 + 0.4, d = F_STL_THROAT);
+    }
+}
+
+// Third material: the outer skin of the three bayonet lugs, and the pin
+// recess with its ramps. Angles are in the mounted frame, pin at +X.
+// grow opens the pocket in the outer part; the printed skin uses 0.
+module f_mount_lug_skin(a0, a1, grow = 0) {
+    r0 = 22.2 - grow;
+    r1 = 23.3 + grow;
+    span = a1 - a0;
+    n = max(4, ceil(span / 4));
+    translate([0, 0, 4.15])
+        linear_extrude(3.7)
+            polygon(concat(
+                [for (i = [0:n])
+                    let (a = a0 + span * i / n)
+                        [r1 * cos(a), r1 * sin(a)]],
+                [for (i = [0:n])
+                    let (a = a1 - span * i / n)
+                        [r0 * cos(a), r0 * sin(a)]]));
+}
+
+module f_mount_pin_surround(grow = 0) {
+    translate([23.0 - grow, -(5.0 + grow), 1.15 - grow])
+        cube([7.6 + 2 * grow, 10.0 + 2 * grow, 3.0 + 2 * grow]);
+}
+
+module f_mount_wear(grow = 0) {
+    for (ab = [[33.5, 91.5], [152.5, 202.5], [269.5, 334.5]])
+        f_mount_lug_skin(ab[0], ab[1], grow);
+    f_mount_pin_surround(grow);
+}
+
+// What the outer actually gives up: the lip, opened to the sleeve. Not the
+// barrel.
+module f_mount_light_pocket() {
+    translate([0, 0, -0.2])
+        cylinder(h = 3.4, d = F_STL_THROAT + 2 * INNER_LINING);
+}
+
 // Back at z=0 (tube end); register face at z=3 (62 mm flange front).
 // Mesh is imported +180° so the lock-pin recess is at +X. T/R still add
 // 0 / −90; F_MOUNT_CLOCK is extra if a dry-fit is still off.
