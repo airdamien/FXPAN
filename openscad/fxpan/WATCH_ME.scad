@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_focus:Arm T focused F Nikkor-W, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, lid_cap:Lid cap, lid_cap_rf:Lid cap with rangefinder, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -38,6 +38,7 @@ include <../isco/nikkor_w_180.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
+SHOW_CAP = 1; // [0:hide, 1:slip-on lid cap, 2:rangefinder cap]
 SHOW_PANELS = 1; // [0:hide, 1:show]
 SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
@@ -94,7 +95,7 @@ lid_lift = EXPLODED ? lid_explode_z() : 0;
 function fxp_tag(name) = str("fxp_", name);
 function w_arm_part() =
     PART == "arm_r_w" || PART == "arm_t_w"
-    || PART == "arm_r_fw" || PART == "arm_t_fw"
+    || PART == "arm_r_fw" || PART == "arm_t_fw" || PART == "arm_t_focus"
     || PART == "arm_r_hw" || PART == "arm_t_hw"
     || PART == "arm_r_focus";
 function arm_extra() = (nw_stem() || w_arm_part()) ? W_ARM_EXTRA : 0;
@@ -105,7 +106,7 @@ function fxp_arm_tag(mark) =
 
 function printed_f() =
     (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
-    || PART == "arm_r_focus"
+    || PART == "arm_r_focus" || PART == "arm_t_focus"
     || PART == "arm_r_fw" || PART == "arm_t_fw"
     || PART == "arm_r_wl" || PART == "arm_t_wl";
 function heli_cam() =
@@ -1947,6 +1948,102 @@ module part_lid() {
     }
 }
 
+// Slip-on tent over the lid. The skirt takes the lid's outer edge; the roof
+// clears the Zero and the trigger board. Prints skirt-down. On the R-camera
+// face (+X): a slot for the two shutter plugs, and toward the T camera a
+// larger hole that passes a micro-USB cable with its plugs on.
+CAP_GAP   = 0.35;
+CAP_WALL  = 1.8;
+CAP_SKIRT = 5.2;    // lid plate is 6 mm, so the skirt stops on the chassis
+CAP_RISE  = 32;     // vertical wall above the lid top; jacks end near 27
+CAP_ROOF  = 16;     // hip above that, over the middle of the stack
+// Jacks at y −15.4 and −3.7, each plug about 8 mm across. 5 mm past each.
+CAP_JACK_Y = [-20.5, 1.5];
+// +X wall, toward +Y (T). A molded micro-USB plug is about 11×7; the other
+// end of that cable is a USB-A plug about 16×8. The pill clears both.
+CAP_USB_W  = 18;
+CAP_USB_H  = 12;
+CAP_USB_Y  = 24;
+CAP_USB_Z  = 14;     // centre, over the lid top, in the vertical wall
+
+module lid_cap_2d(grow = 0) {
+    offset(r = grow)
+        round_rect(chassis_out(), chassis_out(), PORT_BOSS_R);
+}
+
+module part_lid_cap(ridge_x = 12, rise = CAP_RISE, tag = "lid_cap", flat = false) {
+    out = chassis_out();
+    z_eave = CAP_SKIRT + rise;
+    z_peak = z_eave + CAP_ROOF;
+    // The hollow stays at the plain cap's eave. Extra rise is solid, for the
+    // finder bore in lid_cap_rf.
+    z_void = CAP_SKIRT + min(rise, CAP_RISE);
+    color("DimGray")
+    difference() {
+        union() {
+            if (flat)
+                linear_extrude(z_eave)
+                    lid_cap_2d(CAP_GAP + CAP_WALL);
+            else {
+                linear_extrude(CAP_SKIRT + 0.01)
+                    lid_cap_2d(CAP_GAP + CAP_WALL);
+                hull() {
+                    translate([0, 0, CAP_SKIRT])
+                        linear_extrude(0.01) lid_cap_2d(CAP_GAP + CAP_WALL);
+                    translate([0, 0, z_eave])
+                        linear_extrude(0.01) lid_cap_2d(CAP_GAP + CAP_WALL);
+                    translate([ridge_x, 0, z_peak])
+                        linear_extrude(0.01)
+                            square([10, out * 0.42], center = true);
+                }
+            }
+        }
+        translate([0, 0, -0.2])
+            linear_extrude(CAP_SKIRT + 0.4)
+                lid_cap_2d(CAP_GAP);
+        hull() {
+            translate([0, 0, CAP_SKIRT - 0.1])
+                linear_extrude(0.01) lid_cap_2d(CAP_GAP);
+            translate([0, 0, z_void - CAP_WALL])
+                linear_extrude(0.01) lid_cap_2d(CAP_GAP);
+            if (!flat)
+                translate([ridge_x, 0, z_peak - CAP_WALL])
+                    linear_extrude(0.01)
+                        square([10 - 2 * CAP_WALL, out * 0.42 - 2 * CAP_WALL],
+                               center = true);
+        }
+        // Jack bodies sit 21.5–26.5 mm over the lid. The pill is the same
+        // 22×9 opening, with round ends, and it stops short of the eave.
+        translate([out / 2 - 4,
+                   (CAP_JACK_Y[0] + CAP_JACK_Y[1]) / 2,
+                   CAP_SKIRT + 23.5])
+            hull()
+                for (s = [-1, 1])
+                    translate([0,
+                               s * (CAP_JACK_Y[1] - CAP_JACK_Y[0] - 9) / 2,
+                               0])
+                        rotate([0, 90, 0])
+                            cylinder(h = CAP_GAP + CAP_WALL + 8,
+                                     d = 9, $fn = 40);
+        translate([out / 2 - 4, CAP_USB_Y, CAP_SKIRT + CAP_USB_Z])
+            hull()
+                for (s = [-1, 1])
+                    translate([0, s * (CAP_USB_W - CAP_USB_H) / 2, 0])
+                        rotate([0, 90, 0])
+                            cylinder(h = CAP_GAP + CAP_WALL + 8,
+                                     d = CAP_USB_H, $fn = 40);
+        if (flat)
+            translate([0, -(out / 2 - 14), z_eave - STAMP_DEPTH])
+                part_stamp_cut(fxp_tag(tag), STAMP_DEPTH, 3.2);
+        else
+            translate([ridge_x, 0, z_peak - STAMP_DEPTH])
+                rotate(90)
+                    part_stamp_cut(fxp_tag(tag), STAMP_DEPTH, 3.2);
+    }
+}
+
+include <lid_cap_rf.scad>
+
 // -----------------------------------------------------------------------------
 // base and cradles — the bayonet locates, the base carries
 // -----------------------------------------------------------------------------
@@ -2151,11 +2248,18 @@ GRIP_TRIPOD_KEEP = 7;  // solid ring round the tripod insert
 function grip_tripod_xy() = [base_tripod_xy().x, 0];
 GRIP_STAMP_X = 25;     // along the front lip
 GRIP_RIM    = 5;       // solid edge round the hex field
+// The outrigger is a cantilever. Hexes stay under the chassis; from just
+// outside it to the grip the plate is solid and ramps up into the foot.
+// Bending stiffness goes with thickness cubed, which is what the pinky
+// edge was missing.
+GRIP_RAMP_GAP = 6;     // past the chassis outline before the ramp starts
+GRIP_RAMP_H   = 10;    // added on top of BASE_T at the grip
+GRIP_RAMP_N   = 28;
 // Shutter switch, default a 12 × 12 tactile. Seat is measured in from the
 // grip's front-most point. Behind it, room for leads not yet trimmed.
-SW_W        = 12.4;
-SW_H        = 12.4;
-SW_SEAT     = 5.8;
+SW_W        = 14.0;    // 12 mm body, and the last 12.4 printed tight
+SW_H        = 14.0;    // even after the legs were snapped off and the hole filed
+SW_SEAT     = 8.0;     // body is ~7.3; 5.8 bottomed it out in the mouth
 SW_DROP     = 29;      // switch centre under the grip top
 SW_LEAD     = 9;
 SW_LEAD_D   = 10;
@@ -2253,6 +2357,7 @@ module grip_hex_cuts_2d() {
             translate(grip_tripod_xy())
                 circle(d = TRIPOD_INSERT_D + 2 * GRIP_TRIPOD_KEEP);
             translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+            grip_ramp_2d();
         }
         for (j = [-6:24], i = [-14:24])
             translate([(i + (j % 2) * 0.5) * cell, j * cell * sin(60)])
@@ -2302,6 +2407,45 @@ function grip_pt(z, ang) =
          k = grip_crown_k(z))
         z <= GRIP_CROWN_Z ? p : c + (p - c) * k;
 function grip_front(z) = grip_pt(z, 270).y;
+
+// Plate outboard of the chassis, grip included. The chassis keeps sitting
+// on the flat 8 mm.
+module grip_ramp_2d() {
+    s = chassis_out() + 2 * GRIP_RAMP_GAP;
+    difference() {
+        grip_plate_2d();
+        square([s, s], center = true);
+    }
+}
+
+function grip_ramp_h(x) =
+    let (x0 = -chassis_out() / 2 - GRIP_RAMP_GAP,
+         x1 = GRIP_XY.x)
+        x >= x0 ? 0
+            : GRIP_RAMP_H * grip_sstep(min(1, (x0 - x) / (x0 - x1)));
+
+module grip_ramp() {
+    x0 = -chassis_out() / 2 - GRIP_RAMP_GAP;
+    xfar = GRIP_XY.x - grip_foot_ab().x - 4;
+    for (i = [0:GRIP_RAMP_N - 1]) {
+        xa = x0 + (xfar - x0) * i / GRIP_RAMP_N;
+        xb = x0 + (xfar - x0) * (i + 1) / GRIP_RAMP_N;
+        hull() {
+            translate([0, 0, BASE_T - 0.2])
+                linear_extrude(grip_ramp_h(xa) + 0.2)
+                    intersection() {
+                        grip_ramp_2d();
+                        translate([xa - 0.15, -500]) square([0.5, 1000]);
+                    }
+            translate([0, 0, BASE_T - 0.2])
+                linear_extrude(grip_ramp_h(xb) + 0.2)
+                    intersection() {
+                        grip_ramp_2d();
+                        translate([xb - 0.35, -500]) square([0.5, 1000]);
+                    }
+        }
+    }
+}
 
 module grip_handle() {
     body_n = 150;
@@ -2354,11 +2498,16 @@ module grip_switch_cuts() {
             rotate([-ang, 0, 0]) {
                 translate([-SW_W / 2, -1, 0])
                     cube([SW_W, SW_SEAT + 1, len]);
+                // Mouth wider than the seat, so the body can start in.
+                translate([-(SW_W + 1.6) / 2, -1.4, -0.8])
+                    cube([SW_W + 1.6, 2.6, len + 1.6]);
                 translate([-SW_LEAD / 2, SW_SEAT - 0.01, (len - SW_LEAD) / 2])
                     cube([SW_LEAD, SW_LEAD_D, SW_LEAD]);
             }
         hull() {
-            translate([0, 0, -0.2])
+            // Through the plate and out the sole. -0.2 was just under the
+            // handle root, so the bore stopped on top of the plate.
+            translate([0, 0, -BASE_T - 0.4])
                 cylinder(h = 0.01, d = SW_WIRE_D, $fn = 24);
             translate([0,
                        y0 + (SW_SEAT + SW_LEAD_D / 2) * cos(ang)
@@ -2377,6 +2526,7 @@ module part_base_grip() {
     difference() {
         union() {
             linear_extrude(BASE_T) grip_plate_2d();
+            grip_ramp();
             grip_handle();
         }
         base_mount_cuts(grip_tripod_xy());
@@ -2675,6 +2825,12 @@ module assembly() {
 
     if (SHOW_LID)
         part_lid();
+    if (SHOW_CAP)
+        translate([0, 0, BOX_Z / 2 + LID_T - CAP_SKIRT + lid_lift])
+            if (SHOW_CAP == 2)
+                part_lid_cap_rf();
+            else
+                part_lid_cap();
     if (SHOW_TRIGGER && $preview)
         translate([0, 0, BOX_Z / 2 + LID_T + lid_lift])
             trigger_stack_ghost();
@@ -2906,6 +3062,9 @@ module export_part() {
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "arm_r_w" || PART == "arm_r_fw")
         part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    else if (PART == "arm_t_focus")
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(),
+                         mark = "T", tag = "fxp_tw_focus");
     else if (PART == "arm_t_w" || PART == "arm_t_fw")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "arm_r_h" || PART == "arm_r_hw")
@@ -2920,6 +3079,10 @@ module export_part() {
         cam_helicoid_gauge();
     else if (PART == "lid")
         part_lid();
+    else if (PART == "lid_cap")
+        part_lid_cap();
+    else if (PART == "lid_cap_rf")
+        part_lid_cap_rf();
     else if (PART == "display_mount")
         display_mount_print();
     else if (PART == "fxp_tray" || PART == "tray")
@@ -2957,4 +3120,6 @@ module export_part() {
         assembly();
 }
 
-export_part();
+// lid_cap_rf.scad sets this before including, and draws its own part.
+if (is_undef(FXP_INCLUDE))
+    export_part();

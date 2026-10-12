@@ -49,13 +49,64 @@ module f_rev_thread_cut(h = undef, clear = undef) {
                 tooth_angle = 30);
 }
 
+// Lock-pin catch, in the frame after the 180° turn: slot at +X, flange face
+// at z = 3. The mesh slot is a 2.10 × 5.1 mm stadium. Roll is the 2.10 mm
+// way (the pin moves along Y as the lens turns), so that is the gap to
+// close. The floor stays 1.99. Both sides of the slot carry a wedge that
+// rises off the flange face and ends in a square cliff, so the pin rides
+// up and then drops in, whichever way it arrives. The wedges are only on
+// the pin track; the rest of the register face stays flat.
+F_PIN_D      = 2.0;    // D800 lens lock pin
+F_PIN_CLEAR  = -0.01;  // slot reads 1.99; the 2.0 pin is a snap, no roll
+F_PIN_FACE_Z = 3.0;
+F_PIN_FLOOR  = 1.5;    // mesh floor; leaves 1.5 mm under the flange
+F_PIN_R      = [23.7, 28.8];
+F_PIN_LEAD   = 2.2;    // run of each ramp along the pin's travel
+F_PIN_RISE   = 0.6;    // how far the cliff stands above the flange face
+
+function f_pin_w() = F_PIN_D + F_PIN_CLEAR;
+
+module f_pin_fill() {
+    translate([F_PIN_R[0] - 0.15, -1.25, F_PIN_FLOOR - 0.15])
+        cube([F_PIN_R[1] - F_PIN_R[0] + 0.3, 2.5,
+              F_PIN_FACE_Z - F_PIN_FLOOR + 0.2]);
+}
+
+// dir is −1 on the −Y side and +1 on the +Y side. The wedge sits outside
+// the slot, rises toward the cliff, and overlaps the pocket so the drop
+// is one face.
+module f_pin_ramp(y_cliff, dir) {
+    y_toe = y_cliff + dir * F_PIN_LEAD;
+    y_peak = y_cliff - dir * 0.12;
+    translate([F_PIN_R[0] - 0.05, 0, 0])
+        rotate([90, 0, 90])
+            linear_extrude(F_PIN_R[1] - F_PIN_R[0] + 0.1)
+                polygon([[y_toe, F_PIN_FACE_Z],
+                         [y_peak, F_PIN_FACE_Z],
+                         [y_peak, F_PIN_FACE_Z + F_PIN_RISE]]);
+}
+
+module f_pin_catch_cut() {
+    translate([F_PIN_R[0] - 0.05, -f_pin_w() / 2, F_PIN_FLOOR])
+        cube([F_PIN_R[1] - F_PIN_R[0] + 0.1, f_pin_w(),
+              F_PIN_FACE_Z + F_PIN_RISE + 0.4 - F_PIN_FLOOR]);
+}
+
 module f_mount_stl_raw() {
     // 180° so the lock-pin recess sits at +X, matching f_pin_az.
     // Imported whole. A bore through this mesh splits the barrel wall
-    // into the gap slots.
-    rotate([0, 0, 180])
-        translate([0, 0, -F_STL_ZMIN])
-            import(F_STL_FILE, convexity = 12);
+    // into the gap slots. The pin catch is local and well clear of it.
+    difference() {
+        union() {
+            rotate([0, 0, 180])
+                translate([0, 0, -F_STL_ZMIN])
+                    import(F_STL_FILE, convexity = 12);
+            f_pin_fill();
+            f_pin_ramp(-f_pin_w() / 2, -1);
+            f_pin_ramp(f_pin_w() / 2, 1);
+        }
+        f_pin_catch_cut();
+    }
 }
 
 // Raw forks sit at +X. The pin is 90° left of flange-mark-up (look −Z, CCW).
