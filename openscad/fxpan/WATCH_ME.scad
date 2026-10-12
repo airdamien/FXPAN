@@ -67,7 +67,7 @@ BODY_T_Y = 10; // [-20:0.5:20]
 BODY_T_Z = -5; // [-20:0.5:20]
 
 /* [Shell] */
-SHELL = "full"; // [full:Full (one material), inner:Inner PETG, outer:Outer PCTG, logo:Logo inlay]
+SHELL = "full"; // [full:Full (one material), inner:Inner light path, outer:Outer structure, wear:Bayonet lugs and pin catch, logo:Logo inlay]
 // Fills the wall pockets in the preview. The chassis STL stays pocketed;
 // each colour is still its own STL (chassis_logo_*).
 LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
@@ -104,6 +104,8 @@ function fxp_arm_tag(mark) =
         printed_f() ? "f" : "",
         arm_extra() > 0 ? "w" : "");
 
+function focus_cookie() =
+    PART == "arm_r_focus" || PART == "arm_t_focus";
 function printed_f() =
     (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
     || PART == "arm_r_focus" || PART == "arm_t_focus"
@@ -190,7 +192,7 @@ module mm_split() {
         intersection() { children(0); children(1); }
     else if (SHELL == "outer")
         difference() { children(0); children(1); }
-    else
+    else if (SHELL != "wear")
         children(0);
 }
 
@@ -1357,8 +1359,27 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
     }
         tube_lining_mask(out_len, rx, ry, mark);
     }
-    if (SHELL != "inner") {
-    if (printed_f())
+    // Focused cookie, three materials. Inner is the light sleeve. Wear is
+    // the bayonet lug skins and the pin recess. Outer is everything else.
+    if (focus_cookie() && SHELL == "wear")
+        color("SteelBlue")
+            intersection() {
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
+                                        peg_face = 0,
+                                        back_extra = FX_FMOUNT_EXTRA);
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        rotate([0, 0, (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK])
+                            f_mount_wear();
+            }
+    else if (focus_cookie() && SHELL == "inner")
+        color("Black")
+            along_cam(rx, ry, mark)
+                translate([0, 0, out_len])
+                    f_mount_light_mask(FX_FMOUNT_EXTRA, -0.12);
+    else if (printed_f() && SHELL != "inner" && SHELL != "wear")
         color("Goldenrod")
             difference() {
                 along_cam(rx, ry, mark)
@@ -1366,6 +1387,15 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
                         f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
                                         peg_face = 0,
                                         back_extra = FX_FMOUNT_EXTRA);
+                if (SHELL == "outer" && focus_cookie()) {
+                    along_cam(rx, ry, mark)
+                        translate([0, 0, out_len])
+                            f_mount_light_pocket();
+                    along_cam(rx, ry, mark)
+                        translate([0, 0, out_len])
+                            rotate([0, 0, (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK])
+                                f_mount_wear(0.12);
+                }
                 tube_flash_waste(mark, out_len);
             }
     else if ($preview && SHOW_BODIES == 0)
@@ -1377,7 +1407,6 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
                         translate([0, 0, -0.1])
                             cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
                     }
-    }
 }
 
 // -----------------------------------------------------------------------------
