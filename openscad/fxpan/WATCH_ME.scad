@@ -2232,7 +2232,8 @@ module base_mount_cuts(q = base_tripod_xy()) {
 GRIP_XY     = [-108, -14.4];
 GRIP_W      = 32;      // across, X
 GRIP_D      = 44;      // fore and aft, Y
-GRIP_H      = 114;     // over the base top, including the round crown
+GRIP_LIFT   = 15;      // straight stem under the hand, about one pinky
+GRIP_H      = 114 + GRIP_LIFT; // over the base top, including the round crown
 GRIP_FLARE  = 6;       // wider at the root
 GRIP_N      = 192;     // points around each grip section, ~0.6 mm on the hand
 GRIP_PLATE  = 12;      // plate margin round the grip root
@@ -2388,13 +2389,14 @@ function grip_ay(z) =
     let (hand = 18.5 + 6.5 * grip_bell(z, 30, 14))
         28 * (1 - grip_neck(z)) + hand * grip_neck(z);
 // One round crown over the whole top. k is 1 at the shoulder and 0 at the peak.
-GRIP_CROWN_Z = 93;
+GRIP_CROWN_Z = 93 + GRIP_LIFT;
 function grip_crown_k(z) =
     let (u = (z - GRIP_CROWN_Z) / (GRIP_H - GRIP_CROWN_Z))
         u <= 0 ? 1 : sqrt(max(0, 1 - min(max(u, 0), 1) * min(max(u, 0), 1)));
 function grip_thumb(z) = 6.0 * grip_bell(z, 66, 15);
 function grip_pt_raw(z, ang) =
-    let (c = cos(ang), s = sin(ang),
+    let (z = max(0, z - GRIP_LIFT),
+         c = cos(ang), s = sin(ang),
          n = 2 + (s > 0 ? 1.2 * grip_sstep((z - 10) / 22) : 0),
          e = 2 / n,
          x = grip_ax(z) * (c == 0 ? 0 : sign(c) * pow(abs(c), e)),
