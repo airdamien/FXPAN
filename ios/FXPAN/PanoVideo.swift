@@ -39,6 +39,7 @@ enum PanoVideo {
         report.sec = Double(made.frames) / Double(max(made.fps, 1))
         report.startGap = gap
         report.lag = lag
+        report.turned = true
         let json = movie.deletingPathExtension().appendingPathExtension("json")
         if let data = try? JSONEncoder().encode(report) {
             try? data.write(to: json, options: .atomic)
@@ -227,8 +228,11 @@ enum PanoVideo {
                 let stitched: CGImage?
                 if let locked {
                     let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
-                    stitched = Hugin.frame(t: tImage, r: oriented, locked: locked)
-                        ?? Stitcher.preview(t: tImage, r: rImage, rig: rig, squeeze: 1, maxWidth: tImage.width)
+                    if let held = Hugin.frame(t: tImage, r: oriented, locked: locked) {
+                        stitched = Stitcher.flop(held)
+                    } else {
+                        stitched = Stitcher.preview(t: tImage, r: rImage, rig: rig, squeeze: 1, maxWidth: tImage.width)
+                    }
                 } else {
                     stitched = Stitcher.preview(t: tImage, r: rImage, rig: rig, squeeze: 1, maxWidth: tImage.width)
                 }

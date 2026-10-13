@@ -9,11 +9,15 @@ Protocol, one line in, one line out:
 
 FIRE holds focus (BCM 20 and 26) for 100 ms, then shutter (BCM 21 and 19)
 for 300 ms, or for the given millisecond count. Pins drop before OK.
+
+A switch on BCM 17 (physical pin 11) to ground (pin 9) fires the same
+pulse. That is the yoke grip button. Holding it does not repeat.
 """
 
 from __future__ import annotations
 
 import socket
+import threading
 import time
 
 HOST = "10.55.0.1"
@@ -22,12 +26,20 @@ CHIP = "/dev/gpiochip0"
 FOCUS_PINS = (20, 26)
 SHUTTER_PINS = (21, 19)
 PINS = (20, 26, 21, 19)
+# Yoke button: physical pin 11, other side to pin 9 (GND). Idle high.
+BUTTON_PIN = 17
 FOCUS_MS = 100
 DEFAULT_SHUTTER_MS = 300
 MAX_SHUTTER_MS = 120_000
+_fire = threading.Lock()
 
 
 def pulse(shutter_ms: int) -> None:
+    with _fire:
+        _pulse(shutter_ms)
+
+
+def _pulse(shutter_ms: int) -> None:
     import gpiod
     from gpiod.line import Direction, Value
 
@@ -72,6 +84,45 @@ def command(line: str) -> str:
     return f"OK focus_ms={FOCUS_MS} shutter_ms={shutter_ms}"
 
 
+def watch_button() -> None:
+    """Press to ground fires once. The socket server keeps running if this pin is busy."""
+    try:
+        import gpiod
+        from gpiod.line import Bias, Direction, Value
+    except Exception as exc:
+        print(f"FXPAN yoke button unavailable: {exc}", flush=True)
+        return
+    try:
+        req = gpiod.request_lines(
+            CHIP,
+            consumer="fxpan-yoke",
+            config={
+                BUTTON_PIN: gpiod.LineSettings(
+                    direction=Direction.INPUT, bias=Bias.PULL_UP
+                )
+            },
+        )
+    except Exception as exc:
+        print(f"FXPAN yoke button unavailable: {exc}", flush=True)
+        return
+    held = False
+    with req:
+        while True:
+            pressed = req.get_value(BUTTON_PIN) == Value.INACTIVE
+            if pressed and not held:
+                time.sleep(0.02)
+                if req.get_value(BUTTON_PIN) == Value.INACTIVE:
+                    held = True
+                    print("FXPAN yoke button", flush=True)
+                    try:
+                        pulse(DEFAULT_SHUTTER_MS)
+                    except Exception as exc:
+                        print(f"FXPAN yoke button {exc}", flush=True)
+            elif not pressed:
+                held = False
+            time.sleep(0.02)
+
+
 def serve() -> None:
     while True:
         try:
@@ -102,4 +153,5 @@ def serve() -> None:
 
 
 if __name__ == "__main__":
+    threading.Thread(target=watch_button, name="yoke", daemon=True).start()
     serve()

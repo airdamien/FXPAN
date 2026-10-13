@@ -1081,14 +1081,16 @@ struct PairPicture: View {
     private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
         let cg: CGImage?
         if let url = shot.ana ?? shot.pano, let image = Stitcher.thumbnail(at: url, maxPixel: 1800) {
-            cg = image
+            cg = Stitcher.upright(image, turned: FrameFacts.report(shot.stamp)?.turned)
         } else {
             let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
             let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
             if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
                 cg = preview
+            } else if let t {
+                cg = Stitcher.flop(t)
             } else {
-                cg = t ?? r
+                cg = r.map { rig.flipR ? $0 : Stitcher.flop($0) }
             }
         }
         guard let cg else { return nil }
@@ -1203,7 +1205,14 @@ struct PeepScreen: View {
         }
         .task(id: url) {
             let url = url
-            let cg = await Task.detached(priority: .userInitiated) { Stitcher.image(at: url) }.value
+            let cg = await Task.detached(priority: .userInitiated) {
+                guard let image = Stitcher.image(at: url) else { return nil as CGImage? }
+                let name = url.deletingPathExtension().lastPathComponent
+                guard name.hasPrefix("P_") else { return image }
+                var stamp = String(name.dropFirst(2))
+                if stamp.hasSuffix("_ana") { stamp.removeLast(4) }
+                return Stitcher.upright(image, turned: FrameFacts.report(stamp)?.turned)
+            }.value
             if let cg { image = UIImage(cgImage: cg) }
         }
     }

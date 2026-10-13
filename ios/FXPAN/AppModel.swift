@@ -380,14 +380,17 @@ final class AppModel {
 
     private struct PanoOverlap: Decodable {
         var overlap: Double?
+        var turned: Bool?
     }
 
     /// Captured stitches in the library, newest first. The overlap written beside each file places R and T.
     private func focusPages() -> [FocusPage] {
         shots.compactMap(\.pano).compactMap { url in
             guard let image = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
-            let overlap = storedOverlap(beside: url) ?? rig.overlap
-            return FocusPage(image: image, overlap: overlap)
+            let note = storedNote(beside: url)
+            let overlap = note?.overlap ?? rig.overlap
+            let shown = Stitcher.upright(image, turned: note?.turned)
+            return FocusPage(image: shown, overlap: overlap)
         }
     }
 
@@ -452,12 +455,14 @@ final class AppModel {
         return Stitcher.sized(image, to: maxW, height: height)
     }
 
-    private func storedOverlap(beside jpeg: URL) -> Double? {
+    private func storedNote(beside jpeg: URL) -> PanoOverlap? {
         let json = jpeg.deletingPathExtension().appendingPathExtension("json")
         guard let data = try? Data(contentsOf: json),
-              let note = try? JSONDecoder().decode(PanoOverlap.self, from: data),
-              let overlap = note.overlap, overlap > 0.05, overlap < 0.55 else { return nil }
-        return overlap
+              let note = try? JSONDecoder().decode(PanoOverlap.self, from: data) else { return nil }
+        guard let overlap = note.overlap, overlap > 0.05, overlap < 0.55 else {
+            return PanoOverlap(overlap: nil, turned: note.turned)
+        }
+        return note
     }
 
     func fire() async {
@@ -916,12 +921,14 @@ final class AppModel {
             return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let t {
-            let read = meter ? FocusMeter.read(t, aim: aim, overlap: rig.overlap, only: .t, hold: hold, holdBest: holdBest) : FocusRead(place: .t)
-            return PreviewMade(image: UIImage(cgImage: t), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
+            let shown = Stitcher.flop(t)
+            let read = meter ? FocusMeter.read(shown, aim: aim, overlap: rig.overlap, only: .t, hold: hold, holdBest: holdBest) : FocusRead(place: .t)
+            return PreviewMade(image: UIImage(cgImage: shown), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let r {
-            let read = meter ? FocusMeter.read(r, aim: aim, overlap: rig.overlap, only: .r, hold: hold, holdBest: holdBest) : FocusRead(place: .r)
-            return PreviewMade(image: UIImage(cgImage: r), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
+            let shown = rig.flipR ? r : Stitcher.flop(r)
+            let read = meter ? FocusMeter.read(shown, aim: aim, overlap: rig.overlap, only: .r, hold: hold, holdBest: holdBest) : FocusRead(place: .r)
+            return PreviewMade(image: UIImage(cgImage: shown), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let fallback, let image = UIImage(contentsOfFile: fallback.path) {
             return PreviewMade(image: image)
