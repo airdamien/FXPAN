@@ -38,15 +38,15 @@ enum FocusMeter {
         return CGRect(x: x, y: y, width: w, height: h)
     }
 
-    /// R is the left of the stitch, T the right. A point in the overlap watches both bodies.
+    /// After the panorama is turned, T is the left of the stitch and R the right. A point in the overlap watches both bodies.
     static func place(x: CGFloat, overlap: Double, only: FocusPlace?) -> FocusPlace {
         if let only, only != .both { return only }
         let span = 2 - overlap
         let unit = Double(min(1, max(0, x))) * span
-        let onR = unit <= 1
-        let onT = unit >= 1 - overlap
-        if onR && onT { return .both }
-        return onT ? .t : .r
+        let onLeft = unit <= 1
+        let onRight = unit >= 1 - overlap
+        if onLeft && onRight { return .both }
+        return onRight ? .r : .t
     }
 
     /// Fine detail in the panorama. `hold` is the window already being watched. It stays until some other place is plainly sharper than that window has ever been.

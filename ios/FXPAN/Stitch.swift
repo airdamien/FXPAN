@@ -26,6 +26,8 @@ struct StitchReport: Codable {
     /// Video only: seconds R started after T, and the frame offset the stitch used.
     var startGap: Double?
     var lag: Int?
+    /// The saved panorama is already turned so text reads forwards. Missing on older files, which are turned when shown.
+    var turned: Bool?
 }
 
 typealias StitchNote = @Sendable (String) -> Void
@@ -195,7 +197,8 @@ enum Stitcher {
         rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
         try StitchGate.check(stop)
-        var cg = image
+        // R is flopped to meet T, and that pair is a mirror of the scene.
+        var cg = flop(image)
         if !LookBook.identity(photo.look) {
             note?("Grading the look")
             cg = grade(cg, look: photo.look, fromRaw: develop == "ciraw")
@@ -213,7 +216,8 @@ enum Stitcher {
         return StitchReport(
             overlap: overlap, overlapPx: ol, dy: dy, flipR: flip, mode: mode,
             width: cg.width, height: cg.height, squeeze: photo.frame.squeeze,
-            look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend, develop: develop
+            look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend, develop: develop,
+            turned: true
         )
     }
 
@@ -345,7 +349,12 @@ enum Stitcher {
         let out = compose(t: bitmap(ts), r: bitmap(rs), overlap: rig.overlap(width: t.width, height: t.height), dy: 0, cut: false)
         var cg = out.bitmap.image()
         if squeeze > 1.01 { cg = stretch(cg, squeeze: squeeze) }
-        return cg
+        return flop(cg)
+    }
+
+    /// Older panoramas were saved mirrored. A file marked turned is already the right way around.
+    static func upright(_ image: CGImage, turned: Bool?) -> CGImage {
+        turned == true ? image : flop(image)
     }
 
     // MARK: - Match

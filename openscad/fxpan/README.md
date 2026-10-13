@@ -82,7 +82,8 @@ a millimetre.
 | `stem_nw_m65` | 1 | Copal board up, male down on a raft |
 | `arm_r_wl`, `arm_t_wl` | 1 each | cookie flange on the bed, printed F up. Fixed registers 23.00 (R) and 22.62 (T). No camera helicoids |
 | `base` | 1 | flat. Tripod insert and screw heads enter from the bed. 176 × 190 mm. Each camera slot runs along that camera's lens axis |
-| `cradle_r`, `cradle_t` | 1 each | flat. 12 mm tall so the body sits on the plinth before the tripod screw is tightened |
+| `yoke` | 1 | plate on the bed, grips up. Alternate to `base`. Same screws. One arm under R and out past it, the other out the −X side. About 360 × 200 mm |
+| `cradle_r`, `cradle_t` | 1 each | flat. 12 mm tall so the body sits on the plinth before the tripod screw is tightened. The grip side is notched for the battery door |
 | `baffle` | 2 sheets | flat. One arm's rings per sheet, four rings at the f/11 default |
 
 Colour inlays, if you want the badge in filament rather than paint:
@@ -194,7 +195,10 @@ was reprinted 2.57 mm longer, at 23.00, and both peak together.
 **Roll.** Shoot a level horizon on both. The seam is horizontal, so relative
 roll is a wedge. `STEM_W_CLOCK` is 90°, which puts the Copal controls on
 top. Body roll is the printed F. Set `F_MOUNT_CLOCK` and reprint that arm
-if a body comes up on its side.
+if a body comes up on its side. The three shots on the focused cookies at
+15:42 averaged −0.49°. `arm_r_focus_roll` and `arm_t_focus_roll` split that,
+−0.245° on T and +0.245° on R. If the seam gets worse, put `arm_r_focus`
+and `arm_t_focus` back.
 
 **Field.** Shoot something with detail across the frame and stitch it on the
 phone. Overlap starts at 20%. Far from that means a cookie is in the wrong

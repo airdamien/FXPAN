@@ -20,7 +20,7 @@
 // =============================================================================
 
 /* [Part] */
-PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_focus:Arm T focused F Nikkor-W, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, lid_cap:Lid cap, lid_cap_rf:Lid cap with rangefinder, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_focus:Arm T focused F Nikkor-W, arm_r_focus_roll:Arm R focused F rolled, arm_t_focus_roll:Arm T focused F rolled, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, lid_cap:Lid cap, lid_cap_rf:Lid cap with rangefinder, display_mount:Display mount, fxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
 
 include <params.scad>
 include <../lib/threads.scad>
@@ -75,6 +75,12 @@ LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:6
 /* [Mount] */
 ARM_MOUNT = 0; // [0:reverse ring, 1:printed F, 2:helicoid F]
 F_MOUNT_CLOCK = 0;
+// Mean stitch roll of the three shots on the focused cookies, 15:42–15:43
+// on 2026-10-12: −0.540, −0.446, −0.481. The stitch rotates T onto R by
+// this angle. R is mirrored first, so the same mechanical roll on both
+// bodies adds. Half goes on each bayonet, opposite ways. The unrolled
+// arm_*_focus parts stay the fallback.
+FOCUS_ROLL = -0.49;
 STEM = 1; // [0:EL 180 helicoid, 1:EL 180 infinity, 2:Nikkor-W 180 helicoid]
 EL180_M62_PITCH = 1.0; // [0.75, 1.0]
 
@@ -97,7 +103,8 @@ function w_arm_part() =
     PART == "arm_r_w" || PART == "arm_t_w"
     || PART == "arm_r_fw" || PART == "arm_t_fw" || PART == "arm_t_focus"
     || PART == "arm_r_hw" || PART == "arm_t_hw"
-    || PART == "arm_r_focus";
+    || PART == "arm_r_focus"
+    || PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll";
 function arm_extra() = (nw_stem() || w_arm_part()) ? W_ARM_EXTRA : 0;
 function fxp_arm_tag(mark) =
     str("fxp_arm_", mark == "T" ? "t" : "r",
@@ -105,10 +112,22 @@ function fxp_arm_tag(mark) =
         arm_extra() > 0 ? "w" : "");
 
 function focus_cookie() =
-    PART == "arm_r_focus" || PART == "arm_t_focus";
+    PART == "arm_r_focus" || PART == "arm_t_focus"
+    || PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll";
+function focus_roll_part() =
+    PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll";
+// Image roll, same sign as the stitch report. R is flopped before the
+// fit, so its bayonet turns the other way and the two halves add.
+function mount_roll(mark) =
+    !focus_roll_part() ? 0
+    : mark == "T" ? FOCUS_ROLL / 2
+    : -FOCUS_ROLL / 2;
+function mount_clock(mark) =
+    (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK + mount_roll(mark);
 function printed_f() =
     (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
     || PART == "arm_r_focus" || PART == "arm_t_focus"
+    || PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll"
     || PART == "arm_r_fw" || PART == "arm_t_fw"
     || PART == "arm_r_wl" || PART == "arm_t_wl";
 function heli_cam() =
@@ -1366,12 +1385,12 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
             intersection() {
                 along_cam(rx, ry, mark)
                     translate([0, 0, out_len])
-                        f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
+                        f_mount_on_tube(mount_clock(mark),
                                         peg_face = 0,
                                         back_extra = FX_FMOUNT_EXTRA);
                 along_cam(rx, ry, mark)
                     translate([0, 0, out_len])
-                        rotate([0, 0, (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK])
+                        rotate([0, 0, mount_clock(mark)])
                             f_mount_wear();
             }
     else if (focus_cookie() && SHELL == "inner")
@@ -1384,7 +1403,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
             difference() {
                 along_cam(rx, ry, mark)
                     translate([0, 0, out_len])
-                        f_mount_on_tube((mark == "T" ? 0 : -90) + F_MOUNT_CLOCK,
+                        f_mount_on_tube(mount_clock(mark),
                                         peg_face = 0,
                                         back_extra = FX_FMOUNT_EXTRA);
                 if (SHELL == "outer" && focus_cookie()) {
@@ -1393,7 +1412,7 @@ module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
                             f_mount_light_pocket();
                     along_cam(rx, ry, mark)
                         translate([0, 0, out_len])
-                            rotate([0, 0, (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK])
+                            rotate([0, 0, mount_clock(mark)])
                                 f_mount_wear(0.12);
                 }
                 tube_flash_waste(mark, out_len);
@@ -1496,7 +1515,7 @@ module cam_helicoid_body(lift = 0) {
 // z = 0 at the thread tip. The shoulder flares out to the flange so the
 // 62 mm disk is not a shelf.
 module part_cam_heli_mount(mark) {
-    clock = (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK;
+    clock = mount_clock(mark);
     shoulder = cam_heli_shoulder(mark);
     z_mesh = CAM_HELI_FRONT + shoulder;
     color("Goldenrod")
@@ -1612,6 +1631,23 @@ module stem_bed_chamfer() {
                 polygon([[0, 0], [0, t], [t, 0]]);
 }
 
+// Chassis printed before b6e909c carry a lid nut in every corner, at
+// (±41, ±41) and LID_NUT_DROP under the rim. The two on the stem side
+// break into the top corners of the rebate and stand proud of the
+// cookie's seat. Notch the inner face out through both side edges there.
+STEM_LID_NUT_X0    = 33.5;  // old slot runs in to 37.5, hex reaches ~34.2
+STEM_LID_NUT_H     = 4.2;   // 2.85 mm slot plus air
+STEM_LID_NUT_DEPTH = 2.2;
+module stem_m65_lid_nut_notch() {
+    y = BOX_Z / 2 - LID_NUT_DROP;
+    edge = stem_plate_w() / 2 + 1;
+    for (side = [-1, 1])
+        translate([side * (STEM_LID_NUT_X0 + edge) / 2, y,
+                   STEM_LID_NUT_DEPTH / 2 - 0.2])
+            cube([edge - STEM_LID_NUT_X0, STEM_LID_NUT_H,
+                  STEM_LID_NUT_DEPTH + 0.4], center = true);
+}
+
 module stem_thread_liner(z0, major = EL180_M62_MAJOR) {
     translate([0, 0, z0 - 0.2])
         cylinder(h = EL180_M62_LEN + 0.4, d = major + 8);
@@ -1637,6 +1673,9 @@ module part_stem(major = EL180_M62_MAJOR, tag = "stem", clock = 0) {
                         cylinder(h = z_top - z_bot, d = od, $fn = 128);
                 }
             stem_cookie_cuts(fxp_tag(tag));
+            if (tag == "stem65")
+                translate([0, 0, -stem_drop()])
+                    stem_m65_lid_nut_notch();
             translate([0, 0, -stem_drop()])
                 stem_bed_chamfer();
             translate([0, 0, z_top - 0.05])
@@ -2182,16 +2221,59 @@ function cradle_bolt_xy(mark, i) =
          du = cradle_bolt_du(i), dv = cradle_bolt_dv(i))
         [p.x + u.x * du + v.x * dv, p.y + u.y * du + v.y * dv];
 
+module base_plate_2d() {
+    union() {
+        offset(BASE_WEB / 2)
+            polygon(base_web_pts());
+        circle(d = BASE_PAD_D);
+        base_cam_pad_2d("R");
+        base_cam_pad_2d("T");
+        translate(base_tripod_xy()) circle(d = BASE_PAD_D);
+    }
+}
+
 module base_blank() {
     linear_extrude(BASE_T)
-        union() {
-            offset(BASE_WEB / 2)
-                polygon(base_web_pts());
-            circle(d = BASE_PAD_D);
-            base_cam_pad_2d("R");
-            base_cam_pad_2d("T");
-            translate(base_tripod_xy()) circle(d = BASE_PAD_D);
-        }
+        base_plate_2d();
+}
+
+// Shared with the yoke, so the two braces take the same screws.
+module base_fastener_cuts() {
+    q = base_tripod_xy();
+    // Chassis 1/4-20 through the origin pad.
+    translate([0, 0, -0.2])
+        cylinder(h = BASE_T + 0.4, d = BASE_SCREW_D);
+    translate([0, 0, -0.2])
+        cylinder(h = BASE_HEAD_COUNTER_H + 0.2, d = BASE_HEAD_D);
+    // Camera 1/4-20 slots + head pockets.
+    translate([0, 0, -0.2])
+        linear_extrude(BASE_T + 0.4)
+            union() {
+                base_slot_2d("R");
+                base_slot_2d("T");
+            }
+    translate([0, 0, -0.2])
+        linear_extrude(BASE_T - 2.0)
+            union() {
+                base_relief_2d("R");
+                base_relief_2d("T");
+            }
+    // Cradle bolts, M3 through with a nut trap underneath.
+    for (mark = ["R", "T"], i = [0:3]) {
+        p = cradle_bolt_xy(mark, i);
+        translate([p.x, p.y, -0.2])
+            cylinder(h = BASE_T + 0.4, d = PORT_SCREW_D);
+        translate([p.x, p.y, -0.05])
+            rotate([0, 0, 30])
+                cylinder(h = PORT_NUT_T + 0.15,
+                         d = PORT_NUT_AF / cos(30), $fn = 6);
+    }
+    // Tripod insert, from the underside.
+    translate([q.x, q.y, -0.05]) {
+        cylinder(h = min(BASE_T - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0) + 0.15,
+                 d = TRIPOD_INSERT_D);
+        cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
+    }
 }
 
 module part_base() {
@@ -2572,6 +2654,27 @@ module part_base_grip() {
     }
 }
 
+// Battery door, in a camera pad's own frame. Local +X is rearward along the
+// optical axis, local +Y is the grip. The door starts just outside the
+// cradle bolts (those sit at ±15) and runs out past the grip edge. Nominal
+// for a D800: move these four numbers if a door still kisses the plastic.
+function door_x0() = -42;
+function door_x1() = 32;
+function door_y0() = 21;
+function door_y1() = 98;
+
+module battery_door_2d() {
+    translate([(door_x0() + door_x1()) / 2, (door_y0() + door_y1()) / 2])
+        square([door_x1() - door_x0(), door_y1() - door_y0()], center = true);
+}
+
+module battery_doors_2d() {
+    for (mark = ["R", "T"])
+        translate(base_pad_xy(mark))
+            rotate(base_axis_az(mark))
+                battery_door_2d();
+}
+
 // Plinth that lifts the body's tripod socket onto the optical axis. Nothing
 // else: footprint and bolt pattern match base_cam_pad_2d() and the top is
 // bare.
@@ -2608,6 +2711,10 @@ module part_cradle(mark = "R") {
                     translate([-BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
                     translate([ BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
                 }
+        // Grip side, so the battery door can swing past the plinth.
+        translate([0, 0, -0.2])
+            linear_extrude(lift + 0.4)
+                battery_door_2d();
         // Cradle bolts: M3 clearance, heads sunk into the plinth top.
         for (i = [0:3]) {
             sx = cradle_bolt_du(i);
@@ -2621,6 +2728,121 @@ module part_cradle(mark = "R") {
             rotate(90)
                 part_stamp_cut(fxp_tag(mark == "T" ? "cradle_t" : "cradle_r"),
                                STAMP_DEPTH, 3.0);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// yoke — same screws as the base, arms out the two sides, grips up
+// -----------------------------------------------------------------------------
+// The plate is the original triangle. Each grip is a second triangle of the
+// same web, grown off that plate: one on under R and out past its back, one
+// off the opposite side. The grip section is turned so the long axis runs
+// front to back. The trigger is on the front edge of the right grip.
+YOKE_GRIP_H = 112;
+YOKE_GRIP_W = 32;   // side to side
+YOKE_GRIP_D = 42;   // front to back, front is −Y
+// Socket to the back of a D800 is about 25 mm. This clears that, plus a hand.
+YOKE_PAST   = 78;
+
+function yoke_r_xy() =
+    let (p = base_r_xy())
+        [p.x + YOKE_PAST, p.y];
+// Right hand. Straight out −X from the origin pad.
+function yoke_right_xy() = [-128, 0];
+
+module yoke_oval_2d() {
+    scale([YOKE_GRIP_W / 2, YOKE_GRIP_D / 2])
+        circle(r = 1, $fn = 64);
+}
+
+// Straight off the pad that is already there, ending on the grip outline.
+module yoke_plate_2d() {
+    union() {
+        base_plate_2d();
+        // The near oval sits inside the pad, so the beam comes off it square.
+        hull() {
+            translate(base_r_xy() + [BASE_SLOT_L / 2, 0]) yoke_oval_2d();
+            translate(yoke_r_xy()) yoke_oval_2d();
+        }
+        hull() {
+            translate([-12, 0]) yoke_oval_2d();
+            translate(yoke_right_xy()) yoke_oval_2d();
+        }
+    }
+}
+
+module yoke_grip_at(p) {
+    translate(p)
+        linear_extrude(YOKE_GRIP_H)
+            yoke_oval_2d();
+}
+
+// Groove along the right arm, then up inside the grip to the trigger.
+module yoke_wire_cut() {
+    a = [-BASE_PAD_D / 2 - 4, 0];
+    b = yoke_right_xy();
+    front = b.y - YOKE_GRIP_D / 2;
+    cz = YOKE_GRIP_H - 30;
+    hull() {
+        translate([a.x, a.y, BASE_T - 2.8])
+            cube([5, 5, 3.2], center = true);
+        translate([b.x, b.y, BASE_T - 2.8])
+            cube([5, 5, 3.2], center = true);
+    }
+    hull() {
+        translate([b.x, b.y, BASE_T + 2])
+            cube([4.4, 4.4, 4], center = true);
+        translate([b.x, front + 9, cz])
+            cube([4.4, 4.4, 4], center = true);
+    }
+}
+
+// 12 × 12 × 7.3 mm tactile on the front edge, near the top. The plunger
+// points forward (−Y). The body sits behind 3 mm of wall.
+module yoke_button_cut() {
+    g = yoke_right_xy();
+    front = g.y - YOKE_GRIP_D / 2;
+    cz = YOKE_GRIP_H - 30;
+    translate([g.x, front + 8, cz])
+        cube([13.2, 10, 13.2], center = true);
+    translate([g.x, front - 0.4, cz])
+        rotate([-90, 0, 0])
+            cylinder(h = 5.2, d = 8, $fn = 32);
+}
+
+module yoke_ties() {
+    a = [-BASE_PAD_D / 2 - 4, 0];
+    b = yoke_right_xy();
+    d = b - a;
+    n = norm(d);
+    u = d / n;
+    v = [-u.y, u.x];
+    for (t = [0.30, 0.55, 0.80]) {
+        p = a + u * (n * t);
+        for (s = [-1, 1])
+            translate([p.x + v.x * s * 8, p.y + v.y * s * 8, -0.2])
+                cylinder(h = BASE_T + 0.4, d = 3.4, $fn = 16);
+    }
+}
+
+module part_yoke() {
+    color("SlateGray")
+    difference() {
+        union() {
+            linear_extrude(BASE_T)
+                yoke_plate_2d();
+            yoke_grip_at(yoke_r_xy());
+            yoke_grip_at(yoke_right_xy());
+        }
+        base_fastener_cuts();
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                base_hex_cuts_2d();
+        yoke_wire_cut();
+        yoke_button_cut();
+        yoke_ties();
+        translate([0, 16, BASE_T - STAMP_DEPTH])
+            part_stamp_cut(fxp_tag("yoke"), STAMP_DEPTH, 3.2);
     }
 }
 
@@ -3030,6 +3252,9 @@ module diagnostics() {
              port_edge_proud() > PORT_EDGE_CHAM
                ? "  *** past the chamfer — drop PORT_BOSS_R ***"
                : ", inside the chamfer, so port_chassis_clip takes it off"));
+    echo(str("base pads R ", base_r_xy(), " T ", base_t_xy(),
+             " tripod ", base_tripod_xy(), " cam_d ", base_cam_d(),
+             " shift ", sensor_shift()));
     echo(str("under the chassis: lens axis ", d800_axis_base(),
              " above a D800's baseplate, chamber floor at ", BOX_Z / 2,
              "  →  plinth ", chassis_plinth(), " + cradle ", CRADLE_T,
@@ -3083,6 +3308,9 @@ module export_part() {
     else if (PART == "arm_r_focus")
         part_camera_tube(reflect_focus_tube_len(), rx = -field_toe(),
                          mark = "R", tag = "fxp_rw_focus");
+    else if (PART == "arm_r_focus_roll")
+        part_camera_tube(reflect_focus_tube_len(), rx = -field_toe(),
+                         mark = "R", tag = "fxp_rw_roll");
     else if (PART == "arm_r_wl")
         part_camera_tube(wl_tube_len("R"), rx = -field_toe(), mark = "R",
                          tag = "fxp_rw_lens");
@@ -3096,6 +3324,9 @@ module export_part() {
     else if (PART == "arm_t_focus")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(),
                          mark = "T", tag = "fxp_tw_focus");
+    else if (PART == "arm_t_focus_roll")
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(),
+                         mark = "T", tag = "fxp_tw_roll");
     else if (PART == "arm_t_w" || PART == "arm_t_fw")
         part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
     else if (PART == "arm_r_h" || PART == "arm_r_hw")

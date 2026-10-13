@@ -10,7 +10,10 @@ Nikkor-W covers the stitch wide open. The 44 mm mouths fully clear the
 extreme corners from f/8.4; at f/5.6 those corners still pass most of the
 light, and the long axis stays clean. The iPhone is the viewfinder and the
 stitcher, and it can release both bodies over USB. A Pi Zero and the trigger
-board are optional. They pulse both 10-pin remotes together.
+board are optional. They pulse both 10-pin remotes together. A yoke is the
+alternate base: the same triangle and the same screws, extended out to a
+grip past R and a grip on the far side of the plate. The right grip has a
+trigger on its front edge.
 
 ![Assembled. Nikkor-W to the left, a D800 on each arm, trigger board on the lid.](docs/build/assembly.png)
 

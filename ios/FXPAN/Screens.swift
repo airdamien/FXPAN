@@ -1031,21 +1031,25 @@ struct ShotPart: View {
         let cg: CGImage?
         switch part {
         case "t":
-            cg = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
+            cg = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { Stitcher.flop($0) }
         case "r":
-            cg = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { rig.flipR ? Stitcher.flop($0) : $0 }
+            cg = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { rig.flipR ? $0 : Stitcher.flop($0) }
         case "ana":
-            cg = (LookStore.plain(stamp: shot.stamp, ana: true) ?? shot.ana).flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
+            cg = (LookStore.plain(stamp: shot.stamp, ana: true) ?? shot.ana)
+                .flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
+                .map { Stitcher.upright($0, turned: FrameFacts.report(shot.stamp)?.turned) }
         default:
             if let pano = (LookStore.plain(stamp: shot.stamp, ana: false) ?? shot.pano).flatMap({ Stitcher.thumbnail(at: $0, maxPixel: 1800) }) {
-                cg = pano
+                cg = Stitcher.upright(pano, turned: FrameFacts.report(shot.stamp)?.turned)
             } else {
                 let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
                 let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
                 if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
                     cg = preview
+                } else if let t {
+                    cg = Stitcher.flop(t)
                 } else {
-                    cg = t ?? r
+                    cg = r.map { rig.flipR ? $0 : Stitcher.flop($0) }
                 }
             }
         }

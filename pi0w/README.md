@@ -16,6 +16,9 @@ The Zero W pinout matches the trigger board.
 | 21 | 40 | Shutter, J1 and J2 while JP2 pads 1–2 are bridged |
 | 26 | 37 | J2 focus, only after JP1 is cut and pads 2–3 are bridged |
 | 19 | 35 | J2 shutter, only after JP2 is cut and pads 2–3 are bridged |
+| 17 | 11 | Yoke shutter button. The other side of the switch goes to ground, pin 9 |
+
+The yoke button is an input. Pressing it to ground runs the same pulse as `FIRE`: focus for 100 ms, then shutter for 300 ms. Holding it does not fire again. The 10-pin lines stay outputs. A D800 ignores that pulse while USB is claimed, same as a `FIRE` from the phone.
 
 If the Zero shows bare holes, solder a 2×20 male header with the pins pointing up. The board’s socket plugs onto that header. The board is Pi 4 sized, so it overhangs the Zero and the four screw holes do not line up. Leave it on the header. Do not force those screws.
 
