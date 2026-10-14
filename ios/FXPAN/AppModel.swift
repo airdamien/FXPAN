@@ -87,6 +87,14 @@ final class AppModel {
     private var scenePhase: ScenePhase = .active
     private var previewToken = 0
 
+    /// D7000 when a paired body says so. The simulator and a D800 stay on the FX stitch.
+    var bodyKind: BodyKind {
+        let _ = cameraRevision
+        let names = [camera.slots[.t]?.model, camera.slots[.r]?.model].compactMap { $0 }
+        if names.contains(where: { BodyKind.from($0) == .d7000 }) { return .d7000 }
+        return .d800
+    }
+
     var activeMode: NamedMode? { modes.first { $0.id == activeModeID } }
     var modeDrifted: Bool {
         guard let mode = activeMode else { return false }
