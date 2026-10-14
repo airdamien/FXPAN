@@ -50,13 +50,14 @@ CAM_RECESS = 2.5
 PORT_PATCH_T = 4.0
 BOX_XY = 70.0
 DX_HELI_BODY = 16.58
-DX_HELI_EXT = 9.5          # extension at which the path is  the design infinity
+DX_HELI_TRAVEL = 7.5       # measured barrel travel of the M65 helicoid
+DX_HELI_EXT = 6.0          # mirror-image station; flangeless ring
 DX_LENS = 24.25            # lens seat, from the plate
 DX_TUBE_GAIN = 39.0 - DX_LENS
 DX_FACE = 33.0
-R_WALL = 2.6               # lens-side wall; the bore is flat inside this
-# Distance from the R axis to that flat. A full circle is r = 19.
-R_CHORD = (DX_LENS - SHIFT) - R_WALL               # 12.21
+DX_THREAD_BACK = 20.0        # R bore stops on the back of the M65 thread
+# Distance from the R axis to the flat at the chassis wall. Full circle r = 19.
+R_CHORD = DX_THREAD_BACK - SHIFT                  # 10.56
 
 BS_T_COMP = BS_THICK * (
     BS_N / np.cos(np.arcsin(np.sin(np.radians(45.0)) / BS_N))
@@ -120,8 +121,8 @@ def bore_passes(at, axis, throat, chord=False):
         x, y = at(d)
         if np.hypot(x - axis, y) > dia / 2 + EPS:
             return False
-        # The flat is on the lens side of R, which is the outer field.
-        if chord and d > FLANGE_F and (axis - x) > R_CHORD + EPS:
+        # Flat only at the chassis end. The arm past the face is a circle.
+        if chord and d >= D_WALL - 1.0 and (axis - x) > R_CHORD + EPS:
             return False
     return True
 
@@ -346,9 +347,14 @@ def main():
     print(f"  another {R_FOCUS_PULL:.3f} mm of extension, to "
           f"+{DX_HELI_EXT + R_FOCUS_PULL:.2f} mm, puts R on paraxial "
           f"infinity and T on the circle of least confusion together.")
-    print(f"  a 17–31 mm helicoid has 14 mm of travel, so +{DX_HELI_EXT + R_FOCUS_PULL:.1f} "
-          f"is inside it, with about {14 - (DX_HELI_EXT + R_FOCUS_PULL):.1f} mm "
-          f"left for closer focus.")
+    inf = DX_HELI_EXT + R_FOCUS_PULL
+    left = DX_HELI_TRAVEL - inf
+    print(f"  measured travel is {DX_HELI_TRAVEL:.2f} mm, so infinity at +{inf:.2f} "
+          f"{'is inside it' if left >= 0 else 'IS PAST THE STOP'}, "
+          f"{left:.2f} mm before the stop.")
+    print(f"  near focus needs more extension than infinity, so the "
+          f"{left:.2f} mm left reaches about "
+          f"{EL_FOCAL ** 2 / max(left, 1e-6) / 1000:.0f} m and no closer.")
     print(f"  shift R {U_OF_R:+.2f}   T {U_OF_T:+.2f}   "
           f"{'opposite' if U_OF_R * U_OF_T < 0 else 'SAME SIDE'}")
     print(f"  R chord: flat {R_CHORD:.2f} mm off the axis "
