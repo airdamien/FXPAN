@@ -43,7 +43,7 @@ function dx_y1() = dx_face("T");
 // Pilot stays in the wall. Heads sit in the lid, which spans the cavity.
 function dx_lid_screws() = [
     [dx_x0() + 6.0,    2],
-    [dx_x0() + 6.0,   24],
+    [dx_x0() + 6.0,   21],
     [dx_x1() - 3.6,   18],
     [-18,            dx_y1() - 3.6],
     [16,             dx_y1() - 3.6]
@@ -455,12 +455,15 @@ module dx_bed_cuts(skip_r_lens = 0) {
     dx_print_corner(dx_x1(), dx_y1(), z,  1,  1);
 }
 
-// Front top corners stay on the ledge. The rear top corners are on the lid.
-module dx_ledge_top_corners(skip_r_lens = 0) {
+// Top corner flats only. Same cutter on the body and the lid, so the
+// triangle crosses the seam. The wall between this and the bed flat stays square.
+module dx_top_corners(skip_r_lens = 0) {
     z = DX_HALF_Z;
     dx_print_corner(dx_x0(), dx_y0(), z, -1, -1, 1);
     if (!skip_r_lens)
         dx_print_corner(dx_x1(), dx_y0(), z,  1, -1, 1);
+    dx_print_corner(dx_x0(), dx_y1(), z, -1,  1, 1);
+    dx_print_corner(dx_x1(), dx_y1(), z,  1,  1, 1);
 }
 
 // Roof over the helicoid only. Everything aft of it, above the seat, is the lid.
@@ -477,15 +480,6 @@ module dx_lid_taps() {
     for (p = dx_lid_screws())
         translate([p[0], p[1], DX_SEAT - DX_TAP_H])
             cylinder(h = DX_TAP_H + 0.3, d = DX_TAP_D, $fn = 24);
-}
-
-module dx_lid_top_corners() {
-    z = DX_HALF_Z;
-    y0 = DX_LEDGE_Y + 0.2;
-    dx_print_corner(dx_x0(), y0,      z, -1, -1, 1);
-    dx_print_corner(dx_x1(), y0,      z,  1, -1, 1);
-    dx_print_corner(dx_x0(), dx_y1(), z, -1,  1, 1);
-    dx_print_corner(dx_x1(), dx_y1(), z,  1,  1, 1);
 }
 
 module part_dx_body() {
@@ -511,7 +505,7 @@ module part_dx_body() {
                                         dx_plate();
                                     }
                                     dx_bed_cuts();
-                                    dx_ledge_top_corners();
+                                    dx_top_corners();
                                     dx_top_slice();
                                 }
                                 dx_arm_tube("R");
@@ -530,30 +524,26 @@ module part_dx_body() {
                             dx_flash_cut("R");
                             dx_flash_cut("T");
                             dx_top_slice();
-                            dx_ledge_top_corners(1);
+                            dx_top_corners();
                             dx_lid_taps();
                         }
 }
 
-// The sliced-off roof. Sits on the seat aft of the helicoid ledge.
+// Full chassis outline. The top flats are the body's corner cutters,
+// so each triangle crosses from the lid onto the wall under it.
 // Countersunk M3s cut their own thread in the chassis pilots.
-// Each top corner is the same print flat as the chassis bed corners.
 module part_dx_lid() {
     t  = DX_HALF_Z - DX_SEAT;
-    fit = 0.15;
-    y0 = DX_LEDGE_Y + fit;
-    x0 = dx_x0() + fit;
-    x1 = dx_x1() - fit;
-    y1 = dx_y1() - fit;
+    x0 = dx_x0();
+    x1 = dx_x1();
+    y0 = DX_LEDGE_Y;
+    y1 = dx_y1();
     csk_h = (DX_CSK_D - DX_CLR_D) / 2;
     color("DimGray")
     difference() {
-        union() {
-            translate([(x0 + x1) / 2, (y0 + y1) / 2,
-                       DX_SEAT + t / 2])
-                cube([x1 - x0, y1 - y0, t], center = true);
-        }
-        dx_lid_top_corners();
+        translate([(x0 + x1) / 2, (y0 + y1) / 2, DX_SEAT + t / 2])
+            cube([x1 - x0, y1 - y0, t], center = true);
+        dx_top_corners();
         for (p = dx_lid_screws()) {
             translate([p[0], p[1], DX_SEAT - 0.2])
                 cylinder(h = t + 1, d = DX_CLR_D, $fn = 28);
