@@ -1,0 +1,628 @@
+# DXPAN 65 — design plan
+
+Read this before changing anything in `openscad/dxpan/`. It records the
+numbers, where each one comes from, and which ones you are not free to move.
+The body is a clean sheet: it shares no printed part with `hybrid_shift/`,
+`hybrid/` or `v/`, and its bore is deliberately wider than theirs.
+
+**What it is.** Two D800 bodies behind one EL-Nikkor 180/5.6N and a
+50 × 75 × 1 mm 50/50 plate beamsplitter at 45°. Each sensor takes one half
+of the field; the two frames stitch to **64.80 × 23.9 mm, 2.711:1,
+13248 × 4912 = 65.1 MP**. XPan is 65 × 24 mm and 2.708:1, so the aspect is
+within 0.1%. Horizontal field is **20.4°** — read the honest limits below
+before you get excited about that.
+
+The frame is corner-to-corner clean from **f/8.4**, limited by the 44 mm
+Nikon F throat. Verify it yourself with `kraken/dxpan_paths.py`, which ray
+traces the thing and exits non-zero if the geometry stops agreeing with
+`params.scad`.
+
+## The constraints that set everything
+
+Every number in `params.scad` falls out of these pulling against each other.
+The first four are optical and mechanical and are load-bearing; 5 and 6 are
+things the build got wrong and how. If you change one, re-derive the others.
+
+### 1. The plate has to pass the whole frame
+
+A plate tilted 45° presents only `size/√2` across its plane of incidence.
+`cam/pano.py` requires landscape sensors with a horizontal seam, so the wide
+stitch axis is forced onto exactly that foreshortened dimension — there is no
+orientation trick available.
+
+The exit pupil sits at the lens, `EL_FOCAL` from the sensor. At a station `d`
+ahead of the sensor, a field half-width `ym` fills
+
+```
+ym·(P−d)/P + (P/2N)·(d/P)          P = EL_FOCAL = 180, N = f-number
+```
+
+That is largest at the sensor and smallest at the lens, so **the plate wants
+to be as far forward as it will go, and stopping down only ever helps.** With
+the plate at `d = 112.5 mm`:
+
+| f-stop | across the fold (`ym` = 32.4) | `BS_W` = 75 → 53.03 | `BS_W` = 50 → 35.36 | along the fold (`ym` = 11.95) | `BS_H` = 50 |
+| --- | --- | --- | --- | --- | --- |
+| 5.6 | 44.39 mm | +19.5% | clips | 29.05 mm | +72.1% |
+| 8 | 38.36 mm | +38.2% | clips | 23.03 mm | +117.1% |
+| 11 | 34.53 mm | +53.6% | +2.4% | 19.19 mm | +160.6% |
+| 16 | 31.33 mm | +69.3% | +12.9% | 15.99 mm | +212.7% |
+
+So: **75 mm across the fold, clean from f/3.9. 50 mm there only works from
+f/11.** This is the whole reason the body is not just a rebore of
+`hybrid_shift`.
+
+### 1a. But only one of the plate's two directions is doing that job
+
+The foreshortening is in the plane of incidence and nowhere else. Across the
+fold the plate carries the 64.80 mm stitch through a √2 squeeze; along it
+there is no squeeze and nothing to carry but the 23.9 mm sensor height, which
+wants 29.05 mm at f/5.6. A square plate therefore buys margin in the one
+direction that never needed any — and pays for it in chassis height, because
+`BOX_Z` is set by the along-the-fold dimension and nothing else.
+
+`BS_SIZE` is split into **`BS_W` = 75 across and `BS_H` = 50 along**, which is
+Edmund **#37201**, a stock part. `BOX_Z` follows `BS_H` and falls from 108 to
+**83**, which is 25 mm of chamber that was holding a 4.5× margin on the easy
+axis. It buys nothing in the path budget — `BOX_XY` is the direction that
+costs path — but it is 25 mm less print, and the tray, lid and chamber all
+shrink with it.
+
+Two consequences worth knowing before you move either number:
+
+- **`BOX_Z` no longer sets how high the cameras sit.** It used to be close
+  enough to the right height that the cradles could be read off it. See the
+  load path section: the datum is now `d800_axis_base()`, and
+  `chassis_plinth()` makes up the difference.
+- **`bs_in_plane()` reads `BS_W`, `frame_top_z()` reads `BS_H`.** They are not
+  interchangeable. If you fit a plate the other way round, the stitch crosses
+  50/√2 = 35.36 mm and clips until f/11 while the chamber grows 25 mm. The
+  tray slot is keyed to the right orientation, but the slot will not stop you
+  putting a square plate in sideways.
+
+### 2. The F throat has to pass the frame corners, and mostly can't
+
+This is the constraint that actually limits the body, and the one that is
+easiest to get wrong — I got it wrong first time round and the ray trace
+caught it.
+
+A bore is round, so what matters is **distance from the bore axis**, and the
+corner of a 36 × 23.9 mm window is 21.6 mm from its centre against the 18 mm
+the stitch axis alone suggests. Working the bore along the stitch axis
+understates it by 3.4 to 4.3 mm. So `need_bore()` is evaluated at the corner:
+
+```
+c  = corner·(P−b)/P + shift·(b/P)        corner = (18, 11.95)
+r  = |c| + (P/2N)·(b/P)
+```
+
+At the F flange (`b = 46.5`) that gives **46.77 mm at f/5.6**, against the
+**44.0 mm** a real Nikon F throat provides. So:
+
+| f-stop | corner needs | 44 mm throat | traced corner illumination |
+| --- | --- | --- | --- |
+| 5.6 | 46.77 mm | clips | 0.836 |
+| 8 | 44.28 mm | clips | 0.951 |
+| 11 | 42.69 mm | clears | 1.000 |
+| 16 | 41.37 mm | clears | 1.000 |
+
+**The frame is fully lit from f/8.4.** Wide of that the corners lose light
+while the stitch axis stays perfectly clean, so it shows up as corner
+shading, not as a broken stitch.
+
+Three things follow. The first two are mount physics; the third is which mesh you print:
+
+- **44 mm is a ceiling, not a choice.** `F_BORE` is set to 44.0 so the printed
+  part is flush with the ring and the bought ring is the sole limit. It used
+  to be 43.5, which cost a third of a stop for nothing.
+- **An unshifted D800 needs 40.35 mm there at f/5.6.** The F throat only ever
+  had 3.65 mm of margin; a 14.4 mm shift spends essentially all of it. This is
+  a property of putting a shifted full-frame bundle through an F mount, not of
+  this design.
+- **The printed bayonet is 43.5 mm, not 44.** Archive-663 `f-mount_archive663.stl`
+  (male lens-rear) is bored to the modelled bayonet ID. That is clean from
+  **f/9.2**. The old scanned `f-mount_raw.stl` was 38.0 mm and never cleared
+  the 38.47 mm corner term. Metal reverse ring stays the f/8.4 ceiling.
+
+The only way to buy f/5.6 back is to shrink the shift to 8.29 mm, which drops
+the stitch to 52.6 mm and 2.20:1 — it stops being an XPan frame. Not worth it.
+
+### 3. The path has to land on 180 mm
+
+`PATH` is lens flange to sensor along the fold, and it has to reach the
+EL-Nikkor's flange focal distance for infinity. It is
+
+```
+PATH = BOX_XY + 2·PORT_PATCH_T + ARM_TUBE + F_REV_STACK + FLANGE_F
+       + EL180_M62_LEN + (helicoid − EL180_HELI_MALE)
+```
+
+Note `BOX_XY` appears once but spans both legs — **every millimetre of
+chassis costs two millimetres of budget.** That is the trap. Two earlier
+attempts died here:
+
+- **A cube chassis does not fit.** A cube tall enough to stand a 75 mm plate
+  on its diagonal is 111 mm, which makes `PATH ≥ 207 mm`. Infinity is then
+  unreachable at any helicoid setting. This is why `BOX_Z` and `BOX_XY` are
+  separate: `BOX_Z` (83) carries `BS_H`, `BOX_XY` (92) comes out of the
+  path budget and only has to clear the shifted port windows. The two are
+  still separate now that `BS_H` is 50 and they happen to be close — do not
+  re-merge them, because `BS_W` can go back up without touching the path and
+  `BOX_XY` cannot move without re-solving infinity.
+- **A 20 mm M62 nut does not fit.** `hybrid_shift` puts a 20 mm female nut on
+  its stem. 20 mm of nut plus 17 mm of collapsed helicoid is 37 mm on the lens
+  side and blows the budget on its own. The stem here is an **8 mm female boss
+  on the cookie and nothing else**; the bought helicoid's male bottoms
+  straight onto it.
+
+Result: `BOX_XY = 92` gives **PATH 179.5 … 193.5 mm**, so 180 mm lands at
+17.5 mm of the helicoid's 17–31 mm travel.
+
+| helicoid | PATH | subject |
+| --- | --- | --- |
+| 17.5 mm | 180.0 mm | infinity |
+| 20 mm | 182.5 mm | 13.1 m |
+| 24 mm | 186.5 mm | 5.2 m |
+| 31 mm | 193.5 mm | 2.6 m |
+
+`BOX_XY` is rounded **down** to a whole mm on purpose. Shims can only add
+length, so a chassis 1 mm too large can never reach infinity, while one 1 mm
+too small is fixed with a 1.0 mm shim.
+
+### 4. The camera has to be able to physically go on
+
+A D800 is not flat at its flange. Its front panel stands `D800_PROUD` ≈ 13 mm
+past the bayonet's register face, and the body goes on by pushing that panel
+toward the chassis and twisting to lock. So the F register has to stand off
+the chassis face by at least that much, and the body is 146 × 123 mm against
+a 100 mm chassis face, so there is **nowhere to relieve locally** — the whole
+face has to be behind the line.
+
+Everything between the chassis face and the register is arm tube and reverse
+ring, and the chassis half-width cancels out of both sides:
+
+```
+standoff = ARM_TUBE + F_REV_STACK − (shell outboard of the cookie)
+```
+
+`BOX_XY` does not appear. That is worth stating plainly, because the instinct
+is to shrink the chassis and it does nothing: shrinking `BOX_XY` frees path
+budget, which is only useful because it lets `ARM_TUBE` grow by the same
+amount. The first cut of this body had `ARM_TUBE = 5`, a 4 mm retaining wall
+outboard of each cookie, and therefore **9 mm of standoff** — a D800 would
+have hit the chassis 4 mm before the bayonet seated. For comparison,
+`hybrid_shift`'s long variant, which has actually been built, has 19 mm.
+
+Two changes, neither of which touches an optical number:
+
+- **The outboard retaining wall is gone** (`chassis_shell_t()` is now just
+  `patch_t()`). On the camera faces that wall was precisely what the front
+  panel landed on. The cookie is stopped inboard by the chamber wall it sits
+  against, all the way round by its rebate, and outboard by four countersunk
+  M3s — a better joint than the wall was, and worth 4 mm.
+- **`ARM_TUBE` is solved from the camera rather than picked**, and `BOX_XY`
+  takes what the path budget has left. 5 mm becomes 8 mm, 95 becomes 92, and
+  `PATH` is unchanged at 179.5 mm because the two trade 1:1.
+
+That gives **16 mm of standoff against 13 mm of camera**, 3 mm to twist it on.
+The lever is nearly spent: the floor on `BOX_XY` is 91.4 mm, where the shifted
+port bore starts to break into the adjacent chamber wall, so `ARM_TUBE` cannot
+go much past 9 without the helicoid running out of travel. If your bodies
+measure more than 16 mm proud, `WATCH_ME.scad` will tell you infinity has gone
+out of range rather than quietly building something that cannot focus.
+
+### 5. A 0.75 mm pitch female thread has to be truncated
+
+The reverse-ring mouths on the earlier bodies never took a ring: too loose to
+start, would not run down. That is a profile fault, not a clearance fault.
+
+`lib/threads.scad` cuts a sharp full-height V unless `tooth_height` says
+otherwise. At P = 0.75 that is 0.650 mm of radial depth, against the 0.406 mm
+a real M52 × 0.75 female has. The printed crests stand a quarter of a
+millimetre proud, into the ring's thread *roots*. The ring then rides on those
+crests rather than its flanks — line contact on a knife edge — so it rocks,
+starts crooked and never bites. It feels like a bore that is too big, which
+is why it was read that way for so long.
+
+`F_REV_TOOTH = 0.52` truncates the crest back to the real minor and
+`F_REV_CLEAR` puts the clearance on the major where it belongs, plus a 0.9 mm
+lead-in at the mouth. `F_REV_CLEAR` is the only number a builder should have
+to touch, and `PART = ringgauge` exists so they can find it in ten minutes
+instead of in a three-hour arm print.
+
+The lock was working against the thread too. An M3 nut wants 2.8 mm of radial
+depth; the wall over the M52 female is `(TUBE_OD − F_REV_MAJOR)/2` = 3.0 mm.
+A pocket sunk into that wall has to come out the far side, and the original one
+did — a 5.7 mm window straight through the thread, twice, over 7 of the 8 mm of
+engagement. Two gaps for the ring to jump on every turn.
+
+So the nut goes **outboard** of the thread, in a lug, and only the 3.2 mm screw
+crosses it. `rev_lock_r_out()` is `F_COLLAR_OD / 2` — the reverse ring's own
+OD — because that is the only clearance statement that can be made about the
+camera's front panel without measuring it: whatever the lug is, it is never
+proud of the metal ring that already has to live in that gap. Strength comes
+from `REV_LOCK_FLARE` widening each lug down onto the cookie instead of from
+standing it further out, which also makes it overhang-free printed arm-up.
+
+`REV_LOCK_HOME = 180` with `REV_LOCK_SPREAD = 90` puts the pair at **135° and
+225°** from camera-up, square about the azimuth directly opposite it. Two
+azimuths are already spoken for, and on both faces they sit the same way
+round: `TUBE_FLASH_KEEP` rakes the OD back at camera-up for the pentaprism
+nose, and the cookie runs out of plate at the shift azimuth, which is +90°
+from camera-up on R and on T alike. The old pair sat at camera-up itself and
+120° off it, so the first screw of the two had 1.4 mm of raked wall to work
+with; these two have 0.93 mm of wall left over a full-depth thread and full
+tube section behind them.
+
+An earlier pass had them at 190° and 260°, which is also clear of both claims
+but is not symmetric about anything. That was fine while the cookie was a
+90 mm square with room to spare on every side. It is not fine now the plate is
+sized off its features: a lug swung toward the shift azimuth is plate the
+cookie has to grow to cover, in the direction it is already widest. Sitting
+the pair square about 180° costs the same in both directions and nothing
+across — see section 6.
+
+`rev_lock_ok()` also replaced a test for a whole `F_REV_LEN` of tube. What the
+lock needs is room for the nut slot to floor above the cookie face, and the T
+arm is `bs_t_comp()` shorter than the R arm for the glass path — 7.697 against
+8 — so it lost both screws to a 0.3 mm rounding and had nothing holding its
+ring's clock at all.
+
+### 6. A port cookie is the outside of the camera
+
+Once the retaining wall went, a cookie's face stopped being a patch behind a
+wall and became a panel of the body. Three things followed from that:
+
+- **`tube_flash_waste` was eating the plate.** Its taper was specified as a
+  length back from the mouth, `TUBE_FLASH_L = 11 mm`, which on an 8 mm tube
+  ran straight past the cookie face and bit a 16 mm notch out of the corner —
+  an L-shaped plate with a 4 mm trench in the outside of the camera for no
+  reason. It now rakes to the full OD at the cookie face and stops dead there.
+- **`tube_flat_waste` was vestigial.** It chord-cut the tube OD where the
+  shift pushed it past the cookie, but at `TUBE_OD` 58 and a 14.4 mm shift the
+  tube reaches 43.4 mm against the plate's 45, so all it did was shave 0.4 mm
+  off one edge and leave the plate 90 × 89.6. Gone.
+- **The plate was square and centred on the face, and it should be neither.**
+  A 90 mm square costs 8100 mm² of plate per cookie, three times over.
+  Everything it carries — the bore, the tube, the four clamp screws, the two
+  lock lugs — is centred on `cam_axis()`, 14.4 mm off the middle of the face,
+  so it reached 45 mm one way to catch a tube ending at 43.4 and spent the
+  other 25 mm over nothing at all.
+
+  `port_patch_u()` and `port_patch_v()` size each direction off the last
+  feature in it plus `PORT_PLATE_RIM`, centred on the bore. Along camera-up
+  that is the clamp screws; across it, the tube OD or a lock lug, whichever
+  is wider; on the stem face, across is the M62 boss instead. That gives
+  **77.8 × 62 for an arm and 77.8 × 74 for the stem, 36.6% less plate** than
+  three 90 mm squares. Everything that clocks off the bore — screws, lugs,
+  tags — is now sized against that rectangle rather than a face-centred
+  square, which is why the lock lugs moved in section 5.
+- **The outline follows the chassis, and then gets cut to it.**
+  `port_plate_r()` is `PORT_BOSS_R` less `port_rim()` — subtracting the rim
+  from the corner is exactly what an inward offset does to a radius — so the
+  rim stays even the whole way round instead of pinching on the diagonals.
+  But a rounded chassis corner is still curving away underneath the cookie's
+  outboard edge, so the plate stands proud of the skin it is supposed to be
+  flush with. `PORT_BOSS_R` is solved to keep that inside the chamfer:
+  `R − √(R²−d²) ≤ PORT_EDGE_CHAM` at the edge gives `R ≤ 9.12`, so **9**, and
+  at 9 the cookie stands **1.15 mm** proud against a 1.2 mm chamfer.
+  `port_chassis_clip()` then intersects the cookie with the chassis solid so
+  the last of it comes off exactly rather than nearly. `diagnostics()` reports
+  both numbers and will say so if either moves.
+- **The rebate was open at the top and took the chassis rim with it.** A
+  cookie slid down its slot from the lid side, which meant the slot had to be
+  open there, which meant a notch through the top rim of each camera face —
+  and a flat 100 mm lid then overhung those notches on two sides. The rebate
+  is now a **blind pocket, closed on all four sides**, so the rim is
+  continuous and the lid sits on it flush the whole way round. `lid_align_lip()`
+  loses the notches it had to have and is a plain ring again. Nothing holds a
+  cookie in but the four M3s, which was already true — the open top was never
+  doing any of the work, just costing the rim.
+
+All of it is on the top face. The cookies print flange-down with the arm up,
+so the bed face is the full flat plate and every one of these features only
+ever narrows the part on the way up.
+
+### 7. The M62 boss has to stand somewhere that is not on a screw
+
+`EL180_STEM_OD` was 82 mm and nothing had asked it to be. An M62×1 female
+needs a wall, not a flange — the helicoid's male bottoms on the cookie's face,
+not on the boss — so the only load it sees is the thread's own hoop. At 82 it
+reached r 41 against clamp screws at r 40.85, so the countersinks came out
+*inside* its footprint with 8 mm of thread standing over them. You could start
+a screw and then not turn it. It also set how wide the stem cookie had to be,
+which under section 6 is now a real cost.
+
+So take the wall as the number and check it clears the heads, rather than the
+other way round:
+
+```
+el180_stem_od() = min(EL180_M62_MAJOR + 2·EL180_M62_WALL,
+                      2·(|clamp_xy| − PORT_CSK_D/2 − 1.0))
+```
+
+`EL180_M62_WALL = 4` gives 70 mm, and the screw-clearance cap sits at 77.5, so
+the wall is what binds and the boss finishes **70 mm across with the nearest
+head edge at 38.76** — 4.6 mm of daylight. If you widen `PORT_CLAMP_SEP` or
+pull `port_clamp_r()` in, watch that second term: once the cap binds, thinning
+the M62 wall is what the model will quietly do.
+
+## Locked numbers
+
+Treat these as fixed inputs. `WATCH_ME.scad` echoes every one of them on
+open, with a margin report — check the echo before you trust this table.
+
+| | |
+| --- | --- |
+| `SENSOR_W` / `SENSOR_H` / `FLANGE_F` | 36.0 / 23.9 / 46.5 mm |
+| `overlap_frac()` | 0.20 |
+| `sensor_shift()` | 14.40 mm |
+| `stitch_w()` | 64.80 mm, 2.711:1, 13248 × 4912, 65.1 MP |
+| `BOX_XY` × `BOX_Z` | 92 × 92 × 83 mm chamber (outer 100 × 100 × 103.5) |
+| `BS_W` / `BS_H` / `BS_THICK` / `BS_N` | 75 across the fold / 50 along it / 1.0 / 1.52, 45°, S1 toward the lens |
+| `bs_t_comp()` | 0.303 mm — shortens the T arm only |
+| `TUBE_ID` / `TUBE_OD` / `WALL` | 46 / 58 / 6 mm |
+| `F_BORE` / `F_THROAT` | **44.0** mm, flush with the ring (others use 40.3) |
+| `ARM_TUBE` | 8.0 mm past the cookie — solved from `D800_PROUD`, not picked |
+| `D800_PROUD` / standoff | 13.0 mm of camera against 16.0 mm of air |
+| `EL180_M62_LEN` / `el180_stem_od()` | 8 mm female on the helicoid stem, 70 mm across |
+| cookies | 77.8 × 62 arm, 77.8 × 74 stem, centred on the bore, rebate closed |
+| `d800_axis_base()` | 52.0 mm — plinth 20.5 + cradle 10 + base 8 follow it |
+| `PATH` | 179.5 … 193.5 mm, infinity at helicoid 17.5 — `stem_el180_inf` is that 17.5 mm as a one-piece boss |
+
+### The two mouths are not equivalent
+
+| mouth | clear | frame corners |
+| --- | --- | --- |
+| metal M52→F reverse ring | 44.0 mm (real F throat) | clean from **f/8.4** |
+| printed F bayonet (`f-mount_archive663.stl`) | **43.5 mm** (bored lips) | clean from **f/9.2** |
+
+The 40 mm lips on the Archive-663 mesh are opened with a through-cylinder;
+the bayonet itself is already 43.5 mm and the lugs are only ~1.15 mm radially,
+so the cut stops there rather than at `F_BORE` 44. The old scanned
+`f-mount_raw.stl` was 38.0 mm and could not be `difference()`d.
+
+**`ARM_MOUNT = 0` stays the default** so the metal ring remains the f/8.4
+ceiling. Print `arm_r_f` / `arm_t_f` when you would rather skip the short
+M52 reverse-ring thread; clock with `F_MOUNT_CLOCK`. `WATCH_ME.scad` echoes
+the mouth f-stop either way.
+
+`TUBE_ID = 46` is not the binding aperture: it clears the corners from f/6.95,
+comfortably wide of the f/8.4 the mouth allows.
+
+### Plate thickness is 1.00 mm, not 3 mm
+
+A tilted plate puts astigmatism on the **transmit path only** — S1 faces the
+lens, so the reflect path never enters glass.
+
+| thickness | astigmatism | needs |
+| --- | --- | --- |
+| 1.0 mm | 0.172 mm | inside the 0.224 mm depth of focus at f/5.6 |
+| 3.0 mm | 0.516 mm | f/16 |
+
+So 1 mm is a non-issue and 3 mm is not. The transmit tube is shortened by
+`bs_t_comp() = 0.303 mm` to pay back the glass path; nothing else changes.
+
+## Honest limits — document these, do not bury them
+
+- **f/8.4, not f/5.6.** The corners lose light wide open: 0.836 illumination at
+  f/5.6 and 0.951 at f/8, clean by f/11. The stitch axis is never affected, so
+  it reads as corner shading. The 44 mm F throat is the cause and nothing in
+  this repo can change it.
+- **20.4° horizontal.** 65 mm of frame at 180 mm of focal length is a
+  telephoto panorama for distant compression, not an XPan-like wide sweep. The
+  aspect matches; the angle of view does not. A shorter lens means a whole new
+  path budget — `PATH` must equal the new focal length, which changes `BOX_XY`,
+  which changes the plate size that fits.
+- **The 50 mm square plate you already own is an f/11 build.** `BS_W = 50`
+  still builds and costs nothing in chamber height, but it clips the stitch
+  axis itself at f/5.6 and f/8 — a worse failure than the corner shading
+  above, because it eats the ends of the panorama rather than its corners.
+  `BS_H = 50` is free; `BS_W = 50` is not, and the two are separate numbers
+  precisely so that distinction is visible.
+- **The two 50 mm first-surface mirrors are not in the imaging path.** Keeping
+  the stitch axis off every fold's foreshortened dimension forces all folds
+  coplanar, and coplanar folds cannot make the two bodies parallel. Two D800s
+  side by side would need their axes 146 mm apart, which does not fit in a
+  180 mm path. They stay with the V body.
+- **Cradle dimensions are unmeasured.** `D800_AXIS_BASE` and `D800_TRIPOD_IN`
+  default to 52.0 and 44 mm. Measure your own bodies and set them in the
+  customizer before printing `base` or the cradles.
+- **`D800_PROUD` is unmeasured too**, and it is the one that bites hardest:
+  get it wrong and the camera will not go on at all. 13.0 mm is the reported
+  figure, not a measured one, and the standoff is 16 mm. Measure before you
+  print a chassis.
+- **The M52 mouth is printer-dependent.** `F_REV_CLEAR = 0.15` is a starting
+  point, not a result. Print `ringgauge` and set it from a real ring.
+- **The lock lugs assume the ring clears the body.** `rev_lock_r_out()` is
+  pinned to `F_COLLAR_OD / 2` on the argument that nothing proud of the metal
+  reverse ring can be in the camera's way, since the ring is already in that
+  gap. It is a sound argument but it is still an argument — if a body will not
+  seat and the lugs are what it is touching, drop `F_COLLAR_OD`, which pulls
+  `rev_lock_r_in()` in with it, and watch `rev_lock_thread_wall()` in the echo.
+
+## Files
+
+| file | what |
+| --- | --- |
+| `params.scad` | every number above, with the derivations as comments |
+| `WATCH_ME.scad` | customizer, `assembly()`, all part modules, `export_part()`, `diagnostics()` |
+| `dxp_tray.scad` | plate cartridge, sized off `BS_W` × `BS_H` |
+| `dxp_f_mount.scad` | local F-mount copy bound to this body's bore |
+| `shims.scad` | 0.2 / 0.5 / 1.0 mm focus shims |
+| `../../kraken/dxpan_paths.py` | the ray trace that checks all of the above |
+
+`dxp_f_mount.scad` exists because `openscad/f_mount_male.scad` `include`s the
+top-level `openscad/params.scad`. With `use`, its modules keep *those* values
+(`F_BORE` 40.3, `TUBE_ID` 52) rather than this body's. The printed bayonet is
+`../../f-mount_archive663.stl` (Archive-663, CC BY-NC-SA 4.0), not the old
+shared scan.
+
+Reused unchanged: `../lib/part_stamp.scad`, `../lib/threads.scad`,
+`../camera_body.scad`.
+
+The `SHELL = full | inner | outer | logo` split and `mm_split()` are kept from
+`hybrid_shift`: the inner PETG lining matters for light-tightness and the
+badge inlay path depends on `logo`. **`full` is the recommended print** — the
+inner/outer split is there if you want it, but it buys little on a body this
+small and adds two more failure modes.
+
+One deliberate omission: `tube_lining_mask()` does **not** line the F throat.
+The throat is the tightest aperture in the body — 1.3 mm clear of the frame
+corners even at f/11 — so a 1.6 mm liner in there would vignette outright.
+Flocking handles glare in the throat instead.
+
+The drop-in baffle rings are sized from `need_bore()` at `FSTOP`, and
+`baffle_ring_fits()` drops any ring the bundle has already filled. At f/5.6
+that is all five, so `baffle.stl` comes out empty and the echo says so; at the
+f/11 default four survive and at f/16 all five do. **If you change `FSTOP`,
+reprint them** — a set cut for f/16 vignettes at f/11.
+
+## Parts and stamps
+
+Every part carries `fxp_` + its name + the export timestamp, via `dxp_tag()`.
+
+| part | stamp | where |
+| --- | --- | --- |
+| `fxp_chassis` (+`_inner`/`_outer`) | `box_floor_stamp` | chamber floor |
+| `fxp_lid` | `plate_stamp` | outer face |
+| `dxp_tray` | `part_stamp_cut` | −Y chamber wall, readable from the stem |
+| `fxp_stem` | `flange_stamp` | cookie, camera side |
+| `fxp_arm_r` / `fxp_arm_t` (+`f`) | `dxp_port_stamp` | cookie, camera side, along the edge furthest from the lid |
+| `fxp_el180` | `part_stamp_stack_cut` | hex flat |
+| `fxp_base`, `fxp_cradle_r/t` | `part_stamp_cut` | top face |
+| `fxp_bf1`…`fxp_bf5` | `part_stamp_stack_cut` | each surviving baffle ring |
+
+`box_floor_stamp` is written for a cube, so the chassis call feeds it `BOX_XY`
+and then drops it `-(BOX_Z − BOX_XY)/2` to reach the real floor.
+
+The −X wall carries the DXPAN badge inlay: the colour-separated mark from
+`logos/dxpan_gen.py` (gold FX + sweep, white PAN, red outline), then
+65MP over the native stitch `13248×4912 · 2.71:1` and, as its own colour
+layers, 130MP over the 2× anamorphic delivery `26496×4912 · 5.42:1`. The two
+spec lines share columns (middot and aspect on the same x) so they read as a
+pair rather than two centred strings of different width. The three logo STLs
+are projected to 2D and scaled to the spec-line width so they sit in the
+same pocket as the old D3-badge lockup; the type is Futura, which ships
+with macOS — re-exporting on Linux needs the same family installed. A 1.6 mm groove
+(`STRIPE_H`) runs around the plinth 5 mm above the floor (`STRIPE_LIFT`) —
+the D3/D4/D5 red line — through the same colour-plug path as `LOGO_LAYER=stripe`.
+
+`LOGO_FIT = 0.08` and `LOGO_PROUD = 0.06` are load-bearing. The colour plugs
+bite 0.08 mm into the pocket walls and floor and stand 0.06 mm proud of the
+wall, so **no face is coplanar with the chassis**. Match them exactly and the
+slicer gets two coincident faces per surface and renders the pair as speckled
+garbage. `LOGO_SCALE = 1.15` fits the lockup to this wall; it is applied
+inside the plug fit, so the two fit numbers stay in real mm. The stripe
+uses the same pair; its outward offset is radial because the ring has no
+single face-normal.
+
+## Load path
+
+A D800 is about 1 kg, and hanging it off a printed F bayonet is the weak point
+in the other bodies. `fxp_base` is an L-shaped web carrying four pads: one
+under the chassis (its 1/4-20), one per camera, and one for the tripod. Each
+camera bolts through its own 1/4-20 into an `fxp_cradle`, so **the bayonet
+locates and never carries load.**
+
+The cradle is a bare plinth. It briefly had an anti-twist flange up the back
+of the body, and that was wrong on both counts. The bayonet already fixes yaw
+far better than a flange 46 mm wide could — anything narrow enough to sit on
+the pad has almost no leverage, and anything with leverage would have to span
+most of the D800's 146 mm width. More importantly, mounting the camera means
+bringing it in along the axis and twisting to lock, so anything standing up
+off the plinth is in the way of the one motion the whole build depends on.
+The 1/4-20 slot runs along the axis so the screw follows the bayonet in
+rather than fighting it: start it loose, seat the mount, then tighten.
+
+Tripod socket goes under the combined centre of mass — `base_tripod_xy()`
+weights the chassis-plus-lens at the origin against 1 kg at each camera pad.
+
+**The cradle height is read off the camera, not off the chassis.** The old
+knob was `D800_TRIPOD_ABOVE`, the 1/4-20's height above the chassis bottom,
+which is a datum that moves: shorten the chamber and the cameras rise with it,
+off the optical axis, for no reason anyone would notice in the model until the
+frames would not stitch. When `BS_H` took 25 mm out of `BOX_Z` that is exactly
+what would have happened.
+
+`d800_axis_base()` is instead **where the lens axis sits above a D800's own
+baseplate**, 52 mm, which is a property of the camera. Stand a body on a flat
+surface and measure to the centre of the mount. Everything below the chassis
+then solves from it: `CRADLE_T` is a fixed 10 mm plinth, `BASE_T` a fixed 8,
+and `chassis_plinth()` grows a skirt to make up the rest —
+
+```
+chassis_plinth() = max(PORT_SLOT_LIP, d800_axis_base() + CRADLE_T − BOX_Z/2)
+```
+
+— which is **20.5 mm** now, covering the 12.5 mm the short chamber no longer
+reaches. The chassis got shorter and the skirt got taller by the same amount;
+the cameras did not move.
+
+## Export
+
+```
+./export_dxpan.sh              # all 35 STLs -> stls/dxpan/
+./export_dxpan.sh chassis lid  # just these
+```
+
+That wraps `./export_stls.sh --dxpan`. Every part is stamped with the render
+minute. All 35 export manifold with no warnings; if yours do not, say so
+rather than shipping it.
+
+## Verification
+
+```
+pip install -r kraken/requirements.txt
+python kraken/dxpan_paths.py
+```
+
+Ray traces the system and **exits non-zero** if any of these stops holding:
+
+- the stitch spans 64.80 mm with a 7.20 mm overlap, at every aperture
+- the stitch axis is never clipped, at every aperture
+- the frame corners are fully lit at and beyond the aperture the model claims
+  (f/8.4), and *not* fully lit wide of it — so the model cannot quietly drift
+  pessimistic either
+- the two shift senses are opposite
+
+Writes `docs/kraken/fxpan_paths.png`, `fxpan_frames.png`, `dxpan_pano.png`
+and `fxpan_margins.png`.
+
+One thing to know if you extend it: **KrakenOS's tilted-surface convention
+does not fold correctly.** An `obj → thin lens f=180 → 45° mirror (AxisMove=2)`
+system puts a 5° field at −3.674 mm where the unfolded one correctly gives
+15.748 mm, and a tilted 1 mm plate puts the axial ray 55 mm off centre instead
+of 0.303 mm. `reflect_system()` in `hybrid_paths.py` draws a fold that does not
+trace. So `dxpan_paths.py` traces the imaging unfolded, where KrakenOS is
+exact, and handles the fold with explicit reflection algebra — the √2
+foreshortening at the plate and the sense reversal, both derived from the
+reflection matrix rather than asserted. Round bores are fold-invariant and are
+tested directly.
+
+## If you change something
+
+- **Moved `BS_H`?** `BOX_Z` follows automatically, and so does
+  `chassis_plinth()` in the other direction, so the cameras stay on the axis.
+  Re-read the plate margin and `under the chassis` lines in the echo.
+- **Moved `BS_W`?** Nothing follows it but the tray. Re-read the plate margin
+  line — this is the direction that clips.
+- **Moved a cookie feature — `PORT_CLAMP_SEP`, `REV_LOCK_*`, the M62 wall?**
+  The plate is sized off them, so the cookie changes shape and the rebate,
+  the stamp and the chassis clip all move with it. Re-read the `cookie` and
+  `cookie vs chassis skin` echo lines; the second one is the mismatch between
+  the plate's outboard edge and the chassis it has to disappear into, and it
+  has to stay under `PORT_EDGE_CHAM`.
+- **Moved `BOX_XY`, `ARM_TUBE`, `EL180_M62_LEN` or the mount?** You changed
+  `PATH`. Check the `infinity:` echo line still says *in range*.
+- **Moved `overlap_frac()`?** `sensor_shift()` and `stitch_w()` both move, so
+  the port windows move and so does the required bore. Check the
+  `chamber half … vs port reach` and `arm bore` echo lines, update `OVERLAP` in
+  `cam/pano.py` to match, and mirror the change into `kraken/dxpan_paths.py`
+  and rerun it — a bigger shift buys width and costs corners.
+- **Changed the lens?** `EL_FOCAL` must equal the new focal length *and* the
+  new flange focal distance has to be reachable. This is a new body, not a
+  parameter change.
+- **Touched `need_bore()`?** Work it at the corner. The stitch-axis version is
+  4.3 mm optimistic at f/5.6 and it will tell you the body is clean wide open
+  when it is not.

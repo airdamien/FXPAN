@@ -1,0 +1,3354 @@
+// =============================================================================
+// dxpan/WATCH_ME.scad — DXPAN 65: clean-sheet FX panoramic body
+// =============================================================================
+// Two D800 behind one EL-Nikkor 180/5.6N and a 75×75×1 50/50 plate.
+// 64.80 × 23.9 mm stitch, 2.711:1 (XPan is 2.708:1), 13248 × 4912 = 65.1 MP.
+// The chamber is deliberately NOT a cube. BOX_Z carries BS_H. The flange
+// register is 158.5 mm, not the 180 mm focal length: the lens nut is recessed
+// into the wall and the camera cookies sit CAM_RECESS deeper. Read params.scad.
+//
+// Lens −Y. Plate at the origin, 45°, S1 (the 50/50 coating) toward the lens.
+// Reflect leg → +X (camera R), transmit leg → +Y (camera T). Both bores are
+// translated by sensor_shift() in opposite senses; no tube toe, no Scheimpflug.
+// The lens, camera, and logo faces are blind rebates closed all round, so
+// the chassis keeps an unbroken top rim and the lid sits flush on it. The
+// red line around the plinth stays in the chassis.
+//
+// This body does not share parts with hybrid_shift. Every STL is stamped
+// dxp_* and the bore is wider (TUBE_ID 46 / F_BORE 44.0 vs 52 / 40.3) so the
+// 14.4 mm shift does not clip. Open this file and read the echo() lines.
+// =============================================================================
+
+/* [Part] */
+PART = "assembly"; // [assembly:Assembly, section:Assembly section, isco:ISCO on the 180, isco_cut:ISCO section, chassis:Chassis, logo_cookie:Logo cookie, stem:Stem EL 180 helicoid, stem_el180_inf:Stem EL 180 infinity, stem_w:Stem Nikkor-W, stem_nw180:Nikkor-W nose, stem_nw_m65:Nikkor-W nose on M65, stem_nw_direct:Nikkor-W nose direct in stem_m65, arm_r:Arm R, arm_t:Arm T, arm_r_f:Arm R printed F, arm_r_focus:Arm R focused F Nikkor-W, arm_t_focus:Arm T focused F Nikkor-W, arm_r_focus_roll:Arm R focused F rolled, arm_t_focus_roll:Arm T focused F rolled, arm_r_wl:Arm R Nikkor-W lens helicoid, arm_t_wl:Arm T Nikkor-W lens helicoid, arm_t_f:Arm T printed F, arm_r_w:Arm R Nikkor-W, arm_t_w:Arm T Nikkor-W, arm_r_fw:Arm R printed F Nikkor-W, arm_t_fw:Arm T printed F Nikkor-W, arm_r_h:Arm R helicoid, arm_t_h:Arm T helicoid, arm_r_hw:Arm R helicoid Nikkor-W, arm_t_hw:Arm T helicoid Nikkor-W, fmount_h_r:F mount on helicoid R, fmount_h_t:F mount on helicoid T, cam_helicoid:Camera helicoid, lid:Lid, lid_cap:Lid cap, lid_cap_rf:Lid cap with rangefinder, display_mount:Display mount, dxp_tray:Plate cartridge, base:Base, base_grip:Base with hand grip, cradle_r:Cradle R, cradle_t:Cradle T, baffle:Baffles, ringgauge:M52 ring gauge, shims:Shims, el180_adapter:EL 180 adapter, m65_ring:M65 to M62 ring, stem_m65:Stem M65 helicoid]
+
+include <params.scad>
+include <../lib/threads.scad>
+include <../lib/part_stamp.scad>
+include <dxp_f_mount.scad>
+use <dxp_tray.scad>
+use <shims.scad>
+use <../camera_body.scad>
+use <../monitor/display_mount.scad>
+use <../monitor/monitor.scad>
+include <../isco/el_nikkor_180n.scad>
+include <../isco/isco_ultrastar_attachment.scad>
+include <../isco/isco_mount.scad>
+include <../isco/nikkor_w_180.scad>
+
+/* [View] */
+SHOW_LID = 1; // [0:hide, 1:show]
+SHOW_CAP = 1; // [0:hide, 1:slip-on lid cap, 2:rangefinder cap]
+SHOW_PANELS = 1; // [0:hide, 1:show]
+SHOW_MONITOR = 0; // [0:hide, 1:show]
+SHOW_PI = 0; // [0:hide, 1:show]
+SHOW_TRIGGER = 1; // [0:hide, 1:show]
+SHOW_BODIES = 0; // [0:hide, 1:D7000]
+SHOW_LENS = 0; // [0:hide, 1:show]
+SHOW_LENS_MARKS = 0; // [0:hide, 1:pupils and focal plane]
+SHOW_BASE = 1; // [0:hide, 1:show]
+BASE_GRIP = 0; // [0:base, 1:base with hand grip]
+SHOW_AXES = 1; // [0:hide, 1:show]
+
+/* [Camera] */
+D800_AXIS_BASE    = 36.0; // D7000 mesh: mount centre above the baseplate
+D800_TRIPOD_IN    = 40;   // mm, lens axis → tripod along the base
+// D7000's mount is the front of the body. A couple of mm covers the
+// bayonet ring; the tubes are not sized from this.
+D800_PROUD        = 2.0; // [0:0.5:16]
+
+/* [Body Alignment] */
+// Ghost offsets in each arm's local frame, for eyeballing clearances.
+BODY_R_X = 10; // [-20:0.5:20]
+BODY_R_Y = 13; // [-20:0.5:20]
+BODY_R_Z = -5; // [-20:0.5:20]
+BODY_T_X = -13; // [-20:0.5:20]
+BODY_T_Y = 10; // [-20:0.5:20]
+BODY_T_Z = -5; // [-20:0.5:20]
+
+/* [Shell] */
+SHELL = "full"; // [full:Full (one material), inner:Inner light path, outer:Outer structure, wear:Bayonet lugs and pin catch, logo:Logo inlay]
+// Fills the wall pockets in the preview. The chassis STL stays pocketed;
+// each colour is still its own STL (chassis_logo_*).
+LOGO_LAYER = "all"; // [all:All, fx:Gold FX, word:PAN, outline:Red outline, mp:65MP, rule:Hairline, spec:Native, ana_mp:130MP, ana_rule:Ana hairline, ana:Anamorphic, stripe:Red line]
+
+/* [Mount] */
+ARM_MOUNT = 1; // [0:reverse ring, 1:printed F, 2:helicoid F]
+F_MOUNT_CLOCK = 0;
+// FXPAN's measured roll does not belong on these bodies. Set it after a
+// DXPAN stitch, the same way: half on each bayonet, opposite signs.
+FOCUS_ROLL = 0;
+STEM = 3; // [0:EL M62 helicoid, 1:EL infinity cookie, 2:Nikkor-W, 3:EL on M65 helicoid]
+EL180_M62_PITCH = 1.0; // [0.75, 1.0]
+
+/* [Optics check] */
+// Drives the baffle apertures and the preview envelope. f/11 is the default
+// because the 44 mm F throat only passes the frame corners from f/8.4, so
+// baffles cut for f/5.6 would be no baffles at all. Set it to 5.6 to see how
+// much the corners lose wide open.
+FSTOP = 8; // [5.6, 8, 11, 16, 22]
+
+screw_resolution = $preview ? 0.6 : 0.25;
+ex = EXPLODED ? 55 : 0;
+lid_lift = EXPLODED ? lid_explode_z() : 0;
+
+// -----------------------------------------------------------------------------
+// tags — every part in this body is dxp_*
+// -----------------------------------------------------------------------------
+function dxp_tag(name) = str("dxp_", name);
+function w_arm_part() =
+    PART == "arm_r_w" || PART == "arm_t_w"
+    || PART == "arm_r_fw" || PART == "arm_t_fw"
+    || PART == "arm_r_hw" || PART == "arm_t_hw";
+function arm_extra() = (nw_stem() || w_arm_part()) ? W_ARM_EXTRA : 0;
+function dxp_arm_tag(mark) =
+    str("dxp_arm_", mark == "T" ? "t" : "r",
+        printed_f() ? "f" : "",
+        arm_extra() > 0 ? "w" : "");
+
+function focus_cookie() =
+    PART == "arm_r_focus" || PART == "arm_t_focus"
+    || PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll";
+function focus_roll_part() =
+    PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll";
+// Image roll, same sign as the stitch report. R is flopped before the
+// fit, so its bayonet turns the other way and the two halves add.
+function mount_roll(mark) =
+    !focus_roll_part() ? 0
+    : mark == "T" ? FOCUS_ROLL / 2
+    : -FOCUS_ROLL / 2;
+function mount_clock(mark) =
+    (mark == "T" ? 0 : -90) + F_MOUNT_CLOCK + mount_roll(mark);
+function printed_f() =
+    (ARM_MOUNT == 1) || PART == "arm_r_f" || PART == "arm_t_f"
+    || PART == "arm_r_focus" || PART == "arm_t_focus"
+    || PART == "arm_r_focus_roll" || PART == "arm_t_focus_roll"
+    || PART == "arm_r_fw" || PART == "arm_t_fw"
+    || PART == "arm_r_wl" || PART == "arm_t_wl";
+function heli_cam() =
+    ARM_MOUNT == 2 || PART == "arm_r_h" || PART == "arm_t_h"
+    || PART == "arm_r_hw" || PART == "arm_t_hw"
+    || PART == "fmount_h_r" || PART == "fmount_h_t";
+// Infinity register in the arm's own frame (cookie back at z = 0). Same
+// station as the fixed arms. T is shorter by the glass path.
+function cam_heli_register_z(mark) =
+    patch_t() + mount_standoff() + arm_extra() + CAM_RECESS
+    - (mark == "T" ? bs_t_comp() : 0);
+// Shoulder the male bottoms on. The mesh register is F_FMOUNT_STACK
+// further out.
+function cam_heli_face_z() = patch_t() + cam_face_cap();
+// Floor of the recess. The bought male bottoms here.
+function cam_heli_seat_z() = cam_heli_face_z() - CAM_HELI_RECESS;
+// Front face of the helicoid, collapsed. The printed mount's shoulder
+// lands on it. T's mount is shorter; the helicoid itself is the same.
+function cam_heli_front_z() = cam_heli_body_z() + cam_heli_proud();
+// Body's rear face, floated off the seat by the lip under the male's tip.
+function cam_heli_body_z() = cam_heli_seat_z() + CAM_HELI_FLOAT;
+function cam_heli_lip_z() = cam_heli_body_z() - CAM_HELI_MALE;
+function cam_heli_shoulder(mark) =
+    cam_heli_register_z(mark) - F_FMOUNT_STACK - cam_heli_front_z();
+// Best focus the fixed W arms found: T by the glass path (arm_t_fw), R by
+// r_focus_pull() (arm_r_focus, plate centred).
+function cam_heli_focus_z(mark) =
+    cam_heli_register_z(mark) - (mark == "T" ? 0 : r_focus_pull());
+// Register on the metal F ring, helicoid collapsed.
+function cam_heli_ring_z() = cam_heli_front_z() + CAM_F_RING;
+// Extension that brings that body to focus. It only extends.
+function cam_heli_dial(mark) = cam_heli_focus_z(mark) - cam_heli_ring_z();
+// Fixed printed-F register for the W on the lens helicoid, arm frame.
+function wl_register_z(mark) =
+    cam_heli_ring_z() + W_INF_BODY_T
+    - cam_heli_proud() - W_LENS_HELI_BODY - W_LENS_INF_MARGIN
+    + (mark == "T" ? 0 : W_WL_PRINTED_R - W_WL_PRINTED_T
+                         + W_LENS_FOCUS_R - W_LENS_FOCUS_T);
+function wl_tube_len(mark) = wl_register_z(mark) - patch_t() - F_FMOUNT_STACK;
+function m65_el_stem() =
+    STEM == 3 || PART == "stem_m65";
+function inf_stem() =
+    STEM == 1 || PART == "stem_el180_inf";
+function nw_stem() =
+    STEM == 2 || PART == "stem_nw180";
+function show_isco() = PART == "isco" || PART == "isco_cut";
+function mount_stack() = printed_f() ? F_FMOUNT_STACK : F_REV_STACK;
+// Narrowest thing in the light path at the flange. The metal reverse ring
+// keeps the real 44 mm F throat; the printed bayonet lip is F_STL_THROAT.
+function mouth_clear() = printed_f() ? F_STL_THROAT : F_THROAT;
+// Widest aperture that puts the whole frame, corners included, through that
+// mouth. need_bore() falls as you stop down, so bisect for where it crosses.
+// It does not fall to zero: at f/inf the field term alone remains, so a mouth
+// narrower than that never passes the corners. The old 38 mm scan was one.
+function bore_floor() = need_bore(1e6, FLANGE_F);
+function mouth_ever_clean() = mouth_clear() > bore_floor();
+function _mouth_fstop(lo, hi, i) =
+    i <= 0 ? hi
+    : let (m = (lo + hi) / 2)
+        need_bore(m, FLANGE_F) > mouth_clear()
+            ? _mouth_fstop(m, hi, i - 1)
+            : _mouth_fstop(lo, m, i - 1);
+function mouth_fstop() = _mouth_fstop(1, 64, 40);
+
+// Arm tube past the cookie. Both mouths put their F register at the same
+// station, so the printed F (a 3 mm stack) needs a longer tube than the
+// reverse ring (8 mm). CAM_RECESS moves the whole arm in; it does not
+// shorten the tube, because the tube is the M52 thread.
+function reflect_tube_len()  =
+    ARM_TUBE + arm_extra() + F_REV_STACK - mount_stack();
+// The transmit leg crosses 1 mm of glass at 45°, which pushes its focus
+// back by bs_t_comp(). Shorten the tube by the same amount.
+function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
+// Printed F at the EL-Nikkor flange. T is the glass path; R is shorter
+// by the plate's circle of least confusion so the two focus together.
+function reflect_focus_tube_len() =
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull();
+function transmit_focus_tube_len() =
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp();
+function patch_t()           = PORT_PATCH_T;
+
+module mm_split() {
+    if (SHELL == "inner")
+        intersection() { children(0); children(1); }
+    else if (SHELL == "outer")
+        difference() { children(0); children(1); }
+    else if (SHELL != "wear")
+        children(0);
+}
+
+// -----------------------------------------------------------------------------
+// port frame — cookie drops into a blind rebate, held by four countersunk M3s
+// -----------------------------------------------------------------------------
+module round_rect(w, h, r) {
+    offset(r)
+        offset(-r)
+            square([w, h], center = true);
+}
+
+// Skin is the 4 mm shell. Camera cookies are faced out to it. The infinity
+// cookie's rim is too; the lens sits in a step down to the 158.5 seat.
+function skin_z() = patch_t();
+function cam_face_cap() = skin_z() - patch_t() + CAM_RECESS;
+function chassis_shell_t() = skin_z();
+function chassis_out()     = BOX_XY + 2 * chassis_shell_t();
+// The chamber is only as tall as the plate; the skirt under it is what puts
+// the optical axis where the cameras have to stand.
+function chassis_out_z()   = BOX_Z + chassis_plinth();
+
+// Cookie outline: a rectangle on camera-up, centred on the bore rather than
+// on the face, sized by port_patch_u() and port_patch_v() off the features it
+// actually has to carry.
+// Square, and wide enough that the infinity step has a land outside the Ø76.
+function stem_plate_w() =
+    max(port_patch_u(), port_patch_v(""), EL180_LENS_OD + 4);
+
+module port_plate_2d(mark = "", grow = 0) {
+    ax = cam_axis(mark);
+    w = mark == "" ? stem_plate_w() : port_patch_u();
+    h = mark == "" ? stem_plate_w() : port_patch_v(mark);
+    translate([ax.x, ax.y])
+        rotate([0, 0, port_up_az(mark)])
+            round_rect(w + 2 * grow, h + 2 * grow,
+                       max(0.4, PORT_PLATE_R + grow));
+}
+
+// A cookie is a panel of the body, so it stops where the body's skin does.
+// Past the flat part of a face the chassis curves away under it, and without
+// this the plate carries straight on into the air over the corner. Clipping
+// to the same profile the chassis is extruded from contours the outer face
+// down onto it; the bed face is untouched, which is what the part is printed
+// on. PORT_BOSS_R is chosen so the whole of this lands inside PORT_EDGE_CHAM.
+module port_chassis_clip(mark = "") {
+    u   = port_up(mark);
+    out = chassis_out();
+    // Camera-up is vertical on every face, so the chassis's rounding — which
+    // is all in plan — is always across the plate, never along it.
+    // The clip ends on the skin for a part that sits on the box face. Camera
+    // cookies are placed CAM_RECESS inboard, and the face cap has to reach
+    // back out to the skin from that frame — without the lift the cap is
+    // trimmed off and the plate sits in the rebate.
+    rot = abs(u.x) > 0.5 ? [0, 90, 0] : [-90, 0, 0];
+    lift = mark == "" ? 0 : cam_face_cap();
+    translate([0, 0, -BOX_XY / 2 + lift])
+        rotate(rot)
+            linear_extrude(height = 4 * out, center = true)
+                round_rect(out, out, PORT_BOSS_R);
+}
+
+// Chamfered on the outer face only. The stem prints this face up, so the
+// chamfer only narrows the last layers and the bed face stays the full plate.
+module port_flange(mark = "") {
+    c = min(PORT_EDGE_CHAM, patch_t() - 1.5);
+    difference() {
+        intersection() {
+            hull() {
+                linear_extrude(patch_t() - c)
+                    port_plate_2d(mark, 0);
+                linear_extrude(patch_t())
+                    port_plate_2d(mark, -c);
+            }
+            port_chassis_clip(mark);
+        }
+        // Same slope the chassis rebate keeps, so the plate clears the cap.
+        port_top_seal(mark, patch_t());
+    }
+}
+
+// Camera cookie. Straight through, same outline on both faces, so the edge
+// is a vertical wall and sits flat on the bed. Following the chassis corner
+// back through the thickness left a slope there, and that slope is a ledge
+// once the flange is the bed face.
+module cam_cookie(mark) {
+    // Straight wall, but the shifted edge runs past the chassis corner and
+    // sits proud of it. Clip that edge to the skin; the other three stay.
+    // The world-up edge is cut back to the rebate slope.
+    difference() {
+        intersection() {
+            linear_extrude(patch_t() + cam_face_cap())
+                port_plate_2d(mark);
+            port_chassis_clip(mark);
+        }
+        port_top_seal(mark, patch_t() + cam_face_cap());
+    }
+}
+
+// Camera-up chord at the F mouth so the pentaprism nose clears the OD. It
+// rakes back to the full OD at the cookie's outer face and stops dead there:
+// below that line the cookie IS the outside of the body. The taper used to be
+// specified as a length from the mouth, TUBE_FLASH_L = 11 mm, which on an
+// 8 mm tube ran straight past the cookie face and bit a 16 mm notch out of
+// the plate — the L.
+TUBE_FLASH_KEEP = 27.0;
+
+module tube_flash_waste(mark, out_len) {
+    n  = port_up(mark);
+    ax = cam_axis(mark);
+    z_face = patch_t() + (mark == "" ? 0 : cam_face_cap());
+    z1 = z_face + out_len;
+    w  = 80;
+    if (mark == "R" || mark == "T")
+        hull() {
+            translate([ax.x + n.x * (TUBE_FLASH_KEEP + w / 2),
+                       ax.y + n.y * (TUBE_FLASH_KEEP + w / 2), z1 + 8])
+                cube([w, w, 16], center = true);
+            translate([ax.x + n.x * (TUBE_OD / 2 + w / 2),
+                       ax.y + n.y * (TUBE_OD / 2 + w / 2),
+                       z_face + 0.5])
+                cube([w, w, 1], center = true);
+        }
+}
+
+// Four M3s, two each side of the bore, tracking cam_axis, so the cookie can
+// be screwed down after it has dropped into its rebate.
+module port_clamp_screws(mark = "") {
+    for (up = [-1, 1], side = [-1, 1]) {
+        p = clamp_xy(mark, side, up);
+        translate([p.x, p.y, 0])
+            children();
+    }
+}
+
+// Flat-head M3, flush with the cookie face. Cut in the cookie, not the box.
+module port_csk_cut() {
+    translate([0, 0, -1])
+        cylinder(h = patch_t() + 2, d = PORT_SCREW_D);
+    translate([0, 0, patch_t() - PORT_CSK_H])
+        cylinder(h = PORT_CSK_H, d1 = PORT_SCREW_D, d2 = PORT_CSK_D);
+    translate([0, 0, patch_t() - 0.01])
+        cylinder(h = 0.8, d = PORT_CSK_D);
+}
+
+// Tapped into the chamber wall behind the cookie, nut trapped on the inside.
+module port_clamp_anchor_cut() {
+    translate([0, 0, -WALL - 0.2])
+        cylinder(h = WALL + 0.6, d = PORT_SCREW_D);
+    translate([0, 0, -WALL - 0.05])
+        hex_nut_cut();
+}
+
+// Cookie pocket. Closed on all four sides — this is the lid overhang.
+//
+// The pocket used to sweep open toward the lid, because a cookie used to slide
+// in behind a retaining wall. That wall is gone, the plate's outer face is the
+// outside of the body, and it goes in from outside; but the channel stayed,
+// running the full 4.35 mm deep straight out through the top of the chassis.
+// So the chassis's top rim was cut away over 90 of its 100 mm on both camera
+// faces and the lid sat over the hole, proud of nothing, on two sides.
+//
+// Closing it also captures the cookie on four sides instead of three. The
+// ceiling is a 4.35 mm ledge off the wall behind it, tied at both ends and
+// facing into a pocket a plate then fills — droop there costs nothing.
+// World +Z in this face's plane. The pocket ceiling is that edge, and it
+// is the one the slicer leaves open: a 4 mm ledge with nothing under it.
+function face_up_local(mark) =
+    mark == "R" ? [-1, 0] :
+    mark == "T" ? [0, -1] : [0, 1];
+
+// How far `dir` reaches on the cookie outline, corner radius ignored.
+function port_support(mark, dir) =
+    let (u = port_up(mark),
+         v = [-u.y, u.x],
+         hu = (mark == "" ? stem_plate_w() : port_patch_u()) / 2,
+         hv = (mark == "" ? stem_plate_w() : port_patch_v(mark)) / 2,
+         ax = cam_axis(mark))
+        ax.x * dir.x + ax.y * dir.y
+        + hu * abs(u.x * dir.x + u.y * dir.y)
+        + hv * abs(v.x * dir.x + v.y * dir.y);
+
+// 45° along the world-up edge. Inner layers stay full depth; the outer
+// skin closes on the slope, so the rim is not a line in free air.
+// 1.2 mm stays clear of the countersinks, which sit ~2 mm in from the edge.
+PORT_TOP_SEAL = 1.2;
+
+module port_top_seal(mark, depth) {
+    fu = face_up_local(mark);
+    edge = port_support(mark, fu);
+    ang = atan2(fu.y, fu.x);
+    seal = PORT_TOP_SEAL;
+    rotate([0, 0, ang])
+        translate([0, -120, 0])
+            rotate([90, 0, 0])
+                linear_extrude(240)
+                    polygon([
+                        [edge - seal, depth + 0.3],
+                        [edge + 0.8, depth + 0.3],
+                        [edge + 0.8, depth - seal],
+                        [edge, depth - seal],
+                        [edge - seal, depth]
+                    ]);
+}
+
+module port_slide_slot(mark = "", extra = 0) {
+    d = patch_t() + 0.35 + extra;
+    // Outer end of the rebate. extra shifts the whole pocket inward.
+    z_out = d - 0.2 - extra;
+    // extra deepens the floor. The mouth stays at the skin.
+    difference() {
+        translate([0, 0, d / 2 - 0.2 - extra])
+            linear_extrude(d, center = true)
+                port_plate_2d(mark, PORT_SLOT_CLEAR / 2);
+        port_top_seal(mark, z_out);
+    }
+}
+
+// 3 mm ring into the chassis top shelf. It used to be notched out over each
+// port face to let a cookie slide past; nothing passes here now.
+module lid_align_lip() {
+    s = BOX_XY;
+    difference() {
+        cube([s - WALL - 2 * LID_GAP,
+              s - WALL - 2 * LID_GAP,
+              LID_LIP], center = true);
+        cube([s - 2 * WALL - 0.6,
+              s - 2 * WALL - 0.6,
+              LID_LIP + 0.4], center = true);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// port placement
+// -----------------------------------------------------------------------------
+module at_stem_face() {
+    translate([0, -BOX_XY / 2, 0])
+        rotate([90, 0, 0])
+            children();
+}
+module at_reflect_face() {
+    translate([BOX_XY / 2, 0, 0])
+        rotate([0, 90, 0])
+            children();
+}
+module at_transmit_face() {
+    translate([0, BOX_XY / 2, 0])
+        rotate([-90, 0, 0])
+            children();
+}
+module at_stem()     { at_stem_face()     children(); }
+module at_reflect()  { at_reflect_face()  children(); }
+module at_transmit() { at_transmit_face() children(); }
+
+module at_each_bore() {
+    at_stem_face() children();
+    at_reflect_face()
+        translate([cam_axis("R").x, cam_axis("R").y, 0])
+            children();
+    at_transmit_face()
+        translate([cam_axis("T").x, cam_axis("T").y, 0])
+            children();
+}
+
+// -----------------------------------------------------------------------------
+// chassis
+// -----------------------------------------------------------------------------
+module box_bore() {
+    s = BOX_XY;
+    h = BOX_Z;
+
+    translate([0, 0, WALL / 2])
+        cube([s - 2 * WALL, s - 2 * WALL, h - WALL], center = true);
+
+    translate([0, 0, h / 2 - WALL / 2])
+        cube([s - 2 * WALL, s - 2 * WALL, WALL + 0.2], center = true);
+
+    translate([0, 0, h / 2 - LID_LIP / 2])
+        cube([s - WALL, s - WALL, LID_LIP + 0.1], center = true);
+
+    translate([0, 0, -h / 2 - chassis_plinth() - 0.05]) {
+        cylinder(h = tripod_hole_h() + 0.1, d = TRIPOD_INSERT_D);
+        cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
+    }
+
+    // Optical hole. The helicoid's M42 male (42 mm) passes this; the
+    // cookie covers it. Fixed-arm tubes are smaller and still land.
+    at_reflect_face()
+        translate([cam_axis("R").x, cam_axis("R").y, -WALL / 2])
+            cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
+    at_transmit_face()
+        translate([cam_axis("T").x, cam_axis("T").y, -WALL / 2])
+            cylinder(h = WALL + 2, d = TUBE_ID + 1, center = true);
+    // Big enough for the helicoid nut. The infinity stem stops at this
+    // hole; only the lens barrel passes into the chamber.
+    at_stem_face()
+        translate([0, 0, -WALL / 2])
+            cylinder(h = WALL + 2, d = HELI_NUT_OD + 0.8, center = true);
+
+    floor_hex_cut();
+}
+
+// The plinth under the chamber is a solid slab. A thin lip stays at the
+// walls. The only wide solid patch is under the floor stamp.
+FLOOR_HEX_SKIN = 2.0;
+FLOOR_HEX_RIM  = 1.2;
+FLOOR_HEX_FLAT = 8.0;    // hole, flat to flat
+FLOOR_HEX_WALL = 1.0;    // web between flats
+// box_floor_stamp sits on the −X side of the chamber floor, text along Y.
+// Just the ink: "dxp_chassis" plus the export timestamp.
+FLOOR_LABEL_X = 3.2;
+FLOOR_LABEL_Y = 26;
+
+module floor_hex_cut() {
+    z0 = -BOX_Z / 2 - chassis_plinth() + FLOOR_HEX_SKIN;
+    z1 = -BOX_Z / 2 + WALL + 0.4;
+    span = BOX_XY - 2 * WALL - 2 * FLOOR_HEX_RIM;
+    // Flat-top hexes. Neighbours sit FLAT+WALL apart, measured across the flats.
+    s = FLOOR_HEX_FLAT + FLOOR_HEX_WALL;
+    x_pitch = s * sqrt(3);
+    hole = 2 * FLOOR_HEX_FLAT / sqrt(3);
+    n = ceil(span / s) + 2;
+    hx = hole / 2;
+    hy = FLOOR_HEX_FLAT / 2;
+    lim = span / 2;
+    // Cells the insert reaches keep a solid floor tall enough for it,
+    // with TRIPOD_KEEP of plastic between the hole and the hex.
+    z_fill = -BOX_Z / 2 - chassis_plinth() + tripod_hole_h() + TRIPOD_KEEP;
+    for (j = [-n : n], i = [-n : n]) {
+        x = i * x_pitch + (abs(j) % 2) * x_pitch / 2;
+        y = j * s / 2;
+        label_x = -(BOX_XY / 2 - WALL - 4.2);
+        on_label = abs(x - label_x) < FLOOR_LABEL_X + hx
+                && abs(y) < FLOOR_LABEL_Y + hy;
+        if (abs(x) + hx <= lim && abs(y) + hy <= lim && !on_label) {
+            za = norm([x, y]) < TRIPOD_INSERT_D / 2 + hx ? z_fill : z0;
+            translate([x, y, za - 0.2])
+                cylinder(h = z1 - za + 0.6, d = hole, $fn = 6);
+        }
+    }
+}
+
+// Tray stop on the −X side, the wall the logo window removed. The other
+// three walls already stop the tray. The window opens down into the
+// plinth, so the stop rises from the window sill, solid all the way down,
+// and its face stands where the wall's would.
+TRAY_STOP_H = 6;   // over the chamber floor
+TRAY_STOP_T = 3;
+module floor_tray_lip() {
+    z0 = logo_cookie_z0() - 0.2;
+    z1 = -BOX_Z / 2 + WALL + TRAY_STOP_H;
+    tray_x = -(BOX_XY - 2 * WALL - 0.8) / 2;
+    x1 = tray_x - 0.35;
+    span = BOX_XY - 2 * WALL - 1;
+    translate([x1 - TRAY_STOP_T, -span / 2, z0])
+        cube([TRAY_STOP_T, span, z1 - z0]);
+}
+
+// [x, y, azimuth of the slot from the nut to its mouth, slot length].
+// The +Y pair open into the chamber; the -Y pair into the stem rebate.
+function lid_nut_r() = PORT_NUT_AF / cos(30) / 2;
+function lid_nut_slot() = LID_SCREW_A - (BOX_XY / 2 - WALL) + lid_nut_r() + 0.3;
+function lid_front_slot() =
+    LID_FRONT_X - (stem_plate_w() + PORT_SLOT_CLEAR) / 2 + lid_nut_r() + 0.3;
+function lid_screws() = [
+    [ LID_SCREW_A,  LID_SCREW_B,  180, lid_nut_slot()],
+    [-LID_SCREW_B,  LID_SCREW_A,  270, lid_nut_slot()],
+    [ LID_FRONT_X, -LID_FRONT_Y,  180, lid_front_slot()],
+    [-LID_FRONT_X, -LID_FRONT_Y,    0, lid_front_slot()]
+];
+
+// M3 hex fed sideways, flats on the slot walls so it cannot turn. Its far
+// end is the screw axis; the tray wall or the stem cookie closes the mouth.
+// Roof stays solid so the lid screw can clamp.
+module lid_body_fastener_cuts() {
+    nut_z = BOX_Z / 2 - LID_NUT_DROP;
+    for (p = lid_screws()) {
+        translate([p[0], p[1], nut_z - 4])
+            cylinder(h = BOX_Z / 2 - nut_z + 5, d = PORT_SCREW_D);
+        translate([p[0], p[1], nut_z])
+            rotate([0, 0, p[2]])
+                hull()
+                    for (x = [0, p[3]])
+                        translate([x, 0, 0])
+                            cylinder(h = PORT_NUT_T + 0.25, r = lid_nut_r(),
+                                     $fn = 6, center = true);
+    }
+}
+
+module hex_nut_cut() {
+    cylinder(h = PORT_NUT_T + 0.2, d = PORT_NUT_AF / cos(30), $fn = 6);
+}
+
+module port_letter_2d(kind) {
+    module stamp(letter) {
+        translate([-4.6, 0])
+            polygon([[0, 2.6], [-1.7, -1.4], [1.7, -1.4]]);
+        translate([3.2, 0])
+            text(letter, size = 5.2, font = "Liberation Sans:style=Bold",
+                 halign = "center", valign = "center");
+        translate([3.2, -5.6])
+            text("FXP", size = 3.0, font = "Liberation Sans:style=Bold",
+                 halign = "center", valign = "center");
+    }
+    if (kind == "R")
+        rotate(90)  stamp("R");
+    else
+        rotate(180) stamp("T");
+}
+
+// Part tag, along the plate edge opposite the lid. That is the one edge with
+// nothing on it: the tube fills the middle out to TUBE_OD/2, the clamp screws
+// sit on the two edges across camera-up, flange_marks owns camera-up itself,
+// and the lock lugs come down either side of this edge without reaching it.
+module dxp_port_stamp(name, mark = "") {
+    e = port_patch_u() / 2 - PORT_EDGE_CHAM - 2.8;
+    a = port_up_az(mark) + 180;
+    ax = cam_axis(mark);
+    translate([ax.x + e * cos(a), ax.y + e * sin(a), patch_t() - STAMP_DEPTH])
+        rotate([0, 0, a + 90])
+            linear_extrude(STAMP_DEPTH + 0.15)
+                part_stamp_2d(name, 3.4);
+}
+
+module flange_marks(kind) {
+    t = 0.8;
+    ax = cam_axis(kind);
+    u  = port_up(kind);
+    translate([ax.x + u.x * port_clamp_r(),
+               ax.y + u.y * port_clamp_r(),
+               patch_t() - t])
+        linear_extrude(t + 0.15)
+            port_letter_2d(kind);
+}
+
+module chassis_port_mark(kind) {
+    t = 0.8;
+    ax = cam_axis(kind);
+    u  = port_up(kind);
+    translate([ax.x + u.x * port_clamp_r(),
+               ax.y + u.y * port_clamp_r(), -t])
+        linear_extrude(t + 0.15)
+            port_letter_2d(kind);
+}
+
+module box_fastener_cuts() {
+    lid_body_fastener_cuts();
+    at_stem_face() {
+        port_slide_slot("", stem_drop());
+        port_clamp_screws("") port_clamp_anchor_cut();
+        translate([0, 0, patch_t() - stem_drop() - 0.3])
+            cylinder(h = stem_drop() + 1.3,
+                     d = M65_HELI_OD + M65_HELI_CLEAR, $fn = 160);
+    }
+    at_reflect_face() {
+        port_slide_slot("R", CAM_RECESS);
+        port_clamp_screws("R") port_clamp_anchor_cut();
+        chassis_port_mark("R");
+    }
+    at_transmit_face() {
+        port_slide_slot("T", CAM_RECESS);
+        port_clamp_screws("T") port_clamp_anchor_cut();
+        chassis_port_mark("T");
+    }
+}
+
+module box_lining_mask() {
+    s = BOX_XY;
+    h = BOX_Z;
+    L = INNER_LINING;
+    difference() {
+        translate([0, 0, (WALL - L) / 2])
+            cube([s - 2 * (WALL - L),
+                  s - 2 * (WALL - L),
+                  h - (WALL - L)], center = true);
+        translate([0, 0, WALL / 2])
+            cube([s - 2 * WALL, s - 2 * WALL, h - WALL + 0.4], center = true);
+    }
+    translate([0, 0, -h / 2 + WALL - FLOOR_SKIN - (L - FLOOR_SKIN) / 2])
+        cube([s - 2 * WALL + 2 * L,
+              s - 2 * WALL + 2 * L,
+              L - FLOOR_SKIN], center = true);
+    module bore_liner(d) {
+        translate([0, 0, -WALL / 2])
+            difference() {
+                cylinder(h = WALL + 0.4, d = d + 2 * L, center = true);
+                cylinder(h = WALL + 0.8, d = d, center = true);
+            }
+    }
+    at_reflect_face()
+        translate([cam_axis("R").x, cam_axis("R").y, 0])
+            bore_liner(TUBE_ID + 1);
+    at_transmit_face()
+        translate([cam_axis("T").x, cam_axis("T").y, 0])
+            bore_liner(TUBE_ID + 1);
+    at_stem_face()
+        bore_liner(HELI_NUT_OD + 0.8);
+}
+
+// -----------------------------------------------------------------------------
+// DXPAN wall badge — colour-separated STLs from logos/dxpan_gen.py (gold FX
+// + sweep, white PAN, red outline) then 65MP over the native stitch and
+// 130MP over the 2× anamorphic delivery. The mark is projected to 2D so the
+// existing offset / extrude plug fit still applies. Spec type is Futura,
+// which ships with macOS — re-exporting on Linux needs the same family.
+// layer: all | fx | word | outline | mp | rule | spec | ana_mp | ana_rule |
+//        ana | stripe.
+// -----------------------------------------------------------------------------
+// Native bounding box of logos/dxpan_outline_red.stl. Gold and PAN share
+// that origin, so one translate keeps the three layers registered.
+LOGO_ART_FILE = "../../logos";
+LOGO_ART_X0   = -1.200;
+LOGO_ART_Y0   = -3.963;
+LOGO_ART_W    = 143.367;
+LOGO_ART_H    = 74.771;
+
+// 7.60, not 9.05: the upper screws follow the badge, and the rebate
+// now stops 1 mm short of the arris so the slicer can cap it. The old
+// centre put the countersinks through that cap.
+function fx_word_y()      = 7.60;   // mark centre on the wall
+function logo_art_scale() = SPEC_W / LOGO_ART_W;
+function logo_art_h()     = LOGO_ART_H * logo_art_scale();
+function logo_art_bottom()= fx_word_y() - logo_art_h() / 2;
+function fx_mp_y()        = logo_art_bottom() - 3.8;
+function fx_rule_y()      = fx_mp_y() - 4.8;
+function fx_spec_y()      = fx_mp_y() - 9.2;
+function fx_ana_mp_y()    = fx_mp_y() - 19.1;
+function fx_ana_rule_y()  = fx_mp_y() - 23.9;
+function fx_ana_y()       = fx_mp_y() - 28.3;
+
+module dxpan_art_stl(name) {
+    translate([0, fx_word_y()])
+        scale(logo_art_scale())
+            translate([-LOGO_ART_X0 - LOGO_ART_W / 2,
+                       -LOGO_ART_Y0 - LOGO_ART_H / 2])
+                projection(cut = false)
+                    import(str(LOGO_ART_FILE, "/", name), convexity = 12);
+}
+
+module dxpan_badge() {
+    dxpan_art_stl("dxpan_fx_gold.stl");
+}
+
+module dxpan_pan() {
+    dxpan_art_stl("dxpan_pan_white.stl");
+}
+
+module dxpan_outline() {
+    dxpan_art_stl("dxpan_outline_red.stl");
+}
+
+// Spec lines share columns measured off the native string in Futura
+// Condensed Medium 5 / spacing 1.08, so the middot and the aspect sit
+// on the same x whether the label is NATIVE or ANA 2×. Advances are
+// baked (textmetrics is still experimental in the GUI).
+SPEC_SIZE   = 5.0;
+SPEC_SP     = 1.08;
+SPEC_W      = 71.9167;   // NATIVE  13248×4912  ·  2.71:1
+SPEC_X_LAB  = 16.1316;   // NATIVE
+SPEC_X_PIX  = 19.2371;   // NATIVE<two spaces>
+SPEC_X_DOT  = 51.9106;   // …4912<two spaces>, left of ·
+SPEC_X_AR   = 56.5687;   // …  ·<two spaces>
+
+module dxpan_spec_line(label, pix, ar) {
+    specf = "Futura:style=Condensed Medium";
+    x0 = -SPEC_W / 2;
+    translate([x0 + SPEC_X_LAB, 0])
+        text(label, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "right", valign = "center");
+    translate([x0 + SPEC_X_PIX, 0])
+        text(pix, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+    translate([x0 + SPEC_X_DOT, 0])
+        text("·", size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+    translate([x0 + SPEC_X_AR, 0])
+        text(ar, size = SPEC_SIZE, font = specf, spacing = SPEC_SP,
+             halign = "left", valign = "center");
+}
+
+module dxpan_mp_mark(s) {
+    text(s, size = 6.2, font = "Futura:style=Bold", spacing = 1.12,
+         halign = "center", valign = "center");
+}
+
+module dxpan_rule() {
+    square([SPEC_W, 0.45], center = true);
+}
+
+module dxpan_wall_2d(layer = "all") {
+    if (layer == "all" || layer == "fx")
+        dxpan_badge();
+    if (layer == "all" || layer == "word")
+        dxpan_pan();
+    if (layer == "all" || layer == "outline")
+        dxpan_outline();
+    if (layer == "all" || layer == "mp")
+        translate([0, fx_mp_y()])
+            dxpan_mp_mark("29MP");
+    if (layer == "all" || layer == "rule")
+        translate([0, fx_rule_y()])
+            dxpan_rule();
+    if (layer == "all" || layer == "spec")
+        translate([0, fx_spec_y()])
+            dxpan_spec_line("NATIVE", "8870×3264", "2.72:1");
+    if (layer == "all" || layer == "ana_mp")
+        translate([0, fx_ana_mp_y()])
+            dxpan_mp_mark("130MP");
+    if (layer == "all" || layer == "ana_rule")
+        translate([0, fx_ana_rule_y()])
+            dxpan_rule();
+    if (layer == "all" || layer == "ana")
+        translate([0, fx_ana_y()])
+            dxpan_spec_line("ANA 2×", "26496×4912", "5.42:1");
+}
+
+// grow  — swell the footprint and deepen the floor (plug interference)
+// proud — start this far outside the wall face
+// deep  — depth below the wall face, so the pocket keeps its own depth
+//         whatever the plugs do
+module dxpan_inlay(layer = "all", grow = 0, proud = 0.05,
+                   deep = MARK_DEPTH + 0.10) {
+    out = chassis_out();
+    translate([-out / 2 - proud, 0, 2])
+        rotate([90, 0, -90])
+            mirror([0, 0, 1])
+                linear_extrude(proud + deep + grow)
+                    offset(0.02 + grow)
+                        scale(LOGO_SCALE)
+                            dxpan_wall_2d(layer);
+}
+
+// Groove around the plinth, a few millimetres above the floor so the first
+// layers stay solid and the cookies (centred on the axis) never reach it.
+// proud is an outward offset — the ring has no single face-normal to
+// translate along the way the −X badge does.
+function stripe_z0() = -BOX_Z / 2 - chassis_plinth() + STRIPE_LIFT;
+
+module dxpan_stripe(grow = 0, proud = 0.05, deep = MARK_DEPTH + 0.10) {
+    out = chassis_out();
+    translate([0, 0, stripe_z0() - grow])
+        linear_extrude(STRIPE_H + 2 * grow)
+            difference() {
+                offset(0.02 + grow + proud)
+                    round_rect(out, out, PORT_BOSS_R);
+                offset(-(deep + grow))
+                    round_rect(out, out, PORT_BOSS_R);
+            }
+}
+
+module dxpan_colour(layer = "all", grow = 0, proud = 0.05,
+                    deep = MARK_DEPTH + 0.10) {
+    if (layer != "stripe")
+        dxpan_inlay(layer, grow, proud, deep);
+    if (layer == "all" || layer == "stripe")
+        dxpan_stripe(grow, proud, deep);
+}
+
+// Logo face (−X). The skin there is a cookie: same countersunk M3s and
+// trapped nuts as the port plates, so a logo change reprints this panel
+// and not the chassis. The red stripe stays on the chassis, below the
+// rebate. Art Y maps to world Z as art_y * LOGO_SCALE + 2.
+function logo_world_z(art_y) = 2 + art_y * LOGO_SCALE;
+function logo_cookie_z0() = stripe_z0() + STRIPE_H + 1.6;
+// The rebate used to run out through the top face. That rim is open air,
+// and the slicer will not put a skin on it. One millimetre of cap is five
+// layers at 0.2 mm, enough for a top shell. The cookie stops under it.
+LOGO_TOP_LIP = 1.0;
+function logo_cookie_z1() = BOX_Z / 2 - LOGO_TOP_LIP;
+LOGO_SCREW_Y = 33;
+// One pair beside 65MP, clear of that short word. The other pair sits in
+// the blank band above the badge: the spec line is full width, so a hole
+// above the chamber floor has to go through it.
+function logo_screw_z_hi() =
+    let (art_top = logo_world_z(fx_word_y() + logo_art_h() / 2),
+         r = PORT_CSK_D / 2)
+        art_top + r + 0.6;
+
+module at_logo_screws() {
+    for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())])
+        translate([0, s * LOGO_SCREW_Y, z])
+            children();
+}
+
+// Outer 4 mm of the −X skin, clipped to the chassis corner, between the
+// stripe and a lip under the lid.
+module logo_slab(z0, z1, deep = 0, grow = 0) {
+    out = chassis_out();
+    thick = patch_t() + deep + 0.4;
+    x0 = -out / 2 - 0.2;
+    intersection() {
+        translate([x0 + thick / 2, 0, (z0 + z1) / 2])
+            cube([thick, out + 40, max(0.4, z1 - z0)], center = true);
+        translate([0, 0, -BOX_Z / 2 - chassis_plinth() - 2])
+            linear_extrude(chassis_out_z() + 8)
+                if (grow > 0)
+                    offset(r = grow)
+                        round_rect(out, out, PORT_BOSS_R);
+                else
+                    round_rect(out, out, PORT_BOSS_R);
+    }
+}
+
+// 45° along the straight part of the bottom inner edge. The outer face
+// keeps the full outline. That face goes on the bed. z_shift lifts the
+// chassis copy so the two faces have a little clearance.
+function logo_chamfer_span() = chassis_out() + 24;
+// 45° through the whole plate. The cut starts outside the outer face and
+// runs past the inner face, so no vertical lip is left behind the angle.
+module logo_bed_chamfer(z_shift = 0) {
+    x0 = -chassis_out() / 2 - 0.6;
+    run = patch_t() + 1.6;
+    translate([x0, 0, logo_cookie_z0() + z_shift])
+        rotate([90, 0, 0])
+            linear_extrude(logo_chamfer_span(), center = true)
+                polygon([[0, -1], [run, -1], [run, run - 0.6], [0, -0.6]]);
+}
+
+// 45° under the 1 mm cap, outer face only. Printed floor-down the arris
+// steps out a layer at a time instead of a perimeter hung over the pocket.
+module logo_top_chamfer() {
+    x0 = -chassis_out() / 2 - 0.6;
+    translate([x0, 0, BOX_Z / 2])
+        rotate([90, 0, 0])
+            linear_extrude(logo_chamfer_span(), center = true)
+                polygon([[0.4, 0], [0.4, -LOGO_TOP_LIP], [0.4 + LOGO_TOP_LIP + 0.3, -LOGO_TOP_LIP]]);
+}
+
+module logo_csk() {
+    rotate([0, 90, 0]) {
+        translate([0, 0, -0.8])
+            cylinder(h = 0.7, d = PORT_CSK_D);
+        cylinder(h = PORT_CSK_H + 0.4, d1 = PORT_CSK_D, d2 = PORT_SCREW_D);
+        cylinder(h = patch_t() + 1.2, d = PORT_SCREW_D);
+    }
+}
+
+// Meat behind the cookie: the nut, plus the web the screw pulls against.
+// The rebate (logo_slab overshoot + LOGO_REBATE_DEEP) lands 0.75 mm
+// past the 4 mm skin. Measuring the old 1 mm web from the skin left
+// 0.3 mm, which the slicer drops. LOGO_NUT_WEB is from the rebate floor.
+LOGO_REBATE_DEEP = 0.35;
+function logo_rebate_x() =
+    -chassis_out() / 2 - 0.2 + patch_t() + LOGO_REBATE_DEEP + 0.4;
+LOGO_NUT_WEB = 2.0;
+function logo_nut_stop_x() = logo_rebate_x() + LOGO_NUT_WEB;
+function logo_frame_t() =
+    logo_nut_stop_x() + PORT_NUT_T + 0.15
+    - (-chassis_out() / 2 + patch_t());
+function logo_inner_x() = -chassis_out() / 2 + patch_t() + logo_frame_t();
+
+// Pare the logo wall back to that nut rail, outboard of the cartridge,
+// then open the middle so only the rail is left.
+module logo_frame_window() {
+    x_nut = logo_inner_x();
+    y_span = (BOX_XY - 2 * WALL) - 1;
+    z_floor = -BOX_Z / 2 + WALL;
+    // The opening runs to the side walls. Each nut is a pad tied to the
+    // nearest side edge and the nearer horizontal edge. The ties land
+    // at 45°, so the chassis prints floor-down with nothing in mid-air.
+    x0 = -chassis_out() / 2 + patch_t() - 0.3;
+    win_y = (BOX_XY - 2 * WALL) - 4;
+    win_z0 = logo_cookie_z0() + 3;
+    win_z1 = logo_cookie_z1() - 3;
+    nut_d = PORT_NUT_AF / cos(30);
+    module logo_nut_keepers() {
+        xa = x0 - 0.4;
+        // Stop on the chamber face. Past that, the pad caps the mouth
+        // and the nut cannot be put in from inside.
+        xb = x_nut;
+        half_y = win_y / 2;
+        pad_d = nut_d + 3.2;
+        module ax(y, z, d) {
+            translate([(xa + xb) / 2, y, z])
+                rotate([0, 90, 0])
+                    cylinder(h = xb - xa, d = d, center = true, $fn = 24);
+        }
+        // Upper nuts. A round pad here is a bar in the opening. The
+        // plastic is a wedge: 45° up from the side wall to the nut,
+        // so each layer sits on the one below.
+        module upper_web(s, sy, sz) {
+            ye = s * half_y;
+            // Past the hex, not through its middle. The old face sat on
+            // the nut centre and cut the hole in half.
+            y_far = sy - s * (nut_d / 2 + 1.0);
+            z_top = max(sz + nut_d / 2 + 1.0, logo_rail_z());
+            z_lo = sz - nut_d / 2 - 0.8;
+            z_foot = z_lo - abs(ye - y_far);
+            translate([xa, 0, 0])
+                rotate([0, 90, 0])
+                    linear_extrude(xb - xa)
+                        polygon([
+                            [-z_top, y_far],
+                            [-z_top, ye],
+                            [-z_foot, ye],
+                            [-z_lo, y_far]
+                        ]);
+        }
+        for (s = [-1, 1]) {
+            sy = s * LOGO_SCREW_Y;
+            sz_hi = logo_screw_z_hi();
+            sz_lo = logo_world_z(fx_mp_y());
+            ye = s * half_y;
+            upper_web(s, sy, sz_hi);
+            // Lower pair: the side wall is beside the pad, and the web
+            // down to the opening's lower edge is steeper than 45°.
+            gap = max(1.2, abs(ye - sy) - pad_d / 2);
+            hull() {
+                ax(sy, sz_lo, pad_d);
+                ax(ye, sz_lo - gap, 2.4);
+                ax(ye, sz_lo + gap, 2.4);
+            }
+            hull() {
+                ax(sy, sz_lo, pad_d);
+                ax(ye, win_z0, 2.4);
+            }
+        }
+    }
+    difference() {
+        union() {
+            // Thin the wall back to the nut rail, above the floor and in the plinth.
+            translate([(x_nut - 39.2) / 2, 0, (z_floor + BOX_Z / 2) / 2])
+                cube([-39.2 - x_nut, y_span, BOX_Z / 2 - z_floor + 0.4], center = true);
+            translate([(x_nut - 40.6) / 2, 0, (logo_cookie_z0() + z_floor) / 2])
+                cube([-40.6 - x_nut, y_span, z_floor - logo_cookie_z0()], center = true);
+            translate([(x0 + x_nut + 0.4) / 2, 0, (win_z0 + win_z1) / 2])
+                cube([x_nut + 0.4 - x0, win_y, win_z1 - win_z0], center = true);
+        }
+        logo_nut_keepers();
+        logo_lid_rim();
+    }
+}
+
+// Underside of the lid rail. It has to clear the logo-cookie nuts.
+function logo_rail_z() =
+    logo_screw_z_hi() + (PORT_NUT_AF / cos(30)) / 2 + 1.2;
+
+// The rail stays above the logo nuts; a post ties it down at each end.
+module logo_lid_rim() {
+    x0 = -chassis_out() / 2 + patch_t() + 0.2;
+    x1 = -(BOX_XY / 2 - WALL);
+    z_top = BOX_Z / 2 + 0.3;
+    nut_z = BOX_Z / 2 - LID_NUT_DROP;
+    z0 = logo_rail_z();
+    translate([(x0 + x1) / 2, 0, (z0 + z_top) / 2])
+        cube([x1 - x0, BOX_XY - 4, max(1.2, z_top - z0)], center = true);
+    for (sy = [-1, 1])
+        translate([(x0 + x1) / 2,
+                   sy * (BOX_XY / 2 - LID_SCREW + 1.4),
+                   (nut_z - 5 + z_top) / 2])
+            cube([x1 - x0, 8, z_top - (nut_z - 5)], center = true);
+}
+
+module logo_inner_nuts() {
+    nut_d = PORT_NUT_AF / cos(30);
+    // Screw comes through the cookie and pulls the nut that way.
+    // The hex opens into the chamber. LOGO_NUT_WEB on the cookie side
+    // stops the nut, and only the 3.2 mm screw hole goes through it.
+    for (s = [-1, 1], z = [logo_screw_z_hi(), logo_world_z(fx_mp_y())]) {
+        y = s * LOGO_SCREW_Y;
+        translate([logo_inner_x() + 1.2, y, z])
+            rotate([0, -90, 0])
+                cylinder(h = 1.2 + PORT_NUT_T + 0.15, d = nut_d, $fn = 6);
+        translate([logo_rebate_x() - 0.4, y, z])
+            rotate([0, 90, 0])
+                cylinder(h = LOGO_NUT_WEB + 1.0, d = PORT_SCREW_D);
+    }
+}
+
+module at_logo_face_cuts() {
+    m = PORT_SLOT_CLEAR / 2;
+    // Rebate, but leave the mating 45° at the bed and a capped rim on top.
+    difference() {
+        logo_slab(logo_cookie_z0() - m, logo_cookie_z1() + 0.25, LOGO_REBATE_DEEP, m);
+        logo_bed_chamfer(0.2);
+    }
+    logo_top_chamfer();
+    logo_frame_window();
+    logo_inner_nuts();
+}
+
+module part_logo_cookie() {
+    color("SlateGray")
+    difference() {
+        logo_slab(logo_cookie_z0(), logo_cookie_z1());
+        logo_bed_chamfer();
+        translate([-chassis_out() / 2, 0, 0])
+            at_logo_screws()
+                logo_csk();
+        // Full inlay. The old clip sat patch_t() (4 mm) above the arris
+        // and sheared the ANA line; the 45° only climbs MARK_DEPTH
+        // across the engraving, and logo_bed_chamfer() already takes
+        // the angle. That line clears it.
+        dxpan_inlay("all");
+        translate([-chassis_out() / 2 + patch_t(), 0, 0])
+            rotate([0, -90, 0])
+                part_stamp_cut(dxp_tag("logo"), size = 2.4);
+    }
+}
+
+// +X+Y bottom corner. Neither bore reaches it. Equal legs, so the flat
+// is 45° to the floor and to both walls: that face goes on the bed.
+BED_LEG = 12;
+module bed_corner_cut() {
+    o  = chassis_out() / 2;
+    z0 = -BOX_Z / 2;
+    hull() {
+        translate([o, o, z0 + BED_LEG])           cube(0.4, center = true);
+        translate([o - BED_LEG, o, z0])           cube(0.4, center = true);
+        translate([o, o - BED_LEG, z0])           cube(0.4, center = true);
+        translate([o + 6, o + 6, z0 - 6])         cube(0.4, center = true);
+    }
+}
+
+module chassis_blank() {
+    dz  = chassis_plinth();
+    h   = BOX_Z + dz;
+    out = chassis_out();
+    difference() {
+        translate([0, 0, -BOX_Z / 2 - dz])
+            linear_extrude(h)
+                round_rect(out, out, PORT_BOSS_R);
+        bed_corner_cut();
+    }
+}
+
+// One colour, clipped to the chassis so a glyph cannot cross a bore.
+// The proud lip is the part that stands off the wall face.
+module logo_plug(layer) {
+    union() {
+        intersection() {
+            difference() {
+                chassis_blank();
+                box_bore();
+                box_fastener_cuts();
+            }
+            dxpan_colour(layer, LOGO_FIT, 0);
+        }
+        dxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+    }
+}
+
+module logo_fills() {
+    // Same plugs the colour STLs export, drawn into the pockets. No second
+    // chassis boolean — the pocket cut already made the seat.
+    module one(layer, c) {
+        if (LOGO_LAYER == "all" || LOGO_LAYER == layer)
+            color(c) {
+                dxpan_colour(layer, LOGO_FIT, 0);
+                dxpan_colour(layer, LOGO_FIT, LOGO_PROUD, 0.4);
+            }
+    }
+    one("fx", "Gold");
+    one("word", "White");
+    one("outline", "Crimson");
+    one("mp", "White");
+    one("rule", "Crimson");
+    one("spec", "White");
+    one("ana_mp", "White");
+    one("ana_rule", "Crimson");
+    one("ana", "White");
+    one("stripe", "Crimson");
+}
+
+module chassis_body() {
+    color("SlateGray")
+    mm_split() {
+        union() {
+        difference() {
+            chassis_blank();
+            box_bore();
+            box_fastener_cuts();
+            // box_floor_stamp is written for a cube; feed it the XY size and
+            // drop it to the real floor, which is BOX_Z deep.
+            translate([0, 0, -(BOX_Z - BOX_XY) / 2])
+                box_floor_stamp(dxp_tag("chassis"), BOX_XY, WALL);
+            if (SHELL == "full" || SHELL == "logo")
+                dxpan_colour("stripe");
+            at_logo_face_cuts();
+        }
+        floor_tray_lip();
+        }
+        union() {
+            box_lining_mask();
+            if (SHELL == "outer")
+                dxpan_colour("stripe");
+        }
+    }
+}
+
+include <dx_body.scad>
+
+module part_chassis() {
+    part_dx_body();
+}
+
+// -----------------------------------------------------------------------------
+// tubes
+// -----------------------------------------------------------------------------
+module along_tube(rx = 0, ry = 0) {
+    translate([0, 0, patch_t()])
+        rotate([rx, ry, 0])
+            children();
+}
+
+module along_cam(rx = 0, ry = 0, mark = "") {
+    ax = cam_axis(mark);
+    translate([ax.x, ax.y, 0])
+        along_tube(rx, ry)
+            children();
+}
+
+// Ring baffle. ID follows need_bore() at this station so the tooth never
+// shadows the shifted bundle at FSTOP.
+function baffle_id(mark, out_len, z) =
+    let (b = d_plate_to_mount() - (out_len - z))
+        min(TUBE_ID - 1.0, max(F_BORE - 2, need_bore(FSTOP, b + FLANGE_F) + 1.0));
+
+module tube_baffle_tooth(id) {
+    rotate_extrude()
+        polygon([
+            [id / 2,           0],
+            [TUBE_ID / 2 - 0.02, 0],
+            [TUBE_ID / 2 - 0.02, BAFFLE_H],
+            [id / 2,           BAFFLE_H]
+        ]);
+}
+
+module tube_baffles(out_len, mark = "") {
+    z0 = 8;
+    z1 = out_len - (printed_f() ? F_PEG_H + MASK_T + 1.2 : F_REV_LEN + 1.2);
+    if (z1 > z0 + BAFFLE_H)
+        for (z = [z0 : BAFFLE_PITCH : z1 - BAFFLE_H])
+            translate([0, 0, z])
+                difference() {
+                    cylinder(h = BAFFLE_H, d = TUBE_ID - 0.02);
+                    translate([0, 0, -0.1])
+                        cylinder(h = BAFFLE_H + 0.2,
+                                 d1 = baffle_id(mark, out_len, z),
+                                 d2 = TUBE_ID - 0.02);
+                }
+}
+
+// Glare stop in the F throat. The window has to pass the whole shifted
+// bundle, so it is set from the sensor plus MASK_CLEAR, not from F_BORE.
+module f_glare_mask(out_len, mark) {
+    roll = mark == "T" ? 180 : 90;
+    z = printed_f() ? out_len - F_PEG_H - MASK_T : out_len - F_REV_LEN - MASK_T;
+    od = TUBE_ID + 0.6;
+    translate([0, 0, z])
+        difference() {
+            cylinder(h = MASK_T, d = od);
+            translate([0, 0, -0.2])
+                linear_extrude(MASK_T + 0.4)
+                    rotate([0, 0, roll])
+                        offset(r = 2)
+                            offset(delta = -2)
+                                square([SENSOR_W + 2 * MASK_CLEAR,
+                                        SENSOR_H + 2 * MASK_CLEAR],
+                                       center = true);
+        }
+}
+
+module tube_lining_mask(out_len, rx = 0, ry = 0, mark = "", m62 = 0) {
+    L = INNER_LINING;
+    ax = cam_axis(mark);
+    h = patch_t() + out_len + 0.2;
+    translate([ax.x, ax.y, -0.2])
+        rotate([rx, ry, 0])
+            difference() {
+                cylinder(h = h, d = TUBE_ID + 2 * L);
+                translate([0, 0, -0.4])
+                    cylinder(h = h + 0.8, d = TUBE_ID - 0.4);
+            }
+    // Inner PETG owns threaded zones; the PCTG outer is nut-seat meat only.
+    if (m62 > 0)
+        translate([ax.x, ax.y, patch_t() + out_len - 0.2])
+            cylinder(h = m62 + 0.4, d = EL180_M62_MAJOR + 2 * L);
+    if (!printed_f() && mark != "")
+        translate([ax.x, ax.y, patch_t() + out_len - F_REV_LEN - 0.2])
+            cylinder(h = F_REV_LEN + 0.6, d = F_REV_MAJOR + 2 * L + 0.4);
+    // No liner in the F throat: it is the tightest aperture in the body,
+    // 1.3 mm clear of the frame corners even at f/11, so anything in there
+    // would vignette outright. Flocking handles glare instead.
+    if (mark != "")
+        along_cam(rx, ry, mark) {
+            tube_baffles(out_len, mark);
+            f_glare_mask(out_len, mark);
+        }
+}
+
+module port_tube_solid(out_len, rx = 0, ry = 0, mark = "") {
+    ax = cam_axis(mark);
+    difference() {
+        union() {
+            if (mark != "")
+                cam_cookie(mark);
+            else
+                port_flange(mark);
+            if (out_len > 0.05)
+                along_cam(rx, ry, mark)
+                    cylinder(h = out_len, d = TUBE_OD);
+        }
+        along_cam(rx, ry, mark)
+            translate([0, 0, -patch_t() - 2])
+                cylinder(h = patch_t() + out_len + 4, d = TUBE_ID);
+        tube_flash_waste(mark, out_len);
+        // Printed-F cookies are cam_face_cap thicker, and the inner edge is
+        // a 45° face. The old cut started above the back and left a web.
+        if (printed_f())
+            port_clamp_screws(mark) cam_csk_cut();
+        else
+            translate([0, 0, mark == "" ? 0 : cam_face_cap()])
+                port_clamp_screws(mark) port_csk_cut();
+    }
+}
+
+// 45° face along the inner long edge, on the chassis side of the cookie.
+// The outer face keeps the full outline. Lay this face on the bed.
+module cookie_print_flat(mark) {
+    H = patch_t() + cam_face_cap();
+    ax = cam_axis(mark);
+    half_v = port_patch_v(mark) / 2;
+    span = port_patch_u() + 30;
+    if (mark == "R") {
+        translate([ax.x, ax.y + half_v, H])
+            rotate([45, 0, 0])
+                translate([-span / 2, -40, -40])
+                    cube([span, 40, 40]);
+    } else {
+        translate([ax.x - half_v, ax.y, H])
+            rotate([0, 45, 0])
+                translate([0, -span / 2, -40])
+                    cube([40, span, 40]);
+    }
+}
+
+module part_camera_tube(out_len, rx = 0, ry = 0, mark = "", tag = "") {
+    p = max(port_patch_u(), port_patch_v(mark)) + 2 * sensor_shift();
+    color("SlateGray")
+    mm_split() {
+    intersection() {
+    difference() {
+        union() {
+            port_tube_solid(out_len, rx, ry, mark);
+            along_cam(rx, ry, mark) {
+                tube_baffles(out_len, mark);
+                f_glare_mask(out_len, mark);
+                if (!printed_f() && rev_lock_ok(out_len))
+                    rev_lock_bosses(out_len, port_up_az(mark));
+            }
+        }
+        if (!printed_f())
+            along_cam(rx, ry, mark) {
+                translate([0, 0, max(out_len - F_REV_LEN, -patch_t())])
+                    f_rev_thread_cut();
+                // Lead-in, so the ring can find the first turn square.
+                translate([0, 0, out_len - F_REV_LEAD])
+                    cylinder(h = F_REV_LEAD + 0.1,
+                             d1 = f_rev_minor(),
+                             d2 = f_rev_minor() + 2 * F_REV_LEAD);
+                if (rev_lock_ok(out_len))
+                    rev_lock_cuts(out_len, port_up_az(mark));
+                f_pin_line_cut(out_len, port_up_az(mark));
+            }
+        translate([0, 0, cam_face_cap()]) {
+            flange_marks(mark);
+            dxp_port_stamp(tag == "" ? dxp_arm_tag(mark) : tag, mark);
+        }
+        tube_flash_waste(mark, out_len);
+        if (printed_f())
+            cookie_print_flat(mark);
+    }
+        translate([-p, -p, 0])
+            cube([p * 2, p * 2,
+                  patch_t() + out_len + (printed_f() ? 16 : 8)]);
+    }
+        tube_lining_mask(out_len, rx, ry, mark);
+    }
+    // Focused cookie, three materials. Inner is the light sleeve. Wear is
+    // the bayonet lug skins and the pin recess. Outer is everything else.
+    if (focus_cookie() && SHELL == "wear")
+        color("SteelBlue")
+            intersection() {
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        f_mount_on_tube(mount_clock(mark),
+                                        peg_face = 0,
+                                        back_extra = FX_FMOUNT_EXTRA);
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        rotate([0, 0, mount_clock(mark)])
+                            f_mount_wear();
+            }
+    else if (focus_cookie() && SHELL == "inner")
+        color("Black")
+            along_cam(rx, ry, mark)
+                translate([0, 0, out_len])
+                    f_mount_light_mask(FX_FMOUNT_EXTRA, -0.12);
+    else if (printed_f() && SHELL != "inner" && SHELL != "wear")
+        color("Goldenrod")
+            difference() {
+                along_cam(rx, ry, mark)
+                    translate([0, 0, out_len])
+                        f_mount_on_tube(mount_clock(mark),
+                                        peg_face = 0,
+                                        back_extra = FX_FMOUNT_EXTRA);
+                if (SHELL == "outer" && focus_cookie()) {
+                    along_cam(rx, ry, mark)
+                        translate([0, 0, out_len])
+                            f_mount_light_pocket();
+                    along_cam(rx, ry, mark)
+                        translate([0, 0, out_len])
+                            rotate([0, 0, mount_clock(mark)])
+                                f_mount_wear(0.12);
+                }
+                tube_flash_waste(mark, out_len);
+            }
+    else if ($preview && SHOW_BODIES == 0)
+        color("Goldenrod", 0.55)
+            along_cam(rx, ry, mark)
+                translate([0, 0, out_len])
+                    difference() {
+                        cylinder(h = F_REV_STACK, d = 62);
+                        translate([0, 0, -0.1])
+                            cylinder(h = F_REV_STACK + 0.2, d = F_BORE);
+                    }
+}
+
+// -----------------------------------------------------------------------------
+// helicoid camera arms. The cookie takes the M42 male of a bought
+// M52-female / M42-male 17–31 mm helicoid. The printed mount is an M52
+// male into that helicoid's front female.
+// Collapsed is infinity. Extending moves the camera out. The tripod screw
+// locks it; there is no set screw.
+// -----------------------------------------------------------------------------
+module cam_csk_cut() {
+    h = patch_t() + cam_face_cap();
+    translate([0, 0, -1])
+        cylinder(h = h + 2, d = PORT_SCREW_D);
+    translate([0, 0, h - PORT_CSK_H])
+        cylinder(h = PORT_CSK_H + 0.4, d1 = PORT_SCREW_D, d2 = PORT_CSK_D);
+}
+
+module part_cam_heli_arm(mark) {
+    ax = cam_axis(mark);
+    z_seat = cam_heli_seat_z();
+    assert(cam_heli_dial(mark) >= 0,
+           str("camera helicoid ", mark, " collapses ", -cam_heli_dial(mark),
+               " mm past focus on a ", CAM_F_RING, " mm F ring"));
+    color("SlateGray")
+    mm_split() {
+        union() {
+        ScrewHole(CAM_HELI_REAR, z_seat + 0.2,
+                  position = [ax.x, ax.y, 0],
+                  rotation = [0, 0, mark == "T" ? CAM_HELI_CLOCK_T : CAM_HELI_CLOCK_R],
+                  pitch = CAM_HELI_PITCH,
+                  tolerance = CAM_HELI_TOL,
+                  tooth_height = CAM_HELI_TOOTH)
+            difference() {
+                cam_cookie(mark);
+                // Pocket the helicoid body. The male bottoms on the floor.
+                // The thread itself is the bore; a clearance cylinder here
+                // would wipe it out.
+                if (CAM_HELI_RECESS > 0)
+                    translate([ax.x, ax.y, z_seat])
+                        cylinder(h = cam_heli_face_z() - z_seat + 0.02,
+                                 d = CAM_HELI_OD + 0.8);
+                port_clamp_screws(mark) cam_csk_cut();
+                translate([0, 0, cam_face_cap()]) {
+                    flange_marks(mark);
+                    dxp_port_stamp(str("dxp_arm_", mark == "T" ? "t" : "r", "h"),
+                                   mark);
+                }
+            }
+        // Stop for the male's tip. On the bed.
+        translate([ax.x, ax.y, 0])
+            difference() {
+                cylinder(h = cam_heli_lip_z(), d = CAM_HELI_REAR + 1);
+                translate([0, 0, -0.1])
+                    cylinder(h = cam_heli_lip_z() + 0.2, d = CAM_HELI_LIP_ID);
+            }
+        }
+        translate([ax.x, ax.y, -0.2])
+            cylinder(h = z_seat + 0.5,
+                     d = CAM_HELI_REAR + 2 * INNER_LINING + 1.2);
+    }
+}
+
+// Bought helicoid, collapsed plus `lift`. Sits on the recess floor.
+module cam_helicoid_body(lift = 0) {
+    h = cam_heli_proud() + lift;
+    color("Silver")
+        difference() {
+            union() {
+                translate([0, 0, -CAM_HELI_MALE])
+                    cylinder(h = CAM_HELI_MALE + 0.2, d = CAM_HELI_REAR - 1);
+                cylinder(h = h, d = CAM_HELI_OD);
+                translate([0, 0, h * 0.55])
+                    difference() {
+                        cylinder(h = 0.8, d = CAM_HELI_OD + 1.2);
+                        translate([0, 0, -0.1])
+                            cylinder(h = 1.0, d = CAM_HELI_OD - 3);
+                    }
+            }
+            translate([0, 0, -0.2])
+                cylinder(h = h + 0.4, d = CAM_HELI_ID);
+            translate([0, 0, -CAM_HELI_MALE - 0.2])
+                cylinder(h = CAM_HELI_MALE + 0.4, d = CAM_HELI_NECK);
+        }
+}
+
+// Printed male into the helicoid's front female, then the bayonet.
+// z = 0 at the thread tip. The shoulder flares out to the flange so the
+// 62 mm disk is not a shelf.
+module part_cam_heli_mount(mark) {
+    clock = mount_clock(mark);
+    shoulder = cam_heli_shoulder(mark);
+    z_mesh = CAM_HELI_FRONT + shoulder;
+    color("Goldenrod")
+        union() {
+            difference() {
+                union() {
+                    ScrewThread(CAM_HELI_NOSE, CAM_HELI_FRONT + 0.2,
+                                pitch = CAM_HELI_PITCH,
+                                tolerance = CAM_HELI_TOL,
+                                tooth_height = CAM_HELI_TOOTH,
+                                tip_height = 1.2);
+                    translate([0, 0, CAM_HELI_FRONT - 1.6])
+                        cylinder(h = shoulder + 1.8,
+                                 d1 = CAM_HELI_NOSE, d2 = F_STL_OD);
+                }
+                translate([0, 0, -1])
+                    cylinder(h = CAM_HELI_FRONT + 1.2, d = CAM_HELI_ID);
+                translate([0, 0, CAM_HELI_FRONT - 0.2])
+                    cylinder(h = shoulder + 0.5, d = TUBE_ID);
+            }
+            translate([0, 0, z_mesh])
+                rotate([0, 0, clock])
+                    f_mount_stl_raw();
+        }
+}
+
+// Printable stand-in for the bought unit, collapsed. Male tip at z = 0.
+// M42 male into the cookie, M52 female for fmount_h_*. Not the real part.
+module cam_helicoid_gauge() {
+    proud = cam_heli_proud();
+    male_h = CAM_HELI_MALE;
+    nose_h = CAM_HELI_FRONT + 0.2;
+    // Root of the M42 tooth. The bore stays 2 mm inside it so a 0.4 mm
+    // nozzle has a shank to print, not a bare coil.
+    male_root = CAM_HELI_REAR - CAM_HELI_TOOTH / tan(30);
+    color("Silver")
+        ScrewHole(CAM_HELI_NOSE, nose_h + 0.2,
+                  position = [0, 0, male_h + proud - nose_h],
+                  pitch = CAM_HELI_PITCH,
+                  tolerance = CAM_HELI_TOL,
+                  tooth_height = CAM_HELI_TOOTH)
+            difference() {
+                union() {
+                    translate([0, 0, male_h])
+                        rotate([180, 0, 0])
+                            ScrewThread(CAM_HELI_REAR, male_h,
+                                        pitch = CAM_HELI_PITCH,
+                                        tolerance = CAM_HELI_TOL,
+                                        tooth_height = CAM_HELI_TOOTH,
+                                        tip_height = 1.2);
+                    translate([0, 0, -0.1])
+                        cylinder(h = male_h + 0.3, d = male_root - 0.3);
+                    translate([0, 0, male_h - 1.8])
+                        cylinder(h = proud + 1.8, d = CAM_HELI_OD);
+                    translate([0, 0, male_h + proud * 0.55])
+                        difference() {
+                            cylinder(h = 0.8, d = CAM_HELI_OD + 1.2);
+                            translate([0, 0, -0.1])
+                                cylinder(h = 1.0, d = CAM_HELI_OD - 3);
+                        }
+                }
+                translate([0, 0, -0.2])
+                    cylinder(h = male_h + proud + 0.4, d = male_root - 4);
+            }
+}
+
+// lift > 0 is the helicoid extended, camera on the far side of infinity.
+module cam_heli_mount_at(mark, lift = 0) {
+    ax = cam_axis(mark);
+    translate([ax.x, ax.y, cam_heli_body_z()]) {
+        if ($preview) {
+            cam_helicoid_body(lift);
+            // Bought metal F ring.
+            color("DimGray")
+                translate([0, 0, cam_heli_proud() + lift])
+                    difference() {
+                        cylinder(h = CAM_F_RING, d = F_STL_OD);
+                        translate([0, 0, -0.1])
+                            cylinder(h = CAM_F_RING + 0.2, d = TUBE_ID);
+                    }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// stems — one cookie rebate. Helicoid nut is 9 mm deeper than the infinity
+// seat, because the collapsed helicoid stays in the path.
+// -----------------------------------------------------------------------------
+// Shared rebate floor. The helicoid cookie's face is the collapsed flange.
+// The infinity cookie's rim is the skin; its seat is HELI_SHORT above that
+// flange, down inside the step.
+// Cookie face is the skin. The M65 helicoid seats there; the 158.5 mm
+// flange is DX_HELI_BODY + DX_HELI_EXT further out, not a step in this plate.
+function stem_drop() = 0;
+
+module stem_cookie() {
+    translate([0, 0, -stem_drop()])
+        port_flange("");
+}
+
+module stem_cookie_cuts(tag) {
+    translate([0, 0, -stem_drop()]) {
+        port_clamp_screws("") port_csk_cut();
+        dxp_port_stamp(tag, "");
+    }
+}
+
+// 45° on the inner −Y edge. That face sits on the bed so the cookie
+// prints on-angle and the layers run through the plate.
+module stem_bed_chamfer() {
+    t = patch_t();
+    translate([0, -stem_plate_w() / 2, 0])
+        rotate([0, -90, 0])
+            linear_extrude(stem_plate_w() + 2, center = true)
+                polygon([[0, 0], [0, t], [t, 0]]);
+}
+
+// Chassis printed before b6e909c carry a lid nut in every corner, at
+// (±41, ±41) and LID_NUT_DROP under the rim. The two on the stem side
+// break into the top corners of the rebate and stand proud of the
+// cookie's seat. Notch the inner face out through both side edges there.
+STEM_LID_NUT_X0    = 33.5;  // old slot runs in to 37.5, hex reaches ~34.2
+STEM_LID_NUT_H     = 4.2;   // 2.85 mm slot plus air
+STEM_LID_NUT_DEPTH = 2.2;
+module stem_m65_lid_nut_notch() {
+    y = BOX_Z / 2 - LID_NUT_DROP;
+    edge = stem_plate_w() / 2 + 1;
+    for (side = [-1, 1])
+        translate([side * (STEM_LID_NUT_X0 + edge) / 2, y,
+                   STEM_LID_NUT_DEPTH / 2 - 0.2])
+            cube([edge - STEM_LID_NUT_X0, STEM_LID_NUT_H,
+                  STEM_LID_NUT_DEPTH + 0.4], center = true);
+}
+
+module stem_thread_liner(z0, major = EL180_M62_MAJOR) {
+    translate([0, 0, z0 - 0.2])
+        cylinder(h = EL180_M62_LEN + 0.4, d = major + 8);
+}
+
+// Bought M62 helicoid. The female stays in the wall and stops on the inner
+// face, so nothing printed crosses into the chamber and the tray can drop
+// in from the top. Screw the helicoid in after the tray is in.
+module part_stem(major = EL180_M62_MAJOR, tag = "stem", clock = 0) {
+    od = HELI_NUT_OD;
+    z_bot = -WALL;
+    z_top = -WALL + EL180_M62_LEN;
+    z_cookie = heli_flange_z(EL180_HELI_MIN) - patch_t();
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            ScrewHole(major, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_bot], rotation = [0, 0, clock])
+                union() {
+                    stem_cookie();
+                    translate([0, 0, z_bot])
+                        cylinder(h = z_top - z_bot, d = od, $fn = 128);
+                }
+            stem_cookie_cuts(dxp_tag(tag));
+            if (tag == "stem65")
+                translate([0, 0, -stem_drop()])
+                    stem_m65_lid_nut_notch();
+            translate([0, 0, -stem_drop()])
+                stem_bed_chamfer();
+            translate([0, 0, z_top - 0.05])
+                cylinder(h = heli_flange_z(EL180_HELI_MIN) - z_top + 4,
+                         d = heli_pass_d());
+            translate([0, 0, z_bot])
+                cylinder(h = 1.3, d = EL180_BARREL);
+        }
+        stem_thread_liner(z_bot, major);
+    }
+}
+
+// Nikkor-W cookie. Outer face is the chassis skin. The only cut in that
+// face is the clearance around the helicoid, from the end of the 8 mm
+// thread out through the skin. The thread stops on the inner face.
+module part_stem_w() {
+    od = HELI_NUT_OD;
+    z_bot = -WALL;
+    z_top = z_bot + EL180_M62_LEN;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_bot], rotation = [0, 0, STEM_W_CLOCK])
+                union() {
+                    port_flange("");
+                    translate([0, 0, z_bot])
+                        cylinder(h = patch_t() - z_bot, d = od, $fn = 128);
+                }
+            port_clamp_screws("") port_csk_cut();
+            dxp_port_stamp(dxp_tag("stem_w"), "");
+            stem_bed_chamfer();
+            translate([0, 0, z_top - 0.05])
+                cylinder(h = patch_t() - z_top + 2, d = heli_pass_d());
+            translate([0, 0, z_bot])
+                cylinder(h = 1.3, d = EL180_BARREL);
+        }
+        stem_thread_liner(z_bot);
+    }
+}
+
+// Lens screws into the cookie. The rim is the chassis skin. Inside the Ø76
+// the face steps down to the 158.5 seat. The M62 is the 8 mm under that
+// seat and it stops at the inner face of the wall — the Ø60 barrel goes
+// on through the chassis hole, so there is no printed tube in the chamber.
+module part_stem_el180_inf() {
+    od = el180_stem_od();
+    seat = inf_seat_z();
+    z_thread = seat - EL180_M62_LEN;
+    color("SlateGray")
+    mm_split() {
+        difference() {
+            ScrewHole(EL180_M62_MAJOR, EL180_M62_LEN,
+                      pitch = EL180_M62_PITCH, tolerance = EL180_M62_TOL,
+                      position = [0, 0, z_thread])
+                union() {
+                    port_flange("");
+                    translate([0, 0, -stem_drop()])
+                        linear_extrude(stem_drop())
+                            port_plate_2d("");
+                    translate([0, 0, z_thread])
+                        cylinder(h = seat + 0.2 - z_thread, d = od);
+                }
+            // Step down to the flange. The rim outside this stays at the skin.
+            translate([0, 0, seat])
+                cylinder(h = patch_t() - seat + 2, d = EL180_LENS_OD + 0.6);
+            port_clamp_screws("") {
+                port_csk_cut();
+                translate([0, 0, -stem_drop() - 0.2])
+                    cylinder(h = stem_drop() + 0.4, d = PORT_SCREW_D);
+            }
+            // The step eats the rim, so the tag sits on the seat.
+            translate([0, 0, seat - patch_t()])
+                dxp_port_stamp(dxp_tag("stem_inf"), "");
+        }
+        stem_thread_liner(z_thread);
+    }
+}
+
+// Nikkor-W nose. Screws into the same M62 helicoid as the EL-Nikkor.
+// z = 0 seats on the helicoid's front face. The Copal flange stops on the
+// far end, NW_FFD − EL_FFD ahead of that, so infinity is the helicoid's
+// infinity mark. The lens drops in from the front. Its own M39 ring comes
+// in through the bore from the rear.
+NW_BOARD = 3.0;
+// The ring clamps the thread, and that thread is what has to center the
+// lens. Measured across it: 38.5. The old 41.8 hole (a Copal 1 barrel)
+// left 1.6 mm of radial play. 39.2 is the slip fit — the hole prints
+// small, and it still has to start over the crests.
+NW_THREAD = 38.5;
+NW_HOLE   = 39.2;
+// A screw stands proud of the flange, 2–4 mm outside the thread, 1.05 tall.
+// Full circle, so the shutter can sit at any angle. Deep enough that the
+// screw does not hold the flange off the face.
+NW_PIN_H   = 1.4;
+NW_PIN_IN  = 1.6;
+NW_PIN_OUT = 5.0;
+NW_CLEAR = 56;      // Ø54 cell and the retaining ring
+NW_NOSE_OD = 72;
+function nw_flange_z() = flange_z(NW_FFD) - W_ARM_EXTRA;
+// Helicoid front when it is at the infinity mark, threaded into the wall.
+function nw_heli_z() = -WALL + heli_at_infinity();
+function nw_rise() = nw_flange_z() - nw_heli_z();
+
+module part_stem_nw180(major = EL180_M62_MAJOR, male = EL180_M62_LEN, tag = "nw180") {
+    rise = nw_rise();
+    echo(str(tag, "  rise ", rise, " mm from the helicoid face, male M",
+              major, " × ", male, " mm. Adds 0 mm."));
+    color("SteelBlue")
+    difference() {
+        union() {
+            translate([0, 0, -male])
+                ScrewThread(major, male, pitch = EL180_M62_PITCH,
+                            tolerance = EL180_M62_TOL);
+            cylinder(h = rise, d = NW_NOSE_OD, $fn = 128);
+        }
+        translate([0, 0, rise - NW_BOARD])
+            cylinder(h = NW_BOARD + 1, d = NW_HOLE, $fn = 96);
+        // Annulus in the flange face for the locating screw.
+        translate([0, 0, rise - NW_PIN_H])
+            difference() {
+                cylinder(h = NW_PIN_H + 0.02,
+                         d = NW_THREAD + 2 * NW_PIN_OUT, $fn = 96);
+                translate([0, 0, -0.02])
+                    cylinder(h = NW_PIN_H + 0.06,
+                             d = NW_THREAD + 2 * NW_PIN_IN, $fn = 96);
+            }
+        translate([0, 0, -male - 0.2])
+            cylinder(h = rise - NW_BOARD + male + 0.2,
+                     d = NW_CLEAR, $fn = 96);
+        translate([0, -NW_NOSE_OD / 2 - 0.02, rise / 2])
+            rotate([-90, 0, 0])
+                part_stamp_stack_cut(dxp_tag(tag), size = 2.0);
+    }
+}
+
+// Printed stand-in for the bought M62 helicoid: a fixed spacer whose length
+// is solved for infinity, so it has no travel at all. el180_spacer_add() is
+// derived from the chassis, so it tracks any change to BOX_XY or the plate.
+// Print a second at +0.5 mm if the first lands long; the shims only add.
+function el180_adapter_h() = EL180_HELI_MALE + el180_spacer_add();
+
+module part_el180_adapter(tone = "SlateGray") {
+    hm = EL180_HELI_MALE;               // male into the stem boss
+    hb = el180_spacer_add();            // what it adds past the boss face
+    hf = EL180_M62_LEN;                 // female for the lens
+    overlap = 3;
+    hex_od = heli_pass_d() - 0.8;       // has to pass the recessed nut
+    shank_d = EL180_M62_MAJOR - 1.6;
+    hex_h = hb + overlap;
+    color(tone)
+    difference() {
+        union() {
+            ScrewThread(EL180_M62_MAJOR, hm, pitch = EL180_M62_PITCH,
+                        tolerance = EL180_M62_TOL);
+            cylinder(h = hm + overlap, d = shank_d);
+            translate([0, 0, hm - overlap])
+                ScrewHole(EL180_M62_MAJOR, hf, pitch = EL180_M62_PITCH,
+                          tolerance = EL180_M62_TOL,
+                          position = [0, 0, hex_h - hf])
+                    cylinder(h = hex_h, d = hex_od, $fn = 128);
+        }
+        // Through-bore at the M62 minor; the hex behind the female stays
+        // EL180_BARREL so the 60 mm lens barrel drops in.
+        translate([0, 0, hm - overlap])
+            cylinder(h = hex_h - hf + 0.4, d = EL180_BARREL);
+        translate([0, 0, -0.2])
+            cylinder(h = hm + hex_h + 0.4, d = EL180_BORE);
+        translate([0, -hex_od / 2 - 0.05,
+                   hm + hb * 0.5])
+            rotate([90, 0, 0])
+                part_stamp_stack_cut(dxp_tag("el180"), size = 2.2);
+    }
+    if ($preview && !SHOW_LENS && !nw_stem())
+        color("DimGray", 0.45)
+            translate([0, 0, hm + hb])
+                el180_ghost();
+}
+
+// Stand-in for the machined flangeless ring. z = 0 is the shoulder that
+// stops on the helicoid face. +z is the M62 female, 8 mm, which is how far
+// the lens flange moves out. −z is 6 mm of M65 male. The Ø60 rear barrel
+// passes back through that male into the helicoid.
+module part_m65_ring() {
+    male = M65_RING_MALE;
+    add = M65_RING_ADD;
+    echo(str("m65_ring adds ", add,
+              " mm. Collapsed focus is about 4.5 m, not infinity.",
+              " Face the male shorter if the shoulder does not seat."));
+    color("SlateGray")
+    difference() {
+        union() {
+            translate([0, 0, -male])
+                ScrewThread(M65_MAJOR, male, pitch = EL180_M62_PITCH,
+                            tolerance = EL180_M62_TOL);
+            ScrewHole(EL180_M62_MAJOR, add, pitch = EL180_M62_PITCH,
+                      tolerance = EL180_M62_TOL)
+                cylinder(h = add, d = M65_RING_OD, $fn = 128);
+        }
+        translate([0, 0, -male - 0.2])
+            cylinder(h = male + 0.2, d = EL180_BARREL, $fn = 96);
+        translate([0, -M65_RING_OD / 2 - 0.02, add / 2])
+            rotate([-90, 0, 0])
+                part_stamp_stack_cut(dxp_tag("m65"), size = 2.2);
+    }
+}
+
+module el180_ghost() {
+    // Flange face on the stem face. +Z is the front of the lens, so the
+    // Ø60 barrel runs back through the M62 into the boss.
+    el180n(show_glass = SHOW_LENS_MARKS);
+}
+
+// Clamp on the external M62, ISCO on the collar, stand under the Ø90.
+module isco_on_body() {
+    seat = inf_stem()
+        ? inf_seat_z()
+        : -WALL + heli_at_infinity();
+    lift = EXPLODED ? ex * 1.4 : 0;
+    at_stem()
+        translate([0, 0, seat + lift]) {
+            color("DimGray", 0.92)
+                el180n(show_glass = SHOW_LENS_MARKS);
+            translate([0, 0, front_z - M62_LEN])
+                isco_clamp("DarkOrange");
+            translate([0, 0, front_z - M62_LEN + shoulder_z()])
+                color("Goldenrod")
+                    isco_ultrastar(show_glass = SHOW_LENS_MARKS);
+        }
+    saddle_y = -BOX_XY / 2
+        - (seat + lift + front_z - M62_LEN + shoulder_z()
+           + z_nose() + L_NOSE / 2);
+    translate([50, saddle_y - 65, base_z()])
+        rotate([0, 0, 90])
+            isco_stand();
+}
+
+// -----------------------------------------------------------------------------
+// lid
+// -----------------------------------------------------------------------------
+module lid_lining_mask() {
+    s = BOX_XY;
+    L = INNER_LINING;
+    translate([0, 0, BOX_Z / 2 + lid_lift])
+        translate([0, 0, (-40 + L) / 2])
+            cube([s + 4, s + 4, 40 + L], center = true);
+}
+
+// Trigger board (KiCad x right, y down) to the lid: turned 180° so the jack
+// edge faces +X, TRIG_EDGE_IN short of the lid edge, centred in Y.
+function trig_xy(p) = [
+    chassis_out() / 2 - TRIG_EDGE_IN - (p[0] - TRIG_EDGE[0]),
+    p[1] - (TRIG_EDGE[1] + TRIG_EDGE[3]) / 2
+];
+function trig_holes() = concat(TRIG_ZERO_HOLES, TRIG_HAT_HOLES);
+
+module trig_lid_holes() {
+    for (p = trig_holes())
+        translate(concat(trig_xy(p), [LID_T - TRIG_HOLE_DEEP]))
+            cylinder(h = TRIG_HOLE_DEEP + 1, d = TRIG_PILOT_D, $fn = 24);
+}
+
+module trig_rib_keepout() {
+    for (p = trig_holes())
+        translate(trig_xy(p))
+            cylinder(h = 10, d = 7, center = true);
+}
+
+// Ghost: Zero, board, jacks. z = 0 is the lid top.
+module trigger_stack_ghost() {
+    zero_z  = TRIG_STANDOFF;
+    board_z = zero_z + 1.4 + 8.5;
+    module outline(x0, y0, x1, y1)
+        hull()
+            for (p = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]])
+                translate(trig_xy(p)) square(0.01, center = true);
+    for (p = trig_holes())
+        color("Gold")
+            translate(trig_xy(p))
+                cylinder(h = p[1] > 50 ? board_z : zero_z, d = 4.5, $fn = 6);
+    color("DarkGreen")
+        translate([0, 0, zero_z])
+            linear_extrude(1.4)
+                outline(TRIG_ZERO_HOLES[0][0] - 3.5, TRIG_ZERO_HOLES[0][1] - 3.5,
+                        TRIG_ZERO_HOLES[0][0] + 61.5, TRIG_ZERO_HOLES[0][1] + 26.5);
+    color("Black")
+        translate([0, 0, zero_z - 5.5])
+            linear_extrude(5.5)
+                let (cx = (TRIG_ZERO_HOLES[0][0] + TRIG_ZERO_HOLES[1][0]) / 2,
+                     cy = TRIG_ZERO_HOLES[0][1])
+                    outline(cx - 25.4, cy - 2.54, cx + 25.4, cy + 2.54);
+    color("SeaGreen", 0.85)
+        translate([0, 0, board_z])
+            linear_extrude(1.6)
+                outline(TRIG_EDGE[0], TRIG_EDGE[1], TRIG_EDGE[2], TRIG_EDGE[3]);
+    for (j = TRIG_JACKS)
+        color("DimGray")
+            translate([0, 0, board_z + 1.6])
+                linear_extrude(5)
+                    outline(TRIG_EDGE[0], j[1] - 3, TRIG_EDGE[0] + 14, j[1] + 3);
+}
+
+module part_lid() {
+    s   = BOX_XY;
+    out = chassis_out();
+    color("DarkSlateGray")
+    mm_split() {
+    difference() {
+        translate([0, 0, BOX_Z / 2 + lid_lift]) {
+            linear_extrude(LID_T)
+                round_rect(out, out, PORT_BOSS_R);
+            translate([0, 0, -LID_LIP / 2 + 0.01])
+                lid_align_lip();
+            lid_retain_tabs(lip = LID_LIP);
+        }
+        translate([0, 0, BOX_Z / 2 + lid_lift]) {
+            for (p = lid_screws())
+                translate([p[0], p[1], 0]) {
+                    translate([0, 0, -LID_LIP - 1])
+                        cylinder(h = LID_T + LID_LIP + 2, d = PORT_SCREW_D);
+                    csk = (LID_CSK_D - PORT_SCREW_D) / 2;
+                    translate([0, 0, LID_T - csk - 0.2])
+                        cylinder(h = csk + 0.01, d1 = PORT_SCREW_D, d2 = LID_CSK_D);
+                    translate([0, 0, LID_T - 0.2])
+                        cylinder(h = 1, d = LID_CSK_D);
+                }
+            trig_lid_holes();
+            plate_stamp(dxp_tag("lid"), s, LID_T, STAMP_DEPTH, 5.0);
+            difference() {
+                lid_inner_ribs();
+                lid_retain_keepout();
+                trig_rib_keepout();
+            }
+        }
+    }
+        lid_lining_mask();
+    }
+}
+
+// Slip-on tent over the lid. The skirt takes the lid's outer edge; the roof
+// clears the Zero and the trigger board. Prints skirt-down. On the R-camera
+// face (+X): a slot for the two shutter plugs, and toward the T camera a
+// larger hole that passes a micro-USB cable with its plugs on.
+CAP_GAP   = 0.35;
+CAP_WALL  = 1.8;
+CAP_SKIRT = 5.2;    // lid plate is 6 mm, so the skirt stops on the chassis
+CAP_RISE  = 32;     // vertical wall above the lid top; jacks end near 27
+CAP_ROOF  = 16;     // hip above that, over the middle of the stack
+// Jacks at y −15.4 and −3.7, each plug about 8 mm across. 5 mm past each.
+CAP_JACK_Y = [-20.5, 1.5];
+// +X wall, toward +Y (T). A molded micro-USB plug is about 11×7; the other
+// end of that cable is a USB-A plug about 16×8. The pill clears both.
+CAP_USB_W  = 18;
+CAP_USB_H  = 12;
+CAP_USB_Y  = 24;
+CAP_USB_Z  = 14;     // centre, over the lid top, in the vertical wall
+
+module lid_cap_2d(grow = 0) {
+    offset(r = grow)
+        round_rect(chassis_out(), chassis_out(), PORT_BOSS_R);
+}
+
+module part_lid_cap(ridge_x = 12, rise = CAP_RISE, tag = "lid_cap", flat = false) {
+    out = chassis_out();
+    z_eave = CAP_SKIRT + rise;
+    z_peak = z_eave + CAP_ROOF;
+    // The hollow stays at the plain cap's eave. Extra rise is solid, for the
+    // finder bore in lid_cap_rf.
+    z_void = CAP_SKIRT + min(rise, CAP_RISE);
+    color("DimGray")
+    difference() {
+        union() {
+            if (flat)
+                linear_extrude(z_eave)
+                    lid_cap_2d(CAP_GAP + CAP_WALL);
+            else {
+                linear_extrude(CAP_SKIRT + 0.01)
+                    lid_cap_2d(CAP_GAP + CAP_WALL);
+                hull() {
+                    translate([0, 0, CAP_SKIRT])
+                        linear_extrude(0.01) lid_cap_2d(CAP_GAP + CAP_WALL);
+                    translate([0, 0, z_eave])
+                        linear_extrude(0.01) lid_cap_2d(CAP_GAP + CAP_WALL);
+                    translate([ridge_x, 0, z_peak])
+                        linear_extrude(0.01)
+                            square([10, out * 0.42], center = true);
+                }
+            }
+        }
+        translate([0, 0, -0.2])
+            linear_extrude(CAP_SKIRT + 0.4)
+                lid_cap_2d(CAP_GAP);
+        hull() {
+            translate([0, 0, CAP_SKIRT - 0.1])
+                linear_extrude(0.01) lid_cap_2d(CAP_GAP);
+            translate([0, 0, z_void - CAP_WALL])
+                linear_extrude(0.01) lid_cap_2d(CAP_GAP);
+            if (!flat)
+                translate([ridge_x, 0, z_peak - CAP_WALL])
+                    linear_extrude(0.01)
+                        square([10 - 2 * CAP_WALL, out * 0.42 - 2 * CAP_WALL],
+                               center = true);
+        }
+        // Jack bodies sit 21.5–26.5 mm over the lid. The pill is the same
+        // 22×9 opening, with round ends, and it stops short of the eave.
+        translate([out / 2 - 4,
+                   (CAP_JACK_Y[0] + CAP_JACK_Y[1]) / 2,
+                   CAP_SKIRT + 23.5])
+            hull()
+                for (s = [-1, 1])
+                    translate([0,
+                               s * (CAP_JACK_Y[1] - CAP_JACK_Y[0] - 9) / 2,
+                               0])
+                        rotate([0, 90, 0])
+                            cylinder(h = CAP_GAP + CAP_WALL + 8,
+                                     d = 9, $fn = 40);
+        translate([out / 2 - 4, CAP_USB_Y, CAP_SKIRT + CAP_USB_Z])
+            hull()
+                for (s = [-1, 1])
+                    translate([0, s * (CAP_USB_W - CAP_USB_H) / 2, 0])
+                        rotate([0, 90, 0])
+                            cylinder(h = CAP_GAP + CAP_WALL + 8,
+                                     d = CAP_USB_H, $fn = 40);
+        if (flat)
+            translate([0, -(out / 2 - 14), z_eave - STAMP_DEPTH])
+                part_stamp_cut(dxp_tag(tag), STAMP_DEPTH, 3.2);
+        else
+            translate([ridge_x, 0, z_peak - STAMP_DEPTH])
+                rotate(90)
+                    part_stamp_cut(dxp_tag(tag), STAMP_DEPTH, 3.2);
+    }
+}
+
+include <lid_cap_rf.scad>
+
+// -----------------------------------------------------------------------------
+// base and cradles — the bayonet locates, the base carries
+// -----------------------------------------------------------------------------
+function base_z()      = -BOX_Z / 2 - chassis_plinth() - BASE_T;
+function base_cam_d()  = d_plate_to_mount() + d800_tripod_in() + BASE_SLOT_C;
+function base_r_xy()   = [base_cam_d(), -sensor_shift()];
+function base_t_xy()   = [sensor_shift(), base_cam_d()];
+// Each body slides along its own lens axis, which is offset from the chassis
+// centre by the shift. Pads, slots and cradles run along that axis, not
+// along the line back to the origin.
+function base_axis_az(mark) = mark == "T" ? 90 : 0;
+function base_q_xy() =
+    let (r = base_r_xy(), t = base_t_xy(),
+         u = (t - r) / norm(t - r),
+         p = r + u * BASE_RT_ALONG)
+        p * (1 - BASE_RT_INSET / norm(p));
+function base_web_pts() = [[0, 0], base_r_xy(), base_q_xy(), base_t_xy()];
+// Tripod socket under the combined centre of mass: chassis plus lens at the
+// origin, one D800 at each camera pad. Masses in kg.
+function base_tripod_xy() =
+    let (m_box = 1.4, m_cam = 1.0,
+         r = base_r_xy(), t = base_t_xy(),
+         tot = m_box + 2 * m_cam)
+        [(m_cam * (r.x + t.x)) / tot, (m_cam * (r.y + t.y)) / tot];
+function base_stamp_xy() =
+    let (r = base_r_xy(), t = base_t_xy(),
+         m = [(r.x + t.x) / 2, (r.y + t.y) / 2],
+         n = m / norm(m))
+        [m.x - n.x * 10, m.y - n.y * 10];
+function base_pad_xy(mark) = mark == "T" ? base_t_xy() : base_r_xy();
+// Camera pads are stadiums along the optical axis, not circles: the cradle
+// footprint and its four bolts are longer than they are wide, and a round
+// BASE_PAD_D pad put the bolts 0.4 mm inside the rim.
+module base_cam_pad_2d(mark, grow = 0) {
+    p = base_pad_xy(mark);
+    translate(p)
+        rotate(base_axis_az(mark))
+            hull() {
+                translate([-BASE_SLOT_L / 2, 0])
+                    circle(d = BASE_PAD_D + grow);
+                translate([ BASE_SLOT_L / 2, 0])
+                    circle(d = BASE_PAD_D + grow);
+            }
+}
+
+module base_hex_grid_2d() {
+    cell = BASE_HEX_CELL;
+    for (j = [-2:24], i = [-2:24])
+        translate([(i + (j % 2) * 0.5) * cell, j * cell * sin(60)])
+            rotate(30)
+                circle(d = BASE_HEX_D, $fn = 6);
+}
+
+module base_hex_cuts_2d() {
+    r = base_r_xy();
+    t = base_t_xy();
+    q = base_tripod_xy();
+    s = base_stamp_xy();
+    intersection() {
+        difference() {
+            offset(-1.8)
+                offset(BASE_WEB / 2)
+                    polygon(base_web_pts());
+            circle(d = BASE_PAD_D + 4);
+            base_cam_pad_2d("R", 4);
+            base_cam_pad_2d("T", 4);
+            translate(q) circle(d = BASE_PAD_D + 4);
+            translate(s)
+                rotate(135)
+                    square([84, 10], center = true);
+        }
+        base_hex_grid_2d();
+    }
+}
+
+// 1/4-20 slot, pointing along the optical axis so the body can slide to
+// meet the register.
+module base_slot_2d(mark) {
+    translate(base_pad_xy(mark))
+        rotate(base_axis_az(mark))
+            hull() {
+                translate([-BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
+                translate([ BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
+            }
+}
+
+// Thumbscrew head pocket from the print bed; clipped to the pad.
+module base_relief_2d(mark) {
+    intersection() {
+        base_cam_pad_2d(mark);
+        translate(base_pad_xy(mark))
+            rotate(base_axis_az(mark))
+                hull() {
+                    translate([-BASE_SLOT_L / 2, 0]) circle(d = BASE_HEAD_D);
+                    translate([ BASE_SLOT_L / 2, 0]) circle(d = BASE_HEAD_D);
+                }
+    }
+}
+
+// Four M3s per camera pad hold the cradle down. du runs along the optical
+// axis, dv across it; both stay inside the stadium pad.
+function cradle_bolt_du(i) = (i % 2 ? 1 : -1) * (BASE_SLOT_L / 2 + 13);
+function cradle_bolt_dv(i) = (i < 2 ? -1 : 1) * 15;
+function cradle_bolt_xy(mark, i) =
+    let (p = base_pad_xy(mark), a = base_axis_az(mark),
+         u = [cos(a), sin(a)], v = [-u.y, u.x],
+         du = cradle_bolt_du(i), dv = cradle_bolt_dv(i))
+        [p.x + u.x * du + v.x * dv, p.y + u.y * du + v.y * dv];
+
+module base_plate_2d() {
+    union() {
+        offset(BASE_WEB / 2)
+            polygon(base_web_pts());
+        circle(d = BASE_PAD_D);
+        base_cam_pad_2d("R");
+        base_cam_pad_2d("T");
+        translate(base_tripod_xy()) circle(d = BASE_PAD_D);
+    }
+}
+
+module base_blank() {
+    linear_extrude(BASE_T)
+        base_plate_2d();
+}
+
+// Shared with the yoke, so the two braces take the same screws.
+module base_fastener_cuts() {
+    q = base_tripod_xy();
+    // Chassis 1/4-20 through the origin pad.
+    translate([0, 0, -0.2])
+        cylinder(h = BASE_T + 0.4, d = BASE_SCREW_D);
+    translate([0, 0, -0.2])
+        cylinder(h = BASE_HEAD_COUNTER_H + 0.2, d = BASE_HEAD_D);
+    // Camera 1/4-20 slots + head pockets.
+    translate([0, 0, -0.2])
+        linear_extrude(BASE_T + 0.4)
+            union() {
+                base_slot_2d("R");
+                base_slot_2d("T");
+            }
+    translate([0, 0, -0.2])
+        linear_extrude(BASE_T - 2.0)
+            union() {
+                base_relief_2d("R");
+                base_relief_2d("T");
+            }
+    // Cradle bolts, M3 through with a nut trap underneath.
+    for (mark = ["R", "T"], i = [0:3]) {
+        p = cradle_bolt_xy(mark, i);
+        translate([p.x, p.y, -0.2])
+            cylinder(h = BASE_T + 0.4, d = PORT_SCREW_D);
+        translate([p.x, p.y, -0.05])
+            rotate([0, 0, 30])
+                cylinder(h = PORT_NUT_T + 0.15,
+                         d = PORT_NUT_AF / cos(30), $fn = 6);
+    }
+    // Tripod insert, from the underside.
+    translate([q.x, q.y, -0.05]) {
+        cylinder(h = min(BASE_T - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0) + 0.15,
+                 d = TRIPOD_INSERT_D);
+        cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
+    }
+}
+
+module part_base() {
+    color("SlateGray")
+    difference() {
+        base_blank();
+        base_mount_cuts();
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                base_hex_cuts_2d();
+        translate([base_stamp_xy().x, base_stamp_xy().y, BASE_T - STAMP_DEPTH])
+            rotate(135)
+                part_stamp_cut(dxp_tag("base"));
+    }
+}
+
+// Screws, slots, nut traps and the tripod insert.
+module base_mount_cuts(q = base_tripod_xy()) {
+    union() {
+        // Chassis 1/4-20 through the origin pad.
+        translate([0, 0, -0.2])
+            cylinder(h = BASE_T + 0.4, d = BASE_SCREW_D);
+        translate([0, 0, -0.2])
+            cylinder(h = BASE_HEAD_COUNTER_H + 0.2, d = BASE_HEAD_D);
+        // Camera 1/4-20 slots + head pockets.
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                union() {
+                    base_slot_2d("R");
+                    base_slot_2d("T");
+                }
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T - 2.0)
+                union() {
+                    base_relief_2d("R");
+                    base_relief_2d("T");
+                }
+        // Cradle bolts, M3 through with a nut trap underneath.
+        for (mark = ["R", "T"], i = [0:3]) {
+            p = cradle_bolt_xy(mark, i);
+            translate([p.x, p.y, -0.2])
+                cylinder(h = BASE_T + 0.4, d = PORT_SCREW_D);
+            translate([p.x, p.y, -0.05])
+                rotate([0, 0, 30])
+                    cylinder(h = PORT_NUT_T + 0.15,
+                             d = PORT_NUT_AF / cos(30), $fn = 6);
+        }
+        // Tripod insert, from the underside.
+        translate([q.x, q.y, -0.05]) {
+            cylinder(h = min(BASE_T - TRIPOD_KEEP, TRIPOD_INSERT_L + 1.0) + 0.15,
+                     d = TRIPOD_INSERT_D);
+            cylinder(h = 0.7, d1 = TRIPOD_INSERT_D + 0.6, d2 = TRIPOD_INSERT_D);
+        }
+    }
+}
+
+// Base with a hand grip. The plain base's mounts on a wider plate, out past
+// the chassis on the −X side, across from R, so the rig stands on its own,
+// with an organic grip at the tip for the right hand, long way forward (−Y).
+// The front lip runs square to the chassis, straight off the R puck's front
+// edge. Between R and T one curve runs from R's side to T's, through the
+// plain base's tripod pad. On the −X side the T arm is carried out to the
+// puck's width and the back edge sweeps onto it ahead of T's handgrip, clear
+// of its battery door and the battery coming out. Name and date are on the
+// front lip. The index finger lies over a recessed shutter switch at the
+// top front; its wires run down the grip and out under the base.
+GRIP_XY     = [-108, -14.4];
+GRIP_W      = 32;      // across, X
+GRIP_D      = 44;      // fore and aft, Y
+GRIP_LIFT   = 15;      // straight stem under the hand, about one pinky
+GRIP_H      = 114 + GRIP_LIFT; // over the base top, including the round crown
+GRIP_FLARE  = 6;       // wider at the root
+GRIP_N      = 192;     // points around each grip section, ~0.6 mm on the hand
+GRIP_PLATE  = 12;      // plate margin round the grip root
+GRIP_BACK_Y = 40;      // back edge's corner on the T arm's −X side
+GRIP_SWEEP_Y = 95;     // sweep lands on the T arm here; any higher and it
+                       // swings under T's battery door hinge at x −22.5
+GRIP_FOOT_FILLET = 15; // grip foot into the front lip
+GRIP_RT_R   = 65;      // R-to-T curve. Larger runs it under R's battery door
+                       // hinge; smaller crowds the tripod insert.
+GRIP_TRIPOD_KEEP = 7;  // solid ring round the tripod insert
+// Tripod insert in line with the chassis screw, out in the plate's full depth
+// rather than by the R-to-T curve. Same X as the plain base's balance point.
+function grip_tripod_xy() = [base_tripod_xy().x, 0];
+GRIP_STAMP_X = 25;     // along the front lip
+GRIP_RIM    = 5;       // solid edge round the hex field
+// The outrigger is a cantilever. Hexes stay under the chassis; from just
+// outside it to the grip the plate is solid and ramps up into the foot.
+// Bending stiffness goes with thickness cubed, which is what the pinky
+// edge was missing.
+GRIP_RAMP_GAP = 6;     // past the chassis outline before the ramp starts
+GRIP_RAMP_H   = 10;    // added on top of BASE_T at the grip
+GRIP_RAMP_N   = 28;
+// Shutter switch, default a 12 × 12 tactile. Seat is measured in from the
+// grip's front-most point. Behind it, room for leads not yet trimmed.
+SW_W        = 14.0;    // 12 mm body, and the last 12.4 printed tight
+SW_H        = 14.0;    // even after the legs were snapped off and the hole filed
+SW_SEAT     = 8.0;     // body is ~7.3; 5.8 bottomed it out in the mouth
+SW_DROP     = 29;      // switch centre under the grip top
+SW_LEAD     = 9;
+SW_LEAD_D   = 10;
+SW_WIRE_D   = 6;
+SW_RUN_X    = -30;     // underside wire groove ends here, by the chassis
+SW_RUN_T    = 3.5;
+
+module grip_ellipse_2d(grow = 0) {
+    scale([GRIP_W / 2 + grow, GRIP_D / 2 + grow]) circle(1, $fn = 96);
+}
+
+module base_footprint_2d() {
+    offset(BASE_WEB / 2)
+        polygon(base_web_pts());
+    circle(d = BASE_PAD_D);
+    base_cam_pad_2d("R");
+    base_cam_pad_2d("T");
+    translate(base_tripod_xy()) circle(d = BASE_PAD_D);
+}
+
+function unit2(v) = v / norm(v);
+
+// Round-off for a concave corner v whose edges leave along u1 and u2; t is
+// the run along each edge to where the arc lands.
+module corner_fillet_2d(v, u1, u2, t) {
+    th = acos(u1 * u2);
+    c  = v + unit2(u1 + u2) * (t / cos(th / 2));
+    difference() {
+        polygon([v, v + u1 * t, v + u2 * t]);
+        translate(c) circle(t * tan(th / 2), $fn = 360);
+    }
+}
+
+function grip_foot_ab() = [GRIP_W / 2 + GRIP_FLARE + GRIP_PLATE,
+                           GRIP_D / 2 + GRIP_FLARE + GRIP_PLATE];
+// Upper tangent from v to the grip foot, as a direction.
+function grip_back_dir(v) =
+    let (ab = grip_foot_ab(),
+         az = min([for (i = [0:719])
+                     let (f = i / 2,
+                          d = GRIP_XY + [ab.x * cos(f), ab.y * sin(f)] - v)
+                         (atan2(d.y, d.x) + 360) % 360]))
+        [cos(az), sin(az)];
+
+module grip_plate_raw_2d() {
+    r  = base_r_xy();
+    t  = base_t_xy();
+    pr = BASE_PAD_D / 2;
+    xl = t.x - pr;
+    yf = r.y - pr;
+    vb = [xl, GRIP_BACK_Y];
+    base_footprint_2d();
+    translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+    translate([GRIP_XY.x, yf]) square([r.x - GRIP_XY.x, 2 * pr]);
+    translate([xl, 0]) square([2 * pr, t.y]);
+    intersection() {
+        hull() {
+            translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+            polygon([vb, [xl, 0], [xl - 0.01, 0]]);
+        }
+        translate([-500, yf]) square(1000);
+    }
+    corner_fillet_2d(vb, grip_back_dir(vb), [0, 1], GRIP_SWEEP_Y - GRIP_BACK_Y);
+}
+
+function grip_rt_corner() = [base_t_xy().x + BASE_PAD_D / 2,
+                             base_r_xy().y + BASE_PAD_D / 2];
+
+// Neither puck reaches past the R-to-T corner, so everything beyond it goes
+// and the curve is put back.
+module grip_plate_2d() {
+    v = grip_rt_corner();
+    difference() {
+        union() {
+            grip_plate_raw_2d();
+            intersection() {
+                offset(r = -GRIP_FOOT_FILLET) offset(r = GRIP_FOOT_FILLET)
+                    grip_plate_raw_2d();
+                translate([GRIP_XY.x, GRIP_XY.y - 80]) square([80, 80]);
+            }
+        }
+        translate(v) square(500);
+    }
+    corner_fillet_2d(v, [1, 0], [0, 1], GRIP_RT_R);
+}
+
+module grip_hex_cuts_2d() {
+    cell = BASE_HEX_CELL;
+    intersection() {
+        difference() {
+            offset(-GRIP_RIM) grip_plate_2d();
+            circle(d = BASE_PAD_D + 4);
+            base_cam_pad_2d("R", 4);
+            base_cam_pad_2d("T", 4);
+            translate(grip_tripod_xy())
+                circle(d = TRIPOD_INSERT_D + 2 * GRIP_TRIPOD_KEEP);
+            translate(GRIP_XY) grip_ellipse_2d(GRIP_FLARE + GRIP_PLATE);
+            grip_ramp_2d();
+        }
+        for (j = [-6:24], i = [-14:24])
+            translate([(i + (j % 2) * 0.5) * cell, j * cell * sin(60)])
+                rotate(30)
+                    circle(d = BASE_HEX_D, $fn = 6);
+    }
+}
+
+// Hand profile, skinned rather than hulled so the finger hollows stay concave.
+// +X is the thumb (toward the rig), −Y is the fingers, +Y is the palm.
+// The root is the flare ellipse, so it still sits in the plate foot.
+function grip_sstep(t) = let (u = min(1, max(0, t))) u * u * (3 - 2 * u);
+function grip_bell(z, c, s) = exp(-pow((z - c) / s, 2));
+function grip_neck(z) = grip_sstep(z / 14);
+// Positive recesses the finger face. The negative bell is the lip under the
+// index finger.
+function grip_groove(z) =
+    3.6 * grip_bell(z, 42, 5.2) +
+    4.0 * grip_bell(z, 58, 5.2) +
+    3.8 * grip_bell(z, 73, 5.0) -
+    1.8 * grip_bell(z, 81, 4.2);
+function grip_oy(z) = 15 * grip_sstep((z - 8) / 82) + 2.4 * grip_bell(z, 30, 16);
+function grip_ox(z) = 1.8 * grip_bell(z, 68, 18);
+function grip_ax(z) =
+    let (hand = 15.5 + 2.6 * grip_bell(z, 32, 16) + 1.8 * grip_bell(z, 68, 16))
+        22 * (1 - grip_neck(z)) + hand * grip_neck(z);
+function grip_ay(z) =
+    let (hand = 18.5 + 6.5 * grip_bell(z, 30, 14))
+        28 * (1 - grip_neck(z)) + hand * grip_neck(z);
+// One round crown over the whole top. k is 1 at the shoulder and 0 at the peak.
+GRIP_CROWN_Z = 93 + GRIP_LIFT;
+function grip_crown_k(z) =
+    let (u = (z - GRIP_CROWN_Z) / (GRIP_H - GRIP_CROWN_Z))
+        u <= 0 ? 1 : sqrt(max(0, 1 - min(max(u, 0), 1) * min(max(u, 0), 1)));
+function grip_thumb(z) = 6.0 * grip_bell(z, 66, 15);
+function grip_pt_raw(z, ang) =
+    let (z = max(0, z - GRIP_LIFT),
+         c = cos(ang), s = sin(ang),
+         n = 2 + (s > 0 ? 1.2 * grip_sstep((z - 10) / 22) : 0),
+         e = 2 / n,
+         x = grip_ax(z) * (c == 0 ? 0 : sign(c) * pow(abs(c), e)),
+         y = grip_ay(z) * (s == 0 ? 0 : sign(s) * pow(abs(s), e)))
+        [x + grip_thumb(z) * pow(max(0, c), 1.6) + grip_ox(z),
+         y + grip_groove(z) * pow(max(0, -s), 1.5) + grip_oy(z)];
+function grip_pt(z, ang) =
+    let (p = grip_pt_raw(min(z, GRIP_CROWN_Z), ang),
+         c = [grip_ox(GRIP_CROWN_Z), grip_oy(GRIP_CROWN_Z)],
+         k = grip_crown_k(z))
+        z <= GRIP_CROWN_Z ? p : c + (p - c) * k;
+function grip_front(z) = grip_pt(z, 270).y;
+
+// Plate outboard of the chassis, grip included. The chassis keeps sitting
+// on the flat 8 mm.
+module grip_ramp_2d() {
+    s = chassis_out() + 2 * GRIP_RAMP_GAP;
+    difference() {
+        grip_plate_2d();
+        square([s, s], center = true);
+    }
+}
+
+function grip_ramp_h(x) =
+    let (x0 = -chassis_out() / 2 - GRIP_RAMP_GAP,
+         x1 = GRIP_XY.x)
+        x >= x0 ? 0
+            : GRIP_RAMP_H * grip_sstep(min(1, (x0 - x) / (x0 - x1)));
+
+module grip_ramp() {
+    x0 = -chassis_out() / 2 - GRIP_RAMP_GAP;
+    xfar = GRIP_XY.x - grip_foot_ab().x - 4;
+    for (i = [0:GRIP_RAMP_N - 1]) {
+        xa = x0 + (xfar - x0) * i / GRIP_RAMP_N;
+        xb = x0 + (xfar - x0) * (i + 1) / GRIP_RAMP_N;
+        hull() {
+            translate([0, 0, BASE_T - 0.2])
+                linear_extrude(grip_ramp_h(xa) + 0.2)
+                    intersection() {
+                        grip_ramp_2d();
+                        translate([xa - 0.15, -500]) square([0.5, 1000]);
+                    }
+            translate([0, 0, BASE_T - 0.2])
+                linear_extrude(grip_ramp_h(xb) + 0.2)
+                    intersection() {
+                        grip_ramp_2d();
+                        translate([xb - 0.35, -500]) square([0.5, 1000]);
+                    }
+        }
+    }
+}
+
+module grip_handle() {
+    body_n = 150;
+    dome_n = 48;
+    z0 = -0.4;
+    dome_h = GRIP_H - GRIP_CROWN_Z;
+    c = [grip_ox(GRIP_CROWN_Z), grip_oy(GRIP_CROWN_Z)];
+    // Cap rings follow the curve, so the peak is not a stack of flat slices.
+    zs = concat(
+        [for (i = [0:body_n]) z0 + (GRIP_CROWN_Z - z0) * i / body_n],
+        [for (i = [1:dome_n])
+            GRIP_CROWN_Z + dome_h * sin(i * 88 / dome_n)]);
+    nring = len(zs);
+    verts = concat(
+        [for (zi = [0:nring - 1], i = [0:GRIP_N - 1])
+            let (z = zs[zi],
+                 p = grip_pt(max(0, z), i * 360 / GRIP_N))
+                [p.x, p.y, z]],
+        [[c.x, c.y, GRIP_H]]);
+    apex = nring * GRIP_N;
+    steps = nring - 1;
+    // Rings run counter-clockwise from above. OpenSCAD wants faces clockwise
+    // from the outside. The crown closes on one peak instead of a flat cap.
+    faces = concat(
+        [for (zi = [0:steps - 1], i = [0:GRIP_N - 1])
+            let (a = zi * GRIP_N + i,
+                 b = zi * GRIP_N + (i + 1) % GRIP_N,
+                 c = (zi + 1) * GRIP_N + (i + 1) % GRIP_N,
+                 d = (zi + 1) * GRIP_N + i)
+                [a, b, c, d]],
+        [for (i = [1:GRIP_N - 2]) [0, i + 1, i]],
+        [for (i = [0:GRIP_N - 1])
+            let (b = steps * GRIP_N)
+                [apex, b + i, b + (i + 1) % GRIP_N]]);
+    translate([GRIP_XY.x, GRIP_XY.y, BASE_T])
+        polyhedron(verts, faces, convexity = 12);
+}
+
+// Pocket follows the slant of the front face, so the switch sits at an even
+// depth. The bore follows the rake down to the plate.
+module grip_switch_cuts() {
+    zsw = GRIP_H - SW_DROP;
+    z0  = zsw - SW_H / 2;
+    y0  = grip_front(z0);
+    y1  = grip_front(z0 + SW_H);
+    len = norm([y1 - y0, SW_H]);
+    ang = atan2(y1 - y0, SW_H);
+    translate([GRIP_XY.x, GRIP_XY.y, BASE_T]) {
+        translate([0, y0, z0])
+            rotate([-ang, 0, 0]) {
+                translate([-SW_W / 2, -1, 0])
+                    cube([SW_W, SW_SEAT + 1, len]);
+                // Mouth wider than the seat, so the body can start in.
+                translate([-(SW_W + 1.6) / 2, -1.4, -0.8])
+                    cube([SW_W + 1.6, 2.6, len + 1.6]);
+                translate([-SW_LEAD / 2, SW_SEAT - 0.01, (len - SW_LEAD) / 2])
+                    cube([SW_LEAD, SW_LEAD_D, SW_LEAD]);
+            }
+        hull() {
+            // Through the plate and out the sole. -0.2 was just under the
+            // handle root, so the bore stopped on top of the plate.
+            translate([0, 0, -BASE_T - 0.4])
+                cylinder(h = 0.01, d = SW_WIRE_D, $fn = 24);
+            translate([0,
+                       y0 + (SW_SEAT + SW_LEAD_D / 2) * cos(ang)
+                          + (len / 2) * sin(ang),
+                       z0 - (SW_SEAT + SW_LEAD_D / 2) * sin(ang)
+                          + (len / 2) * cos(ang)])
+                cylinder(h = 0.01, d = SW_WIRE_D, $fn = 24);
+        }
+    }
+    translate([GRIP_XY.x, GRIP_XY.y - SW_WIRE_D / 2, -0.2])
+        cube([SW_RUN_X - GRIP_XY.x, SW_WIRE_D, SW_RUN_T + 0.2]);
+}
+
+module part_base_grip() {
+    color("SlateGray")
+    difference() {
+        union() {
+            linear_extrude(BASE_T) grip_plate_2d();
+            grip_ramp();
+            grip_handle();
+        }
+        base_mount_cuts(grip_tripod_xy());
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                grip_hex_cuts_2d();
+        grip_switch_cuts();
+        translate([GRIP_STAMP_X, base_r_xy().y - BASE_PAD_D / 2 + STAMP_DEPTH,
+                   BASE_T / 2])
+            rotate([90, 0, 0])
+                part_stamp_cut(dxp_tag("base_grip"));
+    }
+}
+
+// Battery door, in a camera pad's own frame. Local +X is rearward along the
+// optical axis, local +Y is the grip. The door starts just outside the
+// cradle bolts (those sit at ±15) and runs out past the grip edge. Nominal
+// for a D800: move these four numbers if a door still kisses the plastic.
+function door_x0() = -42;
+function door_x1() = 32;
+function door_y0() = 21;
+function door_y1() = 98;
+
+module battery_door_2d() {
+    translate([(door_x0() + door_x1()) / 2, (door_y0() + door_y1()) / 2])
+        square([door_x1() - door_x0(), door_y1() - door_y0()], center = true);
+}
+
+module battery_doors_2d() {
+    for (mark = ["R", "T"])
+        translate(base_pad_xy(mark))
+            rotate(base_axis_az(mark))
+                battery_door_2d();
+}
+
+// Plinth that lifts the body's tripod socket onto the optical axis. Nothing
+// else: footprint and bolt pattern match base_cam_pad_2d() and the top is
+// bare.
+//
+// It carried an anti-twist flange up the back of the body and that is gone.
+// The bayonet already fixes yaw far better than a 46 mm-wide flange could,
+// and mounting the camera means bringing it in along the axis and twisting,
+// so anything standing up off the plinth is in the way of the one motion
+// the build depends on. A camera plate's job is to take the weight; this
+// one takes the weight.
+function cradle_lift() = CRADLE_T + CRADLE_EXTRA;
+function cradle_len()  = BASE_SLOT_L + BASE_PAD_D;   // along the axis
+function cradle_wid()  = BASE_PAD_D;                 // across it
+
+module cradle_foot_2d() {
+    hull() {
+        translate([-BASE_SLOT_L / 2, 0]) circle(d = BASE_PAD_D);
+        translate([ BASE_SLOT_L / 2, 0]) circle(d = BASE_PAD_D);
+    }
+}
+
+module part_cradle(mark = "R") {
+    lift = cradle_lift();
+    color("DimGray")
+    difference() {
+        translate([0, 0, lift / 2])
+            linear_extrude(lift, center = true)
+                cradle_foot_2d();
+        // 1/4-20 slot along the axis: sets how far the body sits from the
+        // register, so the bayonet can seat without the screw fighting it.
+        translate([0, 0, -0.2])
+            linear_extrude(lift + 0.4)
+                hull() {
+                    translate([-BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
+                    translate([ BASE_SLOT_L / 2, 0]) circle(d = BASE_SLOT_W);
+                }
+        // Grip side, so the battery door can swing past the plinth.
+        translate([0, 0, -0.2])
+            linear_extrude(lift + 0.4)
+                battery_door_2d();
+        // Cradle bolts: M3 clearance, heads sunk into the plinth top.
+        for (i = [0:3]) {
+            sx = cradle_bolt_du(i);
+            sy = cradle_bolt_dv(i);
+            translate([sx, sy, -0.2])
+                cylinder(h = lift + 0.4, d = PORT_SCREW_D);
+            translate([sx, sy, lift - PORT_HEAD_H - CRADLE_EXTRA])
+                cylinder(h = PORT_HEAD_H + CRADLE_EXTRA + 0.4, d = PORT_HEAD_D);
+        }
+        translate([-BASE_SLOT_L / 2 - 11, 0, lift - STAMP_DEPTH])
+            rotate(90)
+                part_stamp_cut(dxp_tag(mark == "T" ? "cradle_t" : "cradle_r"),
+                               STAMP_DEPTH, 3.0);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// yoke — same screws as the base, arms out the two sides, grips up
+// -----------------------------------------------------------------------------
+// The plate is the original triangle. Each grip is a second triangle of the
+// same web, grown off that plate: one on under R and out past its back, one
+// off the opposite side. The grip section is turned so the long axis runs
+// front to back. The trigger is on the front edge of the right grip.
+YOKE_GRIP_H = 112;
+YOKE_GRIP_W = 32;   // side to side
+YOKE_GRIP_D = 42;   // front to back, front is −Y
+// Socket to the back of a D800 is about 25 mm. This clears that, plus a hand.
+YOKE_PAST   = 78;
+
+function yoke_r_xy() =
+    let (p = base_r_xy())
+        [p.x + YOKE_PAST, p.y];
+// Right hand. Straight out −X from the origin pad.
+function yoke_right_xy() = [-128, 0];
+
+module yoke_oval_2d() {
+    scale([YOKE_GRIP_W / 2, YOKE_GRIP_D / 2])
+        circle(r = 1, $fn = 64);
+}
+
+// Straight off the pad that is already there, ending on the grip outline.
+module yoke_plate_2d() {
+    union() {
+        base_plate_2d();
+        // The near oval sits inside the pad, so the beam comes off it square.
+        hull() {
+            translate(base_r_xy() + [BASE_SLOT_L / 2, 0]) yoke_oval_2d();
+            translate(yoke_r_xy()) yoke_oval_2d();
+        }
+        hull() {
+            translate([-12, 0]) yoke_oval_2d();
+            translate(yoke_right_xy()) yoke_oval_2d();
+        }
+    }
+}
+
+module yoke_grip_at(p) {
+    translate(p)
+        linear_extrude(YOKE_GRIP_H)
+            yoke_oval_2d();
+}
+
+// Groove along the right arm, then up inside the grip to the trigger.
+module yoke_wire_cut() {
+    a = [-BASE_PAD_D / 2 - 4, 0];
+    b = yoke_right_xy();
+    front = b.y - YOKE_GRIP_D / 2;
+    cz = YOKE_GRIP_H - 30;
+    hull() {
+        translate([a.x, a.y, BASE_T - 2.8])
+            cube([5, 5, 3.2], center = true);
+        translate([b.x, b.y, BASE_T - 2.8])
+            cube([5, 5, 3.2], center = true);
+    }
+    hull() {
+        translate([b.x, b.y, BASE_T + 2])
+            cube([4.4, 4.4, 4], center = true);
+        translate([b.x, front + 9, cz])
+            cube([4.4, 4.4, 4], center = true);
+    }
+}
+
+// 12 × 12 × 7.3 mm tactile on the front edge, near the top. The plunger
+// points forward (−Y). The body sits behind 3 mm of wall.
+module yoke_button_cut() {
+    g = yoke_right_xy();
+    front = g.y - YOKE_GRIP_D / 2;
+    cz = YOKE_GRIP_H - 30;
+    translate([g.x, front + 8, cz])
+        cube([13.2, 10, 13.2], center = true);
+    translate([g.x, front - 0.4, cz])
+        rotate([-90, 0, 0])
+            cylinder(h = 5.2, d = 8, $fn = 32);
+}
+
+module yoke_ties() {
+    a = [-BASE_PAD_D / 2 - 4, 0];
+    b = yoke_right_xy();
+    d = b - a;
+    n = norm(d);
+    u = d / n;
+    v = [-u.y, u.x];
+    for (t = [0.30, 0.55, 0.80]) {
+        p = a + u * (n * t);
+        for (s = [-1, 1])
+            translate([p.x + v.x * s * 8, p.y + v.y * s * 8, -0.2])
+                cylinder(h = BASE_T + 0.4, d = 3.4, $fn = 16);
+    }
+}
+
+module part_yoke() {
+    color("SlateGray")
+    difference() {
+        union() {
+            linear_extrude(BASE_T)
+                yoke_plate_2d();
+            yoke_grip_at(yoke_r_xy());
+            yoke_grip_at(yoke_right_xy());
+        }
+        base_fastener_cuts();
+        translate([0, 0, -0.2])
+            linear_extrude(BASE_T + 0.4)
+                base_hex_cuts_2d();
+        yoke_wire_cut();
+        yoke_button_cut();
+        yoke_ties();
+        translate([0, 16, BASE_T - STAMP_DEPTH])
+            part_stamp_cut(dxp_tag("yoke"), STAMP_DEPTH, 3.2);
+    }
+}
+
+module base_at() {
+    if (SHOW_BASE) {
+        translate([0, 0, base_z()])
+            if (BASE_GRIP) part_base_grip(); else part_base();
+        for (mark = ["R", "T"]) {
+            p = base_pad_xy(mark);
+            translate([p.x, p.y, base_z() + BASE_T])
+                rotate([0, 0, base_axis_az(mark)])
+                    part_cradle(mark);   // local +X runs away from the plate
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// drop-in baffle stack — printed flat, pushed down the arm bore
+// -----------------------------------------------------------------------------
+BAFFLE_RING_T = 1.2;
+BAFFLE_RINGS  = 5;
+
+// Station of ring i, measured from the sensor.
+function baffle_station(i) =
+    FLANGE_F + 6 + i * (d_plate_to_mount() - 12) / (BAFFLE_RINGS - 1);
+// A ring is only worth printing if the bundle leaves an annulus behind. At
+// f/5.6 the frame corners fill the bore, so there is nothing to print and
+// this returns 0 rather than an inside-out ring.
+function baffle_ring_id(i) = need_bore(FSTOP, baffle_station(i)) + 1.2;
+function baffle_ring_od() = TUBE_ID - 0.4;
+function baffle_ring_fits(i) = baffle_ring_id(i) <= baffle_ring_od() - 1.6;
+function baffle_ring_count() =
+    len([for (i = [0 : BAFFLE_RINGS - 1]) if (baffle_ring_fits(i)) i]);
+
+module part_baffle() {
+    od = baffle_ring_od();
+    keep = [for (i = [0 : BAFFLE_RINGS - 1]) if (baffle_ring_fits(i)) i];
+    color("DimGray")
+    for (n = [0 : max(len(keep), 1) - 1]) {
+        if (n < len(keep)) {
+            i  = keep[n];
+            id = baffle_ring_id(i);
+            translate([n * (od + 6), 0, 0])
+                difference() {
+                    cylinder(h = BAFFLE_RING_T, d = od);
+                    translate([0, 0, -0.1])
+                        cylinder(h = BAFFLE_RING_T + 0.2, d = id);
+                    translate([0, -(od + id) / 4, BAFFLE_RING_T - STAMP_DEPTH])
+                        part_stamp_stack_cut(str("dxp_bf", i + 1), size = 1.8);
+                }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// M52 ring gauge — print this before you print an arm
+// -----------------------------------------------------------------------------
+// One ring per F_REV_GAUGE step, same wall and same orientation as the arm
+// mouth so it prints the way the real thread will. Each is stamped with its
+// clearance in hundredths of a millimetre. Thread the Fotodiox ring into all
+// four, keep the tightest one that still runs down by hand without rocking,
+// and put its number into F_REV_CLEAR.
+GAUGE_H = 7;
+
+module part_ringgauge() {
+    n = len(F_REV_GAUGE);
+    color("DimGray")
+    for (i = [0 : n - 1]) {
+        c = F_REV_CLEAR + F_REV_GAUGE[i];
+        translate([i * (TUBE_OD + 6), 0, 0])
+            difference() {
+                cylinder(h = GAUGE_H, d = TUBE_OD);
+                translate([0, 0, -0.1])
+                    cylinder(h = GAUGE_H + 0.2, d = f_rev_minor() - 1.2);
+                f_rev_thread_cut(GAUGE_H + 0.4, c);
+                translate([0, 0, GAUGE_H - F_REV_LEAD])
+                    cylinder(h = F_REV_LEAD + 0.1,
+                             d1 = F_REV_MAJOR + c - F_REV_TOOTH / tan(30),
+                             d2 = F_REV_MAJOR + c - F_REV_TOOTH / tan(30)
+                                  + 2 * F_REV_LEAD);
+                translate([0, -(TUBE_OD + f_rev_minor()) / 4,
+                           GAUGE_H - STAMP_DEPTH])
+                    part_stamp_stack_cut(str("dxp_m52_", round(c * 100)),
+                                         size = 2.0);
+            }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ghosts and guides
+// -----------------------------------------------------------------------------
+function body_shift_x(mark) = mark == "T" ? BODY_T_X : BODY_R_X;
+function body_shift_y(mark) = mark == "T" ? BODY_T_Y : BODY_R_Y;
+function body_shift_z(mark) = mark == "T" ? BODY_T_Z : BODY_R_Z;
+// Both bodies upright, world +Z = camera top, both landscape.
+function body_roll_r() = 90;
+function body_roll_t() = 180;
+
+module camera_body_at(out_len, rx = 0, ry = 0, roll = 0, mark = "") {
+    if (SHOW_BODIES > 0)
+        color("DimGray", 0.92)
+            along_cam(rx, ry, mark)
+                translate([0, 0, out_len + mount_stack() - CAM_RECESS + ex])
+                    translate([body_shift_x(mark), body_shift_y(mark),
+                               body_shift_z(mark)])
+                        camera_body(roll, which = 1);
+}
+
+// Drawn from the front panel back, not from the register back: the whole
+// point of this ghost is that a D800 reaches D800_PROUD past its own flange,
+// so if it is going to foul the chassis face this is where you see it.
+module ghost_body_at(mark = "") {
+    if ($preview && SHOW_GHOSTS)
+        color("black", 0.12)
+            along_cam(0, 0, mark)
+                translate([0, 0, mount_standoff() + arm_extra() - d800_proud()
+                                 + BODY_D / 2 + ex])
+                    cube([BODY_W, BODY_H, BODY_D], center = true);
+}
+
+module taking_lens_at() {
+    if (show_isco())
+        isco_on_body();
+    else if (nw_stem() || (SHOW_LENS && STEM == 2))
+        at_stem()
+            translate([0, 0, nw_flange_z() + (EXPLODED ? ex * 1.6 : 0)])
+                nw180(show_glass = SHOW_LENS_MARKS);
+    else if (m65_el_stem())
+        at_stem()
+            translate([0, 0, patch_t() + DX_HELI_BODY + DX_HELI_EXT
+                             + (EXPLODED ? ex * 1.4 : 0)])
+                el180_ghost();
+    else if (SHOW_LENS)
+        color("DimGray", 0.92)
+            at_stem()
+                translate([0, 0, (inf_stem()
+                                    ? inf_seat_z()
+                                    : -WALL + heli_at_infinity())
+                                 + (EXPLODED ? ex * 1.4 : 0)])
+                    el180_ghost();
+}
+
+// Gold hairlines down each leg, plus the plate's clear-aperture footprint at
+// FSTOP so you can see the margin rather than trust the echo.
+module optical_axis_guides() {
+    if ($preview && SHOW_AXES) {
+        color("gold", 0.45) {
+            rotate([90, 0, 0])
+                cylinder(h = d_plate_to_flange(EL180_HELI_MIN), d = 1.0);
+            translate([0, -sensor_shift(), 0])
+                rotate([0, 90, 0])
+                    cylinder(h = d_plate_to_mount() + 2, d = 1.0);
+            translate([sensor_shift(), 0, 0])
+                rotate([-90, 0, 0])
+                    cylinder(h = d_plate_to_mount() + 2, d = 1.0);
+        }
+        color("red", 0.30)
+            rotate([0, 0, -45])
+                translate([0, 0, 0])
+                    cube([0.4,
+                          need_clear(FSTOP, path_after_plate()) * sqrt(2),
+                          need_clear(FSTOP, path_after_plate())], center = true);
+    }
+}
+
+// One cut per part. A single difference() around the whole assembly
+// throws the colors away, and the section becomes one green mass.
+// color() has to wrap the boolean. A color inside a difference() is thrown
+// away and the preview paints the cut green.
+module section_cut(tone = "Silver") {
+    if (PART == "section")
+        color(tone)
+            difference() {
+                children();
+                translate([0.02, -600, -200])
+                    cube([700, 1200, 600]);
+            }
+    else
+        children();
+}
+
+// -----------------------------------------------------------------------------
+module assembly() {
+    section_cut("SlateGray")
+        part_dx_body();
+
+    if (SHOW_LID)
+        translate([0, 0, lid_lift])
+            part_dx_lid();
+    if (SHOW_CAP)
+        translate([0, 0, BOX_Z / 2 + LID_T - CAP_SKIRT + lid_lift])
+            if (SHOW_CAP == 2)
+                part_lid_cap_rf();
+            else
+                part_lid_cap();
+    if (SHOW_TRIGGER && $preview)
+        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift])
+            trigger_stack_ghost();
+    if (SHOW_MONITOR || SHOW_PI)
+        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift]) {
+            if (SHOW_MONITOR)
+                display_mount();
+            monitor_easel() {
+                if (SHOW_MONITOR)
+                    monitor_ghost();
+                if (SHOW_PI)
+                    monitor_pi();
+            }
+        }
+
+    base_at();
+
+    at_reflect() {
+        ghost_body_at("R");
+        camera_body_at(reflect_focus_tube_len(), rx = -field_toe(),
+                       roll = body_roll_r(), mark = "R");
+    }
+    at_transmit() {
+        ghost_body_at("T");
+        camera_body_at(transmit_focus_tube_len(), ry = -field_toe(),
+                       roll = body_roll_t(), mark = "T");
+    }
+    section_cut("Silver")
+        taking_lens_at();
+    optical_axis_guides();
+    diagnostics();
+}
+
+module diagnostics() {
+    d = path_after_plate();
+    need = need_clear(FSTOP, d);
+    have = bs_in_plane();
+    echo(str("DXPAN 65  |  ", BS_H, "×", BS_W, "×", BS_THICK,
+             " 50/50 at 45°, S1 toward the lens, ", BS_W,
+             " across the fold  |  ARM_MOUNT=", ARM_MOUNT,
+             " (", printed_f() ? "printed F" : "reverse ring", ")",
+             "  SHELL=", SHELL));
+    echo(str("path: plate→flange ", d_plate_to_flange(EL180_HELI_MIN), "..",
+             d_plate_to_flange(EL180_HELI_MAX),
+             " + plate→mount ", d_plate_to_mount(),
+             " + flange ", FLANGE_F,
+             "  =  PATH ", path_min(), "..", path_max(), " mm",
+             "  |  infinity stem ", path_inf(), " mm"));
+    echo(str("infinity: register ", EL_FFD, " mm (focal length ", EL_FOCAL,
+             ") lands at helicoid ",
+             round(heli_at_infinity() * 10) / 10, " mm of ",
+             EL180_HELI_MIN, "..", EL180_HELI_MAX,
+             (path_min() <= EL_FFD && EL_FFD <= path_max())
+               ? "  → in range"
+               : "  *** OUT OF RANGE ***",
+             "  |  seat z ", inf_seat_z(),
+             "  helicoid nut ", heli_bottom_z(), "..", heli_boss_z(),
+             "  passage ", heli_pass_d()));
+    echo(str("infinity cookie: rim at the skin z ", skin_z(),
+             ", step ", EL180_LENS_OD + 0.6, " down ",
+             round((skin_z() - inf_seat_z()) * 10) / 10,
+             " mm to the seat at z ", inf_seat_z(),
+             "  |  thread ", inf_seat_z() - EL180_M62_LEN, "..", inf_seat_z(),
+             " (wall inner face ", -WALL, ")"));
+    echo(str("body fit: F register stands ",
+             round((patch_t() + mount_standoff() - skin_z()) * 10) / 10,
+             " mm off the chassis skin (skin ", skin_z(),
+             " mm; arm tube ", ARM_TUBE,
+             " + ring ", F_REV_STACK, ", cookies recessed ", CAM_RECESS, ")",
+             "  vs a D800 front panel ", d800_proud(), " mm proud of its flange",
+             patch_t() + mount_standoff() - skin_z() >= d800_proud()
+               ? str("  → ",
+                     round((patch_t() + mount_standoff() - skin_z()
+                            - d800_proud()) * 10) / 10,
+                     " mm to twist it on")
+               : "  *** THE BODY CANNOT GO ON ***"));
+    echo(str("stitch: overlap ", overlap_frac(), "  sensor_shift ",
+             sensor_shift(), " mm  stitch_w ", stitch_w(), " mm  ",
+             stitch_px(), "×", SENSOR_PX_H, " px  ",
+             round(stitch_aspect() * 1000) / 1000, ":1  (XPan 2.708:1)  ",
+             round(stitch_px() * SENSOR_PX_H / 1e5) / 10, " MP"));
+    need_v = need_clear_v(FSTOP, d);
+    echo(str("plate at f/", FSTOP, ": across the fold need ",
+             round(need * 10) / 10, " mm, have ", round(have * 100) / 100,
+             " (", BS_W, "/√2)  →  ", round((have / need - 1) * 1000) / 10, "%",
+             need > have ? " *** CLIPS ***" : "",
+             "  |  along it need ", round(need_v * 10) / 10,
+             " mm, have ", BS_H, "  →  ",
+             round((BS_H / need_v - 1) * 1000) / 10, "%",
+             need_v > BS_H ? " *** CLIPS ***" : ""));
+    // Worked at the frame corner, not along the stitch axis — see need_bore().
+    b_wall = path_after_plate() - BOX_XY / 2;
+    echo(str("arm bore at f/", FSTOP, " (frame corner): need ",
+             round(need_bore(FSTOP, b_wall) * 10) / 10,
+             " mm at the box wall (TUBE_ID ", TUBE_ID,
+             need_bore(FSTOP, b_wall) > TUBE_ID ? " — CLIPS" : "", ") and ",
+             round(need_bore(FSTOP, FLANGE_F) * 10) / 10,
+             " mm at the flange (F_BORE ", F_BORE,
+             need_bore(FSTOP, FLANGE_F) > F_BORE ? " — CLIPS" : "", ")",
+             "  [stitch axis alone would say ",
+             round(need_bore_u(FSTOP, FLANGE_F) * 10) / 10, "]"));
+    echo(str("mouth: ", printed_f() ? "printed F bayonet" : "metal reverse ring",
+             ", clear ", mouth_clear(), " mm  →  ",
+             mouth_ever_clean()
+               ? str("whole frame corner-to-corner from f/",
+                     round(mouth_fstop() * 10) / 10)
+               : "NEVER passes the frame corners at any aperture",
+             printed_f()
+               ? "   (Archive-663 lip is 40 mm; metal reverse ring is 44 mm / f/8.4)"
+               : "   (44 mm is the real F throat — this is the hard ceiling, not a print limit)"));
+    echo(str("camera helicoid: bought M", CAM_HELI_NOSE, " female / M",
+             CAM_HELI_REAR, " male ×", CAM_HELI_PITCH,
+             " ", CAM_HELI_MIN, "–", CAM_HELI_MAX,
+             "  body ", CAM_HELI_OD, "  neck ", CAM_HELI_NECK,
+             "  recess ", CAM_HELI_RECESS,
+             "  |  ", arm_extra() > 0 ? "Nikkor-W" : "EL (cannot focus; W only)",
+             " on a ", CAM_F_RING, " mm F ring, collapsed register ",
+             cam_heli_ring_z(), ", dial out R ", cam_heli_dial("R"),
+             " T ", cam_heli_dial("T"),
+             "  |  clock R ", CAM_HELI_CLOCK_R, "° T ", CAM_HELI_CLOCK_T, "°",
+             "  |  ", cam_heli_travel(), " mm outward",
+             "  |  shown ", CAM_HELI_SHOW, " mm out"));
+    echo(str("baffle rings that fit at f/", FSTOP, ": ", baffle_ring_count(),
+             " of ", BAFFLE_RINGS,
+             baffle_ring_count() == 0
+               ? "  (the bundle fills the bore — nothing to print)" : ""));
+    echo(str("ring lock: 2 M3 grubs at ", REV_LOCK_HOME - REV_LOCK_SPREAD / 2,
+             "° and ", REV_LOCK_HOME + REV_LOCK_SPREAD / 2,
+             "° off camera-up, nuts outboard of the thread at r ",
+             rev_lock_r_in(), "..", rev_lock_r_in() + REV_LOCK_NUT_T,
+             " in a lug to r ", rev_lock_r_out(), " (ring OD/2)",
+             "  |  wall left over the thread ",
+             round(rev_lock_thread_wall() * 100) / 100, " mm",
+             rev_lock_thread_wall() < 0.8
+               ? "  *** thin — drop REV_LOCK_WALL or F_REV_CLEAR ***" : "",
+             rev_lock_ok(transmit_tube_len())
+               ? "" : "  *** T arm too short for the nut slot ***"));
+    echo(str("transmit leg crosses ", BS_THICK,
+             " mm of n=", BS_N, " glass at 45°: tube shortened by ",
+             round(bs_t_comp() * 1000) / 1000, " mm",
+             "  |  plate focus sits ", round(bs_focus_mid() * 1000) / 1000,
+             " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")"));
+    echo(str("arm_r_focus: Nikkor-W printed F, tube ",
+             round(reflect_focus_tube_len() * 1000) / 1000,
+             " mm, ", round(r_focus_pull() * 1000) / 1000,
+             " mm shorter than arm_r_fw, stamp dxp_rw_focus"));
+    head_r = norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2;
+    echo(str("cookie ", round(port_patch_u() * 10) / 10, "×",
+             round(port_patch_v("R") * 10) / 10, " arm, ",
+             round(stem_plate_w() * 10) / 10, " square stem, ",
+             "centred on the bore, rebate closed all round",
+             "  |  clamp M3 at r ", round(port_clamp_r() * 10) / 10,
+             " ± ", PORT_CLAMP_SEP,
+             "  |  M62 boss ", el180_stem_od(), " inside heads at ",
+             round(head_r * 100) / 100,
+             el180_stem_od() / 2 >= head_r
+               ? "  *** the boss is over the screws again ***" : "",
+             "  |  ", round((1 - (port_patch_u() * (port_patch_v("R") * 2
+                            + port_patch_v(""))) / (3 * 8100)) * 1000) / 10,
+             "% less plate than three 90 squares"));
+    echo(str("cookie vs chassis skin: outboard edge at ",
+             round((sensor_shift() + port_patch_v("R") / 2) * 10) / 10,
+             " of a face flat to ", chassis_out() / 2 - PORT_BOSS_R,
+             " (PORT_BOSS_R ", PORT_BOSS_R, ")  →  stands ",
+             round(port_edge_proud() * 100) / 100, " mm proud",
+             port_edge_proud() > PORT_EDGE_CHAM
+               ? "  *** past the chamfer — drop PORT_BOSS_R ***"
+               : ", inside the chamfer, so port_chassis_clip takes it off"));
+    echo(str("base pads R ", base_r_xy(), " T ", base_t_xy(),
+             " tripod ", base_tripod_xy(), " cam_d ", base_cam_d(),
+             " shift ", sensor_shift()));
+    echo(str("under the chassis: lens axis ", d800_axis_base(),
+             " above a D800's baseplate, chamber floor at ", BOX_Z / 2,
+             "  →  plinth ", chassis_plinth(), " + cradle ", CRADLE_T,
+             " + base ", BASE_T,
+             chassis_plinth() > PORT_SLOT_LIP
+               ? str(" (the plinth is making up ",
+                     round((chassis_plinth() - PORT_SLOT_LIP) * 10) / 10,
+                     " mm the short chamber does not have)") : ""));
+    echo(str("pro line: ", STRIPE_H, " mm groove ", STRIPE_LIFT,
+             " mm above the floor, depth ", MARK_DEPTH,
+             "  →  chassis_logo_stripe"));
+    echo(str("logo cookie: −X skin, ",
+             round((logo_cookie_z1() - logo_cookie_z0()) * 10) / 10,
+             " mm tall, bottom ", round((logo_cookie_z0()
+                 - (stripe_z0() + STRIPE_H)) * 10) / 10,
+             " mm above the stripe, 45° on the inner bottom edge",
+             "  |  4× M3 at y ±", LOGO_SCREW_Y,
+             " above the badge and beside 65MP"));
+    echo(str("wall mark: ", round(SPEC_W * LOGO_SCALE * 10) / 10,
+             " × ", round(logo_art_h() * LOGO_SCALE * 10) / 10,
+             " mm from logos/dxpan_*.stl  →  chassis_logo_fx / _word / _outline"));
+    echo(str("chassis ", BOX_XY, "×", BOX_XY, "×", BOX_Z,
+             " chamber (outer ", chassis_out(), "×", chassis_out(), "×",
+             chassis_out_z(), ")  |  arm tube R ",
+             round(reflect_tube_len() * 100) / 100, " T ",
+             round(transmit_tube_len() * 100) / 100,
+             " mm  |  chamber half ", BOX_XY / 2 - WALL,
+             " vs port reach ", sensor_shift() + (TUBE_ID + 0.6) / 2));
+    echo("export: ./export_dxpan.sh  →  stls/dxpan/");
+}
+
+module export_part() {
+    if (PART == "chassis")
+        part_chassis();
+    else if (PART == "logo_cookie")
+        part_logo_cookie();
+    else if (PART == "stem")
+        part_stem();
+    else if (PART == "stem_el180_inf")
+        part_stem_el180_inf();
+    else if (PART == "stem_w")
+        part_stem_w();
+    else if (PART == "stem_nw180")
+        part_stem_nw180();
+    else if (PART == "stem_nw_m65")
+        part_stem_nw180(M65_MAJOR, M65_RING_MALE, "nw65");
+    else if (PART == "stem_nw_direct")
+        part_stem_nw180(M65_MAJOR + NW_DIRECT_GROW, M65_RING_MALE, "nwd65");
+    else if (PART == "arm_r" || PART == "arm_r_f")
+        part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    else if (PART == "arm_r_focus")
+        part_camera_tube(reflect_focus_tube_len(), rx = -field_toe(),
+                         mark = "R", tag = "dxp_rw_focus");
+    else if (PART == "arm_r_focus_roll")
+        part_camera_tube(reflect_focus_tube_len(), rx = -field_toe(),
+                         mark = "R", tag = "dxp_rw_roll");
+    else if (PART == "arm_r_wl")
+        part_camera_tube(wl_tube_len("R"), rx = -field_toe(), mark = "R",
+                         tag = "dxp_rw_lens");
+    else if (PART == "arm_t_wl")
+        part_camera_tube(wl_tube_len("T"), ry = -field_toe(), mark = "T",
+                         tag = "dxp_tw_lens");
+    else if (PART == "arm_t" || PART == "arm_t_f")
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    else if (PART == "arm_r_w" || PART == "arm_r_fw")
+        part_camera_tube(reflect_tube_len(), rx = -field_toe(), mark = "R");
+    else if (PART == "arm_t_focus")
+        part_camera_tube(transmit_focus_tube_len(), ry = -field_toe(),
+                         mark = "T", tag = "dxp_tw_focus");
+    else if (PART == "arm_t_focus_roll")
+        part_camera_tube(transmit_focus_tube_len(), ry = -field_toe(),
+                         mark = "T", tag = "dxp_tw_roll");
+    else if (PART == "arm_t_w" || PART == "arm_t_fw")
+        part_camera_tube(transmit_tube_len(), ry = -field_toe(), mark = "T");
+    else if (PART == "arm_r_h" || PART == "arm_r_hw")
+        part_cam_heli_arm("R");
+    else if (PART == "arm_t_h" || PART == "arm_t_hw")
+        part_cam_heli_arm("T");
+    else if (PART == "fmount_h_r")
+        part_cam_heli_mount("R");
+    else if (PART == "fmount_h_t")
+        part_cam_heli_mount("T");
+    else if (PART == "cam_helicoid")
+        cam_helicoid_gauge();
+    else if (PART == "lid")
+        part_dx_lid();
+    else if (PART == "lid_cap")
+        part_lid_cap();
+    else if (PART == "lid_cap_rf")
+        part_lid_cap_rf();
+    else if (PART == "display_mount")
+        display_mount_print();
+    else if (PART == "dxp_tray" || PART == "tray")
+        dxp_cartridge(show_glass = false, sh = sensor_shift(),
+                      tag = dxp_tag("tray"));
+    else if (PART == "base")
+        part_base();
+    else if (PART == "base_grip")
+        part_base_grip();
+    else if (PART == "cradle_r")
+        part_cradle("R");
+    else if (PART == "cradle_t")
+        part_cradle("T");
+    else if (PART == "baffle")
+        part_baffle();
+    else if (PART == "ringgauge")
+        part_ringgauge();
+    else if (PART == "shims")
+        shim_set();
+    else if (PART == "el180_adapter")
+        part_el180_adapter();
+    else if (PART == "m65_ring")
+        part_m65_ring();
+    else if (PART == "stem_m65")
+        part_stem(M65_MAJOR, "stem65", STEM_W_CLOCK);
+    else if (PART == "section")
+        assembly();
+    else if (PART == "isco_cut")
+        difference() {
+            assembly();
+            translate([0.02, -600, -200])
+                cube([700, 1200, 600]);
+        }
+    else
+        assembly();
+}
+
+// lid_cap_rf.scad sets this before including, and draws its own part.
+if (is_undef(DXP_INCLUDE))
+    export_part();
