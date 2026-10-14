@@ -214,9 +214,12 @@ W_ARM_EXTRA = 8.0;
 // Spent on the register. The cookies sit this much deeper.
 CAM_RECESS = 2.5;
 // M65 helicoid, measured on the Nikkor-W unit. Body seats on the skin.
-// Infinity is 9.5 mm out: printed ring (+8) at +1.5, flangeless ring at +9.5.
-DX_HELI_BODY = 16.58;
-DX_HELI_EXT  = 9.5;
+// Barrel travel is 7.5 mm. This is the mirror-image station; the two
+// cameras peak together r_focus_pull() (0.773) further out, at 6.77,
+// which leaves 0.73 mm before the stop. Flangeless ring only.
+DX_HELI_BODY   = 16.58;
+DX_HELI_TRAVEL = 7.5;
+DX_HELI_EXT    = 6.0;
 
 // --- EL-Nikkor 180/5.6N on an M62×1 helicoid -------------------------------
 // The stem carries a short M62 female boss and nothing else. hybrid_shift's

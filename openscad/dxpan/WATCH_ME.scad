@@ -1,22 +1,14 @@
 // =============================================================================
-// dxpan/WATCH_ME.scad — DXPAN 65: clean-sheet FX panoramic body
+// dxpan/WATCH_ME.scad — DXPAN: one-piece chassis, two D7000, 50×50 plate
 // =============================================================================
-// Two D800 behind one EL-Nikkor 180/5.6N and a 75×75×1 50/50 plate.
-// 64.80 × 23.9 mm stitch, 2.711:1 (XPan is 2.708:1), 13248 × 4912 = 65.1 MP.
-// The chamber is deliberately NOT a cube. BOX_Z carries BS_H. The flange
-// register is 158.5 mm, not the 180 mm focal length: the lens nut is recessed
-// into the wall and the camera cookies sit CAM_RECESS deeper. Read params.scad.
+// EL-Nikkor 180/5.6N on the M65 helicoid. 50×50×1 plate at 45°. Stitch is
+// 42.48 × 15.6 mm, 8870 × 3264, 2.72:1. The chassis is one print: M65 lip,
+// plate holder, lid seat, and both F-mount tubes. There is no cookie, no
+// tray, no separate arms.
 //
-// Lens −Y. Plate at the origin, 45°, S1 (the 50/50 coating) toward the lens.
-// Reflect leg → +X (camera R), transmit leg → +Y (camera T). Both bores are
-// translated by sensor_shift() in opposite senses; no tube toe, no Scheimpflug.
-// The lens, camera, and logo faces are blind rebates closed all round, so
-// the chassis keeps an unbroken top rim and the lid sits flush on it. The
-// red line around the plinth stays in the chassis.
-//
-// This body does not share parts with hybrid_shift. Every STL is stamped
-// dxp_* and the bore is wider (TUBE_ID 46 / F_BORE 44.0 vs 52 / 40.3) so the
-// 14.4 mm shift does not clip. Open this file and read the echo() lines.
+// Lens seat at y = −DX_LENS. R register at +X = dx_reg("R"), T at +Y =
+// dx_reg("T"). Infinity is DX_HELI_EXT + r_focus_pull() of helicoid travel
+// (6.77 mm of the measured 7.5). Open this file and read the echo() lines.
 // =============================================================================
 
 /* [Part] */
@@ -38,15 +30,15 @@ include <../isco/nikkor_w_180.scad>
 
 /* [View] */
 SHOW_LID = 1; // [0:hide, 1:show]
-SHOW_CAP = 1; // [0:hide, 1:slip-on lid cap, 2:rangefinder cap]
+SHOW_CAP = 0; // [0:hide, 1:slip-on lid cap, 2:rangefinder cap]
 SHOW_PANELS = 1; // [0:hide, 1:show]
 SHOW_MONITOR = 0; // [0:hide, 1:show]
 SHOW_PI = 0; // [0:hide, 1:show]
-SHOW_TRIGGER = 1; // [0:hide, 1:show]
+SHOW_TRIGGER = 0; // [0:hide, 1:show]
 SHOW_BODIES = 0; // [0:hide, 1:D7000]
 SHOW_LENS = 0; // [0:hide, 1:show]
 SHOW_LENS_MARKS = 0; // [0:hide, 1:pupils and focal plane]
-SHOW_BASE = 1; // [0:hide, 1:show]
+SHOW_BASE = 0; // [0:hide, 1:show]
 BASE_GRIP = 0; // [0:base, 1:base with hand grip]
 SHOW_AXES = 1; // [0:hide, 1:show]
 
@@ -446,17 +438,17 @@ module lid_align_lip() {
 // port placement
 // -----------------------------------------------------------------------------
 module at_stem_face() {
-    translate([0, -BOX_XY / 2, 0])
+    translate([0, -DX_LENS, 0])
         rotate([90, 0, 0])
             children();
 }
 module at_reflect_face() {
-    translate([BOX_XY / 2, 0, 0])
+    translate([dx_back("R"), 0, 0])
         rotate([0, 90, 0])
             children();
 }
 module at_transmit_face() {
-    translate([0, BOX_XY / 2, 0])
+    translate([0, dx_back("T"), 0])
         rotate([-90, 0, 0])
             children();
 }
@@ -2985,7 +2977,7 @@ module taking_lens_at() {
                 nw180(show_glass = SHOW_LENS_MARKS);
     else if (m65_el_stem())
         at_stem()
-            translate([0, 0, patch_t() + DX_HELI_BODY + DX_HELI_EXT
+            translate([0, 0, DX_HELI_BODY + DX_HELI_EXT
                              + (EXPLODED ? ex * 1.4 : 0)])
                 el180_ghost();
     else if (SHOW_LENS)
@@ -3004,14 +2996,17 @@ module optical_axis_guides() {
     if ($preview && SHOW_AXES) {
         color("gold", 0.45) {
             rotate([90, 0, 0])
-                cylinder(h = d_plate_to_flange(EL180_HELI_MIN), d = 1.0);
+                cylinder(h = DX_LENS + DX_HELI_BODY + DX_HELI_EXT, d = 1.0);
             translate([0, -sensor_shift(), 0])
                 rotate([0, 90, 0])
-                    cylinder(h = d_plate_to_mount() + 2, d = 1.0);
+                    cylinder(h = dx_reg("R") + 2, d = 1.0);
             translate([sensor_shift(), 0, 0])
                 rotate([-90, 0, 0])
-                    cylinder(h = d_plate_to_mount() + 2, d = 1.0);
+                    cylinder(h = dx_reg("T") + 2, d = 1.0);
         }
+        color("goldenrod", 0.45)
+            rotate([0, 0, -45])
+                cube([BS_THICK, BS_W, BS_H], center = true);
         color("red", 0.30)
             rotate([0, 0, -45])
                 translate([0, 0, 0])
@@ -3046,16 +3041,16 @@ module assembly() {
         translate([0, 0, lid_lift])
             part_dx_lid();
     if (SHOW_CAP)
-        translate([0, 0, BOX_Z / 2 + LID_T - CAP_SKIRT + lid_lift])
+        translate([0, 0, DX_HALF_Z + LID_T - CAP_SKIRT + lid_lift])
             if (SHOW_CAP == 2)
                 part_lid_cap_rf();
             else
                 part_lid_cap();
     if (SHOW_TRIGGER && $preview)
-        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift])
+        translate([0, 0, DX_HALF_Z + LID_T + lid_lift])
             trigger_stack_ghost();
     if (SHOW_MONITOR || SHOW_PI)
-        translate([0, 0, BOX_Z / 2 + LID_T + lid_lift]) {
+        translate([0, 0, DX_HALF_Z + LID_T + lid_lift]) {
             if (SHOW_MONITOR)
                 display_mount();
             monitor_easel() {
@@ -3068,15 +3063,19 @@ module assembly() {
 
     base_at();
 
-    at_reflect() {
-        ghost_body_at("R");
-        camera_body_at(reflect_focus_tube_len(), rx = -field_toe(),
-                       roll = body_roll_r(), mark = "R");
-    }
-    at_transmit() {
-        ghost_body_at("T");
-        camera_body_at(transmit_focus_tube_len(), ry = -field_toe(),
-                       roll = body_roll_t(), mark = "T");
+    if (SHOW_BODIES > 0) {
+        color("DimGray", 0.92)
+            translate([dx_reg("R"), -sensor_shift(), 0])
+                rotate([0, 90, 0])
+                    translate([body_shift_x("R"), body_shift_y("R"),
+                               body_shift_z("R")])
+                        camera_body(body_roll_r(), which = 1);
+        color("DimGray", 0.92)
+            translate([sensor_shift(), dx_reg("T"), 0])
+                rotate([-90, 0, 0])
+                    translate([body_shift_x("T"), body_shift_y("T"),
+                               body_shift_z("T")])
+                        camera_body(body_roll_t(), which = 1);
     }
     section_cut("Silver")
         taking_lens_at();
@@ -3088,6 +3087,16 @@ module diagnostics() {
     d = path_after_plate();
     need = need_clear(FSTOP, d);
     have = bs_in_plane();
+    echo(str("DXPAN one-piece  |  ", BS_H, "×", BS_W, "×", BS_THICK,
+             " plate  |  stitch ", stitch_w(), "×", SENSOR_H, "  ",
+             stitch_px(), "×", SENSOR_PX_H, "  ",
+             round(stitch_aspect() * 1000) / 1000, ":1"));
+    echo(str("seat y=", -DX_LENS, "  R register ",
+             round(dx_reg("R") * 100) / 100, "  T register ",
+             round(dx_reg("T") * 100) / 100,
+             "  |  helicoid +", DX_HELI_EXT, " mm station, both cameras ",
+             "peak at +", round((DX_HELI_EXT + r_focus_pull()) * 100) / 100,
+             " of ", DX_HELI_TRAVEL, " mm travel"));
     echo(str("DXPAN 65  |  ", BS_H, "×", BS_W, "×", BS_THICK,
              " 50/50 at 45°, S1 toward the lens, ", BS_W,
              " across the fold  |  ARM_MOUNT=", ARM_MOUNT,

@@ -59,9 +59,9 @@ module dx_outer() {
 }
 
 module dx_cavity() {
-    // Chassis floor is the bottom of the 50 mm glass. The plate sits on it.
+    // Thin skin. The plate sits on the holder shelf, not on this slab.
     // Lens side is open to the back of the thread. No wall behind the crests.
-    z0 = -BS_H / 2 - 0.15;
+    z0 = -DX_HALF_Z + DX_FLOOR;
     z1 = DX_HALF_Z - DX_LIP;
     y0 = -(DX_LENS - DX_THREAD);
     y1 = DX_CAV;
@@ -71,7 +71,7 @@ module dx_cavity() {
 
 // 50 × 50 × 1 plate. Cheeks are a light press, 0.97 mm on 1.00 mm glass.
 // They run up to the lid so the cavity above the glass is a solid wall.
-// The lens-side fin stops on the back of the thread and turns along it.
+// The lens-side end is braced back to the logo wall, away from the thread.
 module dx_plate() {
     pinch = BS_THICK - 0.03;
     mouth = 1.6;
@@ -79,13 +79,20 @@ module dx_plate() {
     plen = BS_W + 0.06;
     reach = DX_CAV * sqrt(2) + 0.6;
     shelf = -BS_H / 2 - 0.04;
-    z0 = shelf - 2.2;
+    web = 1.5;                              // shelf under the glass
+    z0 = -DX_HALF_Z + DX_FLOOR - 0.15;      // cheeks down into the skin
     z1 = DX_SEAT - 0.3;
     edge = 4;
     open0 = shelf + edge;
     open1 = BS_H / 2 - edge;
     glass_top = BS_H / 2;
-    inner = -(DX_LENS - DX_THREAD);
+    keep_y = dx_plate_keep_y();
+    // Lens end of the slot. Just past the glass, so the plate drops in
+    // from the lid and stops here instead of sliding toward the thread.
+    stop = 2.2;
+    face = -BS_W / 2 - 0.15;
+    overlap = 0.5;
+    slot1 = plen / 2 + 0.6;
     intersection() {
         rotate([0, 0, -45])
             union() {
@@ -94,31 +101,97 @@ module dx_plate() {
                         cube([wide, plen, z1 - z0], center = true);
                     // The slot stays open to the lid so the plate can slide in.
                     // Either side of it the cheek is solid up to the lid.
-                    translate([0, 0, (shelf + z1 + 2) / 2])
-                        cube([pinch, plen + 1, z1 + 2 - shelf], center = true);
+                    // Lens end stops at `face`.
+                    translate([0, (face + slot1) / 2, (shelf + z1 + 2) / 2])
+                        cube([pinch, slot1 - face, z1 + 2 - shelf], center = true);
                     hull() {
-                        translate([0, 0, glass_top + 0.3])
-                            cube([pinch, plen + 1, 0.2], center = true);
-                        translate([0, 0, z1 + 1])
-                            cube([mouth, plen + 1, 0.2], center = true);
+                        translate([0, (face + slot1) / 2, glass_top + 0.3])
+                            cube([pinch, slot1 - face, 0.2], center = true);
+                        translate([0, (face + slot1) / 2, z1 + 1])
+                            cube([mouth, slot1 - face, 0.2], center = true);
                     }
                     translate([0, 0, (open0 + open1) / 2])
                         cube([wide + 1, BS_W - 2 * edge, open1 - open0], center = true);
+                    // Under the shelf the cheeks are walls, not a beam.
+                    translate([0, (face + slot1) / 2, (z0 + shelf - web) / 2])
+                        cube([pinch, slot1 - face, shelf - web - z0], center = true);
                 }
-                for (sy = [-1, 1])
-                    translate([0, sy * (plen / 2 + (reach - plen / 2) / 2), (z0 + z1) / 2])
-                        cube([2.2, reach - plen / 2, z1 - z0], center = true);
+                // Only the T/R corner. The lens-side end is the brace,
+                // not a fin into the threads.
+                translate([0, plen / 2 + (reach - plen / 2) / 2, (z0 + z1) / 2])
+                    cube([2.2, reach - plen / 2, z1 - z0], center = true);
             }
-        // Cavity only. The lens fin used to run out through the threads.
-        translate([0, (inner + 0.4 + DX_CAV) / 2, 0])
-            cube([DX_CAV * 2 + 1.2, DX_CAV - inner - 0.4, 90], center = true);
+        // Stop short of the thread back so the holder cannot become a
+        // wall across the M65 hole.
+        translate([0, (keep_y + DX_CAV) / 2, 0])
+            cube([DX_CAV * 2 + 1.2, DX_CAV - keep_y, 120], center = true);
     }
-    // The clipped fin turns along the back of the thread and ties into
-    // the cavity wall. It stays off the glass and on the cavity side of
-    // the bore, so the port stays a round hole.
-    translate([-(DX_CAV + 16.8) / 2, inner + 0.4, (z0 + z1) / 2])
-        cube([DX_CAV - 16.8, 0.8, z1 - z0], center = true);
+    // End wall, past the keep clip. The lens bore trims any corner that
+    // reaches the M65. The slot cut above stops at `face`.
+    rotate([0, 0, -45])
+        translate([0, (face - stop + (-plen / 2 + overlap)) / 2, (z0 + z1) / 2])
+            cube([wide,
+                  (-plen / 2 + overlap) - (face - stop),
+                  z1 - z0], center = true);
+    dx_plate_brace(z0, z1, plen, wide, pinch, shelf);
 }
+
+// Keep the plate geom this far behind the thread back (y = −20). Glass
+// ends at y ≈ −17.7, so the slot still covers it.
+function dx_plate_keep_y() = inner_y() + 1.8;
+
+// Logo brace lands on the logo-side cheek at the solid lens-side end,
+// beside the slot, and runs −X to the logo wall. It does not cross the
+// glass channel.
+module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
+    h = z1 - z0;
+    zc = (z0 + z1) / 2;
+    keep_y = dx_plate_keep_y();
+    cheek = (wide - pinch) / 2;
+    edge = 4;
+    // Lens-side end cap, clear of the window (window starts at BS_W/2 − edge).
+    y0 = -plen / 2 + 0.5;
+    y1 = -(BS_W / 2 - edge) - 0.5;
+    ly = (y0 + y1) / 2;
+    lh = y1 - y0;
+    lx = -(pinch / 2 + cheek / 2);
+    wy = lx * sin(-45) + ly * cos(-45);
+    intersection() {
+        difference() {
+            union() {
+                hull() {
+                    rotate([0, 0, -45])
+                        translate([lx, ly, zc])
+                            cube([cheek - 0.04, lh, h], center = true);
+                    // Flush with the outer face. The old +0.4 landed 0.2 mm
+                    // proud and left a vertical line down the logo wall.
+                    translate([-(DX_CAV + DX_LOGO) / 2 + 0.25, wy, zc])
+                        cube([DX_LOGO - DX_CAV, 4.2, h], center = true);
+                }
+                hull() {
+                    rotate([0, 0, -45])
+                        translate([pinch / 2 + cheek / 2,
+                                   plen / 2 - cheek / 2 - 0.4, zc])
+                            cube([cheek - 0.04, cheek, h], center = true);
+                    translate([DX_CAV + DX_WALL / 2, DX_CAV + DX_WALL / 2, zc])
+                        cube([DX_WALL, DX_WALL, h], center = true);
+                }
+            }
+            // Anything that still sweeps across the slot gets opened.
+            rotate([0, 0, -45])
+                translate([0, 0, (shelf + z1 + 2) / 2])
+                    cube([pinch, plen + 1, z1 + 2 - shelf], center = true);
+        }
+        translate([0, (keep_y + DX_CAV) / 2, 0])
+            cube([DX_LOGO + dx_face("R") + 4,
+                  DX_CAV - keep_y, 120], center = true);
+        // Stay inside the logo face.
+        translate([-DX_LOGO + 80, 0, 0])
+            cube([160, 300, 300], center = true);
+    }
+}
+
+function inner_y() = -(DX_LENS - DX_THREAD);
 
 module dx_plate_pins() {
     rotate([0, 0, -45])
@@ -130,11 +203,11 @@ module dx_plate_pins() {
 
 // Root of the tube, in the tube's own XY. Full flange diameter, cut back
 // to the chassis outline where that circle would hang off the panel.
-module dx_tube_root_2d(mark) {
-    inset = 0.15;
+module dx_tube_root_2d(mark, shrink = 0) {
+    inset = 0.15 + shrink;
     hz = DX_HALF_Z - inset;
     intersection() {
-        circle(d = F_STL_OD, $fn = 96);
+        circle(d = F_STL_OD - 2 * shrink, $fn = 96);
         if (mark == "R") {
             ay = -sensor_shift();
             y0 = -DX_LENS - ay + inset;
@@ -155,7 +228,7 @@ module dx_tube_root_2d(mark) {
 // flange; the sides that already fit stay at the flange diameter.
 // R's lens-side edge stays on the chassis clip until it is outside the
 // helicoid keep-out, then takes a steeper angle out to the flange.
-module dx_arm_tube(mark) {
+module dx_arm_tube(mark, shrink = 0) {
     a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
     span = dx_back(mark) - dx_face(mark);
@@ -168,32 +241,32 @@ module dx_arm_tube(mark) {
                 if (mark == "R" && zc > 0.4 && zc < span - 2) {
                     hull() {
                         linear_extrude(0.2)
-                            dx_tube_root_2d(mark);
+                            dx_tube_root_2d(mark, shrink);
                         translate([0, 0, zc])
                             linear_extrude(0.2)
-                                dx_tube_root_2d(mark);
+                                dx_tube_root_2d(mark, shrink);
                     }
                     hull() {
                         translate([0, 0, zc])
                             linear_extrude(0.2)
-                                dx_tube_root_2d(mark);
+                                dx_tube_root_2d(mark, shrink);
                         translate([0, 0, span - 1.6])
                             linear_extrude(0.2)
-                                circle(d = F_STL_OD, $fn = 96);
+                                circle(d = F_STL_OD - 2 * shrink, $fn = 96);
                         translate([0, 0, span])
                             linear_extrude(0.2)
-                                circle(d = F_STL_OD, $fn = 96);
+                                circle(d = F_STL_OD - 2 * shrink, $fn = 96);
                     }
                 } else {
                     hull() {
                         linear_extrude(0.2)
-                            dx_tube_root_2d(mark);
+                            dx_tube_root_2d(mark, shrink);
                         translate([0, 0, span - 1.6])
                             linear_extrude(0.2)
-                                circle(d = F_STL_OD, $fn = 96);
+                                circle(d = F_STL_OD - 2 * shrink, $fn = 96);
                         translate([0, 0, span])
                             linear_extrude(0.2)
-                                circle(d = F_STL_OD, $fn = 96);
+                                circle(d = F_STL_OD - 2 * shrink, $fn = 96);
                     }
                 }
             }
@@ -202,37 +275,35 @@ module dx_arm_tube(mark) {
 module dx_arm_bore(mark) {
     a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
-    difference() {
+    intersection() {
         translate(a + dir * (DX_CAV - 1))
             rotate(mark == "T" ? [-90, 0, 0] : [0, 90, 0])
-                cylinder(h = dx_back(mark) - DX_CAV + 8, d = TUBE_ID);
-        if (mark == "R") {
-            dx_r_thread_guard();
-            dx_r_sep();
-        }
+                cylinder(h = dx_back(mark) - DX_CAV + 8, d = TUBE_ID, $fn = 96);
+        if (mark == "R") dx_r_keep();
     }
 }
 
-// Ring around the M65 core, in the 4.25 mm lip.
-module dx_r_thread_guard() {
-    translate([0, -DX_LENS - 0.3, 0])
-        rotate([-90, 0, 0])
-            difference() {
-                cylinder(h = DX_THREAD + 0.8, d = 68, $fn = 64);
-                translate([0, 0, -0.2])
-                    cylinder(h = DX_THREAD + 1.2, d = DX_THREAD_BORE, $fn = 64);
-            }
-}
+// R's lens side sits 14.8 mm off the axis, inside the Ø38. The bore
+// stays this far inside the arm's own outside, so the flat the helicoid
+// turns on is a wall and the bore goes round once the flare clears it.
+DX_R_SKIN = 3.0;
+// Behind the M65 crests the bore stops on the back of the thread, so
+// the crests stay whole and nothing is left between them and the tube.
+DX_R_THREAD_X = 34.5;
 
-// 2.6 mm of the lens-side wall, the whole way to the bayonet.
-// The bore is the rest of the circle. Both cutters leave this
-// strip, so the lens port does not open into the tube.
-module dx_r_sep() {
-    wall = 2.6;
-    x0 = DX_CAV - 0.3;
-    x1 = dx_back("R") + 2;
-    translate([(x0 + x1) / 2, -DX_LENS + wall / 2, 0])
-        cube([x1 - x0, wall, 32], center = true);
+module dx_r_keep() {
+    back = -(DX_LENS - DX_THREAD);
+    union() {
+        translate([(DX_CAV - 3 + DX_R_THREAD_X) / 2, back + 40, 0])
+            cube([DX_R_THREAD_X - DX_CAV + 3 + 0.02, 80, 80], center = true);
+        intersection() {
+            dx_arm_tube("R", DX_R_SKIN);
+            translate([DX_R_THREAD_X + 50, 0, 0])
+                cube([100, 200, 200], center = true);
+        }
+        translate([dx_back("R") - 2 + 20, 0, 0])
+            cube([40, 200, 200], center = true);
+    }
 }
 
 // Short fairing where the R tube meets the lens-side print flats.
@@ -304,29 +375,11 @@ module dx_mount(mark) {
 }
 
 module dx_lens_bore() {
-    // Core of the thread, ending on the back of the crests.
-    // It stops there so the plate rib in the cavity is not cored out.
-    difference() {
-        translate([0, -DX_LENS - 0.4, 0])
-            rotate([-90, 0, 0])
-                cylinder(h = DX_THREAD + 0.45, d = DX_THREAD_BORE, $fn = 96);
-        dx_r_sep();
-    }
-}
-
-// ScrewHole cuts its own core, which deletes the lens-side wall and
-// leaves a tunnel into the R tube. This cap is the overlap of that
-// core and the R bore, put back after the thread.
-module dx_r_cap() {
-    intersection() {
-        translate([(DX_CAV + dx_back("R")) / 2,
-                   (-DX_LENS - 0.3 + -19.85) / 2, 0])
-            cube([dx_back("R") - DX_CAV,
-                  -19.85 - (-DX_LENS - 0.3), 32], center = true);
-        translate([0, -DX_LENS - 1, 0])
-            rotate([-90, 0, 0])
-                cylinder(h = DX_THREAD + 2.6, d = DX_THREAD_BORE + 4, $fn = 72);
-    }
+    // Core of the thread, ending on the cavity so the hole opens
+    // rather than leaving a floor on the back of the crests.
+    translate([0, -DX_LENS - 0.4, 0])
+        rotate([-90, 0, 0])
+            cylinder(h = DX_THREAD + 0.45, d = DX_THREAD_BORE, $fn = 96);
 }
 
 module dx_lens_thread() {
@@ -438,9 +491,7 @@ module dx_lid_top_corners() {
 module part_dx_body() {
     color("SlateGray")
     // Thread axis is +Z inside ScrewHole. Map that onto world +Y, into the
-    // wall from the lens face. The cap goes on after ScrewHole, because
-    // the thread core is what opens the R tube.
-    union() {
+    // wall from the lens face.
     translate([0, -DX_LENS, 0])
         rotate([-90, 0, 0])
             ScrewHole(M65_MAJOR, DX_THREAD,
@@ -482,8 +533,6 @@ module part_dx_body() {
                             dx_ledge_top_corners(1);
                             dx_lid_taps();
                         }
-        dx_r_cap();
-    }
 }
 
 // The sliced-off roof. Sits on the seat aft of the helicoid ledge.
