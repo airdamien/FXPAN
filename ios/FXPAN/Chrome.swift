@@ -548,7 +548,7 @@ struct DimPage<Controls: View, Panel: View>: View {
     private func stuck() -> some View {
         VStack(spacing: 12) {
             Color.black
-                .aspectRatio(Catalog.nativeAspect, contentMode: .fit)
+                .aspectRatio(model.bodyKind.aspect, contentMode: .fit)
                 .overlay { panel() }
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS))
             ScrollView {
@@ -696,7 +696,7 @@ struct PanoFrame: View {
             if let preview = model.preview, preview.size.height > 1 {
                 return Double(preview.size.width / preview.size.height)
             }
-            return Catalog.nativeAspect * max(squeeze, 1)
+            return model.bodyKind.aspect * max(squeeze, 1)
         }()
         VStack(spacing: 0) {
             ZStack {
@@ -846,7 +846,7 @@ struct PanoFrame: View {
         return HStack(spacing: 0) {
             cell(light.followCam ? "Camera decides" : light.program, gold: !light.followCam)
             if !light.followCam {
-                cell(Catalog.fmtISO(light.iso))
+                cell(Catalog.fmtISO(light.iso, kind: model.bodyKind))
                 cell(Catalog.fmtShut(light.bulb ? light.shutter : light.shutter) + (light.bulb ? " bulb" : ""))
                 cell(Catalog.fmtF(light.fstop))
             }

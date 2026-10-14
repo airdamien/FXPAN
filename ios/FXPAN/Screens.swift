@@ -42,7 +42,7 @@ struct FrameScreen: View {
             VStack(alignment: .leading, spacing: 12) {
                 LivePanel { PanoFrame().frame(maxHeight: 280) }
                 FrameSketch(
-                    aspect: Catalog.nativeAspect * max(model.photo.frame.squeeze, 1),
+                    aspect: model.bodyKind.aspect * max(model.photo.frame.squeeze, 1),
                     guide: Catalog.guide(model.photo.frame.guide).1,
                     overlap: model.rig.overlap
                 )
@@ -199,8 +199,8 @@ struct LightScreen: View {
 
     private func isoBlock(hint: Bool = true, fill: CGFloat? = nil) -> some View {
         let light = model.photo.light
-        return RowBlock(title: "ISO", value: Catalog.fmtISO(light.iso), hint: hint ? (light.followCam ? "Camera decides" : "Both bodies") : "", fillHeight: fill) {
-            Ruler(values: Catalog.iso, selected: light.iso, label: { Catalog.isAuto($0) ? "Auto" : $0 }) { value in
+        return RowBlock(title: "ISO", value: Catalog.fmtISO(light.iso, kind: model.bodyKind), hint: hint ? (light.followCam ? "Camera decides" : "Both bodies") : "", fillHeight: fill) {
+            Ruler(values: Catalog.iso, selected: light.iso, label: { Catalog.isoLabel($0, kind: model.bodyKind) }) { value in
                 model.edit { $0.light.iso = value }
             }
         }
@@ -434,7 +434,7 @@ struct DriveScreen: View {
     private func releaseBlock(fill: CGFloat? = nil, compact: Bool = false) -> some View {
         let drive = model.photo.drive
         let value = drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB"
-        return RowBlock(title: "Release", value: value, hint: compact ? "" : "Sync drops USB, pulses the 10-pin board, then downloads the frame from camera RAM.", fillHeight: fill) {
+        return RowBlock(title: "Release", value: value, hint: compact ? "" : "Sync drops USB, pulses the trigger cables, then downloads the frame from camera RAM.", fillHeight: fill) {
             ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
                 model.edit { $0.drive.release = value }
             }
@@ -584,7 +584,7 @@ struct ModesScreen: View {
 
     private func modeLine(_ mode: NamedMode) -> String {
         let p = mode.photo
-        var line = "\(Catalog.format(p.frame.squeeze).1) · \(Catalog.fmtISO(p.light.iso)) · \(LookBook.name(p.look))"
+        var line = "\(Catalog.format(p.frame.squeeze).1) · \(Catalog.fmtISO(p.light.iso, kind: model.bodyKind)) · \(LookBook.name(p.look))"
         if p.drive.movie { line += " · Video" }
         if p.drive.ciraw { line += " · CIRAW" }
         return line

@@ -340,10 +340,11 @@ struct HomeView: View {
         case "Frame":
             let f = Catalog.format(photo.frame.squeeze)
             let g = Catalog.guide(photo.frame.guide)
-            let sub = f.0 == 1 ? "Native · 65 MP" : f.2.replacingOccurrences(of: "Anamorphic", with: "Ana") + " · " + f.3
+            let mp = Catalog.megapixels(f.0, kind: model.bodyKind)
+            let sub = f.0 == 1 ? "Native · \(mp)" : f.2.replacingOccurrences(of: "Anamorphic", with: "Ana") + " · " + mp
             return (f.1, sub + (g.1 > 0 ? " · \(g.2) guide" : ""))
         case "Light":
-            return (Catalog.fmtISO(photo.light.iso), "\(Catalog.fmtShut(photo.light.shutter)) · \(Catalog.fmtF(photo.light.fstop)) · \(photo.light.program)")
+            return (Catalog.fmtISO(photo.light.iso, kind: model.bodyKind), "\(Catalog.fmtShut(photo.light.shutter)) · \(Catalog.fmtF(photo.light.fstop)) · \(photo.light.program)")
         case "Focus":
             if photo.focus.aid == "off" { return ("Off", "Lens helicoid") }
             if photo.focus.aid == "range" {

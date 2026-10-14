@@ -141,6 +141,22 @@ struct NamedMode: Codable, Equatable, Identifiable {
     var photo: Photo
 }
 
+/// The D800 is FX, 36×24 mm. The D7000 is DX, 23.6×15.6 mm. Both fire from the trigger cables.
+enum BodyKind: Equatable {
+    case d800
+    case d7000
+
+    static func from(_ model: String) -> BodyKind {
+        model.lowercased().contains("d7000") ? .d7000 : .d800
+    }
+
+    /// The D800 switches into an application mode before a clip. The D7000 records from live view.
+    var movieApplication: Bool { self == .d800 }
+    /// DXPAN is 42.48 × 15.6 mm. FXPAN is 64.80 × 23.9 mm.
+    var aspect: Double { self == .d7000 ? 42.48 / 15.6 : 2.712 }
+    var megapixels: Double { self == .d7000 ? 29 : 65 }
+}
+
 struct Rig: Codable, Equatable {
     var overlap: Double = 0.20
     var flipR: Bool = true
@@ -196,6 +212,16 @@ extension ShotNote: Codable {
 enum Catalog {
     static let iso = ["Auto", "100", "125", "160", "200", "250", "320", "400", "500", "640",
                       "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000", "6400", "12800", "25600"]
+
+    /// D7000 native stops run to 6400. 12800 and 25600 are the Hi 1 and Hi 2 boosts.
+    static func isoLabel(_ v: String, kind: BodyKind) -> String {
+        if isAuto(v) { return "Auto" }
+        if kind == .d7000 {
+            if v == "12800" { return "Hi 1" }
+            if v == "25600" { return "Hi 2" }
+        }
+        return v
+    }
     static let shutter = ["Auto", "30", "20", "15", "10", "8", "6", "4", "3", "2", "1.6", "1.3", "1",
                           "0.8", "0.6", "0.5", "1/3", "1/4", "1/5", "1/6", "1/8", "1/10", "1/13", "1/15", "1/20", "1/25",
                           "1/30", "1/40", "1/50", "1/60", "1/80", "1/100", "1/125", "1/160", "1/200", "1/250", "1/320",
@@ -242,7 +268,9 @@ enum Catalog {
     static let nativeAspect = 2.712
 
     static func isAuto(_ v: String) -> Bool { v.trimmingCharacters(in: .whitespaces).lowercased() == "auto" }
-    static func fmtISO(_ v: String) -> String { isAuto(v) ? "ISO Auto" : "ISO \(v)" }
+    static func fmtISO(_ v: String, kind: BodyKind = .d800) -> String {
+        isAuto(v) ? "ISO Auto" : "ISO \(isoLabel(v, kind: kind))"
+    }
     static func fmtShut(_ v: String) -> String {
         if isAuto(v) { return "Auto" }
         if v.range(of: #"^\d+(\.\d+)?$"#, options: .regularExpression) != nil { return v + "″" }
@@ -251,6 +279,11 @@ enum Catalog {
     static func fmtF(_ v: String) -> String { isAuto(v) ? "Auto" : "f/" + v.replacingOccurrences(of: #"^f/?"#, with: "", options: .regularExpression) }
     static func format(_ squeeze: Double) -> (Double, String, String, String) {
         formats.min(by: { abs($0.0 - squeeze) < abs($1.0 - squeeze) }) ?? formats[0]
+    }
+
+    static func megapixels(_ squeeze: Double, kind: BodyKind) -> String {
+        let n = Int((kind.megapixels * max(squeeze, 1)).rounded())
+        return "\(n) MP"
     }
     static func guide(_ id: String) -> (String, Double, String) {
         guides.first { $0.0 == id } ?? guides[0]

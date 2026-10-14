@@ -351,7 +351,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return out
     }
 
-    /// Arm both bodies, drop USB so the D800s honor the 10-pin, pulse the Zero, then download.
+    /// Arm both bodies, drop USB so they honor the trigger cables, pulse the Zero, then download.
     private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
         let bodies = links.values.filter { role(of: $0.token) != nil }
         guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
@@ -1021,7 +1021,19 @@ final class NikonLink {
                 props[prop.rawValue] = desc
             }
         }
+        notePropList()
         await readExposure()
+    }
+
+    /// One line of what this body will actually accept. A later 200F then names a real refusal, not a guess.
+    private func notePropList() {
+        let rows: [(String, PTP.Prop)] = [("iso", .iso), ("mode", .program), ("ram", .recordingMedia), ("quality", .compression), ("shutter", .exposureTime), ("aperture", .fNumber)]
+        let text = rows.map { name, prop -> String in
+            guard let desc = props[prop.rawValue] else { return "\(name) absent" }
+            let list = desc.enums.map { String($0) }.joined(separator: ",")
+            return "\(name) \(desc.getSet == 0 ? "read" : "write") now \(desc.current) [\(list)]"
+        }.joined(separator: " · ")
+        Trace.line("FXPAN \(model) \(text)")
     }
 
     func readExposure() async {
@@ -1364,7 +1376,14 @@ final class NikonLink {
     }
 
     /// The D800 omits these from device info. Send them anyway, and remember when one lands.
+    /// The D7000 has no application mode. A clip starts from the live view that is already up.
     private func armMovie() async {
+        guard BodyKind.from(model).movieApplication else {
+            movieArmed = true
+            movieGateDead = false
+            Trace.line("FXPAN \(model) movie from live view")
+            return
+        }
         let change = try? await transact(PTP.Op.changeApplication.rawValue, params: [1], timeout: 4)
         Trace.line("FXPAN \(model) application opcode 1 \(Self.hex(change?.code))")
         let prop = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1F0], out: Data([1]), timeout: 4)
@@ -1390,6 +1409,10 @@ final class NikonLink {
 
     /// Photo mode again. Stills and the movie download both need this, or the card stays hidden.
     func leaveMovieMode() async {
+        guard BodyKind.from(model).movieApplication else {
+            movieArmed = false
+            return
+        }
         guard movieArmed || savedSelector != nil || !movieGateDead else { return }
         if let savedSelector {
             let set = try? await transact(PTP.Op.setProp.rawValue, params: [0xD1A6], out: Data([savedSelector]), timeout: 4)
@@ -2114,22 +2137,44 @@ final class NikonLink {
     private func set(_ prop: PTP.Prop, _ value: UInt64) async throws {
         if let supported = info?.properties, !supported.isEmpty, !supported.contains(prop.rawValue) { return }
         let desc = props[prop.rawValue]
+        if desc?.getSet == 0 { return }
         let type = desc?.dataType ?? Self.fallbackType(prop)
         var chosen = value
         if let enums = desc?.enums, !enums.isEmpty, !enums.contains(value) {
             chosen = PTP.nearest(value, in: enums) ?? value
         }
-        let reply = try await transact(PTP.Op.setProp.rawValue, params: [UInt32(prop.rawValue)], out: PTP.encode(chosen, type: type))
+        let payload = PTP.encode(chosen, type: type)
+        var reply = try await transact(PTP.Op.setProp.rawValue, params: [UInt32(prop.rawValue)], out: payload)
+        // 200F is Access Denied: the dial is mechanical, live view still owns the setting, or the mirror has not settled.
+        if reply.code == 0x200F, !inLive {
+            await settle(minimum: 0.3, seconds: 2)
+            reply = try await transact(PTP.Op.setProp.rawValue, params: [UInt32(prop.rawValue)], out: payload)
+        }
         if reply.ok {
             props[prop.rawValue]?.current = chosen
             return
         }
-        // A005 the body will not take this property (mode dial, or no lens for aperture). Keep shooting.
-        if reply.code == 0xA005 || reply.code == 0xA00A || reply.code == 0x2005 || reply.code == 0x2006 {
-            print("FXPAN skip \(model) prop \(String(format: "%04X", prop.rawValue)) \(String(format: "%04X", reply.code))")
+        // A005 / 200F: the body will not take this property (mode dial, no lens, or a boost the menu has closed). Keep shooting.
+        if reply.code == 0xA005 || reply.code == 0xA00A || reply.code == 0x2005 || reply.code == 0x2006 || reply.code == 0x200F || reply.code == 0x201C {
+            let list = desc?.enums.map { String($0) }.joined(separator: ",") ?? ""
+            Trace.line("FXPAN \(model) skip \(Self.propName(prop)) \(Self.hex(prop.rawValue)) value \(chosen) \(Self.hex(reply.code)) live \(inLive ? "up" : "down") [\(list)]")
             return
         }
         throw PTPError.refused(reply.code)
+    }
+
+    private static func propName(_ prop: PTP.Prop) -> String {
+        switch prop {
+        case .iso: return "ISO"
+        case .isoAuto, .isoAutoHi: return "ISO auto"
+        case .program: return "mode"
+        case .exposureTime: return "shutter"
+        case .fNumber: return "aperture"
+        case .whiteBalance: return "white balance"
+        case .compression: return "quality"
+        case .recordingMedia: return "camera RAM"
+        case .battery: return "battery"
+        }
     }
 
     private func value(_ prop: PTP.Prop) async -> UInt64? {
@@ -2303,6 +2348,10 @@ final class NikonLink {
         case 2: return "P"
         case 3: return "A"
         case 4: return "S"
+        case 32784, 32792: return "Auto"
+        case 32790: return "SCENE"
+        case 32848: return "U1"
+        case 32849: return "U2"
         default: return String(v)
         }
     }
