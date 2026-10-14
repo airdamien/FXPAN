@@ -3,39 +3,35 @@ import CoreGraphics
 import ImageIO
 import UIKit
 
-/// Line the two D800 clips up in time, fit the overlap once, then stitch every pair the way a still is stitched.
+/// Line the two clips up in time, solve the still Hugin fit once, and warp every frame with that fit.
 enum PanoVideo {
     /// `gap` is the seconds R started after T, measured when both start commands went out. Nil when it was never measured.
     static func make(
         t: URL, r: URL, movie: URL, poster: URL, rig: Rig, gap: Double?,
         note: @escaping @Sendable (String) -> Void
     ) async throws {
-        note("Matching frames")
+        note("Matching the clips")
         let timing = try await Task.detached(priority: .userInitiated) {
             try await offset(t: t, r: r, gap: gap)
         }.value
         let lag = timing.lag
         note("Fitting the overlap")
-        let locked = try await Task.detached(priority: .userInitiated) {
+        let held = try await Task.detached(priority: .userInitiated) {
             try await lock(t: t, r: r, rig: rig, lag: lag)
         }.value
-        note(locked == nil ? "Feathering" : "Stitching")
+        guard let held else { throw PTPError.message("Could not fit the overlap") }
+        note("Stitching")
         let made = try await Task.detached(priority: .userInitiated) {
-            try await render(t: t, r: r, movie: movie, poster: poster, rig: rig, lag: lag, locked: locked, note: note)
+            try await render(t: t, r: r, movie: movie, poster: poster, rig: rig, lag: lag, hold: held, note: note)
         }.value
         note("\(made.frames) frames")
-        var report = StitchReport(
-            overlap: locked?.fit.overlap ?? rig.overlap, overlapPx: 0, dy: locked?.fit.dy ?? 0, flipR: rig.flipR,
-            mode: locked == nil ? "video" : "video hugin",
-            width: made.width, height: made.height, squeeze: 1, look: "video"
-        )
-        if let fit = locked?.fit {
-            report.rot = fit.rot
-            report.scale = fit.scale
-            report.inliers = fit.inliers
-        }
         let line = lag == 0 ? "in step" : "offset \(lag) frames"
-        report.blend = locked.map { "\($0.useBands ? "multiband" : "feather") · \(line)" } ?? line
+        var report = StitchReport(
+            overlap: made.overlap, overlapPx: 0, dy: made.dy, flipR: rig.flipR,
+            mode: "video hugin",
+            width: made.width, height: made.height, squeeze: 1, look: "video",
+            rot: made.rot, scale: made.scale, inliers: made.inliers, blend: "\(made.blend) · \(line)"
+        )
         report.sec = Double(made.frames) / Double(max(made.fps, 1))
         report.startGap = gap
         report.lag = lag
@@ -68,47 +64,136 @@ enum PanoVideo {
         var fps: Int
         var width: Int
         var height: Int
+        var overlap: Double
+        var dy: Int
+        var rot: Double
+        var scale: Double
+        var inliers: Int
+        var blend: String
     }
 
     // MARK: - Timing
 
     /// T frame i pairs with R frame i + lag. R starting later gives a negative lag, and T skips those frames.
-    /// Each clip becomes a motion curve: how much the picture changed since the frame before. Both bodies see the same
-    /// movement at the same moment, so the curves line up when the clips do, whatever the exposure or the overlap.
+    /// The two pictures share only the overlap, so the sound is what lines them up. Both mics hear the same moment.
+    /// The picture match is the fallback when a body recorded no sound.
     private static func offset(t: URL, r: URL, gap: Double?) async throws -> (lag: Int, score: Double) {
-        let a = try await motion(t)
-        let b = try await motion(r)
-        let fps = Double(max(a.fps, b.fps, 1))
+        let fps = max(try await rate(t), try await rate(r))
         let prior = gap.map { Int((-$0 * fps).rounded()) } ?? 0
         let reach = gap == nil ? Int(fps * 6) : Int(fps * 1.5)
-        let za = zscore(a.curve)
-        let zb = zscore(b.curve)
-        let need = max(8, min(za.count, zb.count) / 3)
-        var bestLag = prior
-        var best = -Double.greatestFiniteMagnitude
-        if !za.isEmpty, !zb.isEmpty {
-            for lag in (prior - reach)...(prior + reach) {
-                var sum = 0.0
-                var n = 0
-                for i in 0..<za.count {
-                    let j = i + lag
-                    guard j >= 0, j < zb.count else { continue }
-                    sum += za[i] * zb[j]
-                    n += 1
-                }
-                guard n >= need else { continue }
-                let score = sum / Double(n)
-                if score > best {
-                    best = score
-                    bestLag = lag
+        if let heard = try await sound(t, r, fps: fps),
+           let found = slide(zscore(heard.t), zscore(heard.r), prior: prior, reach: reach),
+           found.score >= 0.35 {
+            Trace.line(String(format: "FXPAN video timing audio gap %@ prior %d search ±%d best %d corr %.2f use %d",
+                              gap.map { String(format: "%+.3fs", $0) } ?? "none", prior, reach, found.lag, found.score, found.lag))
+            return (found.lag, found.score)
+        }
+        let a = try await motion(t)
+        let b = try await motion(r)
+        let found = slide(zscore(a.curve), zscore(b.curve), prior: prior, reach: reach)
+        let trusted = (found?.score ?? -1) >= 0.25
+        let lag = trusted ? (found?.lag ?? prior) : prior
+        Trace.line(String(format: "FXPAN video timing picture gap %@ prior %d search ±%d best %d corr %.2f use %d",
+                          gap.map { String(format: "%+.3fs", $0) } ?? "none", prior, reach, found?.lag ?? prior, found?.score ?? -1, lag))
+        return (lag, found?.score ?? -1)
+    }
+
+    /// Loudness of each video frame. The waveform itself does not match: the mics are not in phase.
+    private static func sound(_ t: URL, _ r: URL, fps: Double) async throws -> (t: [Double], r: [Double])? {
+        async let a = envelope(t, fps: fps)
+        async let b = envelope(r, fps: fps)
+        let heardT = try await a
+        let heardR = try await b
+        guard let heardT, let heardR, heardT.count > 8, heardR.count > 8 else {
+            Trace.line("FXPAN video timing audio none")
+            return nil
+        }
+        return (heardT, heardR)
+    }
+
+    private static func envelope(_ url: URL, fps: Double) async throws -> [Double]? {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first,
+              let desc = try await track.load(.formatDescriptions).first,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee else { return nil }
+        let channels = max(1, Int(asbd.mChannelsPerFrame))
+        let rate = asbd.mSampleRate > 0 ? asbd.mSampleRate : 48_000
+        let per = max(1, Int((rate / fps).rounded()))
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        output.alwaysCopiesSampleData = true
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading() else { return nil }
+        defer { reader.cancelReading() }
+        var bins: [Double] = []
+        var counts: [Int] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let length = CMBlockBufferGetDataLength(block)
+            guard length >= 2 else { continue }
+            var bytes = [UInt8](repeating: 0, count: length)
+            guard CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: &bytes) == noErr else { continue }
+            let pts = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            let origin = pts.isFinite ? Int((pts * rate).rounded()) : 0
+            bytes.withUnsafeBytes { raw in
+                let samples = raw.bindMemory(to: Int16.self)
+                let frames = samples.count / channels
+                for i in 0..<frames {
+                    var acc = 0
+                    for c in 0..<channels { acc += abs(Int(samples[i * channels + c])) }
+                    let bin = (origin + i) / per
+                    guard bin >= 0 else { continue }
+                    if bin >= bins.count {
+                        bins.append(contentsOf: repeatElement(0, count: bin - bins.count + 1))
+                        counts.append(contentsOf: repeatElement(0, count: bin - counts.count + 1))
+                    }
+                    bins[bin] += Double(acc) / Double(channels)
+                    counts[bin] += 1
                 }
             }
         }
-        let trusted = best >= 0.25
-        let lag = trusted ? bestLag : prior
-        Trace.line(String(format: "FXPAN video timing gap %@ prior %d search ±%d best %d corr %.2f use %d",
-                          gap.map { String(format: "%+.3fs", $0) } ?? "none", prior, reach, bestLag, best, lag))
-        return (lag, best)
+        guard !bins.isEmpty else { return nil }
+        for i in bins.indices where counts[i] > 0 { bins[i] /= Double(counts[i]) }
+        return bins
+    }
+
+    private static func rate(_ url: URL) async throws -> Double {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else { return 30 }
+        return Double(max(try await track.load(.nominalFrameRate), 1))
+    }
+
+    /// Lag that lines `a` up with `b`: sample i of T against sample i + lag of R.
+    private static func slide(_ za: [Double], _ zb: [Double], prior: Int, reach: Int) -> (lag: Int, score: Double)? {
+        guard !za.isEmpty, !zb.isEmpty else { return nil }
+        let need = max(8, min(za.count, zb.count) / 3)
+        var bestLag = prior
+        var best = -Double.greatestFiniteMagnitude
+        for lag in (prior - reach)...(prior + reach) {
+            var sum = 0.0
+            var n = 0
+            for i in 0..<za.count {
+                let j = i + lag
+                guard j >= 0, j < zb.count else { continue }
+                sum += za[i] * zb[j]
+                n += 1
+            }
+            guard n >= need else { continue }
+            let score = sum / Double(n)
+            if score > best {
+                best = score
+                bestLag = lag
+            }
+        }
+        guard best > -Double.greatestFiniteMagnitude / 2 else { return nil }
+        return (bestLag, best)
     }
 
     private static func motion(_ url: URL) async throws -> (curve: [Double], fps: Float) {
@@ -145,41 +230,7 @@ enum PanoVideo {
         return v.map { ($0 - mean) / sd }
     }
 
-    // MARK: - Fit
-
-    /// Try the fit on a few matched pairs and keep the one with the most inliers.
-    private static func lock(t: URL, r: URL, rig: Rig, lag: Int) async throws -> Hugin.Locked? {
-        let left = try await Reader(url: t)
-        let right = try await Reader(url: r)
-        defer {
-            left.reader.cancelReading()
-            right.reader.cancelReading()
-        }
-        skip(left: left, right: right, lag: lag)
-        let picks: Set<Int> = [12, 45, 90]
-        let last = picks.max() ?? 0
-        var best: Hugin.Locked?
-        var index = 0
-        var more = true
-        while more && index <= last {
-            try autoreleasepool {
-                guard let tImage = left.next(), let rImage = right.next() else {
-                    more = false
-                    return
-                }
-                defer { index += 1 }
-                guard picks.contains(index) else { return }
-                let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
-                let overlap = rig.overlap(width: tImage.width, height: tImage.height)
-                guard let found = try Hugin.lock(t: tImage, r: oriented, overlap: overlap, balance: rig.balance) else { return }
-                Trace.line(String(format: "FXPAN video fit frame %d n=%d rot=%+.2f scale=%.4f ol=%.0f%% %dx%d",
-                                  index, found.fit.inliers, found.fit.rot, found.fit.scale, found.fit.overlap * 100, found.width, found.height))
-                if best == nil || found.fit.inliers > best!.fit.inliers { best = found }
-            }
-        }
-        if best == nil { Trace.line("FXPAN video fit missed, feathering the rig overlap") }
-        return best
-    }
+    // MARK: - Render
 
     private static func skip(left: Reader, right: Reader, lag: Int) {
         var tSkip = lag < 0 ? -lag : 0
@@ -196,11 +247,77 @@ enum PanoVideo {
         }
     }
 
-    // MARK: - Render
+    /// Frames spread across the whole clip. The opening often matches the wrong seam.
+    private static func probeIndexes(n: Int) -> [Int] {
+        guard n > 16 else { return [max(0, n / 2)] }
+        let start = min(12, n / 5)
+        let end = max(start, n - 12)
+        let steps = min(12, end - start + 1)
+        var picks: [Int] = []
+        for i in 0..<steps {
+            let t = steps == 1 ? 0.0 : Double(i) / Double(steps - 1)
+            picks.append(start + Int((Double(end - start) * t).rounded()))
+        }
+        return Array(Set(picks)).sorted()
+    }
+
+    /// One still fit for the whole clip. A false match slides the frames apart and rolls them, so the wider, level seam wins.
+    private static func lock(t: URL, r: URL, rig: Rig, lag: Int) async throws -> Hugin.Hold? {
+        let left = try await Reader(url: t)
+        let right = try await Reader(url: r)
+        defer {
+            left.reader.cancelReading()
+            right.reader.cancelReading()
+        }
+        skip(left: left, right: right, lag: lag)
+        let paired = min(left.frameCount - max(0, -lag), right.frameCount - max(0, lag))
+        let calm = probeIndexes(n: max(0, paired))
+        let want = Set(calm)
+        let last = calm.max() ?? 0
+        var best: Hugin.Hold?
+        var bestRank = Double.greatestFiniteMagnitude
+        var index = 0
+        var more = true
+        while more && index <= last {
+            try autoreleasepool {
+                defer { index += 1 }
+                guard want.contains(index) else {
+                    guard left.skipOne(), right.skipOne() else {
+                        more = false
+                        return
+                    }
+                    return
+                }
+                guard let tImage = left.next(), let rImage = right.next() else {
+                    more = false
+                    return
+                }
+                let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
+                guard let found = try Hugin.hold(t: tImage, r: oriented, overlap: rig.overlap(width: tImage.width, height: tImage.height), balance: rig.balance) else { return }
+                let wide = found.fit.overlap
+                let roll = abs(found.fit.rot)
+                let real = roll <= 1.5 && wide >= 0.18
+                let rank = (real ? 0.0 : 100.0) - wide * 10 + roll * 0.15
+                Trace.line(String(format: "FXPAN video fit frame %d n=%d rot=%+.2f scale=%.4f ol=%.0f%% rank %.3f",
+                                  index, found.fit.inliers, found.fit.rot, found.fit.scale, wide * 100, rank))
+                if rank < bestRank {
+                    bestRank = rank
+                    best = found
+                }
+            }
+        }
+        if let best {
+            Trace.line(String(format: "FXPAN video fit kept n=%d rot=%+.2f ol=%.0f%%",
+                              best.fit.inliers, best.fit.rot, best.fit.overlap * 100))
+        } else {
+            Trace.line("FXPAN video fit missed")
+        }
+        return best
+    }
 
     private static func render(
-        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, lag: Int,
-        locked: Hugin.Locked?, note: @escaping @Sendable (String) -> Void
+        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, lag: Int, hold: Hugin.Hold,
+        note: @escaping @Sendable (String) -> Void
     ) async throws -> Made {
         let left = try await Reader(url: t)
         let right = try await Reader(url: r)
@@ -215,39 +332,33 @@ enum PanoVideo {
         var input: AVAssetWriterInput?
         var adaptor: AVAssetWriterInputPixelBufferAdaptor?
         var frames = 0
+        var missed = 0
         var size = (w: 0, h: 0)
         let began = CFAbsoluteTimeGetCurrent()
         var more = true
         while more {
-            // Each frame's images, Metal buffers, and sample buffers are freed here, before the next pair is decoded.
             try autoreleasepool {
                 guard let tImage = left.next(), let rImage = right.next() else {
                     more = false
                     return
                 }
-                let stitched: CGImage?
-                if let locked {
-                    let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
-                    if let held = Hugin.frame(t: tImage, r: oriented, locked: locked) {
-                        stitched = Stitcher.flop(held)
-                    } else {
-                        stitched = Stitcher.preview(t: tImage, r: rImage, rig: rig, squeeze: 1, maxWidth: tImage.width)
-                    }
-                } else {
-                    stitched = Stitcher.preview(t: tImage, r: rImage, rig: rig, squeeze: 1, maxWidth: tImage.width)
-                }
-                guard var frame = stitched else { return }
-                if size.w > 0, frame.width != size.w || frame.height != size.h {
-                    frame = Stitcher.sized(frame, to: size.w, height: size.h)
-                }
-                let w = frame.width - frame.width % 2
-                let h = frame.height - frame.height % 2
-                if w < 16 || h < 16 { return }
-                if w != frame.width || h != frame.height, let cropped = frame.cropping(to: CGRect(x: 0, y: 0, width: w, height: h)) {
-                    frame = cropped
-                }
                 if frames % 15 == 0 {
                     note(total > 0 ? "Stitching \(frames + 1) of \(total)" : "Stitching \(frames + 1)")
+                }
+                let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
+                guard var frame = Hugin.frame(t: tImage, r: oriented, hold: hold) else {
+                    missed += 1
+                    return
+                }
+                frame = Stitcher.flop(frame)
+                let w = frame.width - frame.width % 2
+                let h = frame.height - frame.height % 2
+                if w < 16 || h < 16 {
+                    missed += 1
+                    return
+                }
+                if w != frame.width || h != frame.height, let cropped = frame.cropping(to: CGRect(x: 0, y: 0, width: w, height: h)) {
+                    frame = cropped
                 }
                 if writer == nil {
                     size = (w, h)
@@ -259,6 +370,10 @@ enum PanoVideo {
                         CGImageDestinationAddImage(jpg, frame, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
                         CGImageDestinationFinalize(jpg)
                     }
+                }
+                guard frame.width == size.w, frame.height == size.h else {
+                    missed += 1
+                    return
                 }
                 guard let input, let adaptor, let pool = adaptor.pixelBufferPool else {
                     more = false
@@ -276,7 +391,7 @@ enum PanoVideo {
                 draw(frame, into: buffer)
                 let time = CMTime(value: CMTimeValue(frames), timescale: CMTimeScale(fps))
                 guard adaptor.append(buffer, withPresentationTime: time) else {
-                    throw PTPError.message(writer?.error?.localizedDescription ?? "Could not write a frame")
+                    throw PTPError.message(Self.why(writer?.error, fallback: "Could not write a frame"))
                 }
                 frames += 1
             }
@@ -287,14 +402,29 @@ enum PanoVideo {
         writer.finishWriting { gate.signal() }
         gate.wait()
         guard writer.status == .completed else {
-            throw PTPError.message(writer.error?.localizedDescription ?? "Could not write the movie")
+            throw PTPError.message(Self.why(writer.error, fallback: "Could not write the movie"))
         }
-        Trace.line(String(format: "FXPAN video stitched %d frames %dx%d in %.1fs %@",
-                          frames, size.w, size.h, CFAbsoluteTimeGetCurrent() - began, locked == nil ? "feather" : "hugin"))
-        return Made(frames: frames, fps: fps, width: size.w, height: size.h)
+        let blend = hold.useBands ? "multiband" : "feather"
+        Trace.line(String(format: "FXPAN video stitched %d frames %dx%d in %.1fs hugin rot=%+.2f ol=%.0f%% missed %d",
+                          frames, size.w, size.h, CFAbsoluteTimeGetCurrent() - began, hold.fit.rot, hold.fit.overlap * 100, missed))
+        return Made(
+            frames: frames, fps: fps, width: size.w, height: size.h,
+            overlap: hold.fit.overlap, dy: hold.fit.dy, rot: hold.fit.rot, scale: hold.fit.scale,
+            inliers: hold.fit.inliers, blend: blend
+        )
     }
 
-    private static func writer(movie: URL, width: Int, height: Int) throws -> (AVAssetWriter, AVAssetWriterInput, AVAssetWriterInputPixelBufferAdaptor) {
+    /// Domain and code, because AVFoundation's own text is only "The operation could not be completed".
+    private static func why(_ error: Error?, fallback: String) -> String {
+        guard let error = error as NSError? else { return fallback }
+        let under = (error.userInfo[NSUnderlyingErrorKey] as? NSError).map { " \($0.domain) \($0.code)" } ?? ""
+        Trace.line("FXPAN video \(fallback) \(error.domain) \(error.code)\(under)")
+        return "\(error.localizedDescription) (\(error.domain) \(error.code)\(under))"
+    }
+
+    private static func writer(
+        movie: URL, width: Int, height: Int
+    ) throws -> (AVAssetWriter, AVAssetWriterInput, AVAssetWriterInputPixelBufferAdaptor) {
         if FileManager.default.fileExists(atPath: movie.path) {
             try FileManager.default.removeItem(at: movie)
         }
@@ -312,10 +442,150 @@ enum PanoVideo {
         ])
         writer.add(input)
         guard writer.startWriting() else {
-            throw PTPError.message(writer.error?.localizedDescription ?? "Could not start the movie")
+            throw PTPError.message(Self.why(writer.error, fallback: "Could not start the movie"))
         }
         writer.startSession(atSourceTime: .zero)
         return (writer, input, adaptor)
+    }
+
+    /// T's audio goes on after the panorama is finished. Reading it while the frames are still decoding fails the writer.
+    private static func attachAudio(from source: URL, to movie: URL, skipFrames: Int, fps: Int) async {
+        let picture = AVURLAsset(url: movie)
+        let clip = AVURLAsset(url: source)
+        guard let vTrack = try? await picture.loadTracks(withMediaType: .video).first,
+              let aTrack = try? await clip.loadTracks(withMediaType: .audio).first,
+              let vFormat = try? await vTrack.load(.formatDescriptions).first,
+              let aDesc = try? await aTrack.load(.formatDescriptions).first,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(aDesc)?.pointee else {
+            Trace.line("FXPAN video audio none")
+            return
+        }
+        let channels = max(1, min(2, Int(asbd.mChannelsPerFrame)))
+        let rate = asbd.mSampleRate > 0 ? asbd.mSampleRate : 48_000
+        let out = movie.deletingLastPathComponent().appendingPathComponent("." + movie.lastPathComponent + ".snd")
+        try? FileManager.default.removeItem(at: out)
+        guard let vReader = try? AVAssetReader(asset: picture),
+              let aReader = try? AVAssetReader(asset: clip),
+              let writer = try? AVAssetWriter(outputURL: out, fileType: .mov) else { return }
+        let vOut = AVAssetReaderTrackOutput(track: vTrack, outputSettings: nil)
+        vOut.alwaysCopiesSampleData = false
+        let aOut = AVAssetReaderTrackOutput(track: aTrack, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        aOut.alwaysCopiesSampleData = true
+        guard vReader.canAdd(vOut), aReader.canAdd(aOut) else { return }
+        vReader.add(vOut)
+        aReader.add(aOut)
+        let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: vFormat)
+        vIn.expectsMediaDataInRealTime = false
+        let aIn = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: rate,
+            AVNumberOfChannelsKey: channels,
+            AVEncoderBitRateKey: 160_000,
+        ])
+        aIn.expectsMediaDataInRealTime = false
+        guard writer.canAdd(vIn), writer.canAdd(aIn) else {
+            Trace.line("FXPAN video audio writer refused the tracks")
+            return
+        }
+        writer.add(vIn)
+        writer.add(aIn)
+        guard writer.startWriting(), vReader.startReading(), aReader.startReading() else {
+            Trace.line("FXPAN video audio start \(writer.error?.localizedDescription ?? vReader.error?.localizedDescription ?? aReader.error?.localizedDescription ?? "")")
+            try? FileManager.default.removeItem(at: out)
+            return
+        }
+        writer.startSession(atSourceTime: .zero)
+        let skip = CMTime(value: CMTimeValue(max(0, skipFrames)), timescale: CMTimeScale(max(fps, 1)))
+        let lead = CMTime(value: 1, timescale: 2)
+        var pending: CMSampleBuffer?
+        var videoDone = false
+        var audioDone = false
+        var videoPTS = CMTime.zero
+        while !videoDone || !audioDone {
+            var wrote = false
+            if !videoDone, vIn.isReadyForMoreMediaData {
+                if let sample = vOut.copyNextSampleBuffer() {
+                    videoPTS = CMSampleBufferGetPresentationTimeStamp(sample)
+                    if !vIn.append(sample) {
+                        Trace.line("FXPAN video audio picture \(Self.why(writer.error, fallback: "copy"))")
+                        try? FileManager.default.removeItem(at: out)
+                        return
+                    }
+                    wrote = true
+                } else {
+                    vIn.markAsFinished()
+                    videoDone = true
+                }
+            }
+            if !audioDone, aIn.isReadyForMoreMediaData {
+                let sample = pending ?? aOut.copyNextSampleBuffer()
+                pending = nil
+                if let sample {
+                    let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                    if CMTimeCompare(pts, skip) < 0 {
+                        wrote = true
+                    } else {
+                        let shifted = pts - skip
+                        if !videoDone, CMTimeCompare(shifted, videoPTS + lead) > 0 {
+                            pending = sample
+                        } else if let timed = retimed(sample, by: skip), aIn.append(timed) {
+                            wrote = true
+                        } else {
+                            Trace.line("FXPAN video audio buffer \(writer.error?.localizedDescription ?? "")")
+                            try? FileManager.default.removeItem(at: out)
+                            return
+                        }
+                    }
+                } else {
+                    aIn.markAsFinished()
+                    audioDone = true
+                }
+            }
+            if !wrote { Thread.sleep(forTimeInterval: 0.005) }
+        }
+        let gate = DispatchSemaphore(value: 0)
+        writer.finishWriting { gate.signal() }
+        gate.wait()
+        guard writer.status == .completed else {
+            Trace.line("FXPAN video audio \(Self.why(writer.error, fallback: "mux"))")
+            try? FileManager.default.removeItem(at: out)
+            return
+        }
+        do {
+            _ = try FileManager.default.replaceItemAt(movie, withItemAt: out)
+            Trace.line("FXPAN video audio kept")
+        } catch {
+            Trace.line("FXPAN video audio replace \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: out)
+        }
+    }
+
+    private static func retimed(_ sample: CMSampleBuffer, by skip: CMTime) -> CMSampleBuffer? {
+        let count = CMSampleBufferGetNumSamples(sample)
+        guard count > 0 else { return nil }
+        var infos = [CMSampleTimingInfo](
+            repeating: CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: .invalid, decodeTimeStamp: .invalid),
+            count: count
+        )
+        CMSampleBufferGetSampleTimingInfoArray(sample, entryCount: count, arrayToFill: &infos, entriesNeededOut: nil)
+        for i in 0..<count {
+            infos[i].presentationTimeStamp = infos[i].presentationTimeStamp - skip
+            if infos[i].decodeTimeStamp.isValid {
+                infos[i].decodeTimeStamp = infos[i].decodeTimeStamp - skip
+            }
+        }
+        var copy: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault, sampleBuffer: sample,
+            sampleTimingEntryCount: count, sampleTimingArray: &infos, sampleBufferOut: &copy
+        )
+        return status == noErr ? copy : nil
     }
 
     private static func draw(_ image: CGImage, into buffer: CVPixelBuffer) {
@@ -330,7 +600,11 @@ enum PanoVideo {
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else { return }
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer)))
+        let w = CVPixelBufferGetWidth(buffer)
+        let h = CVPixelBufferGetHeight(buffer)
+        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
     }
 
     private final class Reader {

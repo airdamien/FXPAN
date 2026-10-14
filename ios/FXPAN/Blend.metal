@@ -192,7 +192,7 @@ kernel void fxpanPack(
     if (hasR && hasT) value = min(max(rv, tv), max(min(rv, tv), b));
     else if (hasR) value = rv;
     else if (hasT) value = tv;
-    else value = b;
+    else value = 0.0f;
     uint i = gid.y * u.w + gid.x;
     uchar4 p = out[i];
     uchar byte = uchar(clamp(round(value), 0.0f, 255.0f));

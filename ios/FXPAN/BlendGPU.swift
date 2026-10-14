@@ -3,10 +3,10 @@ import Metal
 
 /// The band blend and the per-row color match. The CPU path stays if a texture or the device refuses the frame.
 enum BlendGPU {
-    static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int) -> [UInt8]? {
+    static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, inset: Int = 0) -> [UInt8]? {
         guard w >= 16, h >= 16, w <= 16384, h <= 16384, bands >= 1, let gpu = GPU.shared else { return nil }
         let started = CFAbsoluteTimeGetCurrent()
-        guard let out = gpu.multiband(r: r, t: t, w: w, h: h, bands: bands) else { return nil }
+        guard let out = gpu.multiband(r: r, t: t, w: w, h: h, bands: bands, inset: inset) else { return nil }
         print(String(format: "FXPAN blend metal %dx%d bands=%d %.2fs", w, h, bands, CFAbsoluteTimeGetCurrent() - started))
         return out
     }
@@ -77,8 +77,8 @@ enum BlendGPU {
             self.balancePipe = balancePipe
         }
 
-        func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int) -> [UInt8]? {
-            let seamWeight = Self.seam(r, t, w, h)
+        func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, inset: Int) -> [UInt8]? {
+            let seamWeight = Self.seam(r, t, w, h, inset: inset)
             guard let rTex = rgba(r, w, h), let tTex = rgba(t, w, h), let wTex = plane(seamWeight, w, h) else { return nil }
             let wPyr = gauss(wTex, bands: bands)
             guard !wPyr.isEmpty else { return nil }
@@ -357,26 +357,36 @@ enum BlendGPU {
             )
         }
 
-        private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int) -> [Float] {
+        private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int) -> [Float] {
             let n = w * h
+            let coverR = covered(r, w, h, inset: inset)
+            let coverT = covered(t, w, h, inset: inset)
             var distR = [Int32](repeating: 1_000_000, count: n)
             var distT = [Int32](repeating: 1_000_000, count: n)
             for i in 0..<n {
-                let rr = r[i * 4 + 3] > 32
-                let tt = t[i * 4 + 3] > 32
-                if rr && !tt { distR[i] = 0 }
-                if tt && !rr { distT[i] = 0 }
+                if coverR[i] && !coverT[i] { distR[i] = 0 }
+                if coverT[i] && !coverR[i] { distT[i] = 0 }
             }
             chamfer(&distR, w, h)
             chamfer(&distT, w, h)
             var weight = [Float](repeating: 0, count: n)
             for i in 0..<n {
-                let rr = r[i * 4 + 3] > 32
-                let tt = t[i * 4 + 3] > 32
-                if rr && !tt { weight[i] = 1 }
-                else if rr && tt { weight[i] = distR[i] <= distT[i] ? 1 : 0 }
+                if coverR[i] && !coverT[i] { weight[i] = 1 }
+                else if coverR[i] && coverT[i] { weight[i] = distR[i] <= distT[i] ? 1 : 0 }
             }
             return weight
+        }
+
+        private static func covered(_ px: [UInt8], _ w: Int, _ h: Int, inset: Int) -> [Bool] {
+            let n = w * h
+            if inset <= 0 {
+                return (0..<n).map { px[$0 * 4 + 3] > 32 }
+            }
+            var outside = [Int32](repeating: 1_000_000, count: n)
+            for i in 0..<n where px[i * 4 + 3] <= 32 { outside[i] = 0 }
+            chamfer(&outside, w, h)
+            let need = Int32(inset)
+            return outside.map { $0 > need }
         }
 
         private static func chamfer(_ d: inout [Int32], _ w: Int, _ h: Int) {

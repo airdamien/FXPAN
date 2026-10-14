@@ -79,6 +79,66 @@ enum Hugin {
         return made
     }
 
+    /// The still fit, warp, crop, and tone, kept so every video frame uses the same framing.
+    struct Hold {
+        fileprivate var g: Geometry
+        fileprivate var box: Box
+        var fit: Fit
+        var scaleR: [Float]
+        var scaleT: [Float]
+        var bands: Int
+        var useBands: Bool
+        var width: Int { box.w }
+        var height: Int { box.h }
+    }
+
+    static func hold(t: CGImage, r: CGImage, overlap: Double, balance: Bool) throws -> Hold? {
+        let tr = rgba(from: t)
+        let rr = rgba(from: r)
+        guard tr.w == rr.w, tr.h == rr.h, tr.w > 32, tr.h > 32 else { return nil }
+        guard let fit = try align(t: tr, r: rr, overlap: overlap),
+              let g = geometry(w: tr.w, h: tr.h, fit: fit),
+              let canvas = try warp(t: tr, r: rr, g: g, metal: true, note: nil, stop: nil),
+              let box = cropBox(canvas) else { return nil }
+        var scaleR: [Float] = []
+        var scaleT: [Float] = []
+        if balance {
+            let cropped = cut(canvas, box)
+            if let scales = toneScales(cropped.r, cropped.t, cropped.w, cropped.h) {
+                scaleR = scales.r
+                scaleT = scales.t
+            }
+        }
+        let bands = bandCount(overlapPx: Int((fit.overlap * Double(tr.w)).rounded()))
+        return Hold(
+            g: g, box: box, fit: fit, scaleR: scaleR, scaleT: scaleT,
+            bands: bands, useBands: memoryAllowsBands(w: box.w, h: box.h)
+        )
+    }
+
+    /// Warp and blend one pair with the fit from `hold`. The crop does not change.
+    static func frame(t: CGImage, r: CGImage, hold: Hold) -> CGImage? {
+        let tr = rgba(from: t)
+        let rr = rgba(from: r)
+        guard tr.w == rr.w, tr.h == rr.h,
+              let canvas = try? warp(t: tr, r: rr, g: hold.g, metal: true, note: nil, stop: nil),
+              canvas.w == hold.g.cw, canvas.h == hold.g.ch else { return nil }
+        var cropped = cut(canvas, hold.box)
+        let w = cropped.w, h = cropped.h
+        if !hold.scaleR.isEmpty {
+            applyTone(&cropped.r, &cropped.t, w, h, scaleR: hold.scaleR, scaleT: hold.scaleT)
+        }
+        let px: [UInt8]?
+        if hold.useBands {
+            px = (try? multiband(r: cropped.r, t: cropped.t, w: w, h: h, bands: hold.bands, stop: nil, inset: 32))
+                ?? feather(r: cropped.r, t: cropped.t, w: w, h: h)
+        } else {
+            px = feather(r: cropped.r, t: cropped.t, w: w, h: h)
+        }
+        guard let px else { return nil }
+        return cgImage(rgba: px, w: w, h: h)
+    }
+
     struct Prepared {
         var r: [UInt8]
         var t: [UInt8]
@@ -853,66 +913,6 @@ enum Hugin {
         return Box(x0: x0, y0: y0, w: cw, h: ch)
     }
 
-    // MARK: - Video
-
-    /// One fit for a whole clip. The rig does not move, so the warp, crop, and tone are solved on one pair and reused.
-    struct Locked {
-        fileprivate var g: Geometry
-        fileprivate var box: Box
-        var fit: Fit
-        var scaleR: [Float]
-        var scaleT: [Float]
-        var bands: Int
-        var useBands: Bool
-        var width: Int { box.w }
-        var height: Int { box.h }
-    }
-
-    static func lock(t: CGImage, r: CGImage, overlap: Double, balance: Bool) throws -> Locked? {
-        let tr = rgba(from: t)
-        let rr = rgba(from: r)
-        guard tr.w == rr.w, tr.h == rr.h, tr.w > 32, tr.h > 32 else { return nil }
-        guard let fit = try align(t: tr, r: rr, overlap: overlap),
-              let g = geometry(w: tr.w, h: tr.h, fit: fit),
-              let canvas = try warp(t: tr, r: rr, g: g, metal: true, note: nil, stop: nil),
-              let box = cropBox(canvas) else { return nil }
-        let cropped = cut(canvas, box)
-        var scaleR: [Float] = []
-        var scaleT: [Float] = []
-        if balance, let scales = toneScales(cropped.r, cropped.t, cropped.w, cropped.h) {
-            scaleR = scales.r
-            scaleT = scales.t
-        }
-        let bands = bandCount(overlapPx: Int((fit.overlap * Double(tr.w)).rounded()))
-        return Locked(
-            g: g, box: box, fit: fit, scaleR: scaleR, scaleT: scaleT,
-            bands: bands, useBands: memoryAllowsBands(w: box.w, h: box.h)
-        )
-    }
-
-    /// Warp, crop, tone, and blend one pair with the clip's fit.
-    static func frame(t: CGImage, r: CGImage, locked: Locked) -> CGImage? {
-        let tr = rgba(from: t)
-        let rr = rgba(from: r)
-        guard tr.w == rr.w, tr.h == rr.h,
-              let canvas = try? warp(t: tr, r: rr, g: locked.g, metal: true, note: nil, stop: nil),
-              canvas.w == locked.g.cw, canvas.h == locked.g.ch else { return nil }
-        var cropped = cut(canvas, locked.box)
-        let w = cropped.w, h = cropped.h
-        if !locked.scaleR.isEmpty {
-            applyTone(&cropped.r, &cropped.t, w, h, scaleR: locked.scaleR, scaleT: locked.scaleT)
-        }
-        let px: [UInt8]?
-        if locked.useBands {
-            px = (try? multiband(r: cropped.r, t: cropped.t, w: w, h: h, bands: locked.bands, stop: nil))
-                ?? feather(r: cropped.r, t: cropped.t, w: w, h: h)
-        } else {
-            px = feather(r: cropped.r, t: cropped.t, w: w, h: h)
-        }
-        guard let px else { return nil }
-        return cgImage(rgba: px, w: w, h: h)
-    }
-
     struct ToneAcc {
         var sumR = [0.0, 0.0, 0.0]
         var sumT = [0.0, 0.0, 0.0]
@@ -1074,11 +1074,11 @@ enum Hugin {
         return ok
     }
 
-    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?) throws -> [UInt8]? {
+    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?, inset: Int = 0) throws -> [UInt8]? {
         try StitchGate.check(stop)
-        if let gpu = BlendGPU.multiband(r: r, t: t, w: w, h: h, bands: bands) { return gpu }
+        if let gpu = BlendGPU.multiband(r: r, t: t, w: w, h: h, bands: bands, inset: inset) { return gpu }
         print("FXPAN blend metal missed, using the CPU")
-        let weight = seam(r, t, w, h)
+        let weight = seam(r, t, w, h, inset: inset)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for c in 0..<3 {
             try StitchGate.check(stop)
@@ -1100,7 +1100,7 @@ enum Hugin {
                 } else if ta {
                     value = Float(t[o + c])
                 } else {
-                    value = blended[i]
+                    value = 0
                 }
                 out[o + c] = UInt8(min(255, max(0, value.rounded())))
             }
@@ -1221,26 +1221,37 @@ enum Hugin {
         return out
     }
 
-    private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int) -> [Float] {
+    /// `inset` pulls the seam in from each photo's edge, so the pyramid never rides the empty border.
+    private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int = 0) -> [Float] {
         let n = w * h
+        let coverR = covered(r, w, h, inset: inset)
+        let coverT = covered(t, w, h, inset: inset)
         var distR = [Int32](repeating: 1_000_000, count: n)
         var distT = [Int32](repeating: 1_000_000, count: n)
         for i in 0..<n {
-            let rr = r[i * 4 + 3] > 32
-            let tt = t[i * 4 + 3] > 32
-            if rr && !tt { distR[i] = 0 }
-            if tt && !rr { distT[i] = 0 }
+            if coverR[i] && !coverT[i] { distR[i] = 0 }
+            if coverT[i] && !coverR[i] { distT[i] = 0 }
         }
         chamfer(&distR, w, h)
         chamfer(&distT, w, h)
         var weight = [Float](repeating: 0, count: n)
         for i in 0..<n {
-            let rr = r[i * 4 + 3] > 32
-            let tt = t[i * 4 + 3] > 32
-            if rr && !tt { weight[i] = 1 }
-            else if rr && tt { weight[i] = distR[i] <= distT[i] ? 1 : 0 }
+            if coverR[i] && !coverT[i] { weight[i] = 1 }
+            else if coverR[i] && coverT[i] { weight[i] = distR[i] <= distT[i] ? 1 : 0 }
         }
         return weight
+    }
+
+    private static func covered(_ px: [UInt8], _ w: Int, _ h: Int, inset: Int) -> [Bool] {
+        let n = w * h
+        if inset <= 0 {
+            return (0..<n).map { px[$0 * 4 + 3] > 32 }
+        }
+        var outside = [Int32](repeating: 1_000_000, count: n)
+        for i in 0..<n where px[i * 4 + 3] <= 32 { outside[i] = 0 }
+        chamfer(&outside, w, h)
+        let need = Int32(inset)
+        return outside.map { $0 > need }
     }
 
     private static func chamfer(_ d: inout [Int32], _ w: Int, _ h: Int) {
