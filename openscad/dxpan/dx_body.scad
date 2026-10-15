@@ -87,18 +87,21 @@ module dx_plate() {
     open1 = BS_H / 2 - edge;
     glass_top = BS_H / 2;
     keep_y = dx_plate_keep_y();
-    // Lens end of the slot. Just past the glass, so the plate drops in
-    // from the lid and stops here instead of sliding toward the thread.
-    stop = 2.2;
-    face = -BS_W / 2 - 0.15;
-    overlap = 0.5;
-    slot1 = plen / 2 + 0.6;
+    // Open longer than the glass. The plate drops in from the lid.
+    // Cheeks end square at `bend`. Extending them on this diagonal
+    // points the lens-side corner at the threads; the brace turns
+    // inward to the logo wall instead. `slot1` leaves room for 50 mm.
+    face = -BS_W / 2 - 0.4;
+    slot1 = BS_W / 2 + 3.2;
+    bend = dx_plate_bend();
+    hy0 = bend;
+    hy1 = slot1;
     intersection() {
         rotate([0, 0, -45])
             union() {
                 difference() {
-                    translate([0, 0, (z0 + z1) / 2])
-                        cube([wide, plen, z1 - z0], center = true);
+                    translate([0, (hy0 + hy1) / 2, (z0 + z1) / 2])
+                        cube([wide, hy1 - hy0, z1 - z0], center = true);
                     // The slot stays open to the lid so the plate can slide in.
                     // Either side of it the cheek is solid up to the lid.
                     // Lens end stops at `face`.
@@ -116,23 +119,16 @@ module dx_plate() {
                     translate([0, (face + slot1) / 2, (z0 + shelf - web) / 2])
                         cube([pinch, slot1 - face, shelf - web - z0], center = true);
                 }
-                // Only the T/R corner. The lens-side end is the brace,
-                // not a fin into the threads.
-                translate([0, plen / 2 + (reach - plen / 2) / 2, (z0 + z1) / 2])
-                    cube([2.2, reach - plen / 2, z1 - z0], center = true);
+                // Only the T/R corner. Starts where the slot ends, so it
+                // does not close the channel short of the plate.
+                translate([0, slot1 + (reach - slot1) / 2, (z0 + z1) / 2])
+                    cube([2.2, reach - slot1, z1 - z0], center = true);
             }
         // Stop short of the thread back so the holder cannot become a
         // wall across the M65 hole.
         translate([0, (keep_y + DX_CAV) / 2, 0])
             cube([DX_CAV * 2 + 1.2, DX_CAV - keep_y, 120], center = true);
     }
-    // End wall, past the keep clip. The lens bore trims any corner that
-    // reaches the M65. The slot cut above stops at `face`.
-    rotate([0, 0, -45])
-        translate([0, (face - stop + (-plen / 2 + overlap)) / 2, (z0 + z1) / 2])
-            cube([wide,
-                  (-plen / 2 + overlap) - (face - stop),
-                  z1 - z0], center = true);
     dx_plate_brace(z0, z1, plen, wide, pinch, shelf);
 }
 
@@ -140,33 +136,47 @@ module dx_plate() {
 // ends at y ≈ −17.7, so the slot still covers it.
 function dx_plate_keep_y() = inner_y() + 1.8;
 
-// Logo brace lands on the logo-side cheek at the solid lens-side end,
-// beside the slot, and runs −X to the logo wall. It does not cross the
-// glass channel.
+// Local Y where the full-width cheeks can end square and still sit
+// behind the keep plane. wide/2 is the lens-side corner of the cheeks.
+function dx_plate_bend() = dx_plate_keep_y() / cos(45) + 4.9 / 2 + 0.15;
+
+// Logo brace leaves the logo-side cheek and runs inward, local −X,
+// into the logo wall. Local −X is away from the lens face. The old
+// landing sat on the lens end and the hull pointed at the threads.
 module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
     h = z1 - z0;
     zc = (z0 + z1) / 2;
     keep_y = dx_plate_keep_y();
     cheek = (wide - pinch) / 2;
     edge = 4;
-    // Lens-side end cap, clear of the window (window starts at BS_W/2 − edge).
-    y0 = -plen / 2 + 0.5;
+    // Solid end beside the window. The channel stop crosses the pinch
+    // on the logo side only, then local −X carries it into the wall.
+    bend = dx_plate_bend();
     y1 = -(BS_W / 2 - edge) - 0.5;
-    ly = (y0 + y1) / 2;
-    lh = y1 - y0;
     lx = -(pinch / 2 + cheek / 2);
-    wy = lx * sin(-45) + ly * cos(-45);
+    // Past the half-moon (ends y = −8) and short of the lid screw at y = 2.
+    land0 = -6.4;
+    land1 = -0.8;
     intersection() {
         difference() {
             union() {
+                rotate([0, 0, -45]) {
+                    translate([lx, (bend + y1) / 2, zc])
+                        cube([cheek - 0.04, y1 - bend, h], center = true);
+                    // Closes the channel on the square end. Flush with the
+                    // slot wall, so the nose does not enter the opening.
+                    translate([-(4.9 / 2 - pinch / 2) / 2,
+                               bend - 0.75, zc])
+                        cube([4.9 / 2 + pinch / 2, 1.5, h], center = true);
+                }
                 hull() {
                     rotate([0, 0, -45])
-                        translate([lx, ly, zc])
-                            cube([cheek - 0.04, lh, h], center = true);
-                    // Flush with the outer face. The old +0.4 landed 0.2 mm
-                    // proud and left a vertical line down the logo wall.
-                    translate([-(DX_CAV + DX_LOGO) / 2 + 0.25, wy, zc])
-                        cube([DX_LOGO - DX_CAV, 4.2, h], center = true);
+                        translate([lx, (bend + y1) / 2, zc])
+                            cube([cheek - 0.04, y1 - bend, h], center = true);
+                    translate([-(DX_CAV + DX_LOGO) / 2,
+                               (land0 + land1) / 2, zc])
+                        cube([DX_LOGO - DX_CAV + 0.4, land1 - land0, h],
+                             center = true);
                 }
                 hull() {
                     rotate([0, 0, -45])
@@ -178,9 +188,10 @@ module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
                 }
             }
             // Anything that still sweeps across the slot gets opened.
+            // Starts at the cheek end, so it does not reopen the channel stop.
             rotate([0, 0, -45])
-                translate([0, 0, (shelf + z1 + 2) / 2])
-                    cube([pinch, plen + 1, z1 + 2 - shelf], center = true);
+                translate([0, (bend + BS_W / 2 + 3) / 2, (shelf + z1 + 2) / 2])
+                    cube([pinch, BS_W / 2 + 3 - bend, z1 + 2 - shelf], center = true);
         }
         translate([0, (keep_y + DX_CAV) / 2, 0])
             cube([DX_LOGO + dx_face("R") + 4,
@@ -382,6 +393,19 @@ module dx_lens_bore() {
             cylinder(h = DX_THREAD + 0.45, d = DX_THREAD_BORE, $fn = 96);
 }
 
+// The inner logo wall is a flat across the M65. Open that chord to the
+// thread circle, on the cavity side of the crests, so the male can
+// finish seating. The crests in the lip stay.
+module dx_logo_moon() {
+    intersection() {
+        translate([0, inner_y(), 0])
+            rotate([-90, 0, 0])
+                cylinder(h = 12, d = M65_MAJOR, $fn = 96);
+        translate([-(DX_LOGO + DX_CAV) / 2, inner_y() + 5.5, 0])
+            cube([DX_LOGO - DX_CAV + 0.8, 12, M65_MAJOR + 2], center = true);
+    }
+}
+
 module dx_lens_thread() {
     translate([0, -DX_LENS, 0])
         rotate([-90, 0, 0])
@@ -519,6 +543,7 @@ module part_dx_body() {
                             dx_arm_bore("R");
                             dx_arm_bore("T");
                             dx_lens_bore();
+                            dx_logo_moon();
                             dx_logo_cut();
                             dx_bed_cuts(1);
                             dx_flash_cut("R");
