@@ -73,12 +73,6 @@ function mouth_z()     = stack_front() + AIR;
 function shoulder_z()  = mouth_z() - CAP_LEN;
 function tube_z0()     = -(AD_FLANGE + AD_LEN + AD_EXTRA + AD_SKIN);
 
-// Planar 45° faces around the closed end. The bottom corner is cut away
-// so each face slopes up and out. Tip the can 45° and that face is the
-// lowest surface, flat on the bed.
-BEVEL_N   = 8;
-BEVEL_LEG = 8;
-
 // Second-color inlay in the outer face. 1.5 mm sits in the pocket,
 // 0.5 mm stands proud of the top. 2 mm overall prints solid.
 MARK_SIZE  = 24;
@@ -160,28 +154,6 @@ module wall_pattern(z0, z1, od) {
     }
 }
 
-module bottom_bevels() {
-    z0 = tube_z0();
-    R = BODY_OD / 2;
-    leg = BEVEL_LEG;
-    // Flat slab wider than the sector, so neighboring cuts meet and
-    // no round lip is left between them.
-    span = 2 * R * tan(180 / BEVEL_N) + 4;
-    for (i = [0:BEVEL_N - 1])
-        rotate([0, 0, i * 360 / BEVEL_N])
-            hull() {
-                // Waste corner, outside and below the rim.
-                translate([R + 2, 0, z0 - 2])
-                    cube([0.4, span, 0.4], center = true);
-                // Inner end of the flat, on the bottom face.
-                translate([R - leg, 0, z0])
-                    cube([0.4, span, 0.4], center = true);
-                // Outer end of the flat, up the wall.
-                translate([R, 0, z0 + leg])
-                    cube([0.4, span, 0.4], center = true);
-            }
-}
-
 module tube() {
     color("SlateGray")
     difference() {
@@ -208,8 +180,7 @@ module tube() {
                      $fn = 96);
         translate([0, 0, -AD_FLANGE - 0.02])
             cylinder(h = AD_FLANGE + 0.2, d = AD_FLANGE_OD + 0.8, $fn = 160);
-        wall_pattern(tube_z0() + BEVEL_LEG + 1.5, shoulder_z() - 2.5, BODY_OD);
-        bottom_bevels();
+        wall_pattern(tube_z0() + 1.5, shoulder_z() - 2.5, BODY_OD);
         translate([0, 0, -0.04])
             cylinder(h = mouth_z() + 4, d = BORE, $fn = 160);
     }
