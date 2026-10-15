@@ -1,6 +1,6 @@
 // One piece. Walls stay thin. The F-mounts sit on tubes that stand off
 // the outer face, so a body can twist on without meeting the wall.
-// The logo is engraved in the logo wall.
+// The logo is a pocket in the logo wall. The inlay is its own STL.
 
 function dx_reg(mark) =
     let (tube = mark == "T" ? transmit_focus_tube_len()
@@ -473,30 +473,74 @@ module dx_lens_thread() {
                       rotation = [0, 0, STEM_W_CLOCK]);
 }
 
-// Fitted to the short logo wall. One material, so the old colour layers
-// are a single engraving. No red line, no anamorphic block.
-module dx_logo_2d() {
+// Three separate solids so a slicer can split them and assign a filament
+// to each. The face of each line is flush with the wall; 1.6 mm sits in it.
+LOGO_IN    = 1.6;
+LOGO_PROUD = 0;
+LOGO_LAP   = 0.08;
+
+module dx_logo_line(which) {
     f = "Futura:style=Condensed Medium";
-    text("DXPAN", size = 11, font = f, halign = "center", valign = "center",
-         spacing = 1.02);
-    translate([0, -12])
-        text("29MP", size = 6, font = f, halign = "center", valign = "center",
-             spacing = 1.05);
-    translate([0, -20])
-        text("8870×3264    2.72:1", size = 3.6, font = f,
-             halign = "center", valign = "center", spacing = 1.04);
+    if (which == "name")
+        text("DXPAN", size = 11, font = f, halign = "center", valign = "center",
+             spacing = 1.02);
+    else if (which == "mp")
+        translate([0, -12])
+            text("29MP", size = 6, font = f, halign = "center", valign = "center",
+                 spacing = 1.05);
+    else
+        translate([0, -20])
+            text("8870×3264    2.72:1", size = 3.6, font = f,
+                 halign = "center", valign = "center", spacing = 1.04);
+}
+
+// Buried in the wall, through the middle of the line, so the glyphs of
+// that line are one solid. It does not reach the outer face.
+module dx_logo_bar(which) {
+    if (which == "name")
+        square([46, 2.2], center = true);
+    else if (which == "mp")
+        translate([0, -12])
+            square([28, 2.0], center = true);
+    else
+        translate([0, -20])
+            square([52, 3.4], center = true);
+}
+
+// Outside is -X. Reading runs world -Y, up is +Z. Extrude starts at x0
+// and runs toward +X (into the wall).
+module dx_logo_extrude(x0, h) {
+    translate([x0, (dx_y0() + dx_y1()) / 2, 1])
+        mirror([0, 1, 0])
+            rotate([0, 90, 0])
+                linear_extrude(h)
+                    rotate(90)
+                        translate([0, 8])
+                            children();
 }
 
 module dx_logo_cut() {
-    // Outside is -X. Reading direction is the viewer's left to right
-    // (world -Y), up is +Z. The art is centred on that face.
-    translate([-DX_LOGO - 0.2, (dx_y0() + dx_y1()) / 2, 1])
-        mirror([0, 1, 0])
-            rotate([0, 90, 0])
-                linear_extrude(1.3)
-                    rotate(90)
-                        translate([0, 8])
-                            dx_logo_2d();
+    dx_logo_extrude(-DX_LOGO, LOGO_IN + 0.02)
+        for (w = ["name", "mp", "spec"])
+            dx_logo_line(w);
+    // The tie bar starts behind the face, so the gaps between glyphs stay closed.
+    dx_logo_extrude(-DX_LOGO + 0.4, LOGO_IN - 0.4 + 0.02)
+        for (w = ["name", "mp", "spec"])
+            dx_logo_bar(w);
+}
+
+module dx_logo_inlay() {
+    tone = ["Goldenrod", "White", "Silver"];
+    line = ["name", "mp", "spec"];
+    for (i = [0:2])
+        color(tone[i])
+            union() {
+                dx_logo_extrude(-DX_LOGO - LOGO_PROUD,
+                                LOGO_PROUD + LOGO_IN + LOGO_LAP)
+                    dx_logo_line(line[i]);
+                dx_logo_extrude(-DX_LOGO + 0.4, LOGO_IN - 0.4 + LOGO_LAP)
+                    dx_logo_bar(line[i]);
+            }
 }
 
 // Zero's four M2.5 pilots, 58 × 23 mm. The HAT pair does not fit on this lid.
