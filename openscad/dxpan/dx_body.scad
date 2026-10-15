@@ -286,6 +286,59 @@ module dx_arm_tube(mark, shrink = 0) {
             }
 }
 
+// The round belly is a horizontal shelf. A 45° face from the tangent
+// down to the floor sits on the bed, so the arm prints with the chassis
+// instead of on support. The flat is about 16 mm wide. It stays inside
+// the tube's footprint and stops at the bayonet.
+function dx_sole_u() = F_STL_OD / 2 * sin(45);
+function dx_sole_z() = -F_STL_OD / 2 * cos(45);
+
+module dx_sole_prism(mark) {
+    u = dx_sole_u();
+    z_tan = dx_sole_z();
+    rise = z_tan + DX_HALF_Z;
+    bed = u - rise;
+    x0 = dx_face(mark) - 2;
+    x1 = dx_back(mark) - 0.3;
+    // local +X is down after the arm rotation below, so the floor
+    // is local x = DX_HALF_Z and the tangent is local x = -z_tan.
+    pts = [
+        [ DX_HALF_Z, -bed],
+        [ DX_HALF_Z,  bed],
+        [-z_tan,      u],
+        [-z_tan,     -u]
+    ];
+    translate(mark == "T"
+            ? [sensor_shift(), x0, 0]
+            : [x0, -sensor_shift(), 0])
+        rotate(mark == "T" ? [-90, 0, 0] : [0, 90, 0])
+            linear_extrude(x1 - x0)
+                polygon(mark == "R"
+                    ? [for (p = pts) [p[0], p[1]]]
+                    : [for (p = pts) [p[1], p[0]]]);
+}
+
+// Straight down from the tube, so the sole cannot stick out past the arm.
+module dx_arm_column(mark) {
+    translate([0, 0, -DX_HALF_Z - 0.02])
+        linear_extrude(DX_HALF_Z + F_STL_OD / 2 + 2)
+            projection()
+                dx_arm_tube(mark);
+}
+
+module dx_arm_sole(mark) {
+    difference() {
+        intersection() {
+            dx_sole_prism(mark);
+            dx_arm_column(mark);
+        }
+        // Same keep-out the R tube holds until it is past the helicoid.
+        if (mark == "R")
+            rotate([90, 0, 0])
+                cylinder(h = 90, d = DX_HELI_CLEAR_D + 1.6, center = true, $fn = 96);
+    }
+}
+
 module dx_arm_bore(mark) {
     a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
@@ -539,6 +592,8 @@ module part_dx_body() {
                                 }
                                 dx_arm_tube("R");
                                 dx_arm_tube("T");
+                                dx_arm_sole("R");
+                                dx_arm_sole("T");
                                 dx_mount("R");
                                 dx_mount("T");
                                 dx_r_join(0);
