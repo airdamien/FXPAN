@@ -72,91 +72,189 @@ module dx_cavity() {
         cube([DX_CAV * 2, y1 - y0, z1 - z0 + 0.2], center = true);
 }
 
-// 50 × 50 × 1 plate. Cheeks are a light press, 0.97 mm on 1.00 mm glass.
-// They run up to the lid so the cavity above the glass is a solid wall.
-// The lens-side end is braced back to the logo wall, away from the thread.
+// 50 × 50 × 1 plate, coated face toward the lens. The R register is solved
+// for a reflection on local x = 0, so that face sits there and the glass
+// goes behind it. Three pads touch the coated face, and a printed finger
+// presses straight across the glass from each one, so the clamp cannot bend
+// it. A bowed plate is a weak mirror: 0.1 mm of bow throws R ~10 mm out of
+// focus and leaves T alone. Everywhere else the slot clears the glass.
+// Cheeks still run corner to corner and up to the lid, and the lens end is
+// braced back to the logo wall, away from the thread.
+DX_BS_SLACK   = 0.25;   // back of the glass to the slot wall
+DX_BS_RELIEF  = 0.4;    // slot wall behind the pads
+DX_BS_PRELOAD = 0.35;   // free spring crest, inside the glass
+DX_BS_BACK    = -2.45;  // holder faces, local x
+DX_BS_FRONT   = 1.95;
+DX_BS_SLIT    = 0.8;
+DX_BS_PLAY    = 0.5;    // along the slot, past the 50 mm
+
+function dx_bs_wall0() = -BS_THICK - DX_BS_SLACK;
+function dx_bs_wall1() = DX_BS_RELIEF;
+function dx_bs_shelf() = -BS_H / 2 - 0.04;
+// Lens-end stop and far wall. The glass drops in between them from the lid.
+function dx_bs_y0() = dx_plate_bend();
+function dx_bs_y1() = dx_bs_y0() + BS_W + DX_BS_PLAY;
+// [y, z, finger width]. Two under the window, one on the far post, all
+// outside the beams.
+function dx_bs_pads() = [
+    [-14, -23, 3.0],
+    [ 14, -23, 3.0],
+    [dx_bs_y0() + BS_W - 2.2, 22.5, 2.3]
+];
+
 module dx_plate() {
-    pinch = BS_THICK - 0.03;
-    mouth = 1.6;
-    wide = 4.9;
-    plen = BS_W + 0.06;
+    w0 = dx_bs_wall0();
+    w1 = dx_bs_wall1();
     reach = DX_CAV * sqrt(2) + 0.6;
-    shelf = -BS_H / 2 - 0.04;
+    shelf = dx_bs_shelf();
     web = 1.5;                              // shelf under the glass
     z0 = -DX_HALF_Z + DX_FLOOR - 0.15;      // cheeks down into the skin
     z1 = DX_SEAT - 0.3;
     edge = 4;
     open0 = shelf + edge;
-    open1 = BS_H / 2 - edge;
-    glass_top = BS_H / 2;
+    glass_top = shelf + BS_H;
     keep_y = dx_plate_keep_y();
-    // Open longer than the glass. The plate drops in from the lid.
-    // Cheeks end square at `bend`. Extending them on this diagonal
-    // points the lens-side corner at the threads; the brace turns
-    // inward to the logo wall instead. `slot1` leaves room for 50 mm.
-    face = -BS_W / 2 - 0.4;
-    slot1 = BS_W / 2 + 3.2;
-    bend = dx_plate_bend();
-    hy0 = bend;
-    hy1 = slot1;
+    // Cheeks end square at the lens stop. Extending them on this diagonal
+    // points the lens-side corner at the threads; the brace turns inward
+    // to the logo wall instead.
+    y0 = dx_bs_y0();
+    y1 = dx_bs_y1();
+    yend = y1 + 1.5;
     intersection() {
         rotate([0, 0, -45])
             union() {
                 difference() {
-                    translate([0, (hy0 + hy1) / 2, (z0 + z1) / 2])
-                        cube([wide, hy1 - hy0, z1 - z0], center = true);
-                    // The slot stays open to the lid so the plate can slide in.
-                    // Either side of it the cheek is solid up to the lid.
-                    // Lens end stops at `face`.
-                    translate([0, (face + slot1) / 2, (shelf + z1 + 2) / 2])
-                        cube([pinch, slot1 - face, z1 + 2 - shelf], center = true);
+                    translate([(DX_BS_BACK + DX_BS_FRONT) / 2, (y0 + yend) / 2,
+                               (z0 + z1) / 2])
+                        cube([DX_BS_FRONT - DX_BS_BACK, yend - y0, z1 - z0],
+                             center = true);
+                    // Open to the lid so the plate slides in.
+                    translate([(w0 + w1) / 2, (y0 + y1) / 2, (shelf + z1 + 2) / 2])
+                        cube([w1 - w0, y1 - y0, z1 + 2 - shelf], center = true);
                     hull() {
-                        translate([0, (face + slot1) / 2, glass_top + 0.3])
-                            cube([pinch, slot1 - face, 0.2], center = true);
-                        translate([0, (face + slot1) / 2, z1 + 1])
-                            cube([mouth, slot1 - face, 0.2], center = true);
+                        translate([(w0 + w1) / 2, (y0 + y1) / 2, glass_top + 0.3])
+                            cube([w1 - w0, y1 - y0, 0.2], center = true);
+                        translate([(w0 + w1) / 2, (y0 + y1) / 2, z1 + 1])
+                            cube([w1 - w0 + 1.0, y1 - y0, 0.2], center = true);
                     }
-                    translate([0, 0, (open0 + open1) / 2])
-                        cube([wide + 1, BS_W - 2 * edge, open1 - open0], center = true);
                     // Under the shelf the cheeks are walls, not a beam.
-                    translate([0, (face + slot1) / 2, (z0 + shelf - web) / 2])
-                        cube([pinch, slot1 - face, shelf - web - z0], center = true);
+                    translate([(w0 + w1) / 2, (y0 + y1) / 2, (z0 + shelf - web) / 2])
+                        cube([w1 - w0, y1 - y0, shelf - web - z0], center = true);
+                    dx_bs_window(open0, BS_W / 2 - edge, glass_top - 0.46);
+                    for (p = dx_bs_pads())
+                        dx_bs_finger_cut(p, shelf, web, open0);
                 }
-                // Only the T/R corner. Starts where the slot ends, so it
-                // does not close the channel short of the plate.
-                translate([0, slot1 + (reach - slot1) / 2, (z0 + z1) / 2])
-                    cube([2.2, reach - slot1, z1 - z0], center = true);
+                for (p = dx_bs_pads()) {
+                    dx_bs_pad(p);
+                    dx_bs_bump(p, p[1] < 0 ? open0 - 0.06 : p[1] + 3);
+                }
+                // Only the T/R corner. Starts past the far wall.
+                translate([0, yend + (reach - yend) / 2, (z0 + z1) / 2])
+                    cube([2.2, reach - yend, z1 - z0], center = true);
             }
         // Stop short of the thread back so the holder cannot become a
         // wall across the M65 hole.
         translate([0, (keep_y + DX_CAV) / 2, 0])
             cube([DX_CAV * 2 + 1.2, DX_CAV - keep_y, 120], center = true);
     }
-    dx_plate_brace(z0, z1, plen, wide, pinch, shelf);
+    dx_plate_brace(z0, z1, shelf);
+}
+
+// Opening for both beams. Full width to 13.5 above the axis, then 45°
+// shoulders to a 20 mm bridge just under the glass top. A flat roof across
+// all 42 mm sagged into the slot.
+module dx_bs_window(open0, yw, ridge) {
+    roof = 13.5;
+    yr = yw - (ridge - roof);
+    rotate([90, 0, 90])
+        linear_extrude(DX_BS_FRONT - DX_BS_BACK + 2, center = true)
+            polygon([[-yw, open0], [yw, open0], [yw, roof],
+                     [yr, ridge], [-yr, ridge], [-yw, roof]]);
+}
+
+// Frees the finger behind pad p. The bottom two stand on the floor and end
+// in the window. The far one stands on the post and ends under a short
+// bridge. Both bend away from the glass, into the chamber.
+module dx_bs_finger_cut(p, shelf, web, open0) {
+    s = DX_BS_SLIT;
+    w = p[2];
+    x0 = DX_BS_BACK - 0.2;
+    x1 = dx_bs_wall0() + 0.01;
+    if (p[1] < 0) {
+        floor_z = -DX_HALF_Z + DX_FLOOR;
+        for (sy = [-1, 1])
+            translate([(x0 + x1) / 2, p[0] + sy * (w + s) / 2,
+                       (floor_z + open0 + 0.2) / 2])
+                cube([x1 - x0, s, open0 + 0.2 - floor_z], center = true);
+        // Shelf web off the finger, or it ties the finger to the far cheek.
+        translate([(dx_bs_wall0() + dx_bs_wall1()) / 2, p[0], shelf - web / 2])
+            cube([dx_bs_wall1() - dx_bs_wall0() + 0.02, w + 2 * s, web + 0.02],
+                 center = true);
+    } else {
+        root = p[1] - 10;
+        tip = p[1] + 3;
+        for (sy = [-1, 1])
+            translate([(x0 + x1) / 2, p[0] + sy * (w + s) / 2, (root + tip + s) / 2])
+                cube([x1 - x0, s, tip + s - root], center = true);
+        translate([(x0 + x1) / 2, p[0], tip + s / 2])
+            cube([x1 - x0, w + 2 * s, s], center = true);
+    }
+}
+
+// Reference pad on the slot's lens-side wall. Its face is the coated face.
+module dx_bs_pad(p) {
+    h = 2.5;
+    r = DX_BS_RELIEF;
+    hull() {
+        translate([0.005, p[0], p[1]])
+            cube([0.01, p[2], h], center = true);
+        translate([r + 0.05, p[0], p[1]])
+            cube([0.1, p[2], h + 2 * r], center = true);
+    }
+}
+
+// Spring crest on the finger. Lead-in on top for the glass coming down,
+// 45° under it so it prints.
+module dx_bs_bump(p, z_top) {
+    crest = -BS_THICK + DX_BS_PRELOAD;
+    w0 = dx_bs_wall0();
+    rise = crest - w0;
+    lead = min(2.0, z_top - p[1]);
+    w = p[2] - 0.7;
+    hull() {
+        translate([crest - 0.005, p[0], p[1]])
+            cube([0.01, w, 1.0], center = true);
+        translate([w0 - 0.05, p[0], p[1] + (lead - 0.5 - rise) / 2])
+            cube([0.1, w, lead + 0.5 + rise], center = true);
+    }
 }
 
 // Keep the plate geom this far behind the thread back (y = −20). Glass
 // ends at y ≈ −17.7, so the slot still covers it.
 function dx_plate_keep_y() = inner_y() + 1.8;
 
-// Local Y where the full-width cheeks can end square and still sit
-// behind the keep plane. wide/2 is the lens-side corner of the cheeks.
-function dx_plate_bend() = dx_plate_keep_y() / cos(45) + 4.9 / 2 + 0.15;
+// Local Y where the cheeks can end square and still sit behind the keep
+// plane. DX_BS_FRONT is the lens-side corner of the cheeks.
+function dx_plate_bend() = dx_plate_keep_y() / cos(45) + DX_BS_FRONT + 0.15;
 
 // Logo brace leaves the logo-side cheek and runs inward, local −X,
 // into the logo wall. Local −X is away from the lens face. The old
 // landing sat on the lens end and the hull pointed at the threads.
-module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
+module dx_plate_brace(z0, z1, shelf) {
     h = z1 - z0;
     zc = (z0 + z1) / 2;
     keep_y = dx_plate_keep_y();
-    cheek = (wide - pinch) / 2;
+    w0 = dx_bs_wall0();
+    w1 = dx_bs_wall1();
+    back = w0 - DX_BS_BACK;
+    front = DX_BS_FRONT - w1;
     edge = 4;
-    // Solid end beside the window. The channel stop crosses the pinch
+    // Solid end beside the window. The channel stop crosses the slot
     // on the logo side only, then local −X carries it into the wall.
-    bend = dx_plate_bend();
-    y1 = -(BS_W / 2 - edge) - 0.5;
-    lx = -(pinch / 2 + cheek / 2);
+    y0 = dx_bs_y0();
+    y1 = dx_bs_y1();
+    ye = -(BS_W / 2 - edge) - 0.5;
+    lx = (DX_BS_BACK + w0) / 2;
     // Past the half-moon (ends y = −8) and clear of the lid screw at y = −5.
     land0 = -3.0;
     land1 = 2.6;
@@ -164,18 +262,17 @@ module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
         difference() {
             union() {
                 rotate([0, 0, -45]) {
-                    translate([lx, (bend + y1) / 2, zc])
-                        cube([cheek - 0.04, y1 - bend, h], center = true);
+                    translate([lx, (y0 + ye) / 2, zc])
+                        cube([back - 0.04, ye - y0, h], center = true);
                     // Closes the channel on the square end. Flush with the
                     // slot wall, so the nose does not enter the opening.
-                    translate([-(4.9 / 2 - pinch / 2) / 2,
-                               bend - 0.75, zc])
-                        cube([4.9 / 2 + pinch / 2, 1.5, h], center = true);
+                    translate([(DX_BS_BACK + w1) / 2, y0 - 0.75, zc])
+                        cube([w1 - DX_BS_BACK, 1.5, h], center = true);
                 }
                 hull() {
                     rotate([0, 0, -45])
-                        translate([lx, (bend + y1) / 2, zc])
-                            cube([cheek - 0.04, y1 - bend, h], center = true);
+                        translate([lx, (y0 + ye) / 2, zc])
+                            cube([back - 0.04, ye - y0, h], center = true);
                     translate([-(DX_CAV + DX_LOGO) / 2,
                                (land0 + land1) / 2, zc])
                         cube([DX_LOGO - DX_CAV + 0.4, land1 - land0, h],
@@ -183,18 +280,17 @@ module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
                 }
                 hull() {
                     rotate([0, 0, -45])
-                        translate([pinch / 2 + cheek / 2,
-                                   plen / 2 - cheek / 2 - 0.4, zc])
-                            cube([cheek - 0.04, cheek, h], center = true);
+                        translate([(w1 + DX_BS_FRONT) / 2, y1 - front / 2, zc])
+                            cube([front - 0.04, front, h], center = true);
                     translate([DX_CAV + DX_WALL / 2, DX_CAV + DX_WALL / 2, zc])
                         cube([DX_WALL, DX_WALL, h], center = true);
                 }
             }
-            // Anything that still sweeps across the slot gets opened.
-            // Starts at the cheek end, so it does not reopen the channel stop.
+            // Anything that still sweeps across the slot gets opened, stop
+            // to far wall, so the channel is only the pads and the springs.
             rotate([0, 0, -45])
-                translate([0, (bend + BS_W / 2 + 3) / 2, (shelf + z1 + 2) / 2])
-                    cube([pinch, BS_W / 2 + 3 - bend, z1 + 2 - shelf], center = true);
+                translate([(w0 + w1) / 2, (y0 + y1) / 2, (shelf + z1 + 2) / 2])
+                    cube([w1 - w0, y1 - y0, z1 + 2 - shelf], center = true);
         }
         translate([0, (keep_y + DX_CAV) / 2, 0])
             cube([DX_LOGO + dx_face("R") + 4,

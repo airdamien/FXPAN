@@ -3006,7 +3006,9 @@ module optical_axis_guides() {
         }
         color("goldenrod", 0.45)
             rotate([0, 0, -45])
-                cube([BS_THICK, BS_W, BS_H], center = true);
+                translate([-BS_THICK / 2, dx_bs_y0() + BS_W / 2,
+                           dx_bs_shelf() + BS_H / 2])
+                    cube([BS_THICK, BS_W, BS_H], center = true);
         color("red", 0.30)
             rotate([0, 0, -45])
                 translate([0, 0, 0])
