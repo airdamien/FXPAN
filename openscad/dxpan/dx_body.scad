@@ -330,8 +330,10 @@ module dx_r_join(top) {
                 translate([x - 2, y + 9, sz * 20])
                     cube([16, 16, 18], center = true);
             }
-            translate([x - 12, y, zc])       cube(0.4, center = true);
-            translate([x, y + 10, zc])       cube(0.4, center = true);
+            // Sit on the floor. A cube centered on it hung 0.2 mm
+            // outside and the slicer would not call the bottom flat.
+            translate([x - 12, y, zc - sz * 0.2]) cube(0.4, center = true);
+            translate([x, y + 10, zc - sz * 0.2]) cube(0.4, center = true);
             translate([x, y, zc - sz * 12])  cube(0.4, center = true);
         }
         translate([x - 2, y + 6, sz * 24])
