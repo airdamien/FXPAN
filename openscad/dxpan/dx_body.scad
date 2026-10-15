@@ -41,9 +41,12 @@ function dx_y0() = -DX_LENS;
 function dx_y1() = dx_face("T");
 
 // Pilot stays in the wall. Heads sit in the lid, which spans the cavity.
+// The lens-side pair is as close to the lip as the corner flat and the
+// M2.5 trigger pilots at y = −10 allow. Same station on both walls.
 function dx_lid_screws() = [
-    [dx_x0() + 6.0,    2],
+    [dx_x0() + 6.0,   -5],
     [dx_x0() + 6.0,   21],
+    [dx_x1() - 3.6,   -5],
     [dx_x1() - 3.6,   18],
     [-18,            dx_y1() - 3.6],
     [16,             dx_y1() - 3.6]
@@ -154,9 +157,9 @@ module dx_plate_brace(z0, z1, plen, wide, pinch, shelf) {
     bend = dx_plate_bend();
     y1 = -(BS_W / 2 - edge) - 0.5;
     lx = -(pinch / 2 + cheek / 2);
-    // Past the half-moon (ends y = −8) and short of the lid screw at y = 2.
-    land0 = -6.4;
-    land1 = -0.8;
+    // Past the half-moon (ends y = −8) and clear of the lid screw at y = −5.
+    land0 = -3.0;
+    land1 = 2.6;
     intersection() {
         difference() {
             union() {
