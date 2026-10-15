@@ -3034,8 +3034,10 @@ module section_cut(tone = "Silver") {
 
 // -----------------------------------------------------------------------------
 module assembly() {
-    section_cut("SlateGray")
+    section_cut("SlateGray") {
         part_dx_body();
+        dx_logo_inlay();
+    }
 
     if (SHOW_LID)
         translate([0, 0, lid_lift])
@@ -3265,6 +3267,8 @@ module diagnostics() {
 module export_part() {
     if (PART == "chassis")
         part_chassis();
+    else if (PART == "logo")
+        dx_logo_inlay();
     else if (PART == "logo_cookie")
         part_logo_cookie();
     else if (PART == "stem")
