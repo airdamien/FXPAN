@@ -9,9 +9,9 @@
 
   <g font-family="ui-monospace, monospace" font-size="14">
     <circle cx="86" cy="230" r="7" fill="#e0b15a"/>
-    <text x="108" y="235" fill="#f2efe6">GPIO 18  focus</text>
+    <text x="108" y="235" fill="#f2efe6">GPIO 32  focus</text>
     <circle cx="86" cy="290" r="7" fill="#d46a6a"/>
-    <text x="108" y="295" fill="#f2efe6">GPIO 19  shutter</text>
+    <text x="108" y="295" fill="#f2efe6">GPIO 27  shutter</text>
     <circle cx="86" cy="350" r="7" fill="#8fd0c6"/>
     <text x="108" y="355" fill="#f2efe6">GND</text>
     <text x="108" y="410" fill="#6d675e">5 V pin stays open</text>

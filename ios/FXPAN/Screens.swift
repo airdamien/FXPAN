@@ -433,9 +433,19 @@ struct DriveScreen: View {
 
     private func releaseBlock(fill: CGFloat? = nil, compact: Bool = false) -> some View {
         let drive = model.photo.drive
-        let value = drive.release == "sync" ? (model.syncReady ? "Sync" : "Sync · waiting") : "USB"
-        return RowBlock(title: "Release", value: value, hint: compact ? "" : "Sync drops USB, pulses the trigger cables, then downloads the frame from camera RAM.", fillHeight: fill) {
-            ChipRow(options: [("usb", "USB"), ("sync", "Sync")], selected: drive.release) { value in
+        let value: String
+        if drive.release == "sync" {
+            value = model.syncReady ? "Sync" : "Sync · waiting"
+        } else if drive.release == "bt" {
+            value = model.bleReady ? "BT" : "BT · waiting"
+        } else {
+            value = "USB"
+        }
+        let hint = drive.release == "bt"
+            ? "BT drops USB, pulses the Mini D1 instead of the Zero, then downloads the frame from camera RAM."
+            : "Sync drops USB, pulses the trigger cables, then downloads the frame from camera RAM."
+        return RowBlock(title: "Release", value: value, hint: compact ? "" : hint, fillHeight: fill) {
+            ChipRow(options: [("usb", "USB"), ("sync", "Sync"), ("bt", "BT")], selected: drive.release) { value in
                 model.edit { $0.drive.release = value }
             }
         }

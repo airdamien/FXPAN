@@ -74,7 +74,7 @@ extension LookSet: Codable {
 }
 
 struct DriveSet: Equatable {
-    /// USB is the release that ships. Sync is the 10-pin path, left for later.
+    /// USB releases through the camera cable. Sync is the Pi Zero. BT is the Mini D1.
     var release: String = "usb"
     var save: String = "ipad"
     var quality: String = "NEF+Fine"

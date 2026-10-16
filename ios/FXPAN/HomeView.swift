@@ -226,13 +226,16 @@ struct HomeView: View {
     }
 
     private var shutterButton: some View {
-        Button { Task { await model.fire() } } label: {
+        let working = model.shooting && !model.recording
+        return Button { Task { await model.fire() } } label: {
             ZStack {
-                Circle().stroke(model.recording || model.shooting ? Theme.red : Theme.hair2, lineWidth: 2)
+                Circle()
+                    .stroke(working || model.recording ? Theme.red : Theme.hair2, lineWidth: working ? 3 : 2)
+                    .modifier(ShutterRingPulse(on: working))
                 Circle()
                     .fill(online || model.recording ? Theme.red : Color(hex: 0x5A2020))
                     .padding(6)
-                    .scaleEffect(model.shooting && !model.recording ? 0.92 : 1)
+                    .scaleEffect(working ? 0.92 : 1)
                 if model.recording {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(.white)
@@ -358,11 +361,30 @@ struct HomeView: View {
         case "Drive":
             let engine = Catalog.engines.first { $0.0 == photo.drive.engine }?.1 ?? photo.drive.engine
             let save = photo.drive.save == "cards" ? "Cards" : (photo.drive.save == "both" ? "Both" : (UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad"))
-            let release = photo.drive.release == "sync" ? "Sync" : "USB"
+            let release = photo.drive.release == "sync" ? "Sync" : (photo.drive.release == "bt" ? "BT" : "USB")
             return (release, [save, photo.drive.autoStitch ? engine : "Hold stitch"].joined(separator: " · "))
         default:
             let w = Catalog.wbRow(photo.wb)
             return (w.1, w.2 > 0 ? "\(w.2) K" : "Bodies decide")
+        }
+    }
+}
+
+/// The web shutter's busy ring: red, and a 0.9 s breathe while the shot is in flight.
+private struct ShutterRingPulse: ViewModifier {
+    var on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content.phaseAnimator([false, true]) { view, phase in
+                view
+                    .scaleEffect(phase ? 1.08 : 0.96)
+                    .opacity(phase ? 1 : 0.35)
+            } animation: { _ in
+                .easeInOut(duration: 0.45)
+            }
+        } else {
+            content
         }
     }
 }
