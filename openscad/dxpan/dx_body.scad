@@ -633,19 +633,6 @@ module dx_logo_line(which) {
                  halign = "center", valign = "center", spacing = 1.04);
 }
 
-// Buried in the wall, through the middle of the line, so the glyphs of
-// that line are one solid. It does not reach the outer face.
-module dx_logo_bar(which) {
-    if (which == "name")
-        square([46, 2.2], center = true);
-    else if (which == "mp")
-        translate([0, -12])
-            square([28, 2.0], center = true);
-    else
-        translate([0, -20])
-            square([52, 3.4], center = true);
-}
-
 // Outside is -X. Reading runs world -Y, up is +Z. Extrude starts at x0
 // and runs toward +X (into the wall).
 module dx_logo_extrude(x0, h) {
@@ -662,10 +649,6 @@ module dx_logo_cut() {
     dx_logo_extrude(-DX_LOGO, LOGO_IN + 0.02)
         for (w = ["name", "mp", "spec"])
             dx_logo_line(w);
-    // The tie bar starts behind the face, so the gaps between glyphs stay closed.
-    dx_logo_extrude(-DX_LOGO + 0.4, LOGO_IN - 0.4 + 0.02)
-        for (w = ["name", "mp", "spec"])
-            dx_logo_bar(w);
 }
 
 module dx_logo_inlay() {
@@ -673,13 +656,9 @@ module dx_logo_inlay() {
     line = ["name", "mp", "spec"];
     for (i = [0:2])
         color(tone[i])
-            union() {
-                dx_logo_extrude(-DX_LOGO - LOGO_PROUD,
-                                LOGO_PROUD + LOGO_IN + LOGO_LAP)
-                    dx_logo_line(line[i]);
-                dx_logo_extrude(-DX_LOGO + 0.4, LOGO_IN - 0.4 + LOGO_LAP)
-                    dx_logo_bar(line[i]);
-            }
+            dx_logo_extrude(-DX_LOGO - LOGO_PROUD,
+                            LOGO_PROUD + LOGO_IN + LOGO_LAP)
+                dx_logo_line(line[i]);
 }
 
 // Zero's four M2.5 pilots, 58 × 23 mm. The HAT pair does not fit on this lid.
