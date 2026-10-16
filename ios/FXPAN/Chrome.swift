@@ -337,7 +337,7 @@ struct TopBar: View {
             if model.photo.drive.release == "sync" {
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(model.syncReady ? Theme.gold : Theme.faint)
+                        .fill(model.syncReady ? Theme.ok : Theme.red)
                         .frame(width: 7, height: 7)
                     if !compact {
                         Text("Sync")
@@ -346,6 +346,19 @@ struct TopBar: View {
                     }
                 }
                 .accessibilityLabel(model.syncReady ? "Sync board answering" : "Sync board not answering")
+            }
+            if model.photo.drive.release == "bt" {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(model.bleReady ? Theme.ok : Theme.red)
+                        .frame(width: 7, height: 7)
+                    if !compact {
+                        Text("BT")
+                            .font(Theme.font(13, weight: .medium))
+                            .foregroundStyle(model.bleReady ? Theme.ink : Theme.dim)
+                    }
+                }
+                .accessibilityLabel(model.bleReady ? "Mini D1 answering" : "Mini D1 not answering")
             }
             if let stitch = model.stitchLabel {
                 Button { model.go(.playback) } label: {

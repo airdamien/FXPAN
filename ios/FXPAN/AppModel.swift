@@ -37,6 +37,7 @@ final class AppModel {
     var countdown: Int?
     var shooting = false
     var syncReady = false
+    var bleReady = false
     var stitchLabel: String?
     var stitchingStamp: String?
     /// Bumped when a stitch finishes so an open photo reloads the new file.
@@ -160,7 +161,9 @@ final class AppModel {
         if redo { try? Data("1".utf8).write(to: marker) }
         applyIdle()
         await camera.start()
-        if await SyncLink.ping() {
+        if photo.drive.release == "bt" {
+            bleReady = await BLELink.ping()
+        } else if await SyncLink.ping() {
             syncReady = true
             if photo.drive.release != "sync" {
                 photo.drive.release = "sync"
@@ -207,6 +210,12 @@ final class AppModel {
         persist()
         scheduleApply()
         ingest()
+        if photo.drive.release == "bt" {
+            Task { await probeSync() }
+        } else {
+            BLELink.stop()
+            bleReady = false
+        }
     }
 
     func editRig(_ body: (inout Rig) -> Void) {
@@ -293,6 +302,10 @@ final class AppModel {
 
     func probeSync() async {
         if shooting { return }
+        if photo.drive.release == "bt" {
+            bleReady = await BLELink.ping()
+            return
+        }
         syncReady = await SyncLink.ping()
     }
 
@@ -301,8 +314,11 @@ final class AppModel {
         syncWatch?.cancel()
         syncWatch = Task { [weak self] in
             while let self, !Task.isCancelled {
-                if self.photo.drive.release == "sync" {
+                if self.photo.drive.release == "sync" || self.photo.drive.release == "bt" {
                     await self.probeSync()
+                } else if self.bleReady {
+                    BLELink.stop()
+                    self.bleReady = false
                 }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }

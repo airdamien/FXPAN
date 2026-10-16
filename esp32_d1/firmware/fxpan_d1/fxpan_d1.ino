@@ -5,16 +5,16 @@
 //   FIRE <milliseconds>
 //
 // Focus goes high for 100 ms, then shutter for the requested time, then both
-// drop, then the board answers OK. Pins idle low. GPIO 18 and 19 are not
-// boot straps on the ESP32-WROOM used by Mini D1 boards.
+// drop, then the board answers OK. Pins idle low. GPIO 32 (focus, socket
+// pin 38) and GPIO 27 (shutter, socket pin 40) are not boot straps.
 
 #include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
-static const int FOCUS_PIN = 18;
-static const int SHUTTER_PIN = 19;
+static const int FOCUS_PIN = 32;
+static const int SHUTTER_PIN = 27;
 static const int FOCUS_MS = 100;
 static const int DEFAULT_SHUTTER_MS = 300;
 static const int MAX_SHUTTER_MS = 120000;
@@ -47,10 +47,22 @@ static void pulse(int shutterMs) {
   pinsLow();
 }
 
+// A new phone link can still only carry 20 bytes per notify. The FIRE answer is
+// longer than that, so it goes out in pieces. The phone joins them at the newline.
 static void reply(const String &line) {
   if (txChar == nullptr || !clientUp) return;
-  txChar->setValue(line.c_str());
-  txChar->notify();
+  const size_t limit = 20;
+  size_t off = 0;
+  while (off < line.length()) {
+    size_t n = line.length() - off;
+    if (n > limit) n = limit;
+    uint8_t buf[20];
+    memcpy(buf, line.c_str() + off, n);
+    txChar->setValue(buf, n);
+    txChar->notify();
+    off += n;
+    if (off < line.length()) delay(20);
+  }
 }
 
 static String handle(const String &raw) {

@@ -10,13 +10,13 @@ The iOS change is specified in [IOS.md](IOS.md). This directory does not modify 
 
 | Mini D1 | Trigger socket | Net |
 |---------|----------------|-----|
-| GPIO 18 | pin 38 | Focus, active high |
-| GPIO 19 | pin 40 | Shutter, active high |
+| GPIO 32 | pin 38 | Focus, active high |
+| GPIO 27 | pin 40 | Shutter, active high |
 | GND | pin 39 | Opto LED return |
 
 Pin 1 is the square pad. Pins 39 and 40 are the pair at the far end. Pin 38 is beside pin 40. Leave the board jumpers on the 1–2 bridge so both jacks follow these two pins. Do not connect the ESP32 ground to a TRS sleeve, and do not feed the socket from the Mini D1 5 V pin. The Mini D1's own USB cable powers it.
 
-GPIO 18 and 19 are the numbers in the firmware. On many Mini D1 boards those pads are labeled D5 and D6. Clones disagree, so count from the GPIO number, not the D label, if the silkscreen differs.
+GPIO 32 and 27 are the numbers in the firmware. Clones disagree on the D labels, so count from the GPIO number.
 
 ## Flash
 
@@ -41,6 +41,17 @@ cd esp32_d1
 ```
 
 The first run creates `.venv` and installs bleak. macOS has to allow Bluetooth for the terminal. A good ping prints `OK`. `fire` moves the pins, so leave the camera unplugged until the ping works.
+
+## Watch the LEDs
+
+`./test.sh fire` is too short to see. This holds the shutter LEDs on for 3 seconds. Cameras stay unplugged.
+
+```bash
+./watch.sh
+./watch.sh 4000
+```
+
+Focus LEDs D1 and D3 light first. A tenth of a second later shutter LEDs D2 and D4 join them. All four go out when the hold ends. The script prints `OK` when the Mini D1 finishes the pulse.
 
 ## Lines
 

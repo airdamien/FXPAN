@@ -319,7 +319,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         if canonMode {
             return try await captureCanon(stamp: stamp)
         }
-        if photo.drive.release == "sync" {
+        if photo.drive.release == "sync" || photo.drive.release == "bt" {
             return try await captureSync(stamp: stamp, photo: photo)
         }
         var out: [Role: Grabbed] = [:]
@@ -351,8 +351,9 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return out
     }
 
-    /// Arm both bodies, drop USB so they honor the trigger cables, pulse the Zero, then download.
+    /// Arm both bodies, drop USB so they honor the trigger cables, pulse the board, then download.
     private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
+        let path = photo.drive.release == "bt" ? "bt" : "sync"
         let bodies = links.values.filter { role(of: $0.token) != nil }
         guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
         let armed: [(NikonLink, Role)] = bodies.compactMap { link in role(of: link.token).map { (link, $0) } }
@@ -361,29 +362,34 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             do { try await link.armSync(photo) } catch { armFailure = armFailure ?? error }
         }
         if let armFailure {
-            Trace.line("FXPAN sync arm failed: \(armFailure.localizedDescription)")
+            Trace.line("FXPAN \(path) arm failed: \(armFailure.localizedDescription)")
             throw armFailure
         }
         let began = CFAbsoluteTimeGetCurrent()
         func since() -> String { String(format: "%.2f s", CFAbsoluteTimeGetCurrent() - began) }
-        Trace.line("FXPAN sync armed \(armed.map { "\($0.1.rawValue) \($0.0.token.suffix(4))" }.joined(separator: ", "))")
+        Trace.line("FXPAN \(path) armed \(armed.map { "\($0.1.rawValue) \($0.0.token.suffix(4))" }.joined(separator: ", "))")
         usbHeld = true
         defer { usbHeld = false }
         await Self.each(armed.map(\.0)) { await $0.closeForSync() }
-        Trace.line("FXPAN sync USB closed at \(since()), still open: \(armed.filter { $0.0.device.hasOpenSession }.map(\.1.rawValue))")
+        Trace.line("FXPAN \(path) USB closed at \(since()), still open: \(armed.filter { $0.0.device.hasOpenSession }.map(\.1.rawValue))")
         try await Task.sleep(nanoseconds: 800_000_000)
         let reply: String
         do {
-            reply = try await SyncLink.fire(photo)
+            if path == "bt" {
+                guard await BLELink.ensure() else {
+                    throw PTPError.message("Trigger board did not answer")
+                }
+            }
+            reply = path == "bt" ? try await BLELink.fire(photo) : try await SyncLink.fire(photo)
         } catch {
-            Trace.line("FXPAN sync fire failed at \(since()): \(error.localizedDescription)")
+            Trace.line("FXPAN \(path) fire failed at \(since()): \(error.localizedDescription)")
             await Self.each(armed.map(\.0)) { try? await $0.open() }
             throw error
         }
-        Trace.line("FXPAN sync fired at \(since()), board said \(reply), hold \(SyncLink.hold(photo)) ms")
+        Trace.line("FXPAN \(path) fired at \(since()), board said \(reply), hold \(SyncLink.hold(photo)) ms")
         try await Task.sleep(nanoseconds: 200_000_000)
         await Self.each(armed.map(\.0)) { try? await $0.open() }
-        Trace.line("FXPAN sync USB reopened at \(since())")
+        Trace.line("FXPAN \(path) USB reopened at \(since())")
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
