@@ -28,6 +28,8 @@ struct StitchReport: Codable {
     var lag: Int?
     /// The saved panorama is already turned so text reads forwards. Missing on older files, which are turned when shown.
     var turned: Bool?
+    /// True when this file was flopped so a mirrored pair reads forwards. False when the pair already read forwards, as on a D7000. Missing on older files.
+    var sceneMirror: Bool?
 }
 
 typealias StitchNote = @Sendable (String) -> Void
@@ -88,7 +90,7 @@ enum RawDevelop {
 enum Stitcher {
     static let work = 360
 
-    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
+    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
         if photo.drive.engine == "hugin" {
             if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop) {
@@ -96,7 +98,7 @@ enum Stitcher {
                     built.made.image, dest: dest, ana: ana, photo: photo, frameWidth: built.made.frameWidth,
                     overlap: built.made.overlap, dy: built.made.dy, flip: rig.flipR, mode: "hugin", score: nil,
                     rot: built.made.rot, scale: built.made.scale, inliers: built.made.inliers, blend: built.made.blend,
-                    develop: built.develop, note: note, stop: stop
+                    develop: built.develop, mirrorScene: mirrorScene, note: note, stop: stop
                 )
             }
             note?("Features missed, feathering the seam")
@@ -135,7 +137,7 @@ enum Stitcher {
         return try finish(
             cg, dest: dest, ana: ana, photo: photo, frameWidth: frameWidth,
             overlap: overlap, dy: dy, flip: flip, mode: mode, score: score,
-            rot: nil, scale: nil, inliers: nil, blend: blendName, develop: loaded.develop, note: note, stop: stop
+            rot: nil, scale: nil, inliers: nil, blend: blendName, develop: loaded.develop, mirrorScene: mirrorScene, note: note, stop: stop
         )
     }
 
@@ -194,11 +196,12 @@ enum Stitcher {
     private static func finish(
         _ image: CGImage, dest: URL, ana: URL?, photo: Photo, frameWidth: Int,
         overlap: Double, dy: Int, flip: Bool, mode: String, score: Double?,
-        rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, note: StitchNote? = nil, stop: StitchStop? = nil
+        rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
         try StitchGate.check(stop)
-        // R is flopped to meet T, and that pair is a mirror of the scene.
-        var cg = flop(image)
+        // R is flopped to meet T. On a D800 that pair is a mirror of the scene, so it is flopped.
+        // A D7000 pair already reads forwards, and the same flop turns it backwards.
+        var cg = mirrorScene ? flop(image) : image
         if !LookBook.identity(photo.look) {
             note?("Grading the look")
             cg = grade(cg, look: photo.look, fromRaw: develop == "ciraw")
@@ -217,7 +220,7 @@ enum Stitcher {
             overlap: overlap, overlapPx: ol, dy: dy, flipR: flip, mode: mode,
             width: cg.width, height: cg.height, squeeze: photo.frame.squeeze,
             look: photo.look.base, score: score, rot: rot, scale: scale, inliers: inliers, blend: blend, develop: develop,
-            turned: true
+            turned: true, sceneMirror: mirrorScene
         )
     }
 
@@ -340,7 +343,7 @@ enum Stitcher {
         return b.image()
     }
 
-    static func preview(t: CGImage, r: CGImage, rig: Rig, squeeze: Double, maxWidth: Int) -> CGImage? {
+    static func preview(t: CGImage, r: CGImage, rig: Rig, squeeze: Double, maxWidth: Int, mirrorScene: Bool = true) -> CGImage? {
         let scale = min(1, Double(maxWidth) / Double(t.width))
         let tw = max(16, Int((Double(t.width) * scale).rounded()))
         let th = max(16, Int((Double(t.height) * scale).rounded()))
@@ -349,12 +352,48 @@ enum Stitcher {
         let out = compose(t: bitmap(ts), r: bitmap(rs), overlap: rig.overlap(width: t.width, height: t.height), dy: 0, cut: false)
         var cg = out.bitmap.image()
         if squeeze > 1.01 { cg = stretch(cg, squeeze: squeeze) }
-        return flop(cg)
+        return mirrorScene ? flop(cg) : cg
     }
 
-    /// Older panoramas were saved mirrored. A file marked turned is already the right way around.
-    static func upright(_ image: CGImage, turned: Bool?) -> CGImage {
-        turned == true ? image : flop(image)
+    /// One body, shown the way it sits in the finished panorama. `flopBody` is the reflection flop on R.
+    static func present(_ image: CGImage, flopBody: Bool, mirrorScene: Bool) -> CGImage {
+        flopBody == mirrorScene ? image : flop(image)
+    }
+
+    struct Hand {
+        /// Flop a saved file on the way to the screen.
+        var flop: Bool
+        /// After that flop, T is the left half. A D7000 pair keeps T on the right.
+        var tOnLeft: Bool
+    }
+
+    /// How to show a saved panorama. Older D800 files omit `turned` and were saved mirrored.
+    /// A D7000 stitch from before `sceneMirror` was recorded was flopped like a D800, so it reads backwards.
+    static func hand(turned: Bool?, sceneMirror: Bool?, savedHeight: Int?) -> Hand {
+        if sceneMirror == false { return Hand(flop: false, tOnLeft: false) }
+        if turned != true { return Hand(flop: true, tOnLeft: true) }
+        if let savedHeight, (3000...3600).contains(savedHeight) {
+            return Hand(flop: true, tOnLeft: false)
+        }
+        return Hand(flop: false, tOnLeft: true)
+    }
+
+    static func upright(_ image: CGImage, report: StitchReport?) -> CGImage {
+        let shown = hand(turned: report?.turned, sceneMirror: report?.sceneMirror, savedHeight: report?.height)
+        return shown.flop ? flop(image) : image
+    }
+
+    /// The D7000 still is 4928×3264. Its stitch is about 3264 tall. Either one skips the scene flop.
+    static func mirrorScene(shot: ShotFiles) -> Bool {
+        if let report = FrameFacts.report(shot.stamp) {
+            if let scene = report.sceneMirror { return scene }
+            if (3000...3600).contains(report.height) { return false }
+        }
+        for url in [shot.t, shot.r].compactMap({ $0 }) {
+            if let model = FrameFacts.cameraModel(url), BodyKind.from(model) == .d7000 { return false }
+            if let (w, h) = FrameFacts.pixels(url), (3000...3400).contains(h), w <= 5300 { return false }
+        }
+        return true
     }
 
     // MARK: - Match

@@ -7,7 +7,7 @@ import UIKit
 enum PanoVideo {
     /// `gap` is the seconds R started after T, measured when both start commands went out. Nil when it was never measured.
     static func make(
-        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, gap: Double?,
+        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, gap: Double?, mirrorScene: Bool = true,
         note: @escaping @Sendable (String) -> Void
     ) async throws {
         note("Matching the clips")
@@ -22,7 +22,7 @@ enum PanoVideo {
         guard let held else { throw PTPError.message("Could not fit the overlap") }
         note("Stitching")
         let made = try await Task.detached(priority: .userInitiated) {
-            try await render(t: t, r: r, movie: movie, poster: poster, rig: rig, lag: lag, hold: held, note: note)
+            try await render(t: t, r: r, movie: movie, poster: poster, rig: rig, lag: lag, hold: held, mirrorScene: mirrorScene, note: note)
         }.value
         note("\(made.frames) frames")
         let line = lag == 0 ? "in step" : "offset \(lag) frames"
@@ -36,6 +36,7 @@ enum PanoVideo {
         report.startGap = gap
         report.lag = lag
         report.turned = true
+        report.sceneMirror = mirrorScene
         let json = movie.deletingPathExtension().appendingPathExtension("json")
         if let data = try? JSONEncoder().encode(report) {
             try? data.write(to: json, options: .atomic)
@@ -316,7 +317,7 @@ enum PanoVideo {
     }
 
     private static func render(
-        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, lag: Int, hold: Hugin.Hold,
+        t: URL, r: URL, movie: URL, poster: URL, rig: Rig, lag: Int, hold: Hugin.Hold, mirrorScene: Bool,
         note: @escaping @Sendable (String) -> Void
     ) async throws -> Made {
         let left = try await Reader(url: t)
@@ -350,7 +351,7 @@ enum PanoVideo {
                     missed += 1
                     return
                 }
-                frame = Stitcher.flop(frame)
+                if mirrorScene { frame = Stitcher.flop(frame) }
                 let w = frame.width - frame.width % 2
                 let h = frame.height - frame.height % 2
                 if w < 16 || h < 16 {
