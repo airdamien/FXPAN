@@ -56,8 +56,8 @@ module f_rev_thread_cut(h = undef, clear = undef) {
 // rises off the flange face and ends in a square cliff, so the pin rides
 // up and then drops in, whichever way it arrives. The wedges are only on
 // the pin track; the rest of the register face stays flat.
-F_PIN_D      = 2.0;    // D800 lens lock pin
-F_PIN_CLEAR  = -0.01;  // slot reads 1.99; the 2.0 pin is a snap, no roll
+F_PIN_D      = 2.0;    // lens lock pin
+F_PIN_CLEAR  = 0.00;   // 2.00 mm between the ramp cliffs
 F_PIN_FACE_Z = 3.0;
 F_PIN_FLOOR  = 1.5;    // mesh floor; leaves 1.5 mm under the flange
 F_PIN_R      = [23.7, 28.8];

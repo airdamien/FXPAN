@@ -134,11 +134,12 @@ function dx_bs_shelf() = -BS_H / 2 - 0.04;
 // Lens-end stop and far wall. The glass drops in between them from the lid.
 function dx_bs_y0() = dx_plate_bend();
 function dx_bs_y1() = dx_bs_y0() + BS_W + DX_BS_PLAY;
-// [y, z, finger width]. Two under the window, one on the far post, all
-// outside the beams.
+// [y, z, finger width]. Two under the window, one on each top post, all
+// outside the beams so the top and bottom of the glass register on x = 0.
 function dx_bs_pads() = [
     [-14, -23, 3.0],
     [ 14, -23, 3.0],
+    [dx_bs_y0() + 2.4,        22.5, 2.3],
     [dx_bs_y0() + BS_W - 2.2, 22.5, 2.3]
 ];
 
@@ -231,13 +232,22 @@ module dx_bs_finger_cut(p, shelf, web, open0) {
             cube([dx_bs_wall1() - dx_bs_wall0() + 0.02, w + 2 * s, web + 0.02],
                  center = true);
     } else {
-        root = p[1] - 10;
+        root = p[1] - 7;
         tip = p[1] + 3;
+        back_clear = 6.0;
         for (sy = [-1, 1])
             translate([(x0 + x1) / 2, p[0] + sy * (w + s) / 2, (root + tip + s) / 2])
                 cube([x1 - x0, s, tip + s - root], center = true);
         translate([(x0 + x1) / 2, p[0], tip + s / 2])
             cube([x1 - x0, w + 2 * s, s], center = true);
+        // Clear any brace behind the finger so the 1.2 mm leaf can flex,
+        // with a 45° floor so the brace prints without an overhang.
+        hull() {
+            translate([DX_BS_BACK - back_clear / 2, p[0], (root + tip + s) / 2])
+                cube([back_clear, w + 2 * s, tip + s - root], center = true);
+            translate([DX_BS_BACK - 0.05, p[0], root - back_clear + 0.05])
+                cube([0.1, w + 2 * s, 0.1], center = true);
+        }
     }
 }
 
@@ -328,9 +338,12 @@ module dx_plate_brace(z0, z1, shelf) {
             }
             // Anything that still sweeps across the slot gets opened, stop
             // to far wall, so the channel is only the pads and the springs.
-            rotate([0, 0, -45])
+            rotate([0, 0, -45]) {
                 translate([(w0 + w1) / 2, (y0 + y1) / 2, (shelf + z1 + 2) / 2])
                     cube([w1 - w0, y1 - y0, z1 + 2 - shelf], center = true);
+                for (p = dx_bs_pads())
+                    dx_bs_finger_cut(p, shelf, 1.5, shelf + edge);
+            }
         }
         translate([0, (keep_y + DX_CAV) / 2, 0])
             cube([DX_LOGO + dx_face("R") + 4,
