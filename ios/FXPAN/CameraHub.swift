@@ -1578,16 +1578,19 @@ final class NikonLink {
     }
 
     func stopLive() async {
+        let was = inLive
         inLive = false
         if canonBody {
+            guard was else { return }
             _ = await canonProp(PTP.canonEVFOutput, 0)
             _ = try? await transact(PTP.Canon.endViewfinder.rawValue, timeout: 3)
             return
         }
         await leaveMovieMode()
+        guard was else { return }
         _ = try? await transact(PTP.Op.endLiveView.rawValue, timeout: 4)
         _ = try? await transact(PTP.Op.changeMode.rawValue, params: [0], timeout: 4)
-        await settle(minimum: 1.2, seconds: 8)
+        await settle(minimum: 0.4, seconds: 4)
     }
 
     /// Point the release at camera RAM and empty what is already parked there.
@@ -2035,7 +2038,6 @@ final class NikonLink {
         await stopLive()
         try await aimRAM(photo)
         await drainRAM()
-        await settle(minimum: 0.4, seconds: 4)
         var reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
         print("FXPAN \(model) captureRAM \(Self.hex(reply.code))")
         if reply.code == 0x2019 {
