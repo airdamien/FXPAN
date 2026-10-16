@@ -23,6 +23,7 @@ cam/__pycache__/
 cam/.venv/
 logos/__pycache__/
 logos/.venv/
+esp32_d1/.venv/
 cam/cameras.json
 cam/gpio.json
 cam/settings.json
