@@ -1080,17 +1080,18 @@ struct PairPicture: View {
     /// The finished panorama when it exists. Until then, T and R side by side the same way live view is composed.
     private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
         let cg: CGImage?
+        let mirror = Stitcher.mirrorScene(shot: shot)
         if let url = shot.ana ?? shot.pano, let image = Stitcher.thumbnail(at: url, maxPixel: 1800) {
-            cg = Stitcher.upright(image, turned: FrameFacts.report(shot.stamp)?.turned)
+            cg = Stitcher.upright(image, report: FrameFacts.report(shot.stamp))
         } else {
             let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
             let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-            if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
+            if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600, mirrorScene: mirror) {
                 cg = preview
             } else if let t {
-                cg = Stitcher.flop(t)
+                cg = Stitcher.present(t, flopBody: false, mirrorScene: mirror)
             } else {
-                cg = r.map { rig.flipR ? $0 : Stitcher.flop($0) }
+                cg = r.map { Stitcher.present($0, flopBody: rig.flipR, mirrorScene: mirror) }
             }
         }
         guard let cg else { return nil }
@@ -1211,7 +1212,7 @@ struct PeepScreen: View {
                 guard name.hasPrefix("P_") else { return image }
                 var stamp = String(name.dropFirst(2))
                 if stamp.hasSuffix("_ana") { stamp.removeLast(4) }
-                return Stitcher.upright(image, turned: FrameFacts.report(stamp)?.turned)
+                return Stitcher.upright(image, report: FrameFacts.report(stamp))
             }.value
             if let cg { image = UIImage(cgImage: cg) }
         }

@@ -372,7 +372,7 @@ final class AppModel {
                 let hold = aim == nil ? self.focusBox : nil
                 let best = self.heldBest
                 let read = await Task.detached(priority: .userInitiated) {
-                    FocusMeter.read(frame, aim: aim, overlap: overlap, only: nil, hold: hold, holdBest: best)
+                    FocusMeter.read(frame, aim: aim, overlap: overlap, only: nil, hold: hold, holdBest: best, tOnLeft: page.tOnLeft)
                 }.value
                 preview = UIImage(cgImage: frame)
                 applyFocus(read)
@@ -384,11 +384,14 @@ final class AppModel {
     private struct FocusPage {
         var image: CGImage
         var overlap: Double
+        var tOnLeft: Bool
     }
 
     private struct PanoOverlap: Decodable {
         var overlap: Double?
         var turned: Bool?
+        var sceneMirror: Bool?
+        var height: Int?
     }
 
     /// Captured stitches in the library, newest first. The overlap written beside each file places R and T.
@@ -397,8 +400,9 @@ final class AppModel {
             guard let image = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
             let note = storedNote(beside: url)
             let overlap = note?.overlap ?? rig.overlap
-            let shown = Stitcher.upright(image, turned: note?.turned)
-            return FocusPage(image: shown, overlap: overlap)
+            let hand = Stitcher.hand(turned: note?.turned, sceneMirror: note?.sceneMirror, savedHeight: note?.height)
+            let shown = hand.flop ? Stitcher.flop(image) : image
+            return FocusPage(image: shown, overlap: overlap, tOnLeft: hand.tOnLeft)
         }
     }
 
@@ -468,7 +472,7 @@ final class AppModel {
         guard let data = try? Data(contentsOf: json),
               let note = try? JSONDecoder().decode(PanoOverlap.self, from: data) else { return nil }
         guard let overlap = note.overlap, overlap > 0.05, overlap < 0.55 else {
-            return PanoOverlap(overlap: nil, turned: note.turned)
+            return PanoOverlap(overlap: nil, turned: note.turned, sceneMirror: note.sceneMirror, height: note.height)
         }
         return note
     }
@@ -567,7 +571,8 @@ final class AppModel {
     private func stitchVideo(stamp: String, t: URL, r: URL, gap: Double?) async throws {
         let movie = Disk.captures.appendingPathComponent("P_\(stamp).mov")
         let poster = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
-        try await PanoVideo.make(t: t, r: r, movie: movie, poster: poster, rig: rig, gap: gap) { [weak self] text in
+        let mirrorScene = bodyKind.mirrorScene
+        try await PanoVideo.make(t: t, r: r, movie: movie, poster: poster, rig: rig, gap: gap, mirrorScene: mirrorScene) { [weak self] text in
             Task { @MainActor in self?.stitchLabel = text }
         }
     }
@@ -857,6 +862,7 @@ final class AppModel {
         previewBusy = true
         let rig = rig
         let photo = photo
+        let mirrorScene = bodyKind.mirrorScene
         let panoURL = shots.first { $0.pano != nil }?.pano
         Task { [weak self] in
             guard let self else { return }
@@ -872,7 +878,7 @@ final class AppModel {
                 let asked = [Role.t, .r].compactMap { self.camera.frameAsked[$0] }.min()
                 let started = CFAbsoluteTimeGetCurrent()
                 let made = await Task.detached(priority: .userInitiated) {
-                    Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim, hold: hold, holdBest: best)
+                    Self.makePreview(t: t, r: r, rig: rig, photo: photo, fallback: panoURL, meter: meter, aim: aim, hold: hold, holdBest: best, mirrorScene: mirrorScene)
                 }.value
                 let now = CFAbsoluteTimeGetCurrent()
                 self.clockPreview(now - started, age: asked.map { now - $0 } ?? 0, look: LookBook.identity(photo.look) ? "none" : photo.look.base, aid: photo.focus.aid)
@@ -920,21 +926,21 @@ final class AppModel {
         var holdBest: Double = 0
     }
 
-    nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?, hold: CGRect?, holdBest: Double) -> PreviewMade {
-        if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400) {
-            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil, hold: hold, holdBest: holdBest) : FocusRead()
+    nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?, hold: CGRect?, holdBest: Double, mirrorScene: Bool) -> PreviewMade {
+        if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400, mirrorScene: mirrorScene) {
+            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil, hold: hold, holdBest: holdBest, tOnLeft: mirrorScene) : FocusRead()
             var out = cg
             if !LookBook.identity(photo.look) { out = Stitcher.grade(out, look: photo.look) }
             if photo.focus.aid == "peaking" { out = Peak.draw(out, color: photo.focus.color, level: photo.focus.level) }
             return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let t {
-            let shown = Stitcher.flop(t)
+            let shown = Stitcher.present(t, flopBody: false, mirrorScene: mirrorScene)
             let read = meter ? FocusMeter.read(shown, aim: aim, overlap: rig.overlap, only: .t, hold: hold, holdBest: holdBest) : FocusRead(place: .t)
             return PreviewMade(image: UIImage(cgImage: shown), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
         if let r {
-            let shown = rig.flipR ? r : Stitcher.flop(r)
+            let shown = Stitcher.present(r, flopBody: rig.flipR, mirrorScene: mirrorScene)
             let read = meter ? FocusMeter.read(shown, aim: aim, overlap: rig.overlap, only: .r, hold: hold, holdBest: holdBest) : FocusRead(place: .r)
             return PreviewMade(image: UIImage(cgImage: shown), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
         }
@@ -1065,6 +1071,7 @@ final class AppModel {
         let ana = photo.frame.squeeze > 1.01 ? Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg") : nil
         let rig = rig
         let photo = photo
+        let mirrorScene = bodyKind.mirrorScene
         do {
             let note: StitchNote = { phase in
                 Task { @MainActor in self.noteStitch(phase) }
@@ -1072,7 +1079,7 @@ final class AppModel {
             let stop = stitchStop
             let metal = metalWarp
             let job = Task.detached(priority: .userInitiated) {
-                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, metal: metal, note: note, stop: { stop.cancelled })
+                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, metal: metal, mirrorScene: mirrorScene, note: note, stop: { stop.cancelled })
             }
             stitchPiece = job
             defer { stitchPiece = nil }

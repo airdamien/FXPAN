@@ -38,19 +38,20 @@ enum FocusMeter {
         return CGRect(x: x, y: y, width: w, height: h)
     }
 
-    /// After the panorama is turned, T is the left of the stitch and R the right. A point in the overlap watches both bodies.
-    static func place(x: CGFloat, overlap: Double, only: FocusPlace?) -> FocusPlace {
+    /// After the D800 scene flop, T is the left of the stitch and R the right. A D7000 pair is saved without that flop, so T is on the right. A point in the overlap watches both bodies.
+    static func place(x: CGFloat, overlap: Double, only: FocusPlace?, tOnLeft: Bool = true) -> FocusPlace {
         if let only, only != .both { return only }
         let span = 2 - overlap
         let unit = Double(min(1, max(0, x))) * span
         let onLeft = unit <= 1
         let onRight = unit >= 1 - overlap
         if onLeft && onRight { return .both }
-        return onRight ? .r : .t
+        let rightIsR = tOnLeft
+        return onRight == rightIsR ? .r : .t
     }
 
     /// Fine detail in the panorama. `hold` is the window already being watched. It stays until some other place is plainly sharper than that window has ever been.
-    static func read(_ image: CGImage, aim: CGPoint?, overlap: Double, only: FocusPlace?, hold: CGRect?, holdBest: Double) -> FocusRead {
+    static func read(_ image: CGImage, aim: CGPoint?, overlap: Double, only: FocusPlace?, hold: CGRect?, holdBest: Double, tOnLeft: Bool = true) -> FocusRead {
         guard let map = detail(image) else { return FocusRead(holdBest: holdBest) }
         if let aim {
             let box = window(around: aim)
@@ -59,7 +60,7 @@ enum FocusMeter {
                 score: value > 0.2 ? value : nil,
                 box: box,
                 sharp: box,
-                place: place(x: box.midX, overlap: overlap, only: only),
+                place: place(x: box.midX, overlap: overlap, only: only, tOnLeft: tOnLeft),
                 holdBest: holdBest
             )
         }
@@ -82,7 +83,7 @@ enum FocusMeter {
             score: score > 0.2 ? score : nil,
             box: box,
             sharp: box,
-            place: place(x: box.midX, overlap: overlap, only: only),
+            place: place(x: box.midX, overlap: overlap, only: only, tOnLeft: tOnLeft),
             holdBest: best
         )
     }

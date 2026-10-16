@@ -920,6 +920,14 @@ enum FrameFacts {
         return (w, h)
     }
 
+    static func cameraModel(_ url: URL?) -> String? {
+        guard let url,
+              let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] else { return nil }
+        return tiff[kCGImagePropertyTIFFModel] as? String
+    }
+
     static func size(_ shot: ShotFiles, report: StitchReport?) -> String {
         if let px = pixels(outputURL(shot)) ?? report.map({ ($0.width, $0.height) }) {
             return "\(px.0.formatted()) × \(px.1.formatted())"
@@ -1029,27 +1037,29 @@ struct ShotPart: View {
 
     private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
         let cg: CGImage?
+        let mirror = Stitcher.mirrorScene(shot: shot)
+        let report = FrameFacts.report(shot.stamp)
         switch part {
         case "t":
-            cg = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { Stitcher.flop($0) }
+            cg = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { Stitcher.present($0, flopBody: false, mirrorScene: mirror) }
         case "r":
-            cg = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { rig.flipR ? $0 : Stitcher.flop($0) }
+            cg = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }.map { Stitcher.present($0, flopBody: rig.flipR, mirrorScene: mirror) }
         case "ana":
             cg = (LookStore.plain(stamp: shot.stamp, ana: true) ?? shot.ana)
                 .flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1800) }
-                .map { Stitcher.upright($0, turned: FrameFacts.report(shot.stamp)?.turned) }
+                .map { Stitcher.upright($0, report: report) }
         default:
             if let pano = (LookStore.plain(stamp: shot.stamp, ana: false) ?? shot.pano).flatMap({ Stitcher.thumbnail(at: $0, maxPixel: 1800) }) {
-                cg = Stitcher.upright(pano, turned: FrameFacts.report(shot.stamp)?.turned)
+                cg = Stitcher.upright(pano, report: report)
             } else {
                 let t = shot.t.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
                 let r = shot.r.flatMap { Stitcher.thumbnail(at: $0, maxPixel: 1400) }
-                if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600) {
+                if let t, let r, let preview = Stitcher.preview(t: t, r: r, rig: rig, squeeze: squeeze, maxWidth: 1600, mirrorScene: mirror) {
                     cg = preview
                 } else if let t {
-                    cg = Stitcher.flop(t)
+                    cg = Stitcher.present(t, flopBody: false, mirrorScene: mirror)
                 } else {
-                    cg = r.map { rig.flipR ? $0 : Stitcher.flop($0) }
+                    cg = r.map { Stitcher.present($0, flopBody: rig.flipR, mirrorScene: mirror) }
                 }
             }
         }
