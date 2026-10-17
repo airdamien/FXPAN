@@ -71,6 +71,9 @@ enum PTP {
         case isoAutoHi = 0xD16A
     }
 
+    /// Nikon prism meter. Signed, one count per twelfth of a stop, about ±5 stops. Negative is dark.
+    static let exposureIndicate: UInt16 = 0xD1B1
+
     static let objectAdded: UInt16 = 0x4002
     /// The body is in transfer mode and will stay there until the host reads this handle.
     static let requestTransfer: UInt16 = 0x4009

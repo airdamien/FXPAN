@@ -160,6 +160,7 @@ struct RootView: View {
         case .home: HomeView()
         case .frame: FrameScreen()
         case .light: LightScreen()
+        case .meter: MeterScreen()
         case .focus: FocusScreen()
         case .look: LookScreen()
         case .drive: DriveScreen()
@@ -433,6 +434,12 @@ struct TopBar: View {
                         .foregroundStyle(slot.online ? Theme.ink2 : Theme.faint)
                         .frame(width: 36, alignment: .leading)
                 }
+                if model.photo.light.autoMeter, let mark = meterMark(role) {
+                    Text(mark)
+                        .font(Theme.font(11, weight: .medium))
+                        .foregroundStyle(tint)
+                        .frame(width: compact ? 34 : 38, alignment: .leading)
+                }
             }
             .padding(.horizontal, compact ? 6 : 8)
             .padding(.vertical, 5)
@@ -440,6 +447,11 @@ struct TopBar: View {
             .overlay(Capsule().stroke(Theme.hair, lineWidth: 1))
             .opacity(slot.online ? 1 : 0.55)
         }
+    }
+
+    private func meterMark(_ role: Role) -> String? {
+        guard let counts = model.meterReads[role]?.counts else { return nil }
+        return ExposureMeter.fmt(ExposureMeter.stops(counts: counts))
     }
 }
 

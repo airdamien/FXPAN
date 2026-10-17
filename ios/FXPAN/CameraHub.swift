@@ -185,14 +185,18 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         publish()
     }
 
-    func apply(_ photo: Photo) async {
+    func apply(_ photo: Photo, readBack: Bool = true) async {
         guard !simulate, !canonMode, photo.exposes, !usbHeld, !idling else { return }
         await withTaskGroup(of: Void.self) { group in
             for link in links.values where role(of: link.token) != nil {
-                group.addTask { try? await link.apply(photo) }
+                group.addTask { await link.match(photo) }
             }
         }
-        await refreshStatus()
+        if readBack {
+            await refreshStatus()
+        } else {
+            publish()
+        }
     }
 
     private var liveGate = false
@@ -298,7 +302,14 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return nil
     }
 
-    func capture(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
+    /// The shot walks both bodies together. They do not decide to fire on their own.
+    enum ShotPhase {
+        case idle, meters, write, arm, release, collect
+    }
+
+    private(set) var shotPhase: ShotPhase = .idle
+
+    func capture(stamp: String, photo: Photo, meter: (() async -> Photo)? = nil) async throws -> [Role: Grabbed] {
         if simulate {
             let was = live
             live = false
@@ -319,27 +330,57 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         if canonMode {
             return try await captureCanon(stamp: stamp)
         }
-        if photo.drive.release == "sync" || photo.drive.release == "bt" {
-            return try await captureSync(stamp: stamp, photo: photo)
+        shotPhase = .meters
+        var shot = photo
+        if let meter { shot = await meter() }
+        shotPhase = .write
+        await apply(shot, readBack: false)
+        holdSettings()
+        defer {
+            releaseSettings()
+            shotPhase = .idle
         }
+        if shot.drive.release == "sync" || shot.drive.release == "bt" {
+            return try await captureSync(stamp: stamp, photo: shot)
+        }
+        return try await capturePTP(stamp: stamp)
+    }
+
+    /// Live view is down and the exposure is already written. Both bodies park on RAM and go idle, then both shutter commands go out, then the frames come back.
+    private func capturePTP(stamp: String) async throws -> [Role: Grabbed] {
+        let armed = pairedBodies()
+        guard !armed.isEmpty else { throw PTPError.message("No paired body on USB") }
+        shotPhase = .arm
+        var armFailure: Error?
+        await Self.each(armed.map(\.0)) { link in
+            do { try await link.armPTP() } catch { armFailure = armFailure ?? error }
+        }
+        if let armFailure { throw armFailure }
+        await Self.each(armed.map(\.0)) { await $0.waitIdle() }
+        shotPhase = .release
+        let fired: [Role] = await withTaskGroup(of: Role?.self) { group in
+            for row in armed {
+                group.addTask { await row.0.releaseShutter() ? row.1 : nil }
+            }
+            var ok: [Role] = []
+            for await role in group {
+                if let role { ok.append(role) }
+            }
+            return ok
+        }
+        shotPhase = .collect
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
-            for link in links.values {
-                guard let who = role(of: link.token) else { continue }
+            for row in armed where fired.contains(row.1) {
                 group.addTask {
-                    do {
-                        let got = try await link.shoot(stamp: stamp, role: who, photo: photo)
-                        return .success((who, got))
-                    } catch {
-                        return .failure(error)
-                    }
+                    do { return .success((row.1, try await row.0.takeRAM(stamp: stamp, role: row.1))) }
+                    catch { return .failure(error) }
                 }
             }
             for await result in group {
                 switch result {
-                case .success(let pair):
-                    out[pair.0] = pair.1
+                case .success(let pair): out[pair.0] = pair.1
                 case .failure(let error): failures.append(error.localizedDescription)
                 }
             }
@@ -351,20 +392,34 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         return out
     }
 
+    private func pairedBodies() -> [(NikonLink, Role)] {
+        links.values.compactMap { link in role(of: link.token).map { (link, $0) } }
+    }
+
+    private func holdSettings() {
+        for link in links.values { link.holdMail() }
+    }
+
+    private func releaseSettings() {
+        for link in links.values { link.releaseMail() }
+    }
+
     /// Arm both bodies, drop USB so they honor the trigger cables, pulse the board, then download.
     private func captureSync(stamp: String, photo: Photo) async throws -> [Role: Grabbed] {
         let path = photo.drive.release == "bt" ? "bt" : "sync"
-        let bodies = links.values.filter { role(of: $0.token) != nil }
-        guard !bodies.isEmpty else { throw PTPError.message("No paired body on USB") }
-        let armed: [(NikonLink, Role)] = bodies.compactMap { link in role(of: link.token).map { (link, $0) } }
+        let armed = pairedBodies()
+        guard !armed.isEmpty else { throw PTPError.message("No paired body on USB") }
+        shotPhase = .arm
         var armFailure: Error?
         await Self.each(armed.map(\.0)) { link in
-            do { try await link.armSync(photo) } catch { armFailure = armFailure ?? error }
+            do { try await link.armSync() } catch { armFailure = armFailure ?? error }
         }
         if let armFailure {
             Trace.line("FXPAN \(path) arm failed: \(armFailure.localizedDescription)")
             throw armFailure
         }
+        await Self.each(armed.map(\.0)) { await $0.waitIdle() }
+        shotPhase = .release
         let began = CFAbsoluteTimeGetCurrent()
         func since() -> String { String(format: "%.2f s", CFAbsoluteTimeGetCurrent() - began) }
         Trace.line("FXPAN \(path) armed \(armed.map { "\($0.1.rawValue) \($0.0.token.suffix(4))" }.joined(separator: ", "))")
@@ -390,6 +445,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         try await Task.sleep(nanoseconds: 200_000_000)
         await Self.each(armed.map(\.0)) { try? await $0.open() }
         Trace.line("FXPAN \(path) USB reopened at \(since())")
+        shotPhase = .collect
         var out: [Role: Grabbed] = [:]
         var failures: [String] = []
         await withTaskGroup(of: Result<(Role, Grabbed), Error>.self) { group in
@@ -804,6 +860,32 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         onSeat?()
     }
 
+    /// Both prism meters. The count is nil when the body does not offer the property.
+    func readMeters() async -> [Role: MeterRead] {
+        if simulate {
+            return [
+                .t: MeterRead(online: true, mirrorUp: live, counts: -28),
+                .r: MeterRead(online: true, mirrorUp: live, counts: -48),
+            ]
+        }
+        guard !canonMode else { return [:] }
+        let pairs: [(Role, NikonLink)] = links.values.compactMap { link in
+            guard let who = role(of: link.token) else { return nil }
+            return (who, link)
+        }
+        return await withTaskGroup(of: (Role, MeterRead).self) { group in
+            for (who, link) in pairs {
+                group.addTask { @MainActor in
+                    let needle = await link.exposureNeedle()
+                    return (who, MeterRead(online: true, mirrorUp: link.inLive, counts: needle.counts, detail: needle.detail))
+                }
+            }
+            var out: [Role: MeterRead] = [:]
+            for await row in group { out[row.0] = row.1 }
+            return out
+        }
+    }
+
     private func forgetMissingFrames() {
         for role in Role.allCases {
             let token = role == .t ? pairT : pairR
@@ -931,6 +1013,9 @@ final class NikonLink {
     private var props: [UInt16: PTP.PropDesc] = [:]
     private var txn: UInt32 = 1
     private var chain: Task<Void, Never>?
+    /// Settings wait here, one job at a time. Held from arm through the frames, so a write cannot sit ahead of the shutter.
+    private var mailHeld = false
+    private var mailTail: Task<Void, Never>?
     private(set) var inLive = false
     /// True after a movie-mode command was accepted. Stills send the matching off command.
     private var movieArmed = false
@@ -1053,24 +1138,27 @@ final class NikonLink {
         if let bat = await value(.battery) { exposure.battery = Int(min(100, bat)) }
     }
 
-    /// One open session. Each property is a PTP op on that session, not a new claim.
-    func apply(_ photo: Photo) async throws {
+    /// Writes the exposure once. A value the body already holds is not sent again, and the shot path does not read every property back before the shutter.
+    func apply(_ photo: Photo, readBack: Bool = true) async throws {
         let light = photo.light
         if let iso = Catalog.isoValue(light.iso) {
             try? await set(.isoAuto, 0)
             try? await set(.isoAutoHi, 0)
             try await set(.iso, UInt64(iso))
+            exposure.iso = light.iso
         }
         try await set(.program, Self.programCode(light.program))
+        exposure.program = light.program
         if let shutter = Catalog.shutterTenThousandths(light.bulb ? "bulb" : light.shutter) {
             try await set(.exposureTime, UInt64(shutter))
+            exposure.shutter = light.bulb ? "bulb" : light.shutter
         }
         if let f = Catalog.fNumberHundredths(light.fstop), light.program == "M" || light.program == "A" {
             try await set(.fNumber, UInt64(f))
         }
         try await set(.whiteBalance, Self.wbCode(photo.wb))
         try await set(.compression, Self.qualityCode(photo.drive.quality))
-        await readExposure()
+        if readBack { await readExposure() }
     }
 
     /// Enter live view and return. Polling is shared so one body cannot starve the other.
@@ -1594,10 +1682,10 @@ final class NikonLink {
     }
 
     /// Point the release at camera RAM and empty what is already parked there.
-    /// The body hands RAM frames back oldest first, so a leftover would be saved as the new shot.
-    func armSync(_ photo: Photo) async throws {
+    /// The exposure was written earlier, so this does not send it again.
+    func armSync() async throws {
         try await ensureSession()
-        try await aimRAM(photo)
+        try await parkRAM()
         await drainRAM()
     }
 
@@ -1606,9 +1694,7 @@ final class NikonLink {
         try await open()
     }
 
-    private func aimRAM(_ photo: Photo) async throws {
-        try await set(.recordingMedia, 1)
-        try await apply(photo)
+    private func parkRAM() async throws {
         try await set(.recordingMedia, 1)
         if let media = await value(.recordingMedia), media != 1 {
             throw PTPError.message("\(model) stayed on the card")
@@ -2033,24 +2119,28 @@ final class NikonLink {
         return CGImageDestinationFinalize(dest)
     }
 
-    func shoot(stamp: String, role: Role, photo: Photo) async throws -> Grabbed {
+    /// Live view down, camera RAM selected, buffer empty. The shutter command is a later step, after both bodies are idle.
+    func armPTP() async throws {
         try await ensureSession()
         await stopLive()
-        try await aimRAM(photo)
+        try await parkRAM()
         await drainRAM()
-        var reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
-        print("FXPAN \(model) captureRAM \(Self.hex(reply.code))")
-        if reply.code == 0x2019 {
+    }
+
+    /// The capture command only. Nothing else is queued ahead of it.
+    func releaseShutter() async -> Bool {
+        var reply = try? await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
+        print("FXPAN \(model) captureRAM \(Self.hex(reply?.code))")
+        if reply?.code == 0x2019 {
             await settle(minimum: 1.5, seconds: 12)
-            reply = try await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
-            print("FXPAN \(model) captureRAM2 \(Self.hex(reply.code))")
+            reply = try? await transact(PTP.Op.captureSDRAM.rawValue, params: [0xFFFF_FFFF], timeout: 60)
+            print("FXPAN \(model) captureRAM2 \(Self.hex(reply?.code))")
         }
-        if !reply.ok {
-            reply = try await transact(PTP.Op.initiateCapture.rawValue, params: [0, 0], timeout: 25)
-            print("FXPAN \(model) capture \(Self.hex(reply.code))")
+        if reply?.ok != true {
+            reply = try? await transact(PTP.Op.initiateCapture.rawValue, params: [0, 0], timeout: 25)
+            print("FXPAN \(model) capture \(Self.hex(reply?.code))")
         }
-        guard reply.ok else { throw PTPError.message("\(role.rawValue) did not fire \(Self.hex(reply.code))") }
-        return try await takeRAM(stamp: stamp, role: role)
+        return reply?.ok == true
     }
 
     /// A JPEG starts with FF D8. Anything else from this slot is the NEF. The embedded preview fills in only when the body did not also send a JPEG.
@@ -2142,15 +2232,17 @@ final class NikonLink {
 
     // MARK: PTP
 
-    private func set(_ prop: PTP.Prop, _ value: UInt64) async throws {
-        if let supported = info?.properties, !supported.isEmpty, !supported.contains(prop.rawValue) { return }
+    @discardableResult
+    private func set(_ prop: PTP.Prop, _ value: UInt64) async throws -> Bool {
+        if let supported = info?.properties, !supported.isEmpty, !supported.contains(prop.rawValue) { return false }
         let desc = props[prop.rawValue]
-        if desc?.getSet == 0 { return }
+        if desc?.getSet == 0 { return false }
         let type = desc?.dataType ?? Self.fallbackType(prop)
         var chosen = value
         if let enums = desc?.enums, !enums.isEmpty, !enums.contains(value) {
             chosen = PTP.nearest(value, in: enums) ?? value
         }
+        if props[prop.rawValue]?.current == chosen { return false }
         let payload = PTP.encode(chosen, type: type)
         var reply = try await transact(PTP.Op.setProp.rawValue, params: [UInt32(prop.rawValue)], out: payload)
         // 200F is Access Denied: the dial is mechanical, live view still owns the setting, or the mirror has not settled.
@@ -2159,14 +2251,17 @@ final class NikonLink {
             reply = try await transact(PTP.Op.setProp.rawValue, params: [UInt32(prop.rawValue)], out: payload)
         }
         if reply.ok {
-            props[prop.rawValue]?.current = chosen
-            return
+            if var desc = props[prop.rawValue] {
+                desc.current = chosen
+                props[prop.rawValue] = desc
+            }
+            return true
         }
         // A005 / 200F: the body will not take this property (mode dial, no lens, or a boost the menu has closed). Keep shooting.
         if reply.code == 0xA005 || reply.code == 0xA00A || reply.code == 0x2005 || reply.code == 0x2006 || reply.code == 0x200F || reply.code == 0x201C {
             let list = desc?.enums.map { String($0) }.joined(separator: ",") ?? ""
             Trace.line("FXPAN \(model) skip \(Self.propName(prop)) \(Self.hex(prop.rawValue)) value \(chosen) \(Self.hex(reply.code)) live \(inLive ? "up" : "down") [\(list)]")
-            return
+            return false
         }
         throw PTPError.refused(reply.code)
     }
@@ -2185,6 +2280,46 @@ final class NikonLink {
         }
     }
 
+    /// The prism property that answered last time, so the next read is one get.
+    private var needleCode: UInt16?
+
+    /// The prism bar. GetDeviceProp of 0xD1B1, then the older 0xD10A. The session list often omits both, so a missing entry is not a reason to skip the get.
+    func exposureNeedle() async -> (counts: Int?, detail: String) {
+        if canonBody { return (nil, "meter is the Nikon prism") }
+        if let needleCode {
+            let again = await readSigned(needleCode)
+            if let counts = again.counts { return (counts, "") }
+            self.needleCode = nil
+        }
+        let listed = info?.properties.contains(PTP.exposureIndicate) == true
+        let primary = await readSigned(PTP.exposureIndicate)
+        if let counts = primary.counts {
+            needleCode = PTP.exposureIndicate
+            return (counts, "")
+        }
+        let older = await readSigned(0xD10A)
+        if let counts = older.counts {
+            needleCode = 0xD10A
+            return (counts, "")
+        }
+        let where_ = listed ? "listed" : "not listed"
+        let code = primary.code == 0 ? "no answer" : String(format: "%04X", primary.code)
+        Trace.line("FXPAN \(model) meter \(where_) reply \(code) \(primary.bytes) bytes")
+        return (nil, "meter \(where_), reply \(code)")
+    }
+
+    /// One signed byte from GetDeviceProp. The response code is 0 when the body says nothing.
+    private func readSigned(_ prop: UInt16) async -> (counts: Int?, code: UInt16, bytes: Int) {
+        guard let reply = try? await transact(PTP.Op.getProp.rawValue, params: [UInt32(prop)], timeout: 2) else {
+            return (nil, 0, 0)
+        }
+        guard reply.ok else { return (nil, reply.code, reply.data.count) }
+        if let byte = reply.data.first ?? reply.params.first.map({ UInt8($0 & 0xFF) }) {
+            return (Int(Int8(bitPattern: byte)), reply.code, reply.data.count)
+        }
+        return (nil, reply.code, 0)
+    }
+
     private func value(_ prop: PTP.Prop) async -> UInt64? {
         if let supported = info?.properties, !supported.isEmpty, !supported.contains(prop.rawValue) {
             return props[prop.rawValue]?.current
@@ -2194,7 +2329,12 @@ final class NikonLink {
         }
         let type = props[prop.rawValue]?.dataType ?? Self.fallbackType(prop)
         var reader = PTP.Reader(data: reply.data)
-        return reader.readValue(type) ?? props[prop.rawValue]?.current
+        guard let read = reader.readValue(type) else { return props[prop.rawValue]?.current }
+        if var desc = props[prop.rawValue] {
+            desc.current = read
+            props[prop.rawValue] = desc
+        }
+        return read
     }
 
     private func text(_ prop: PTP.Prop, _ format: (UInt64) -> String) async -> String? {
@@ -2233,6 +2373,30 @@ final class NikonLink {
                 }
             }
         }
+    }
+
+    /// One settings job: make this body match the photo. A held mailbox drops the job instead of queuing it in front of the shutter.
+    func match(_ photo: Photo) async {
+        if mailHeld { return }
+        let previous = mailTail
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            mailTail = Task { @MainActor in
+                await previous?.value
+                if !self.mailHeld {
+                    try? await self.apply(photo, readBack: false)
+                }
+                cont.resume()
+            }
+        }
+    }
+
+    func holdMail() { mailHeld = true }
+    func releaseMail() { mailHeld = false }
+
+    /// The command chain has finished every job already accepted.
+    func waitIdle() async {
+        await mailTail?.value
+        await chain?.value
     }
 
     private var sink: PTPSink?

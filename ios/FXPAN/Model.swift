@@ -14,7 +14,7 @@ struct FrameSet: Codable, Equatable {
     var clip: Bool = true
 }
 
-struct LightSet: Codable, Equatable {
+struct LightSet: Equatable {
     var program: String = "M"
     var iso: String = "400"
     var shutter: String = "1/250"
@@ -23,6 +23,50 @@ struct LightSet: Codable, Equatable {
     var master: String = "T"
     var lockT: Bool = true
     var followCam: Bool = false
+    /// The prism bar writes shutter and ISO while the app is awake.
+    var autoMeter: Bool = false
+    var maxISO: String = "3200"
+    var slowest: String = "1/60"
+    /// Kept so older saves still decode. Auto exposure follows the Nikon program and does not read this.
+    var priority: String = "shutter"
+}
+
+extension LightSet: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case program, iso, shutter, bulb, fstop, master, lockT, followCam, autoMeter, maxISO, slowest, priority
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        program = try c.decodeIfPresent(String.self, forKey: .program) ?? "M"
+        iso = try c.decodeIfPresent(String.self, forKey: .iso) ?? "400"
+        shutter = try c.decodeIfPresent(String.self, forKey: .shutter) ?? "1/250"
+        bulb = try c.decodeIfPresent(Bool.self, forKey: .bulb) ?? false
+        fstop = try c.decodeIfPresent(String.self, forKey: .fstop) ?? "8"
+        master = try c.decodeIfPresent(String.self, forKey: .master) ?? "T"
+        lockT = try c.decodeIfPresent(Bool.self, forKey: .lockT) ?? true
+        followCam = try c.decodeIfPresent(Bool.self, forKey: .followCam) ?? false
+        autoMeter = try c.decodeIfPresent(Bool.self, forKey: .autoMeter) ?? false
+        maxISO = try c.decodeIfPresent(String.self, forKey: .maxISO) ?? "3200"
+        slowest = try c.decodeIfPresent(String.self, forKey: .slowest) ?? "1/60"
+        priority = try c.decodeIfPresent(String.self, forKey: .priority) ?? "shutter"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(program, forKey: .program)
+        try c.encode(iso, forKey: .iso)
+        try c.encode(shutter, forKey: .shutter)
+        try c.encode(bulb, forKey: .bulb)
+        try c.encode(fstop, forKey: .fstop)
+        try c.encode(master, forKey: .master)
+        try c.encode(lockT, forKey: .lockT)
+        try c.encode(followCam, forKey: .followCam)
+        try c.encode(autoMeter, forKey: .autoMeter)
+        try c.encode(maxISO, forKey: .maxISO)
+        try c.encode(slowest, forKey: .slowest)
+        try c.encode(priority, forKey: .priority)
+    }
 }
 
 struct FocusSet: Codable, Equatable {

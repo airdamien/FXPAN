@@ -138,6 +138,8 @@ struct LightScreen: View {
         DimPage(title: "Light", controls: {
             if halfOpen {
                 VStack(alignment: .leading, spacing: 8) {
+                    meterLink
+                    autoBlock
                     HStack(alignment: .top, spacing: 8) {
                         bodyLine(.t)
                         bodyLine(.r)
@@ -164,6 +166,8 @@ struct LightScreen: View {
                 .onPreferenceChange(ShutterRowKey.self) { shutterRow = $0 }
             } else {
                 VStack(spacing: 10) {
+                    meterLink
+                    autoBlock
                     modeBlock()
                     isoBlock()
                     shutterBlock
@@ -183,6 +187,59 @@ struct LightScreen: View {
                 }
             }
         })
+    }
+
+    private var meterLink: some View {
+        Button { model.go(.meter) } label: {
+            HStack {
+                Text("Meter")
+                    .font(Theme.font(15, weight: .medium))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.dim)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.hair, lineWidth: 1))
+        }
+    }
+
+    private var autoBlock: some View {
+        let light = model.photo.light
+        let isos = Catalog.iso.filter { !Catalog.isAuto($0) }
+        let shutters = Catalog.shutter.filter { !Catalog.isAuto($0) }
+        return RowBlock(
+            title: "Auto",
+            value: light.autoMeter ? "On" : "Off",
+            hint: light.autoMeter
+                ? "Reads the prism while the app is awake. Writes both bodies every couple of seconds, and again with the mirror down before the shutter."
+                : "Off leaves shutter and ISO where you set them."
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                ChipRow(options: [("0", "Off"), ("1", "On")], selected: light.autoMeter ? "1" : "0") { value in
+                    model.edit { $0.light.autoMeter = value == "1" }
+                }
+                if light.autoMeter {
+                    Text("Max ISO")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
+                    Ruler(values: isos, selected: light.maxISO, label: { Catalog.isoLabel($0, kind: model.bodyKind) }) { value in
+                        model.edit { $0.light.maxISO = value }
+                    }
+                    Text("Min shutter speed")
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
+                    Ruler(values: shutters, selected: light.slowest, label: Catalog.fmtShut) { value in
+                        model.edit { $0.light.slowest = value }
+                    }
+                    Text(ExposureMeter.programHint)
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.faint)
+                }
+            }
+        }
     }
 
     /// Height of the shutter card. The other control cards use it so every row matches.

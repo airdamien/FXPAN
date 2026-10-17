@@ -3,7 +3,7 @@ import SwiftUI
 
 enum Route: Hashable {
     case home
-    case frame, light, focus, look, drive, wb
+    case frame, light, focus, look, drive, wb, meter
     case modes
     case playback
     case shot(String)
@@ -67,6 +67,10 @@ final class AppModel {
     var cameraRevision = 0
     /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
     var usbRevision = 0
+    /// Latest prism readings. The top bar shows these while auto-meter is on.
+    var meterReads: [Role: MeterRead] = [:]
+    /// The bar auto-meter already turned into shutter and ISO.
+    var meterHeld: Int?
 
     let camera = CameraHub()
     private let dialT = FocusDial()
@@ -75,6 +79,9 @@ final class AppModel {
     /// Sharpest the current focus window has been. Kept so a blur cannot drag the box onto a different edge.
     private var heldBest = 0.0
     private var applyTask: Task<Void, Never>?
+    private var meterWatch: Task<Void, Never>?
+    private var metering = false
+    private var meterAppliedAt = Date.distantPast
     private var toastTask: Task<Void, Never>?
     private var reviewTask: Task<Void, Never>?
     private var stitchQueue: [String] = []
@@ -174,6 +181,7 @@ final class AppModel {
         ingest()
         armIdle()
         watchSync()
+        armMeter()
         if ProcessInfo.processInfo.arguments.contains("-shootSim") {
             photo.drive.review = 0
             try? await Task.sleep(nanoseconds: 600_000_000)
@@ -206,6 +214,7 @@ final class AppModel {
     func back() { if !route.isEmpty { route.removeLast() } }
 
     func edit(_ body: (inout Photo) -> Void) {
+        let wasAuto = photo.light.autoMeter
         body(&photo)
         persist()
         scheduleApply()
@@ -216,6 +225,7 @@ final class AppModel {
             BLELink.stop()
             bleReady = false
         }
+        if photo.light.autoMeter != wasAuto { armMeter() }
     }
 
     func editRig(_ body: (inout Rig) -> Void) {
@@ -515,7 +525,11 @@ final class AppModel {
         }
         let stamp = CaptureIndex.stampNow()
         do {
-            let grabbed = try await camera.capture(stamp: stamp, photo: photo)
+            let grabbed = try await camera.capture(stamp: stamp, photo: photo) {
+                guard self.photo.light.autoMeter, !self.sleeping, !self.canon else { return self.photo }
+                await self.pullMeter(force: true, write: false)
+                return self.photo
+            }
             notes[stamp] = ShotNote(modeName: activeMode?.name ?? "", look: LookBook.name(photo.look), squeeze: photo.frame.squeeze)
             persist()
             reloadShots()
@@ -974,6 +988,90 @@ final class AppModel {
             await self.camera.apply(self.photo)
             self.ingest()
         }
+    }
+
+    /// Poll the prism while auto-meter is on. Sleep, a recording, and a shot in progress leave the bodies alone.
+    private func armMeter() {
+        meterWatch?.cancel()
+        meterWatch = nil
+        guard photo.light.autoMeter else {
+            meterReads = [:]
+            meterHeld = nil
+            return
+        }
+        meterWatch = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                if self.photo.light.autoMeter, !self.sleeping, !self.shooting, !self.recording, !self.canon, self.scenePhase == .active {
+                    await self.pullMeter(force: false)
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    /// Read both bars, move shutter and ISO to the aim, and write the bodies when the proposal changes.
+    private func pullMeter(force: Bool, write: Bool = true) async {
+        while metering {
+            try? await Task.sleep(nanoseconds: 40_000_000)
+            if Task.isCancelled { return }
+        }
+        metering = true
+        defer { metering = false }
+        var reads = await camera.readMeters()
+        meterReads = reads
+        guard photo.light.autoMeter, !canon else { return }
+        let master = Role(rawValue: photo.light.master) ?? .t
+        // The prism is blind with the mirror up. A frozen count would pin the dials for the whole live view.
+        guard reads[master]?.mirrorUp != true else { return }
+        // Right after the mirror drops, the first get is often the count from before. Wait once and read it again.
+        if force, let held = reads[master]?.counts, held == meterHeld, abs(held - ExposureMeter.targetCounts) > 2 {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            reads = await camera.readMeters()
+            meterReads = reads
+            guard reads[master]?.mirrorUp != true else { return }
+        }
+        let aim = ExposureMeter.aim(of: photo.light)
+        // The prism bar ends at five stops. A pegged reading is applied, then read again, until it comes off the end.
+        let passes = force ? 4 : 1
+        for pass in 0..<passes {
+            guard let counts = reads[master]?.counts else { return }
+            if !force, counts == meterHeld { return }
+            let pegged = abs(counts) >= 60
+            let chase = force && pegged && pass + 1 < passes
+            guard await commitMeter(reads[master], counts: counts, aim: aim, force: force, write: write || chase) else { return }
+            guard chase else { return }
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            reads = await camera.readMeters()
+            meterReads = reads
+            guard reads[master]?.mirrorUp != true, let next = reads[master]?.counts, next != counts else { return }
+        }
+    }
+
+    /// Write one prism correction into the photo, and onto the bodies when `write` is set.
+    private func commitMeter(_ sample: MeterRead?, counts: Int, aim: MeterAim, force: Bool, write: Bool) async -> Bool {
+        let plan = ExposureMeter.plan(
+            master: Role(rawValue: photo.light.master) ?? .t,
+            read: sample,
+            shutter: photo.light.shutter,
+            iso: photo.light.iso,
+            kind: bodyKind,
+            aim: aim
+        )
+        guard plan.ready, let shutter = plan.shutter, let iso = plan.iso else { return false }
+        if !force, Date().timeIntervalSince(meterAppliedAt) < 1.5 { return false }
+        photo.light.program = "M"
+        photo.light.followCam = false
+        photo.light.bulb = false
+        photo.light.shutter = shutter
+        photo.light.iso = iso
+        meterHeld = counts
+        meterAppliedAt = Date()
+        Trace.line("FXPAN meter \(counts) → \(shutter) \(iso)")
+        persist()
+        ingest()
+        applyTask?.cancel()
+        if write { await camera.apply(photo, readBack: false) }
+        return true
     }
 
     private func enqueue(_ stamp: String) {
