@@ -57,7 +57,8 @@ module f_rev_thread_cut(h = undef, clear = undef) {
 // up and then drops in, whichever way it arrives. The wedges are only on
 // the pin track; the rest of the register face stays flat.
 F_PIN_D      = 2.0;    // lens lock pin
-F_PIN_CLEAR  = 0.00;   // 2.00 mm between the ramp cliffs
+F_PIN_CLEAR  = 0.15;   // 2.15 mm between the ramp cliffs; a printed slot
+                       // shrinks ~0.05 a side and the pin would not drop
 F_PIN_FACE_Z = 3.0;
 F_PIN_FLOOR  = 1.5;    // mesh floor; leaves 1.5 mm under the flange
 F_PIN_R      = [23.7, 28.8];

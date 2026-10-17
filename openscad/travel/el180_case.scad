@@ -103,17 +103,31 @@ module mark_pocket() {
 
 // Diamond lattice. Two helices, opposite hands, about 45° on the unrolled
 // wall. The cut stays inside the wall: crossings are no deeper than one groove.
-PAT_BITE = 1.75;
-PAT_W    = 5.6;
+// The top of each groove peg slopes up as it goes out, so the bottom tip
+// and lower edges of every diamond grow out from the groove floor at ~49°
+// from horizontal instead of stepping straight out on air.
+PAT_BITE  = 1.75;
+PAT_W     = 5.6;
+PAT_SLOPE = 1.15;   // dz / dr on the upper groove wall (~49° from horizontal)
 
 function pat_n(od) = max(8, round(PI * od / 32));
 function pat_twist(od, h) = h * 360 / (PI * od);
 
 module pat_peg(i, z0, h, twist, r, steps) {
     t = i / steps;
+    dx = PAT_BITE + 2.4;
+    dz = h / steps + 0.45;
+    rise = dx * PAT_SLOPE;
     rotate([0, 0, twist * t])
         translate([r, 0, z0 + h * t])
-            cube([PAT_BITE + 2.4, PAT_W, h / steps + 0.45], center = true);
+            rotate([90, 0, 0])
+                linear_extrude(PAT_W, center = true)
+                    polygon([
+                        [-dx / 2, -dz / 2],
+                        [ dx / 2, -dz / 2],
+                        [ dx / 2,  dz / 2 + rise],
+                        [-dx / 2,  dz / 2]
+                    ]);
 }
 
 module helix_grooves(z0, z1, od, twist) {

@@ -1,8 +1,9 @@
 // Phone mounts for a D800 hot shoe. Each is two prints: a shoe foot, printed
 // foot-down so the foot's layers run along the rails, and the phone part,
-// printed flat on its back. They meet on a 45° key that centres itself, and
-// one M3 countersunk from the phone side pulls them together into a nut
-// trapped in the foot.
+// printed flat on its back. They meet on a minor spline: straight teeth with
+// a short lead chamfer, so the joint centres on the teeth and cannot rock
+// on them, and one M3 countersunk from the phone side pulls the faces
+// together into a nut trapped in the foot.
 //
 //   pm17_cradle    iPhone 17 Pro Max in the Apple silicone case, landscape,
 //                  screen toward you, leaning back PM_TILT.
@@ -11,8 +12,9 @@
 //   duo_tray_bare  the same, bare.
 //   duo_shoe       their foot.
 //
-// Duo sizes are a guess until it ships: 7.8" inner, 5.5" cover, 4.7 mm a
-// half. Measure the half that lies in the tray and set DUO_BARE / DUO_CASED.
+// Duo bare sizes are Apple's published specs; the cased set adds the
+// regular two-part case estimate from the DUO_CASED comment below.
+// Measure the cased half when it lands and trim DUO_CASED to fit.
 
 include <../lib/part_stamp.scad>
 
@@ -35,8 +37,11 @@ function plat_w()  = NECK_W + 2 * PLAT_H;
 // --- key and fasteners -------------------------------------------------------
 KEY_W = 12;
 KEY_L = 16;
-KEY_H = 2.5;
-KEY_CLEAR = 0.2;
+KEY_H = 3.2;
+KEY_CLEAR = 0.15;  // per side, on the spline teeth
+SPL_T    = 1.5;    // spline tooth depth
+SPL_TW   = 2.4;    // spline tooth width
+SPL_LEAD = 0.8;    // lead chamfer at the tip; the rest runs straight
 M3_D = 3.3;
 M3_CSK_D = 6.4;
 NUT_AF = 5.7;
@@ -59,8 +64,13 @@ PM_KEY_Y   = -20;  // below the middle, so the foot stays short
 PM_LOW_Z   = 14;   // lowest point of the cradle over the foot's base
 
 // --- iPhone Duo lower half: [along the hinge, hinge to front edge, thickness]
-DUO_BARE  = [118.0, 82.0, 4.7];
-DUO_CASED = [120.6, 83.4, 6.4];
+// Bare is one half of the open phone: 117.8 along the hinge, 164.6 / 2 =
+// 82.3 hinge to front edge, 5.2 thick. Cased adds the regular two-part
+// case estimate: ~1.1 over each capped end and the front edge, ~1.3 of
+// back wall. Design envelope was 121 / 88 / 14.5 closed; the tray only
+// holds one half, so its numbers sit well inside that.
+DUO_BARE  = [117.8, 82.3, 5.2];
+DUO_CASED = [120.0, 83.5, 6.5];
 DUO_GAP   = 0.2;
 DUO_FLOOR = 2.5;
 DUO_RIB_H = 3.5;   // the half rests on a cross, so a camera bump anywhere off it is clear
@@ -76,22 +86,43 @@ module rrect(w, l, r) {
     offset(r = r) square([w - 2 * r, l - 2 * r], center = true);
 }
 
-// 45° frustum. g grows it for the socket.
-module key_frustum(g = 0, extra = 0) {
+// Minor spline in plan: a core with straight teeth on all four sides,
+// inside the old KEY_W × KEY_L envelope. g grows it for the socket.
+// Three teeth ride each long side, two each end, so the joint has hard
+// contact all round: no rocking on a taper, no turning on the screw.
+module spline_2d(g = 0) {
+    offset(r = g)
+        union() {
+            square([KEY_W - 2 * SPL_T, KEY_L - 2 * SPL_T], center = true);
+            for (sx = [-1, 1], ty = [-5.25, 0, 5.25])
+                translate([sx * (KEY_W / 2 - SPL_T), ty])
+                    square([2 * SPL_T, SPL_TW], center = true);
+            for (sy = [-1, 1], tx = [-3.2, 3.2])
+                translate([tx, sy * (KEY_L / 2 - SPL_T)])
+                    square([SPL_TW, 2 * SPL_T], center = true);
+        }
+}
+
+// Straight spline for most of its height, so an engaged joint only has
+// KEY_CLEAR of play wherever it bears; a short lead chamfer at the tip
+// starts it into the socket. The clamped faces finish the job.
+module spline_key(g = 0, extra = 0) {
+    translate([0, 0, -extra])
+        linear_extrude(KEY_H - SPL_LEAD + extra)
+            spline_2d(g);
     hull() {
-        translate([0, 0, -extra])
-            linear_extrude(0.01 + extra)
-                square([KEY_W + 2 * g, KEY_L + 2 * g], center = true);
-        translate([0, 0, KEY_H + g - 0.01])
+        translate([0, 0, KEY_H - SPL_LEAD])
             linear_extrude(0.01)
-                square([KEY_W - 2 * KEY_H + 2 * g, KEY_L - 2 * KEY_H + 2 * g],
-                       center = true);
+                spline_2d(g);
+        translate([0, 0, KEY_H - 0.01])
+            linear_extrude(0.01)
+                spline_2d(g - 0.65);
     }
 }
 
 // Socket on a back face at z = 0, screw out through face_z, countersunk.
 module socket_cut(face_z) {
-    key_frustum(KEY_CLEAR, 0.2);
+    spline_key(KEY_CLEAR, 0.2);
     translate([0, 0, -1])
         cylinder(h = face_z + 2, d = M3_D);
     h = (M3_CSK_D - M3_D) / 2;
@@ -209,7 +240,7 @@ module pm17_shoe() {
             }
             pm17_place()
                 translate([0, PM_KEY_Y, -0.01])
-                    key_frustum();
+                    spline_key();
         }
         // Nut goes in from the back along the screw; the screw pulls it
         // onto the end of its tunnel, just behind the key.
@@ -273,7 +304,7 @@ module duo_shoe() {
         union() {
             shoe_foot();
             translate([0, 0, plat_z1() - 0.01])
-                key_frustum();
+                spline_key();
         }
         translate([0, 0, -1])
             cylinder(h = plat_z1() + KEY_H + 2, d = M3_D);

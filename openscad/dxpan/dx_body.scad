@@ -65,6 +65,14 @@ DX_LENS        = DX_THREAD_BACK + DX_THREAD;
 DX_TUBE_GAIN   = 39 - DX_LENS;
 function dx_face(mark) = DX_CAV + DX_WALL;
 DX_FLOOR = 3;
+// Stitch calibration, measured on the fixed chassis 2026-10-16: across
+// body swaps, a plate turn and a glass shim, dy held at +35 px on
+// 1024-wide frames (flopped R minus T) = 0.81 mm at the sensor, with R
+// content low — R's sensor sits effectively 0.81 mm high. Drop the whole
+// R arm (tube, bore, mount) by that much and the sensors line up.
+// Zero restores the symmetric build.
+DX_R_DROP = 0.81;
+function dx_axis_z(mark) = mark == "R" ? -DX_R_DROP : 0;
 DX_LIP   = 2;
 // The flange crown is r 31. The lid is everything above that, except the
 // lens ledge, which stays so the M65 thread still has a roof.
@@ -392,7 +400,8 @@ module dx_tube_root_2d(mark, shrink = 0) {
 // R's lens-side edge stays on the chassis clip until it is outside the
 // helicoid keep-out, then takes a steeper angle out to the flange.
 module dx_arm_tube(mark, shrink = 0) {
-    a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
+    a = mark == "T" ? [sensor_shift(), 0, 0]
+                    : [0, -sensor_shift(), dx_axis_z(mark)];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
     span = dx_arm_end(mark) - dx_face(mark);
     x0 = dx_face(mark) - 0.4;
@@ -445,17 +454,19 @@ function dx_sole_z() = -F_STL_OD / 2 * cos(45);
 module dx_sole_prism(mark) {
     u = dx_sole_u();
     z_tan = dx_sole_z();
-    rise = z_tan + DX_HALF_Z;
+    // The tangent follows the arm axis; the foot stays on the floor
+    // plane, so a dropped arm gets a slightly wider sole.
+    rise = z_tan + dx_axis_z(mark) + DX_HALF_Z;
     bed = u - rise;
     x0 = dx_face(mark) - 2;
     x1 = dx_arm_end(mark) - 0.3;
     // local +X is down after the arm rotation below, so the floor
     // is local x = DX_HALF_Z and the tangent is local x = -z_tan.
     pts = [
-        [ DX_HALF_Z, -bed],
-        [ DX_HALF_Z,  bed],
-        [-z_tan,      u],
-        [-z_tan,     -u]
+        [ DX_HALF_Z,              -bed],
+        [ DX_HALF_Z,               bed],
+        [-z_tan - dx_axis_z(mark), u],
+        [-z_tan - dx_axis_z(mark), -u]
     ];
     translate(mark == "T"
             ? [sensor_shift(), x0, 0]
@@ -489,7 +500,8 @@ module dx_arm_sole(mark) {
 }
 
 module dx_arm_bore(mark) {
-    a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
+    a = mark == "T" ? [sensor_shift(), 0, 0]
+                    : [0, -sensor_shift(), dx_axis_z(mark)];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
     intersection() {
         translate(a + dir * (DX_CAV - 1))
@@ -569,17 +581,17 @@ module dx_flash_cut(mark) {
         if (mark == "R") {
             y = -sensor_shift();
             hull() {
-                translate([mouth, y, keep + h / 2])
+                translate([mouth, y, keep + dx_axis_z(mark) + h / 2])
                     cube([20, w, h], center = true);
-                translate([face + 1.2, y, full + h / 2])
+                translate([face + 1.2, y, full + dx_axis_z(mark) + h / 2])
                     cube([2, w, h], center = true);
             }
         } else {
             x = sensor_shift();
             hull() {
-                translate([x, mouth, keep + h / 2])
+                translate([x, mouth, keep + dx_axis_z(mark) + h / 2])
                     cube([w, 20, h], center = true);
-                translate([x, face + 1.2, full + h / 2])
+                translate([x, face + 1.2, full + dx_axis_z(mark) + h / 2])
                     cube([w, 2, h], center = true);
             }
         }
@@ -589,8 +601,8 @@ module dx_flash_cut(mark) {
 
 module dx_mount(mark) {
     translate(mark == "T"
-            ? [sensor_shift(), dx_back(mark), 0]
-            : [dx_back(mark), -sensor_shift(), 0])
+            ? [sensor_shift(), dx_back(mark), dx_axis_z(mark)]
+            : [dx_back(mark), -sensor_shift(), dx_axis_z(mark)])
         rotate(mark == "T" ? [-90, 0, 0] : [0, 90, 0])
             f_mount_on_tube(mount_clock(mark), 0, FX_FMOUNT_EXTRA);
 }
@@ -877,7 +889,8 @@ module part_dx_lid() {
 function dx_pixco_tab_az(mark) = mark == "R" ? 180 : -90;
 
 module dx_pixco_place(mark, dist) {
-    a = mark == "T" ? [sensor_shift(), 0, 0] : [0, -sensor_shift(), 0];
+    a = mark == "T" ? [sensor_shift(), 0, 0]
+                    : [0, -sensor_shift(), dx_axis_z(mark)];
     dir = mark == "T" ? [0, 1, 0] : [1, 0, 0];
     translate(a + dir * dist)
         rotate(mark == "T" ? [-90, 0, 0] : [0, 90, 0])
@@ -894,7 +907,7 @@ module dx_pixco_hub(mark) {
         x1 = dx_pixco_seat(mark);
         x0 = max(x1 - PIXCO_MALE - 1.6, M65_HELI_OD / 2 + 1.2);
         difference() {
-            translate([(x0 + x1) / 2, -sensor_shift(), 0])
+            translate([(x0 + x1) / 2, -sensor_shift(), dx_axis_z("R")])
                 rotate([0, 90, 0])
                     cylinder(h = x1 - x0, d = od, center = true, $fn = 96);
             rotate([90, 0, 0])

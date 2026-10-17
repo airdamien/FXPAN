@@ -2997,7 +2997,7 @@ module optical_axis_guides() {
         color("gold", 0.45) {
             rotate([90, 0, 0])
                 cylinder(h = DX_LENS + DX_HELI_BODY + DX_HELI_EXT, d = 1.0);
-            translate([0, -sensor_shift(), 0])
+            translate([0, -sensor_shift(), dx_axis_z("R")])
                 rotate([0, 90, 0])
                     cylinder(h = dx_reg("R") + 2, d = 1.0);
             translate([sensor_shift(), 0, 0])
@@ -3069,7 +3069,7 @@ module assembly() {
 
     if (SHOW_BODIES > 0) {
         color("DimGray", 0.92)
-            translate([dx_reg("R"), -sensor_shift(), 0])
+            translate([dx_reg("R"), -sensor_shift(), dx_axis_z("R")])
                 rotate([0, 90, 0])
                     translate([body_shift_x("R"), body_shift_y("R"),
                                body_shift_z("R")])
