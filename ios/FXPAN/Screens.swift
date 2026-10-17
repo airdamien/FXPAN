@@ -1144,7 +1144,7 @@ struct SystemScreen: View {
             VStack(spacing: 8) {
                 nav("Cameras", model.camera.line, .cameras)
                 nav("Rig", "\(Int((model.rig.overlap * 100).rounded()))%\(model.rig.flipR ? " · flop R" : "")", .rig)
-                nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min", .display)
+                nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min\(model.shoeEnabled ? " · Shoe" : "")", .display)
                 nav("Storage", Disk.freeBytes().map(Disk.fmtBytes) ?? "", .storage)
                 nav("Apple", appleLine, .apple)
                 nav("About", "FXPAN", .about)
@@ -1411,6 +1411,11 @@ struct DisplayScreen: View {
                 RowBlock(title: "Sleep", value: model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min", hint: "No touch for this long stops live view and lets the bodies sleep.") {
                     ChipRow(options: [("0", "Awake"), ("2", "2 min"), ("5", "5 min"), ("10", "10 min")], selected: "\(model.idleMinutes)") { value in
                         model.setIdle(Int(value) ?? 0)
+                    }
+                }
+                RowBlock(title: "Shoe", value: model.shoeEnabled ? "On" : "Off", hint: "While the bodies are out of live view, this phone's camera stands in for the 180mm and draws the T and R frames.") {
+                    ChipRow(options: [("1", "On"), ("0", "Off")], selected: model.shoeEnabled ? "1" : "0") { value in
+                        model.setShoe(value == "1")
                     }
                 }
             }

@@ -716,8 +716,13 @@ struct PanoFrame: View {
     private let strip: CGFloat = 36
 
     var body: some View {
+        let _ = model.cameraRevision
         let squeeze = model.photo.frame.squeeze
+        let shoeStandIn = model.shoeEnabled && !model.camera.live
+        let bodies = [model.camera.slots[.t]?.model, model.camera.slots[.r]?.model].compactMap { $0 }.filter { !$0.isEmpty }
+        let mirrorShoe = !bodies.isEmpty && !bodies.contains { BodyKind.from($0) == .d7000 }
         let aspect: Double = {
+            if shoeStandIn { return model.bodyKind.aspect }
             if let preview = model.preview, preview.size.height > 1 {
                 return Double(preview.size.width / preview.size.height)
             }
@@ -726,7 +731,46 @@ struct PanoFrame: View {
         VStack(spacing: 0) {
             ZStack {
                 Color.black
-                if let preview = model.preview {
+                if model.camera.live, let preview = model.preview {
+                    Image(uiImage: preview)
+                        .resizable()
+                        .scaledToFit()
+                } else if shoeStandIn, model.shoe.running {
+                    ShoePreview(
+                        session: model.shoe.session,
+                        device: model.shoe.device,
+                        sensorH: model.shoe.sensorH,
+                        sensorV: model.shoe.sensorV,
+                        pixelW: model.shoe.pixelW,
+                        pixelH: model.shoe.pixelH,
+                        wantH: model.shoe.wantH,
+                        wantV: model.shoe.wantV,
+                        aim: model.shoe.aim
+                    )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .scaleEffect(x: mirrorShoe ? -1 : 1, y: 1)
+                    ShoeMarks(overlap: model.rig.overlap)
+                    Text(model.shoe.lens.isEmpty ? "Shoe" : "Shoe · \(model.shoe.lens)")
+                        .font(Theme.font(11, weight: .semibold))
+                        .foregroundStyle(Theme.gold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(8)
+                } else if shoeStandIn, model.shoe.refused {
+                    VStack(spacing: 8) {
+                        Text("Camera access is off")
+                            .font(Theme.font(16, weight: .medium))
+                        Text("Settings allows the shoe finder")
+                            .font(Theme.font(13))
+                            .foregroundStyle(Theme.dim)
+                    }
+                } else if shoeStandIn {
+                    Text("Shoe")
+                        .font(Theme.font(16, weight: .medium))
+                        .foregroundStyle(Theme.dim)
+                } else if let preview = model.preview {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFit()

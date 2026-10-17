@@ -122,7 +122,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FXPAN;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "FXPAN fires the shutter on the Mini D1 trigger over Bluetooth.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN controls Nikon cameras connected over USB.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN uses this iPhone's camera as a viewfinder for the 180mm while the Nikons are out of live view, and controls Nikon cameras connected over USB.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FXPAN tells the trigger board when to release the shutters.";
 				INFOPLIST_KEY_UIAppFonts = "Jost-VariableFont_wght.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -159,7 +159,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = FXPAN;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "FXPAN fires the shutter on the Mini D1 trigger over Bluetooth.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN controls Nikon cameras connected over USB.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "FXPAN uses this iPhone's camera as a viewfinder for the 180mm while the Nikons are out of live view, and controls Nikon cameras connected over USB.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FXPAN tells the trigger board when to release the shutters.";
 				INFOPLIST_KEY_UIAppFonts = "Jost-VariableFont_wght.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

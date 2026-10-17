@@ -42,10 +42,8 @@ struct HomeView: View {
             let phone = min(geo.size.width, geo.size.height) <= 500
             let landscape = geo.size.width > geo.size.height
             let wide = landscape && geo.size.width >= 980
-            if phone && landscape {
-                phoneLandscape
-            } else if phone {
-                phonePortrait
+            if phone {
+                phoneLayout(landscape: landscape)
             } else if wide {
                 HStack(spacing: 10) {
                     main
@@ -81,34 +79,34 @@ struct HomeView: View {
         .padding(.bottom, 10)
     }
 
-    private var phonePortrait: some View {
-        VStack(spacing: 8) {
-            fittedFrame()
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                ForEach(dims, id: \.1) { dim in
-                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
-                        .frame(minHeight: 86)
-                }
-            }
-            Spacer(minLength: 12)
-            railHorizontal
-        }
-    }
-
-    private var phoneLandscape: some View {
+    /// One tree for both orientations, so the live picture is not torn down and rebuilt on the turn.
+    private func phoneLayout(landscape: Bool) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 fittedFrame()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                railVertical
-                    .frame(width: 84)
-            }
-            HStack(spacing: 6) {
-                ForEach(dims, id: \.1) { dim in
-                    Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                    .frame(maxWidth: .infinity, maxHeight: landscape ? .infinity : nil)
+                if landscape {
+                    railVertical
+                        .frame(width: 84)
                 }
             }
-            .frame(height: 72)
+            if landscape {
+                HStack(spacing: 6) {
+                    ForEach(dims, id: \.1) { dim in
+                        Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                    }
+                }
+                .frame(height: 72)
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                    ForEach(dims, id: \.1) { dim in
+                        Button { model.go(dim.0) } label: { tile(dim.1, dim.2, text(dim.1), compact: true) }
+                            .frame(minHeight: 86)
+                    }
+                }
+                Spacer(minLength: 12)
+                railHorizontal
+            }
         }
     }
 

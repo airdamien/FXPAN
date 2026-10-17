@@ -18,6 +18,8 @@ struct Persisted: Codable {
     var metalWarp: Bool? = nil
     /// One Canon body. The Nikon pair stays unused while this is on.
     var canon: Bool = false
+    /// Nil keeps the hotshoe phone camera on, including saves from before the switch existed.
+    var shoeOn: Bool? = nil
 }
 
 enum Disk {

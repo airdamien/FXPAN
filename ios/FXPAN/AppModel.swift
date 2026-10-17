@@ -63,6 +63,10 @@ final class AppModel {
     var recording = false
     /// One Canon on USB. Picture and transfer only. The Nikon pair is left alone.
     var canon = false
+    /// Nil keeps the hotshoe finder on. The phone camera fills the frame while the bodies are out of live view.
+    var shoeOn: Bool?
+    let shoe = ShoeFinder()
+    var shoeEnabled: Bool { shoeOn ?? true }
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
     /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
@@ -133,6 +137,7 @@ final class AppModel {
         metalWarp = state.metalWarp ?? true
         simulate = state.simulate
         canon = state.canon
+        shoeOn = state.shoeOn
         if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -182,6 +187,7 @@ final class AppModel {
         armIdle()
         watchSync()
         armMeter()
+        syncShoe()
         if ProcessInfo.processInfo.arguments.contains("-shootSim") {
             photo.drive.review = 0
             try? await Task.sleep(nanoseconds: 600_000_000)
@@ -206,6 +212,25 @@ final class AppModel {
             if idleDue, idleMinutes > 0 { await idleDown() }
         default:
             break
+        }
+        if phase == .active { shoe.allowRetry() }
+        syncShoe()
+    }
+
+    func setShoe(_ on: Bool) {
+        shoeOn = on
+        persist()
+        if on { shoe.allowRetry() }
+        syncShoe()
+    }
+
+    /// The phone camera fills the frame only while the bodies are out of live view.
+    private func syncShoe() {
+        let want = shoeEnabled && !camera.live && !sleeping && !shooting && !recording && scenePhase == .active
+        if want {
+            shoe.start(kind: bodyKind)
+        } else if shoe.running {
+            shoe.stop()
         }
     }
 
@@ -267,6 +292,7 @@ final class AppModel {
             Task { await camera.wakeFromIdle() }
         }
         armIdle()
+        syncShoe()
     }
 
     /// A touch. Restarts the sleep clock, and brings the bodies back if they had been released.
@@ -277,6 +303,7 @@ final class AppModel {
             lastPoke = now
             Task { await camera.wakeFromIdle() }
             armIdle()
+            syncShoe()
             return
         }
         if now.timeIntervalSince(lastPoke) < 1 { return }
@@ -880,6 +907,7 @@ final class AppModel {
     // MARK: - Private
 
     private func ingest() {
+        syncShoe()
         schedulePreview()
     }
 
@@ -1243,6 +1271,7 @@ final class AppModel {
         state.appleOn = appleOn
         state.metalWarp = metalWarp
         state.canon = canon
+        state.shoeOn = shoeOn
         Disk.save(state)
     }
 
@@ -1286,6 +1315,7 @@ final class AppModel {
         sleeping = true
         idleTask?.cancel()
         idleTask = nil
+        syncShoe()
         await camera.idleDown()
     }
 
