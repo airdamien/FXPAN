@@ -124,20 +124,21 @@ module spline_2d(g = 0) {
 }
 
 // Straight spline for most of its height, so an engaged joint only has
-// KEY_CLEAR of play wherever it bears; a short lead chamfer at the tip
-// starts it into the socket. The clamped faces finish the job.
+// KEY_CLEAR of play wherever it bears. The lead chamfer is at the base,
+// widening downward onto the platform, so the shoe prints foot-down with
+// no overhang and the top of every tooth stays full width.
 module spline_key(g = 0, extra = 0) {
-    translate([0, 0, -extra])
-        linear_extrude(KEY_H - SPL_LEAD + extra)
-            spline_2d(g);
     hull() {
-        translate([0, 0, KEY_H - SPL_LEAD])
+        translate([0, 0, -extra])
+            linear_extrude(0.01 + extra)
+                spline_2d(g - 0.65);
+        translate([0, 0, SPL_LEAD])
             linear_extrude(0.01)
                 spline_2d(g);
-        translate([0, 0, KEY_H - 0.01])
-            linear_extrude(0.01)
-                spline_2d(g - 0.65);
     }
+    translate([0, 0, SPL_LEAD])
+        linear_extrude(KEY_H - SPL_LEAD)
+            spline_2d(g);
 }
 
 // Socket on a back face at z = 0, screw out through face_z, countersunk.
@@ -327,11 +328,12 @@ module duo_tray(d, tag) {
                 spline_key(KEY_CLEAR, 0.2);
             translate([0, 0, -DUO_PAD - 1])
                 cylinder(h = DUO_PAD + MS_FLOOR + 2, d = M3_D);
-            // Screw drops in from above, through the puck recess. The wide
-            // end opens at the recess floor and narrows downward, so the
-            // head sits flush under the puck.
-            translate([0, 0, duo_back_z() - MS_T - DUO_PAD])
-                cylinder(h = DUO_PAD + 0.02, d1 = M3_D, d2 = M3_CSK_D);
+            // Screw drops in from above, through the puck recess. The cone
+            // opens at the recess floor and stops at the spline socket, so
+            // the head sits flush under the puck and the socket survives.
+            translate([0, 0, MS_FLOOR - 0.01])
+                cylinder(h = duo_back_z() - MS_T - MS_FLOOR + 0.02,
+                         d1 = M3_D, d2 = M3_CSK_D);
         }
         translate([-len / 4 - DUO_RIB_W / 4, -dep / 4 - DUO_RIB_W / 4,
                    DUO_FLOOR - STAMP_DEPTH])
