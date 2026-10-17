@@ -8,6 +8,9 @@
 //   pm17_cradle    iPhone 17 Pro Max in the Apple silicone case, landscape,
 //                  screen toward you, leaning back PM_TILT.
 //   pm17_shoe      its foot, with the lean built in.
+//   pm17_ms_cradle the same phone, nearer vertical, with a press-in MagSafe
+//                  puck, the camera plateau left open, USB-C on the right.
+//   pm17_ms_shoe   its foot.
 //   duo_tray_cased iPhone Duo lower half, half open like a laptop, cased.
 //   duo_tray_bare  the same, bare.
 //   duo_shoe       their foot.
@@ -18,7 +21,7 @@
 
 include <../lib/part_stamp.scad>
 
-PART = "assembly"; // [assembly, pm17_cradle, pm17_shoe, duo_tray_cased, duo_tray_bare, duo_shoe]
+PART = "assembly"; // [assembly, pm17_cradle, pm17_shoe, pm17_ms_cradle, pm17_ms_shoe, duo_tray_cased, duo_tray_bare, duo_shoe]
 
 $fn = 48;
 
@@ -62,6 +65,30 @@ PM_CLIP_X0 = 58;
 PM_CLIP_X1 = 70;
 PM_KEY_Y   = -20;  // below the middle, so the foot stays short
 PM_LOW_Z   = 14;   // lowest point of the cradle over the foot's base
+
+// The nearer-vertical mount. 12° off the panorama camera's axis instead of
+// 30, so its view lines up with the stitch. The phone lies the other way
+// round: USB-C on the right, camera plateau on the left.
+PM_MS_TILT = 12;
+PM_LEN     = 166;  // long edge, in the case
+// Camera plateau on the 1:1 model (Furkan Bahçavan, Printables 1482045).
+// The outline, not the lens rings: x 5.35..72.50 and y 120.80..158.13 on
+// the bare phone (body x -0.45..78.43, y 0..163.43). That is 67.2 across
+// by 37.3 along, centred on the width, 5.3 in from the top edge, corners
+// about 9. In the case the island measures 72 across and 42.6 along.
+// The cradle holds the cased phone centred on the same point, so the
+// window sits at -57.8 along.
+PM_CAM   = [42.6, 72];    // opening, along the phone and across it
+PM_CAM_X = -57.8;         // centre, phone centre at 0, plateau toward -X
+PM_CAM_Y = 0;
+// MagSafe puck, press fit. The ring's centre is the middle of the phone,
+// which clears the plateau.
+PM_MS_X   = 4;
+PM_MS_D   = 55.7;       // snug on the 55.5 puck
+PM_MS_T   = 4.6;        // puck is 4.5, finishes just under the plate
+// USB-C, right end. The opening is wider than the plug so a cable seats.
+PM_USB_W  = 16;
+PM_USB_H  = 8;
 
 // --- iPhone Duo lower half: [along the hinge, hinge to front edge, thickness]
 // Bare is one half of the open phone: 117.8 along the hinge, 164.6 / 2 =
@@ -246,6 +273,99 @@ module pm17_cradle() {
     }
 }
 
+// Nearer vertical, and the phone runs the other way: camera plateau at -X,
+// USB-C at +X.
+function pm_ms_p() = [0, (pm_pad_top() + PM_T / 2) * cos(PM_MS_TILT),
+                      PM_LOW_Z + pm_out() * cos(PM_MS_TILT)];
+
+module pm17_ms_place() {
+    translate(pm_ms_p()) rotate([90 - PM_MS_TILT, 0, 0]) children();
+}
+
+module pm17_ms_cradle() {
+    lip_z = pm_pad_top() + PM_T + 0.1;
+    difference() {
+        union() {
+            linear_extrude(3)
+                rrect(PM_LEN + 8, 2 * pm_out(), 4);
+            hull() {
+                translate([PM_MS_X, 0, 2.9])
+                    linear_extrude(0.1) circle(d = PM_MS_D + 10, $fn = 96);
+                translate([PM_MS_X, 0, pm_pad_top() - 0.1])
+                    linear_extrude(0.1) circle(d = PM_MS_D + 6, $fn = 96);
+            }
+            // Clips on the right end and the bottom edge. The plateau fills
+            // the top-left corner, so that end and the top edge stay open.
+            for (s = [-1, 1]) {
+                grip_x(PM_LEN / 2 - 14, PM_LEN / 2 + CLIP_WALL, s * pm_in(),
+                       s, lip_z);
+                grip_y(s * pm_in() - 12, s * pm_in() + CLIP_WALL,
+                       PM_LEN / 2 - 14, -s, lip_z);
+            }
+            grip_x(-PM_LEN / 2 + 30, PM_LEN / 2 - 30, -pm_in(), -1, lip_z);
+        }
+        // Camera plateau, open through the plate.
+        translate([PM_CAM_X, PM_CAM_Y, -1])
+            linear_extrude(pm_pad_top() + 2)
+                rrect(PM_CAM[0], PM_CAM[1], 11);
+        // MagSafe puck, pressed in from the front.
+        translate([PM_MS_X, 0, pm_pad_top() - PM_MS_T])
+            cylinder(h = PM_MS_T + 1, d = PM_MS_D, $fn = 96);
+        // USB-C on the right end.
+        translate([PM_LEN / 2 - 2, 0, pm_pad_top() + PM_T / 2])
+            cube([PM_USB_W, PM_USB_W, PM_USB_H], center = true);
+        // Countersink opens at the puck recess floor, wide end up, so the
+        // head sits flush under the puck. The cone stops above the spline.
+        translate([0, PM_KEY_Y, 0])
+            socket_cut(pm_pad_top() - PM_MS_T);
+        translate([30, 14, pm_pad_top() - STAMP_DEPTH])
+            part_stamp_cut("pm17_ms", size = 2.8);
+    }
+}
+
+// Foot side of the socket face. At 12° the hotshoe straddles that plane, so
+// a hull of the whole platform crosses it and swallows the spline.
+module pm_ms_back() {
+    pm17_ms_place()
+        translate([0, 0, -100.2])
+            cube([400, 400, 200], center = true);
+}
+
+module pm17_ms_shoe() {
+    difference() {
+        union() {
+            shoe_foot();
+            // Pad ends on the socket plane. The spline stands on it, clear
+            // of the arm, for the full tooth height.
+            pm17_ms_place()
+                translate([0, PM_KEY_Y, -4])
+                    linear_extrude(4)
+                        square([KEY_W + 14, KEY_L + 10], center = true);
+            hull() {
+                intersection() {
+                    shoe_foot();
+                    pm_ms_back();
+                }
+                pm17_ms_place()
+                    translate([0, PM_KEY_Y, -4])
+                        linear_extrude(0.01)
+                            square([KEY_W + 14, KEY_L + 10], center = true);
+            }
+            pm17_ms_place()
+                translate([0, PM_KEY_Y, -0.01])
+                    spline_key();
+        }
+        pm17_ms_place()
+            translate([0, PM_KEY_Y, 0]) {
+                translate([0, 0, -40])
+                    cylinder(h = 40 + KEY_H + 1, d = M3_D);
+                translate([0, 0, -40])
+                    rotate([0, 0, 90])
+                        cylinder(h = 40 - 3, r = nut_r(), $fn = 6);
+            }
+    }
+}
+
 module pm17_shoe() {
     difference() {
         union() {
@@ -391,6 +511,10 @@ module assembly() {
         color("Black", 0.4) pm17_place()
             translate([0, 0, pm_pad_top() + PM_T / 2])
                 cube([166, PM_W, PM_T], center = true);
+    translate([0, -150, 0]) {
+        color("DimGray") pm17_ms_shoe();
+        color("SlateGray") pm17_ms_place() pm17_ms_cradle();
+    }
     translate([0, 160, 0]) {
         color("DimGray") duo_shoe();
         translate([-duo_key_xy()[0], -duo_key_xy()[1], plat_z1() + DUO_PAD])
@@ -401,6 +525,8 @@ module assembly() {
 if (PART == "assembly") assembly();
 else if (PART == "pm17_cradle") pm17_cradle();
 else if (PART == "pm17_shoe") pm17_shoe();
+else if (PART == "pm17_ms_cradle") pm17_ms_cradle();
+else if (PART == "pm17_ms_shoe") pm17_ms_shoe();
 else if (PART == "duo_tray_cased") duo_tray(DUO_CASED, "duo_tray_cased");
 else if (PART == "duo_tray_bare") duo_tray(DUO_BARE, "duo_tray_bare");
 else if (PART == "duo_shoe") duo_shoe();
