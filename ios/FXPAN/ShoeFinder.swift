@@ -8,7 +8,7 @@ import SwiftUI
 struct ShoeAim: Equatable {
     var down: Double
     var right: Double
-    /// Rear island on the Pro Max. The camera outside the Duo's fold.
+    /// Rear island on a slab phone or a Duo held flat. The camera outside the Duo's fold.
     var outer: Bool
 
     /// 17 Pro Max, landscape, screen toward the photographer. The rear island is the upper-left of the cradle,
@@ -18,8 +18,12 @@ struct ShoeAim: Equatable {
     static let proMax = ShoeAim(down: 2.2, right: 1.6, outer: false)
 
     /// The camera on the outside of the Duo, not the one inside the fold. A few degrees down is a guess
-    /// for where that camera sits above the lens.
+    /// for where that camera sits above the lens. Used on the cover and while the hinge is only partly open.
     static let duo = ShoeAim(down: 4.0, right: 0, outer: true)
+
+    /// Fully open and landscape, on the flat mount. The rear island faces the lens.
+    /// The offset stays at zero until that mount is measured.
+    static let duoFlat = ShoeAim(down: 0, right: 0, outer: false)
 }
 
 enum ShoePhone {
@@ -29,11 +33,18 @@ enum ShoePhone {
     static var current: ShoePhone {
         if !ShoeFinder.outerCameras().isEmpty { return .duo }
         let id = machine()
-        if id.localizedCaseInsensitiveContains("fold") { return .duo }
+        if id.localizedCaseInsensitiveContains("fold") || id == "iPhone19,4" { return .duo }
+        if ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] == "iPhone19,4" { return .duo }
         return .proMax
     }
 
-    var aim: ShoeAim { self == .duo ? .duo : .proMax }
+    /// Cover and half-open keep the outer camera. Full landscape uses the rear island.
+    func aim(flat: Bool) -> ShoeAim {
+        switch self {
+        case .proMax: return .proMax
+        case .duo: return flat ? .duoFlat : .duo
+        }
+    }
 
     private static func machine() -> String {
         var system = utsname()
@@ -99,6 +110,7 @@ final class ShoeFinder {
     private var generation = 0
     private var kind = BodyKind.d800
     private var wanted = false
+    private var flat = false
     private var observers: [NSObjectProtocol] = []
 
     init() {
@@ -113,9 +125,9 @@ final class ShoeFinder {
         let gate = ShoeFrame.gate(kind: kind)
         wantH = gate.h
         wantV = gate.v
-        let phone = ShoePhone.current
-        aim = phone.aim
-        if running, self.kind == kind { return }
+        let next = ShoePhone.current.aim(flat: flat)
+        if running, self.kind == kind, aim == next { return }
+        aim = next
         if refused { return }
         self.kind = kind
         wanted = true
@@ -164,6 +176,14 @@ final class ShoeFinder {
     /// Settings may have granted the camera after a refusal. The next start tries again.
     func allowRetry() {
         refused = false
+    }
+
+    /// Fully open landscape uses the rear island. The cover and a half-open hinge keep the outer camera.
+    func setFlat(_ on: Bool) {
+        guard on != flat else { return }
+        flat = on
+        guard wanted else { return }
+        start(kind: kind)
     }
 
     func stop() {

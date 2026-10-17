@@ -161,6 +161,42 @@ enum FoldOrientation {
     }
 }
 
+/// The hinge, when this OS has one. Nil means the device has no hinge reading yet.
+@available(iOS 27.1, *)
+struct HingeProbe: UIViewRepresentable {
+    var onChange: (Bool?) -> Void
+
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateUIView(_ uiView: Probe, context: Context) {
+        uiView.onChange = onChange
+    }
+
+    final class Probe: UIView {
+        var onChange: ((Bool?) -> Void)?
+        private var installed = false
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            install()
+        }
+
+        private func install() {
+            guard !installed else { return }
+            installed = true
+            let interaction = UIHingeInteraction { [weak self] _, update in
+                let open = update.hinge.map { $0.status == .fullyOpen }
+                DispatchQueue.main.async { self?.onChange?(open) }
+            }
+            addInteraction(interaction)
+        }
+    }
+}
+
 final class FoldScene: NSObject, UIWindowSceneDelegate {
     @available(iOS 27.0, *)
     func supportedInterfaceOrientations(for windowScene: UIWindowScene) -> UIInterfaceOrientationMask {

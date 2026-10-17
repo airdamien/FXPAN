@@ -67,6 +67,10 @@ final class AppModel {
     var shoeOn: Bool?
     let shoe = ShoeFinder()
     var shoeEnabled: Bool { shoeOn ?? true }
+    private var windowSize = CGSize.zero
+    private var hingeOpen: Bool?
+    private var haveWindow = false
+    private var postureTask: Task<Void, Never>?
     /// Bumped whenever a camera connects, pairs, or changes live view, so the shutter and pills redraw.
     var cameraRevision = 0
     /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
@@ -222,6 +226,42 @@ final class AppModel {
         persist()
         if on { shoe.allowRetry() }
         syncShoe()
+    }
+
+    /// The window and the hinge. A fully open landscape Duo uses its rear cameras. The cover keeps the outer one.
+    func noteWindow(_ size: CGSize) {
+        guard size.width > 2, size.height > 2 else { return }
+        let first = !haveWindow
+        haveWindow = true
+        windowSize = size
+        if first {
+            applyShoePosture()
+        } else {
+            postureTask?.cancel()
+            postureTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard !Task.isCancelled else { return }
+                applyShoePosture()
+            }
+        }
+    }
+
+    func noteHinge(fullyOpen: Bool?) {
+        guard fullyOpen != hingeOpen else { return }
+        hingeOpen = fullyOpen
+        applyShoePosture()
+    }
+
+    /// Landscape on the unfolded screen, or the hinge open flat in landscape. A phone-sized cover stays on the outer camera.
+    private func applyShoePosture() {
+        guard ShoePhone.current == .duo else {
+            shoe.setFlat(false)
+            return
+        }
+        let landscape = windowSize.width > windowSize.height
+        let unfolded = min(windowSize.width, windowSize.height) > 500
+        let flat = landscape && (unfolded || hingeOpen == true)
+        shoe.setFlat(flat)
     }
 
     /// The phone camera fills the frame only while the bodies are out of live view.

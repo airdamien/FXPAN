@@ -24,6 +24,12 @@ struct RootView: View {
             }
             .background {
                 FoldProbe(division: $division)
+                if #available(iOS 27.1, *) {
+                    HingeProbe { model.noteHinge(fullyOpen: $0) }
+                }
+            }
+            .onChange(of: geo.size, initial: true) { _, size in
+                model.noteWindow(size)
             }
             .onChange(of: halfOpen, initial: true) { _, on in
                 FoldOrientation.update(halfOpen: on)
