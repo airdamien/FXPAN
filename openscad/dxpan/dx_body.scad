@@ -54,11 +54,21 @@ DX_WALL  = 6;      // camera panels. The arm beyond them is tube.
 // The M65 cutter is 33.2 mm from the axis. These two faces sit outside it.
 DX_HALF_Z = 36;
 DX_LOGO   = 36;
-// The helicoid male is 4.25 mm. The lip is that deep and no more.
-// Back of the thread stays 20 mm from the plate. The 3.75 mm this
-// used to be is on the tubes. Face was 39 mm out; gain is the rest.
+// The helicoid male is 4.47 mm. DX_THREAD keeps the 24.25 mm lens seat
+// and the −20 mm lid ledge where the path budget solved them; the inner
+// front wall steps back to DX_THREAD_WALL (5.50 mm) so the full 4.47 mm
+// male stays inside the thread with a millimetre to spare before the
+// plate keep-out at y = −18.20.
 DX_THREAD      = 4.25;
+DX_THREAD_WALL = 5.50;        // threaded wall thickness from the lens face
 DX_THREAD_BORE = 62;          // core, under the M65 crests
+// Direct ScrewThread cutter for the M65×1 female — NOT ScrewHole, whose
+// 1.01 × D multiplier bloats a 65 mm hole by +1.33 mm (66.33 root / 64.48
+// crest), leaving ~0.18 mm of radial bite that strips and pulls out.
+// 65.50 root / 64.15 crest gives ~0.37 mm radial bite per side and 0.50 mm
+// diametral clearance on a metal M65×1 male.
+DX_M65_CLEAR   = 0.50;
+DX_M65_TOOTH   = 0.78;
 DX_HELI_CLEAR_D = 83;         // keep-out around the helicoid body
 DX_THREAD_BACK = 20;
 DX_LENS        = DX_THREAD_BACK + DX_THREAD;
@@ -114,7 +124,7 @@ module dx_cavity() {
     // Lens side is open to the back of the thread. No wall behind the crests.
     z0 = -DX_HALF_Z + DX_FLOOR;
     z1 = DX_HALF_Z - DX_LIP;
-    y0 = -(DX_LENS - DX_THREAD);
+    y0 = -(DX_LENS - DX_THREAD_WALL);
     y1 = DX_CAV;
     translate([0, (y0 + y1) / 2, (z0 + z1) / 2])
         cube([DX_CAV * 2, y1 - y0, z1 - z0 + 0.2], center = true);
@@ -523,7 +533,7 @@ DX_R_SKIN = 3.0;
 DX_R_THREAD_X = 34.5;
 
 module dx_r_keep() {
-    back = -(DX_LENS - DX_THREAD);
+    back = -(DX_LENS - DX_THREAD_WALL);
     union() {
         translate([(DX_CAV - 3 + DX_R_THREAD_X) / 2, back + 40, 0])
             cube([DX_R_THREAD_X - DX_CAV + 3 + 0.02, 80, 80], center = true);
@@ -612,29 +622,43 @@ module dx_lens_bore() {
     // rather than leaving a floor on the back of the crests.
     translate([0, -DX_LENS - 0.4, 0])
         rotate([-90, 0, 0])
-            cylinder(h = DX_THREAD + 0.45, d = DX_THREAD_BORE, $fn = 96);
+            cylinder(h = DX_THREAD_WALL + 0.45, d = DX_THREAD_BORE, $fn = 96);
 }
 
-// The inner logo wall is a flat across the M65. Open that chord to the
-// thread circle, on the cavity side of the crests, so the male can
-// finish seating. The crests in the lip stay.
+// Both the inner logo wall (−X) and the R-side cavity corner (+X, outside
+// the R bore) are flats across the M65 circle. Open both chords to the
+// thread circle behind the threaded wall so the 4.47 mm male never hits
+// a plastic shelf at the back of the hole.
 module dx_logo_moon() {
+    y_back = -(DX_LENS - DX_THREAD_WALL);
+    d_clear = M65_MAJOR + DX_M65_CLEAR + 0.2;
     intersection() {
-        translate([0, inner_y(), 0])
+        translate([0, y_back - 0.05, 0])
             rotate([-90, 0, 0])
-                cylinder(h = 12, d = M65_MAJOR, $fn = 96);
-        translate([-(DX_LOGO + DX_CAV) / 2, inner_y() + 5.5, 0])
-            cube([DX_LOGO - DX_CAV + 0.8, 12, M65_MAJOR + 2], center = true);
+                cylinder(h = 11, d = d_clear, $fn = 96);
+        union() {
+            translate([-(DX_LOGO + DX_CAV) / 2, y_back + 5.0, 0])
+                cube([DX_LOGO - DX_CAV + 0.8, 11, d_clear + 2], center = true);
+            translate([DX_CAV + 1.4, y_back + 1.2, 0])
+                cube([3.6, 2.6, d_clear + 2], center = true);
+        }
     }
 }
 
 module dx_lens_thread() {
-    translate([0, -DX_LENS, 0])
-        rotate([-90, 0, 0])
-            ScrewHole(M65_MAJOR, DX_THREAD,
-                      pitch = EL180_M62_PITCH,
-                      tolerance = EL180_M62_TOL,
-                      rotation = [0, 0, STEM_W_CLOCK]);
+    d_maj = M65_MAJOR + DX_M65_CLEAR;
+    d_min = d_maj - DX_M65_TOOTH / tan(30);
+    translate([0, -DX_LENS - 0.15, 0])
+        rotate([-90, 0, 0]) {
+            rotate([0, 0, STEM_W_CLOCK])
+                ScrewThread(d_maj, DX_THREAD_WALL + 0.30,
+                            pitch = EL180_M62_PITCH,
+                            tolerance = 0,
+                            tooth_height = DX_M65_TOOTH,
+                            tooth_angle = 30);
+            // Lead-in at the lens face so the metal male starts square.
+            cylinder(h = 0.75, d1 = d_maj + 0.4, d2 = d_min, $fn = 128);
+        }
 }
 
 // Three separate solids so a slicer can split them and assign a filament
@@ -781,66 +805,57 @@ module dx_lid_taps() {
 
 module part_dx_body() {
     color("SlateGray")
-    // Thread axis is +Z inside ScrewHole. Map that onto world +Y, into the
-    // wall from the lens face.
-    translate([0, -DX_LENS, 0])
-        rotate([-90, 0, 0])
-            ScrewHole(M65_MAJOR, DX_THREAD,
-                      pitch = EL180_M62_PITCH,
-                      tolerance = EL180_M62_TOL,
-                      rotation = [0, 0, STEM_W_CLOCK])
-                rotate([90, 0, 0])
-                    translate([0, DX_LENS, 0])
-                        difference() {
-                            union() {
-                                difference() {
-                                    union() {
-                                        difference() {
-                                            dx_outer();
-                                            dx_cavity();
-                                        }
-                                        dx_plate();
-                                        dx_tripod_boss();
-                                    }
-                                    dx_bed_cuts();
-                                    dx_top_corners();
-                                    dx_top_slice();
-                                }
-                                dx_arm_tube("R");
-                                dx_arm_tube("T");
-                                dx_arm_sole("R");
-                                dx_arm_sole("T");
-                                if (!dx_pixco_on()) {
-                                    dx_mount("R");
-                                    dx_mount("T");
-                                } else {
-                                    dx_pixco_hub("R");
-                                    dx_pixco_tab("R");
-                                    dx_pixco_tab("T");
-                                }
-                                dx_r_join(0);
-                                dx_r_join(1);
-                            }
-                            dx_plate_pins();
-                            dx_arm_bore("R");
-                            dx_arm_bore("T");
-                            dx_lens_bore();
-                            dx_logo_moon();
-                            dx_logo_cut();
-                            dx_bed_cuts(1);
-                            dx_flash_cut("R");
-                            dx_flash_cut("T");
-                            dx_top_slice();
-                            dx_top_corners();
-                            dx_lid_taps();
-                            dx_tripod_hole();
-                            if (dx_pixco_on()) {
-                                dx_pixco_thread("R");
-                                dx_pixco_thread("T");
-                                dx_pixco_notch("R");
-                                dx_pixco_notch("T");
-                            }
-                        }
+    difference() {
+        union() {
+            difference() {
+                union() {
+                    difference() {
+                        dx_outer();
+                        dx_cavity();
+                    }
+                    dx_plate();
+                    dx_tripod_boss();
+                }
+                dx_bed_cuts();
+                dx_top_corners();
+                dx_top_slice();
+            }
+            dx_arm_tube("R");
+            dx_arm_tube("T");
+            dx_arm_sole("R");
+            dx_arm_sole("T");
+            if (!dx_pixco_on()) {
+                dx_mount("R");
+                dx_mount("T");
+            } else {
+                dx_pixco_hub("R");
+                dx_pixco_tab("R");
+                dx_pixco_tab("T");
+            }
+            dx_r_join(0);
+            dx_r_join(1);
+        }
+        dx_plate_pins();
+        dx_arm_bore("R");
+        dx_arm_bore("T");
+        dx_lens_bore();
+        dx_lens_thread();
+        dx_logo_moon();
+        dx_logo_cut();
+        dx_bed_cuts(1);
+        dx_flash_cut("R");
+        dx_flash_cut("T");
+        dx_top_slice();
+        dx_top_corners();
+        dx_lid_taps();
+        dx_tripod_hole();
+        if (dx_pixco_on()) {
+            dx_pixco_thread("R");
+            dx_pixco_thread("T");
+            dx_pixco_notch("R");
+            dx_pixco_notch("T");
+        }
+    }
     if ($preview && dx_pixco_on()) {
         color("Silver", 0.45) {
             dx_pixco_ghost("R");

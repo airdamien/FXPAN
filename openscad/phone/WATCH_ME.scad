@@ -72,10 +72,30 @@ PM_LOW_Z   = 14;   // lowest point of the cradle over the foot's base
 DUO_BARE  = [117.8, 82.3, 5.2];
 DUO_CASED = [120.0, 83.5, 6.5];
 DUO_GAP   = 0.2;
-DUO_FLOOR = 2.5;
+// Base thickness. One flat plane on the bottom, and deep enough that the
+// countersunk screw and the cable groove both finish inside it.
+DUO_FLOOR = 5.0;
 DUO_RIB_H = 3.5;   // the half rests on a cross, so a camera bump anywhere off it is clear
 DUO_RIB_W = 16;
-DUO_KEY_Y = 6;     // toward the hinge, under the standing half
+// The shoe joint sits under the puck pocket, where the pad is thick enough
+// for the countersunk M3 and its nut.
+function duo_key_xy() = MS_XY;
+// Apple MagSafe puck, measured: 55.5 across, 4.5 thick, cable out the rim.
+// It slides in from the side under a rail, so the tray holds it rather than
+// a lip it has to squeeze past. The slot sits in the front quadrant, clear
+// of the shoe screw at the hinge and of the camera corner.
+MS_D  = 55.7;      // pocket, a snug press fit on the 55.5 puck
+MS_T  = 4.6;       // puck is 4.5; finishes just under the tray top
+MS_XY = [14, -8];
+// The puck presses in from the top. The cable leaves through a groove from
+// the pocket rim to the tray's back edge.
+MS_CABLE = 4.0;    // groove width, a braided MagSafe lead
+MS_CABLE_D = 3.2;  // groove depth below the pocket floor
+MS_FLOOR = DUO_RIB_H;
+// The countersink cone needs this much pad below the pocket floor to taper
+// from the head diameter to the screw bore. It stays inside the base, so
+// the bottom of the tray is still the one flat plane it prints on.
+DUO_PAD  = 1.6;
 
 CLIP_WALL = 2.0;
 LIP_IN    = 1.4;   // over the case rim or bezel
@@ -275,27 +295,72 @@ module duo_tray(d, tag) {
                 linear_extrude(DUO_RIB_H + 0.01) {
                     square([len - 2, DUO_RIB_W], center = true);
                     square([DUO_RIB_W, dep - 2], center = true);
-                    translate([0, DUO_KEY_Y])
+                    translate(duo_key_xy())
                         rrect(KEY_W + 12, KEY_L + 12, 3);
                 }
+            // Pad under the MagSafe pocket. It fills the base only; the
+            // pocket is cut through the tray above it, so nothing stands
+            // over the puck but the lip.
+            if (tag == "duo_tray_cased")
+                translate([MS_XY[0], MS_XY[1], -0.01])
+                    cylinder(h = duo_back_z() + 0.02, d = MS_D + 8, $fn = 96);
+            // The base out to the back edge, so the cable groove has a floor
+            // the whole way and the bottom stays one plane.
+            if (tag == "duo_tray_cased")
+                translate([MS_XY[0] - (MS_CABLE + 8) / 2, MS_XY[1], -0.01])
+                    cube([MS_CABLE + 8, yr - MS_XY[1] + 2, DUO_FLOOR + 0.02]);
             // Front corners: an L, side and front, that the front edge slides
-            // under. Rear grips flex out as the hinge end presses down.
+            // under. The side grips stay low, below the hinge, so the phone
+            // folds down past them. The rear stops are only bumpers.
             for (s = [-1, 1]) {
                 grip_y(yf - CLIP_WALL, yf + 14, s * xi, s, lip_z);
                 grip_x(s > 0 ? xi - 14 : -xi - CLIP_WALL,
                        s > 0 ? xi + CLIP_WALL : -xi + 14,
                        yf, -1, lip_z);
-                grip_y(yr - 34, yr - 20, s * xi, s, lip_z);
-                // Low stops behind the rear edge, under the spine.
+                grip_y(yr - 30, yr - 14, s * xi, s, lip_z);
                 translate([s * (len / 2 - 5) - 3, yr + DUO_GAP, 0])
                     cube([6, 2.3, duo_back_z() + 2]);
             }
         }
-        translate([0, DUO_KEY_Y, 0])
-            socket_cut(duo_back_z());
+        translate(duo_key_xy()) {
+            translate([0, 0, -DUO_PAD - 0.2])
+                spline_key(KEY_CLEAR, 0.2);
+            translate([0, 0, -DUO_PAD - 1])
+                cylinder(h = DUO_PAD + MS_FLOOR + 2, d = M3_D);
+            // Screw drops in from above, through the puck recess. The wide
+            // end opens at the recess floor and narrows downward, so the
+            // head sits flush under the puck.
+            translate([0, 0, duo_back_z() - MS_T - DUO_PAD])
+                cylinder(h = DUO_PAD + 0.02, d1 = M3_D, d2 = M3_CSK_D);
+        }
         translate([-len / 4 - DUO_RIB_W / 4, -dep / 4 - DUO_RIB_W / 4,
                    DUO_FLOOR - STAMP_DEPTH])
             part_stamp_cut(tag, size = 2.2);
+        // MagSafe puck, cased tray only. The bare tray has no case magnets
+        // to meet it.
+        if (tag == "duo_tray_cased")
+            duo_magsafe_cut(yr);
+    }
+}
+
+// Round pocket for the puck, open out the back of the tray. A lip rings the
+// rim everywhere except that rear opening, so the puck slides in from behind
+// and the lip holds it down once it is in.
+module duo_magsafe_cut(yr) {
+    z1 = duo_back_z();
+    translate(MS_XY) {
+        // Straight recess, open at the top. The puck presses in.
+        translate([0, 0, z1 - MS_T])
+            cylinder(h = MS_T + 0.2, d = MS_D, $fn = 128);
+        // Cable groove. Rounded floor, runs straight back from the pocket
+        // rim and out through the tray's back edge.
+        translate([-MS_CABLE / 2, MS_D / 2 - 4, -0.2])
+            cube([MS_CABLE, yr + 8 - MS_XY[1] - MS_D / 2,
+                  MS_CABLE_D + z1 + 0.2]);
+        translate([0, MS_D / 2 - 4, -0.2])
+            rotate([-90, 0, 0])
+                cylinder(h = yr + 8 - MS_XY[1] - MS_D / 2,
+                         d = MS_CABLE, $fn = 32);
     }
 }
 
@@ -326,7 +391,7 @@ module assembly() {
                 cube([166, PM_W, PM_T], center = true);
     translate([0, 160, 0]) {
         color("DimGray") duo_shoe();
-        translate([0, -DUO_KEY_Y, plat_z1()])
+        translate([-duo_key_xy()[0], -duo_key_xy()[1], plat_z1() + DUO_PAD])
             color("SlateGray") duo_tray(DUO_CASED, "duo_tray_cased");
     }
 }
