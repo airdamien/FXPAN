@@ -17,10 +17,16 @@ enum Hugin {
     }
 
     struct Affine {
+        static let stripBands = 9
         var a: Double
         var b: Double
         var tx: Double
         var ty: Double
+        var stripDx: [Double] = Array(repeating: 0, count: stripBands)
+        var stripDy: [Double] = Array(repeating: 0, count: stripBands)
+        var seamX0: Double = 0
+        var seamX1: Double = 0
+        var refH: Double = 0
 
         var scale: Double { (a * a + b * b).squareRoot() }
         var rotDeg: Double { atan2(b, a) * 180 / .pi }
@@ -31,8 +37,30 @@ enum Hugin {
 
         func invert(_ x: Double, _ y: Double) -> (Double, Double) {
             let s2 = a * a + b * b
-            let dx = x - tx
-            let dy = y - ty
+            var ldx = 0.0
+            var ldy = 0.0
+            if refH > 1, seamX1 > seamX0, stripDx.count >= Self.stripBands, stripDy.count >= Self.stripBands {
+                let olW = max(32.0, seamX1 - seamX0)
+                let wx: Double
+                if x <= seamX1 {
+                    wx = 1.0
+                } else if x >= seamX1 + olW {
+                    wx = 0.0
+                } else {
+                    let t = (x - seamX1) / olW
+                    wx = 0.5 * (1.0 + cos(.pi * t))
+                }
+                if wx > 0 {
+                    let pos = min(Double(Self.stripBands - 1), max(0.0, (y / refH) * Double(Self.stripBands - 1)))
+                    let i0 = min(Self.stripBands - 1, max(0, Int(floor(pos))))
+                    let i1 = min(Self.stripBands - 1, i0 + 1)
+                    let f = pos - Double(i0)
+                    ldx = wx * (stripDx[i0] * (1.0 - f) + stripDx[i1] * f)
+                    ldy = wx * (stripDy[i0] * (1.0 - f) + stripDy[i1] * f)
+                }
+            }
+            let dx = x - tx - ldx
+            let dy = y - ty - ldy
             return ((a * dx + b * dy) / s2, (-b * dx + a * dy) / s2)
         }
     }
@@ -72,10 +100,12 @@ enum Hugin {
             image: image, overlap: prepared.fit.overlap, dy: prepared.fit.dy, rot: prepared.fit.rot,
             scale: prepared.fit.scale, inliers: prepared.fit.inliers, blend: blended.blend, frameWidth: prepared.frameWidth
         )
-        print(String(
+        let line = String(
             format: "FXPAN hugin rot=%+.2f° scale=%.4f ol=%.0f%% dy=%+d n=%d %@",
             made.rot, made.scale, made.overlap * 100, made.dy, made.inliers, made.blend
-        ))
+        )
+        print(line)
+        Trace.line(line)
         return made
     }
 
@@ -152,9 +182,9 @@ enum Hugin {
     private static func blend(_ cropped: inout Prepared, note: StitchNote?, stop: StitchStop?) throws -> (px: [UInt8], w: Int, h: Int, blend: String) {
         let useBands = memoryAllowsBands(w: cropped.w, h: cropped.h)
         if useBands {
-            let bands = bandCount(overlapPx: Int((cropped.fit.overlap * Double(cropped.frameWidth)).rounded()))
-            note?("Blending \(bands) bands")
-            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: bands, stop: stop) {
+            let baseBands = bandCount(overlapPx: Int((cropped.fit.overlap * Double(cropped.frameWidth)).rounded()))
+            note?("Blending \(baseBands) bands")
+            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: baseBands, stop: stop) {
                 return (blended, cropped.w, cropped.h, "multiband")
             }
             try StitchGate.check(stop)
@@ -197,32 +227,46 @@ enum Hugin {
         try StitchGate.check(stop)
         note?("Finding features in the T overlap")
         let kT = try features(gT, x0: 0, width: min(gT.w, band + pad), stop: stop).filter { $0.x <= Float(band) }
-        guard kR.count >= 8, kT.count >= 8 else { return nil }
+        var siftCandidate: Solved?
+        if kR.count >= 8, kT.count >= 8 {
+            try StitchGate.check(stop)
+            note?("Matching the overlap")
+            if let matched = match(left: kR, right: kT, height: gR.h), matched.count >= 6 {
+                try StitchGate.check(stop)
+                siftCandidate = ransac(matched, w: gR.w, h: gR.h)
+            }
+        }
         try StitchGate.check(stop)
-        note?("Matching the overlap")
-        guard let matched = match(left: kR, right: kT, height: gR.h), matched.count >= 8 else { return nil }
-        try StitchGate.check(stop)
-        note?("Fitting the seam")
-        guard var mWork = ransac(matched) else { return nil }
-        mWork = nudge(mWork, r: gR, t: gT)
+        note?("Refining the seam")
+        guard let refined = directAlign(sift: siftCandidate, r: gR, t: gT, overlap: overlap) else { return nil }
         let s = Double(gR.w) / Double(fullW)
-        let full = Affine(a: mWork.a, b: mWork.b, tx: mWork.tx / s, ty: mWork.ty / s)
+        let full = Affine(
+            a: refined.a, b: refined.b,
+            tx: refined.tx0 / s, ty: refined.ty0 / s,
+            stripDx: Array(repeating: 0, count: Affine.stripBands),
+            stripDy: Array(repeating: 0, count: Affine.stripBands),
+            seamX0: refined.txC / s,
+            seamX1: Double(fullW),
+            refH: Double(fullH)
+        )
         guard sane(full, w: fullW, h: fullH) else { return nil }
-        let frac = (Double(fullW) - full.tx) / Double(fullW)
+        let txCenterFull = refined.txC / s
+        let tyCenterFull = refined.tyC / s
+        let frac = (Double(fullW) - txCenterFull) / Double(fullW)
+        guard frac >= 0.05, frac <= 0.45 else { return nil }
         return Fit(
-            m: full, overlap: frac, dy: Int(full.ty.rounded()),
-            rot: full.rotDeg, scale: full.scale, inliers: mWork.inliers
+            m: full, overlap: frac, dy: Int(tyCenterFull.rounded()),
+            rot: full.rotDeg, scale: full.scale, inliers: refined.inliers
         )
     }
 
     private static func sane(_ m: Affine, w: Int, h: Int) -> Bool {
         let sc = m.scale
-        if sc < 0.94 || sc > 1.06 || sc.isNaN { return false }
-        if abs(m.rotDeg) > 8 { return false }
-        if m.tx < 0.40 * Double(w) || m.tx > 0.95 * Double(w) { return false }
+        if sc < 0.96 || sc > 1.04 || sc.isNaN { return false }
+        if abs(m.rotDeg) > 6 { return false }
+        if m.tx < 0.45 * Double(w) || m.tx > 0.96 * Double(w) { return false }
         if abs(m.ty) > 0.20 * Double(h) { return false }
-        let frac = (Double(w) - m.tx) / Double(w)
-        return frac >= 0.05 && frac <= 0.50
+        return true
     }
 
     // MARK: - SIFT
@@ -247,6 +291,16 @@ enum Hugin {
         }
         func at(_ x: Int, _ y: Int) -> Float {
             p[min(h - 1, max(0, y)) * w + min(w - 1, max(0, x))]
+        }
+        @inline(__always) func sample(_ x: Double, _ y: Double) -> Float {
+            let xi = Int(floor(x)), yi = Int(floor(y))
+            if xi < 0 || yi < 0 || xi + 1 >= w || yi + 1 >= h { return 0 }
+            let fx = Float(x - Double(xi)), fy = Float(y - Double(yi))
+            let row0 = yi * w + xi
+            let row1 = row0 + w
+            let top = p[row0] * (1 - fx) + p[row0 + 1] * fx
+            let bot = p[row1] * (1 - fx) + p[row1 + 1] * fx
+            return top * (1 - fy) + bot * fy
         }
     }
 
@@ -500,23 +554,24 @@ enum Hugin {
 
     private static func match(left: [KP], right: [KP], height: Int) -> [(l: KP, r: KP)]? {
         let gate = Float(height) * 0.35
+        let ratio: Float = 0.72
+        var bestForLeft: [Int: (qi: Int, dist: Float)] = [:]
         if let ranked = SiftGPU.rank(
             leftY: left.map(\.y), leftD: left.flatMap(\.d),
             rightY: right.map(\.y), rightD: right.flatMap(\.d), gate: gate
         ) {
-            var pairs: [(l: KP, r: KP)] = []
             for (qi, row) in ranked.enumerated() {
-                guard let who = row.index, row.best < 0.64 * row.second else { continue }
-                pairs.append((left[who], right[qi]))
+                guard let li = row.index, row.best < ratio * row.second else { continue }
+                if let prev = bestForLeft[li], prev.dist <= row.best { continue }
+                bestForLeft[li] = (qi, row.best)
             }
-            return pairs
+            return bestForLeft.keys.sorted().map { li in (left[li], right[bestForLeft[li]!.qi]) }
         }
-        var pairs: [(l: KP, r: KP)] = []
-        for q in right {
+        for (qi, q) in right.enumerated() {
             var best = Float.greatestFiniteMagnitude
             var second = Float.greatestFiniteMagnitude
-            var who: KP?
-            for c in left {
+            var who: Int?
+            for (li, c) in left.enumerated() {
                 if abs(c.y - q.y) > gate { continue }
                 var s: Float = 0
                 for i in 0..<128 {
@@ -527,16 +582,17 @@ enum Hugin {
                 if s < best {
                     second = best
                     best = s
-                    who = c
+                    who = li
                 } else if s < second {
                     second = s
                 }
             }
-            if let who, best < 0.64 * second {
-                pairs.append((who, q))
+            if let li = who, best < ratio * second {
+                if let prev = bestForLeft[li], prev.dist <= best { continue }
+                bestForLeft[li] = (qi, best)
             }
         }
-        return pairs
+        return bestForLeft.keys.sorted().map { li in (left[li], right[bestForLeft[li]!.qi]) }
     }
 
     private struct Solved {
@@ -547,13 +603,14 @@ enum Hugin {
         var inliers: Int
     }
 
-    private static func ransac(_ pairs: [(l: KP, r: KP)]) -> Solved? {
+    private static func ransac(_ pairs: [(l: KP, r: KP)], w: Int, h: Int) -> Solved? {
         var rng = UInt64(0x9E3779B97F4A7C15)
         func next(_ n: Int) -> Int {
             rng = rng &* 6364136223846793005 &+ 1
             return Int(rng % UInt64(n))
         }
         let n = pairs.count
+        guard n >= 6 else { return nil }
         var bestInliers: [Int] = []
         let thresh = 4.0 * 4.0
         for _ in 0..<400 {
@@ -569,8 +626,12 @@ enum Hugin {
             let dv = Double(b.l.y - a.l.y)
             let aa = (vx * du + vy * dv) / den
             let bb = (vx * dv - vy * du) / den
+            let sc = hypot(aa, bb)
+            let rot = abs(atan2(bb, aa) * 180.0 / .pi)
+            if sc < 0.985 || sc > 1.015 || rot > 3.5 { continue }
             let tx = Double(a.l.x) - aa * Double(a.r.x) + bb * Double(a.r.y)
             let ty = Double(a.l.y) - bb * Double(a.r.x) - aa * Double(a.r.y)
+            if tx < 0.55 * Double(w) || tx > 0.94 * Double(w) || abs(ty) > 0.14 * Double(h) { continue }
             var inl: [Int] = []
             inl.reserveCapacity(n)
             for k in 0..<n {
@@ -608,85 +669,182 @@ enum Hugin {
             src += sx * sx + sy * sy
         }
         if src < 1 { return nil }
-        let a = dot / src
-        let b = cross / src
+        var a = dot / src
+        var b = cross / src
+        let rawScale = hypot(a, b)
+        guard rawScale > 0.90, rawScale < 1.10 else { return nil }
+        let clampedScale = min(1.003, max(0.997, rawScale))
+        a *= clampedScale / rawScale
+        b *= clampedScale / rawScale
         let tx = mu - a * mx + b * my
         let ty = mv - b * mx - a * my
         return Solved(a: a, b: b, tx: tx, ty: ty, inliers: idx.count)
     }
 
-    /// The feature fit splits the difference between near and far. Slide it so the middle of the overlap agrees.
-    private static func nudge(_ m: Solved, r: Gray, t: Gray) -> Solved {
-        let y0 = Int(Double(r.h) * 0.35)
-        let y1 = Int(Double(r.h) * 0.65)
-        let x0 = max(8, Int(m.tx) + 8)
-        let x1 = r.w - 8
-        guard x1 - x0 > 16, y1 - y0 > 16 else { return m }
-        var xs: [Int] = []
-        var ys: [Int] = []
-        var rv: [Float] = []
-        for y in stride(from: y0, to: y1, by: 4) {
-            for x in stride(from: x0, to: x1, by: 4) {
-                xs.append(x)
-                ys.append(y)
-                rv.append(r.at(x, y))
+    private struct Refined {
+        var a: Double
+        var b: Double
+        var tx0: Double
+        var ty0: Double
+        var txC: Double
+        var tyC: Double
+        var stripDx: [Double]
+        var stripDy: [Double]
+        var inliers: Int
+    }
+
+    /// Coarse-to-fine direct ZNCC pyramid over the full overlap height (8%..92%), plus 9-band smooth local strip deformation.
+    private static func directAlign(sift: Solved?, r: Gray, t: Gray, overlap: Double) -> Refined? {
+        let cx = Double(r.w) * (1.0 - 0.5 * max(0.10, min(0.35, overlap)))
+        let cy = Double(r.h) * 0.50
+        let yMin = Int(Double(r.h) * 0.08)
+        let yMax = Int(Double(r.h) * 0.92)
+
+        func evalBand(_ txC: Double, _ tyC: Double, _ rotDeg: Double, _ scale: Double, y0: Int, y1: Int, step: Int) -> Double {
+            let rad = rotDeg * .pi / 180.0
+            let c = cos(rad) / scale
+            let si = sin(rad) / scale
+            let x0 = max(10, Int(txC) + 10)
+            let x1 = r.w - 10
+            guard x1 > x0 + 16, y1 > y0 + 8 else { return -2.0 }
+            var sr = 0.0, st = 0.0, dr = 0.0, dt = 0.0, num = 0.0, n = 0.0
+            let uc = cx - txC
+            let vc = cy - tyC
+            for y in stride(from: y0, to: y1, by: step) {
+                let dy = Double(y) - cy
+                let rowR = y * r.w
+                for x in stride(from: x0, to: x1, by: step) {
+                    let dx = Double(x) - cx
+                    let u = c * dx + si * dy + uc
+                    let v = -si * dx + c * dy + vc
+                    if u < 1 || v < 1 || u + 1 >= Double(t.w) || v + 1 >= Double(t.h) { continue }
+                    let rv = Double(r.p[rowR + x])
+                    let tv = Double(t.sample(u, v))
+                    sr += rv; st += tv; dr += rv * rv; dt += tv * tv; num += rv * tv; n += 1
+                }
             }
-        }
-        guard xs.count > 200 else { return m }
-        func score(_ dx: Double, _ dy: Double) -> Double {
-            let tx = m.tx + dx
-            let ty = m.ty + dy
-            let s2 = m.a * m.a + m.b * m.b
-            if s2 < 1e-6 { return -1 }
-            var num = 0.0, sr = 0.0, st = 0.0, dr = 0.0, dt = 0.0, n = 0.0
-            for i in 0..<xs.count {
-                let dxv = Double(xs[i]) - tx
-                let dyv = Double(ys[i]) - ty
-                let u = (m.a * dxv + m.b * dyv) / s2
-                let v = (-m.b * dxv + m.a * dyv) / s2
-                let ui = Int(u.rounded(.down))
-                let vi = Int(v.rounded(.down))
-                if ui < 1 || vi < 1 || ui + 1 >= t.w || vi + 1 >= t.h { continue }
-                let fu = u - Double(ui)
-                let fv = v - Double(vi)
-                let tv = Double(t.at(ui, vi)) * (1 - fu) * (1 - fv)
-                    + Double(t.at(ui + 1, vi)) * fu * (1 - fv)
-                    + Double(t.at(ui, vi + 1)) * (1 - fu) * fv
-                    + Double(t.at(ui + 1, vi + 1)) * fu * fv
-                let rr = Double(rv[i])
-                sr += rr
-                st += tv
-                dr += rr * rr
-                dt += tv * tv
-                num += rr * tv
-                n += 1
-            }
-            if n < 150 { return -1 }
+            if n < 60 { return -2.0 }
             let vr = dr - sr * sr / n
             let vt = dt - st * st / n
-            if vr < 1 || vt < 1 { return -1 }
+            if vr <= 1e-4 || vt <= 1e-4 { return -2.0 }
             return (num - sr * st / n) / (vr * vt).squareRoot()
         }
-        let base = score(0, 0)
-        var best = base
-        var bestDx = 0
-        var bestDy = 0
-        for dy in -16...16 {
-            for dx in -16...16 {
-                let s = score(Double(dx), Double(dy))
-                if s > best {
-                    best = s
-                    bestDx = dx
-                    bestDy = dy
+
+        var seeds: [(ncc: Double, tx: Double, ty: Double, rot: Double, scale: Double)] = []
+        if let m = sift {
+            let s2 = m.a * m.a + m.b * m.b
+            if s2 > 0.8 {
+                let dx = cx - m.tx
+                let dy = cy - m.ty
+                let uc = (m.a * dx + m.b * dy) / s2
+                let vc = (-m.b * dx + m.a * dy) / s2
+                let txC = cx - uc
+                let tyC = cy - vc
+                let rotDeg = atan2(m.b, m.a) * 180.0 / .pi
+                let sc = min(1.003, max(0.997, s2.squareRoot()))
+                let z = evalBand(txC, tyC, rotDeg, sc, y0: yMin, y1: yMax, step: 8)
+                if z > 0.20 {
+                    seeds.append((z, txC, tyC, rotDeg, sc))
                 }
             }
         }
-        if abs(bestDx) == 16 || abs(bestDy) == 16 || best < base + 0.004 { return m }
-        print(String(format: "FXPAN nudge %+d %+d px at fit size, ncc %.3f -> %.3f", bestDx, bestDy, base, best))
-        var out = m
-        out.tx += Double(bestDx)
-        out.ty += Double(bestDy)
-        return out
+
+        var coarseBest = (ncc: -2.0, tx: Double(r.w) * (1.0 - overlap), ty: 0.0, rot: 0.0, scale: 1.0)
+        let txLo = Int(Double(r.w) * 0.68)
+        let txHi = Int(Double(r.w) * 0.92)
+        let tyBound = Int(Double(r.h) * 0.09)
+        for tx in stride(from: txLo, through: txHi, by: 8) {
+            for ty in stride(from: -tyBound, through: tyBound, by: 6) {
+                for rotDeg in stride(from: -2.5, through: 2.5, by: 0.5) {
+                    let z = evalBand(Double(tx), Double(ty), rotDeg, 1.0, y0: yMin, y1: yMax, step: 12)
+                    if z > coarseBest.ncc {
+                        coarseBest = (z, Double(tx), Double(ty), rotDeg, 1.0)
+                    }
+                }
+            }
+        }
+        if coarseBest.ncc > 0.20 {
+            let preciseCoarse = evalBand(coarseBest.tx, coarseBest.ty, coarseBest.rot, 1.0, y0: yMin, y1: yMax, step: 8)
+            seeds.append((preciseCoarse, coarseBest.tx, coarseBest.ty, coarseBest.rot, 1.0))
+        }
+        guard var best = seeds.max(by: { $0.ncc < $1.ncc }), best.ncc > 0.25 else { return nil }
+
+        // Medium refinement (step 8)
+        let c1 = best
+        for dtx in stride(from: -8.0, through: 8.0, by: 2.0) {
+            for dty in stride(from: -6.0, through: 6.0, by: 2.0) {
+                for drot in stride(from: -0.5, through: 0.5, by: 0.125) {
+                    let z = evalBand(c1.tx + dtx, c1.ty + dty, c1.rot + drot, c1.scale, y0: yMin, y1: yMax, step: 8)
+                    if z > best.ncc {
+                        best = (z, c1.tx + dtx, c1.ty + dty, c1.rot + drot, c1.scale)
+                    }
+                }
+            }
+        }
+
+        // Fine sub-pixel + micro-scale refinement (step 6)
+        let c2 = best
+        for dtx in stride(from: -2.0, through: 2.0, by: 0.5) {
+            for dty in stride(from: -2.0, through: 2.0, by: 0.5) {
+                for drot in stride(from: -0.15, through: 0.15, by: 0.05) {
+                    for sc in [0.998, 1.000, 1.002] {
+                        let z = evalBand(c2.tx + dtx, c2.ty + dty, c2.rot + drot, sc, y0: yMin, y1: yMax, step: 6)
+                        if z > best.ncc {
+                            best = (z, c2.tx + dtx, c2.ty + dty, c2.rot + drot, sc)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 9-band smooth vertical strip deformation (absorbs radial distortion k1, vertical depth parallax, and curtain travel)
+        let K = Affine.stripBands
+        var rawDx = [Double](repeating: 0, count: K)
+        var rawDy = [Double](repeating: 0, count: K)
+        for b in 0..<K {
+            let fy0 = max(0.02, Double(b) / Double(K) * 0.90 + 0.03)
+            let fy1 = min(0.98, fy0 + (0.90 / Double(K)) * 1.35)
+            let by0 = Int(Double(r.h) * fy0)
+            let by1 = Int(Double(r.h) * fy1)
+            let baseZ = evalBand(best.tx, best.ty, best.rot, best.scale, y0: by0, y1: by1, step: 4)
+            guard baseZ > 0.55 else { continue }
+            var bBest = (score: baseZ, z: baseZ, dx: 0.0, dy: 0.0)
+            for ddx in stride(from: -2.5, through: 2.5, by: 0.5) {
+                for ddy in stride(from: -2.5, through: 2.5, by: 0.5) {
+                    let z = evalBand(best.tx + ddx, best.ty + ddy, best.rot, best.scale, y0: by0, y1: by1, step: 4)
+                    let reg = z - 0.0025 * (ddx * ddx + ddy * ddy)
+                    if reg > bBest.score {
+                        bBest = (reg, z, ddx, ddy)
+                    }
+                }
+            }
+            if bBest.z > baseZ + 0.0005 {
+                rawDx[b] = bBest.dx
+                rawDy[b] = bBest.dy
+            }
+        }
+        // Smooth across vertical bands (2 passes of [0.25, 0.5, 0.25]) so the strip warp is C1 continuous
+        for _ in 0..<2 {
+            var nx = rawDx, ny = rawDy
+            for b in 0..<K {
+                let l = max(0, b - 1), rIdx = min(K - 1, b + 1)
+                nx[b] = 0.25 * rawDx[l] + 0.50 * rawDx[b] + 0.25 * rawDx[rIdx]
+                ny[b] = 0.25 * rawDy[l] + 0.50 * rawDy[b] + 0.25 * rawDy[rIdx]
+            }
+            rawDx = nx
+            rawDy = ny
+        }
+
+        let rad = best.rot * .pi / 180.0
+        let a = best.scale * cos(rad)
+        let b = best.scale * sin(rad)
+        let uc = cx - best.tx
+        let vc = cy - best.ty
+        let tx0 = cx - (a * uc - b * vc)
+        let ty0 = cy - (b * uc + a * vc)
+        let inl = max(sift?.inliers ?? 0, Int((best.ncc * 100.0).rounded()))
+        print(String(format: "FXPAN directAlign ncc=%.4f rot=%+.2f° scale=%.4f txC=%.1f tyC=%+.1f", best.ncc, best.rot, best.scale, best.tx, best.ty))
+        return Refined(a: a, b: b, tx0: tx0, ty0: ty0, txC: best.tx, tyC: best.ty, stripDx: rawDx, stripDy: rawDy, inliers: inl)
     }
 
     private static func blur(_ src: Gray, sigma: Double) -> Gray {
@@ -761,7 +919,13 @@ enum Hugin {
         let ch = Int(ceil(maxY) - y0)
         if cw < 16 || ch < 16 || cw > w * 3 || ch > h * 2 { return nil }
         if cw * ch > 80_000_000 { return nil }
-        let mt = Affine(a: fit.m.a, b: fit.m.b, tx: fit.m.tx - x0, ty: fit.m.ty - y0)
+        let mt = Affine(
+            a: fit.m.a, b: fit.m.b,
+            tx: fit.m.tx - x0, ty: fit.m.ty - y0,
+            stripDx: fit.m.stripDx, stripDy: fit.m.stripDy,
+            seamX0: fit.m.seamX0 - x0, seamX1: fit.m.seamX1 - x0,
+            refH: Double(ch)
+        )
         return Geometry(x0: x0, y0: y0, cw: cw, ch: ch, mt: mt)
     }
 
@@ -1051,16 +1215,25 @@ enum Hugin {
     }
 
     private static func darken(_ px: inout [UInt8], _ i: Int, _ scale: [Double]) {
+        let m = Double(max(px[i], max(px[i + 1], px[i + 2])))
+        let w: Double
+        if m <= 244.0 {
+            w = 0.0
+        } else {
+            let t = min(1.0, (m - 244.0) / 11.0)
+            w = t * t * (3.0 - 2.0 * t) * 0.92
+        }
         for c in 0..<3 where scale[c] < 0.999 {
             let v = Double(px[i + c])
-            let out = v * scale[c]
+            let s = scale[c] * (1.0 - w) + w
+            let out = v * s
             if out < v { px[i + c] = UInt8(min(255, max(0, out.rounded()))) }
         }
     }
 
-    /// The coarsest band carries exposure across the seam and must fade out before either frame's edge of the overlap.
+    /// Span the full overlap width so low frequencies smoothly blend exposure across the seam.
     private static func bandCount(overlapPx: Int) -> Int {
-        let top = Int(log2(max(1, Double(overlapPx) / 6)).rounded(.down))
+        let top = Int(log2(max(1, Double(overlapPx) / 4)).rounded(.down))
         return min(10, max(5, top + 1))
     }
 
@@ -1076,9 +1249,9 @@ enum Hugin {
 
     private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?, inset: Int = 0) throws -> [UInt8]? {
         try StitchGate.check(stop)
-        if let gpu = BlendGPU.multiband(r: r, t: t, w: w, h: h, bands: bands, inset: inset) { return gpu }
+        let (weight, _) = optimalSeam(r, t, w, h, inset: inset)
+        if let gpu = BlendGPU.multiband(r: r, t: t, weight: weight, w: w, h: h, bands: bands) { return gpu }
         print("FXPAN blend metal missed, using the CPU")
-        let weight = seam(r, t, w, h, inset: inset)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for c in 0..<3 {
             try StitchGate.check(stop)
@@ -1091,10 +1264,7 @@ enum Hugin {
                 let ta = t[o + 3] > 32
                 let value: Float
                 if ra && ta {
-                    let rv = Float(r[o + c])
-                    let tv = Float(t[o + c])
-                    // The pyramid overshoots past the brighter frame. Keep the photograph's own highlights.
-                    value = min(max(rv, tv), max(min(rv, tv), blended[i]))
+                    value = min(255, max(0, blended[i]))
                 } else if ra {
                     value = Float(r[o + c])
                 } else if ta {
@@ -1199,9 +1369,9 @@ enum Hugin {
     }
 
     private static func feather(r: [UInt8], t: [UInt8], w: Int, h: Int) -> [UInt8]? {
-        var weight = seam(r, t, w, h)
-        let radius = min(96, max(16, w / 80))
-        weight = box(weight, w, h, radius: radius)
+        let (rawWeight, _) = optimalSeam(r, t, w, h)
+        let radius = min(64, max(16, w / 100))
+        let weight = box(rawWeight, w, h, radius: radius)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for i in 0..<w * h {
             let ra = r[i * 4 + 3] > 32
@@ -1221,58 +1391,74 @@ enum Hugin {
         return out
     }
 
-    /// `inset` pulls the seam in from each photo's edge, so the pyramid never rides the empty border.
-    private static func seam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int = 0) -> [Float] {
+    private static func optimalSeam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int = 0) -> (weight: [Float], focusBias: Bool) {
         let n = w * h
-        let coverR = covered(r, w, h, inset: inset)
-        let coverT = covered(t, w, h, inset: inset)
-        var distR = [Int32](repeating: 1_000_000, count: n)
-        var distT = [Int32](repeating: 1_000_000, count: n)
-        for i in 0..<n {
-            if coverR[i] && !coverT[i] { distR[i] = 0 }
-            if coverT[i] && !coverR[i] { distT[i] = 0 }
+        var rLeft = [Int](repeating: w, count: h)
+        var rRight = [Int](repeating: -1, count: h)
+        var tLeft = [Int](repeating: w, count: h)
+        var tRight = [Int](repeating: -1, count: h)
+        var olL = [Int](repeating: w / 2, count: h)
+        var olR = [Int](repeating: w / 2, count: h)
+        let pad = max(inset, 16)
+
+        for y in 0..<h {
+            let row = y * w * 4
+            var rl = w, rr = -1, tl = w, tr = -1
+            for x in stride(from: 0, to: w, by: 8) {
+                let i = row + x * 4
+                if r[i + 3] > 32 {
+                    if rl == w { rl = max(0, x - 7) }
+                    rr = min(w - 1, x + 7)
+                }
+                if t[i + 3] > 32 {
+                    if tl == w { tl = max(0, x - 7) }
+                    tr = min(w - 1, x + 7)
+                }
+            }
+            if rl <= rr {
+                while rl < rr && r[row + rl * 4 + 3] <= 32 { rl += 1 }
+                while rr > rl && r[row + rr * 4 + 3] <= 32 { rr -= 1 }
+            }
+            if tl <= tr {
+                while tl < tr && t[row + tl * 4 + 3] <= 32 { tl += 1 }
+                while tr > tl && t[row + tr * 4 + 3] <= 32 { tr -= 1 }
+            }
+            rLeft[y] = rl; rRight[y] = rr
+            tLeft[y] = tl; tRight[y] = tr
+            let lo = max(rl, tl)
+            let hi = min(rr, tr)
+            if hi >= lo {
+                let il = min(hi, lo + pad)
+                let ir = max(il, hi - pad)
+                olL[y] = il
+                olR[y] = ir
+            } else {
+                let mid = min(w - 1, max(0, (tl + rr) / 2))
+                olL[y] = mid
+                olR[y] = mid
+            }
         }
-        chamfer(&distR, w, h)
-        chamfer(&distT, w, h)
+
         var weight = [Float](repeating: 0, count: n)
-        for i in 0..<n {
-            if coverR[i] && !coverT[i] { weight[i] = 1 }
-            else if coverR[i] && coverT[i] { weight[i] = distR[i] <= distT[i] ? 1 : 0 }
-        }
-        return weight
-    }
-
-    private static func covered(_ px: [UInt8], _ w: Int, _ h: Int, inset: Int) -> [Bool] {
-        let n = w * h
-        if inset <= 0 {
-            return (0..<n).map { px[$0 * 4 + 3] > 32 }
-        }
-        var outside = [Int32](repeating: 1_000_000, count: n)
-        for i in 0..<n where px[i * 4 + 3] <= 32 { outside[i] = 0 }
-        chamfer(&outside, w, h)
-        let need = Int32(inset)
-        return outside.map { $0 > need }
-    }
-
-    private static func chamfer(_ d: inout [Int32], _ w: Int, _ h: Int) {
-        for _ in 0..<2 {
-            for y in 0..<h {
-                for x in 0..<w {
-                    var v = d[y * w + x]
-                    if x > 0 { v = min(v, d[y * w + x - 1] + 1) }
-                    if y > 0 { v = min(v, d[(y - 1) * w + x] + 1) }
-                    d[y * w + x] = v
-                }
+        for y in 0..<h {
+            let cut = (olL[y] + olR[y]) / 2
+            let rl = rLeft[y], rr = rRight[y]
+            guard rl <= rr else { continue }
+            let tl = tLeft[y], tr = tRight[y]
+            let row = y * w
+            let solidEnd = min(rr, cut)
+            if solidEnd >= rl {
+                for x in rl...solidEnd { weight[row + x] = 1 }
             }
-            for y in stride(from: h - 1, through: 0, by: -1) {
-                for x in stride(from: w - 1, through: 0, by: -1) {
-                    var v = d[y * w + x]
-                    if x + 1 < w { v = min(v, d[y * w + x + 1] + 1) }
-                    if y + 1 < h { v = min(v, d[(y + 1) * w + x] + 1) }
-                    d[y * w + x] = v
+            if rr > solidEnd {
+                for x in max(rl, solidEnd + 1)...rr {
+                    if x < tl || x > tr || t[(row + x) * 4 + 3] <= 32 {
+                        weight[row + x] = 1
+                    }
                 }
             }
         }
+        return (weight, false)
     }
 
     /// Empty warp pixels are black. A band pyramid treats that cliff as detail and the bright side overshoots white.

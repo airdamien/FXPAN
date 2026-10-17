@@ -601,7 +601,7 @@ final class AppModel {
     private func stitchVideo(stamp: String, t: URL, r: URL, gap: Double?) async throws {
         let movie = Disk.captures.appendingPathComponent("P_\(stamp).mov")
         let poster = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
-        let mirrorScene = bodyKind.mirrorScene
+        let mirrorScene = shots.first(where: { $0.stamp == stamp }).map { Stitcher.mirrorScene(shot: $0) } ?? bodyKind.mirrorScene
         try await PanoVideo.make(t: t, r: r, movie: movie, poster: poster, rig: rig, gap: gap, mirrorScene: mirrorScene) { [weak self] text in
             Task { @MainActor in self?.stitchLabel = text }
         }
@@ -1185,7 +1185,7 @@ final class AppModel {
         let ana = photo.frame.squeeze > 1.01 ? Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg") : nil
         let rig = rig
         let photo = photo
-        let mirrorScene = bodyKind.mirrorScene
+        let mirrorScene = (Stitcher.isD7000File(t) || Stitcher.isD7000File(r)) ? false : bodyKind.mirrorScene
         do {
             let note: StitchNote = { phase in
                 Task { @MainActor in self.noteStitch(phase) }
@@ -1207,6 +1207,7 @@ final class AppModel {
             if let data = try? JSONEncoder().encode(report) {
                 try? data.write(to: side)
             }
+            Disk.mirrorLatest()
             LookStore.remove(stamp)
         } catch is StitchHalt {
             if discard(stamp) { return }

@@ -60,8 +60,8 @@ enum Disk {
         }
     }
 
-    /// devicectl can only read Library, Documents and tmp, and the app-group Captures folder sits outside them.
-    /// Copy the newest set into Application Support/Inspect so it can be pulled off the phone.
+    /// devicectl can only read Library, Documents and tmp. The app-group Captures folder sits outside them.
+    /// Copy the newest few sets into Application Support/Inspect so they can be pulled off the phone.
     static func mirrorLatest() {
         let files = FileManager.default
         let src = captures
@@ -70,14 +70,19 @@ enum Disk {
             guard name.hasPrefix("P_"), name.hasSuffix(".json") else { return nil }
             return String(name.dropFirst(2).dropLast(5))
         }
-        guard let stamp = stamps.max() else { return }
+        let keep = Array(Set(stamps)).sorted().suffix(4)
+        guard !keep.isEmpty else { return }
         let dest = support.appendingPathComponent("Inspect", isDirectory: true)
         try? files.removeItem(at: dest)
         try? files.createDirectory(at: dest, withIntermediateDirectories: true)
-        for name in names where name.contains(stamp) {
-            try? files.copyItem(at: src.appendingPathComponent(name), to: dest.appendingPathComponent(name))
+        var copied: [String] = []
+        for stamp in keep {
+            for name in names where name.contains(stamp) && !name.hasSuffix(".nef") && !name.hasSuffix(".mov") {
+                try? files.copyItem(at: src.appendingPathComponent(name), to: dest.appendingPathComponent(name))
+                copied.append(name)
+            }
         }
-        Trace.line("FXPAN inspect copied \(names.filter { $0.contains(stamp) }.sorted().joined(separator: " "))")
+        Trace.line("FXPAN inspect copied \(copied.sorted().joined(separator: " "))")
     }
 
     static func load() -> Persisted {

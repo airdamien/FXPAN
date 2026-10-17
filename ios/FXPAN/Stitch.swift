@@ -90,8 +90,15 @@ enum RawDevelop {
 enum Stitcher {
     static let work = 360
 
+    static func isD7000File(_ url: URL) -> Bool {
+        if let model = FrameFacts.cameraModel(url), BodyKind.from(model) == .d7000 { return true }
+        if let (w, h) = FrameFacts.pixels(url), (2600...3500).contains(h), w <= 5300 { return true }
+        return false
+    }
+
     static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
+        let mirrorScene = (isD7000File(tURL) || isD7000File(rURL)) ? false : mirrorScene
         if photo.drive.engine == "hugin" {
             if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop) {
                 return try finish(
@@ -103,6 +110,7 @@ enum Stitcher {
             }
             note?("Features missed, feathering the seam")
             print("FXPAN hugin SIFT missed — feather")
+            Trace.line("FXPAN hugin SIFT missed — feather")
         }
         let loaded = try loadPair(tURL: tURL, rURL: rURL, photo: photo, note: note)
         let tImage = loaded.t
@@ -252,16 +260,20 @@ enum Stitcher {
             ctx.draw(t, in: tRect)
             ctx.restoreGState()
         } else {
+            // A ramp across the whole overlap averages a sharp frame with a soft one and the seam goes blurry.
+            // Mix only a short strip. The rest of each photo stays as it was shot.
+            let ramp = min(ol, max(64, tw / 60))
+            let seam = x + (ol - ramp) / 2
             ctx.saveGState()
-            ctx.clip(to: CGRect(x: CGFloat(x + ol), y: fromTop(ty), width: CGFloat(tw - ol), height: CGFloat(th)))
+            ctx.clip(to: CGRect(x: CGFloat(seam + ramp), y: fromTop(ty), width: CGFloat(tw - (seam + ramp - x)), height: CGFloat(th)))
             ctx.draw(t, in: tRect)
             ctx.restoreGState()
             let slices = 32
             for i in 0..<slices {
                 let a0 = Double(i) / Double(slices)
                 let a1 = Double(i + 1) / Double(slices)
-                let sx = x + Int((a0 * Double(ol)).rounded())
-                let ex = x + Int((a1 * Double(ol)).rounded())
+                let sx = seam + Int((a0 * Double(ramp)).rounded())
+                let ex = seam + Int((a1 * Double(ramp)).rounded())
                 ctx.saveGState()
                 ctx.setAlpha((a0 + a1) / 2)
                 ctx.clip(to: CGRect(x: CGFloat(sx), y: fromTop(ty), width: CGFloat(max(1, ex - sx)), height: CGFloat(th)))
@@ -372,7 +384,7 @@ enum Stitcher {
     static func hand(turned: Bool?, sceneMirror: Bool?, savedHeight: Int?) -> Hand {
         if sceneMirror == false { return Hand(flop: false, tOnLeft: false) }
         if turned != true { return Hand(flop: true, tOnLeft: true) }
-        if let savedHeight, (3000...3600).contains(savedHeight) {
+        if let savedHeight, (2600...3600).contains(savedHeight) {
             return Hand(flop: true, tOnLeft: false)
         }
         return Hand(flop: false, tOnLeft: true)
@@ -385,13 +397,12 @@ enum Stitcher {
 
     /// The D7000 still is 4928×3264. Its stitch is about 3264 tall. Either one skips the scene flop.
     static func mirrorScene(shot: ShotFiles) -> Bool {
-        if let report = FrameFacts.report(shot.stamp) {
-            if let scene = report.sceneMirror { return scene }
-            if (3000...3600).contains(report.height) { return false }
-        }
         for url in [shot.t, shot.r].compactMap({ $0 }) {
-            if let model = FrameFacts.cameraModel(url), BodyKind.from(model) == .d7000 { return false }
-            if let (w, h) = FrameFacts.pixels(url), (3000...3400).contains(h), w <= 5300 { return false }
+            if isD7000File(url) { return false }
+        }
+        if let report = FrameFacts.report(shot.stamp) {
+            if (2600...3600).contains(report.height) { return false }
+            if let scene = report.sceneMirror { return scene }
         }
         return true
     }

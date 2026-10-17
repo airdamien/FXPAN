@@ -189,7 +189,7 @@ kernel void fxpanPack(
     float tv = (u.channel == 0u ? pt.r : (u.channel == 1u ? pt.g : pt.b)) * 255.0f;
     float b = blended.read(gid).r;
     float value;
-    if (hasR && hasT) value = min(max(rv, tv), max(min(rv, tv), b));
+    if (hasR && hasT) value = clamp(b, 0.0f, 255.0f);
     else if (hasR) value = rv;
     else if (hasT) value = tv;
     else value = 0.0f;
@@ -217,10 +217,17 @@ kernel void fxpanBalance(
     if (int(round(p.a * 255.0f)) <= 32) return;
     float3 s = float3(scale[gid.y * 3u], scale[gid.y * 3u + 1u], scale[gid.y * 3u + 2u]);
     float3 v = p.rgb * 255.0f;
+    float m = max(v.r, max(v.g, v.b));
+    float hw = 0.0f;
+    if (m > 244.0f) {
+        float t = clamp((m - 244.0f) / 11.0f, 0.0f, 1.0f);
+        hw = t * t * (3.0f - 2.0f * t) * 0.92f;
+    }
     float3 o = v;
     for (int c = 0; c < 3; c++) {
         if (s[c] < 0.999f) {
-            float n = v[c] * s[c];
+            float sc = s[c] * (1.0f - hw) + hw;
+            float n = v[c] * sc;
             if (n < v[c]) o[c] = round(n);
         }
     }
