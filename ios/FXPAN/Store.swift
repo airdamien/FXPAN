@@ -301,7 +301,7 @@ enum CaptureIndex {
     static func delete(stamp: String) {
         let root = Disk.captures
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        let stems: Set<String> = ["T_\(stamp)", "R_\(stamp)", "P_\(stamp)", "P_\(stamp)_ana", "V_\(stamp)"]
+        let stems: Set<String> = ["T_\(stamp)", "R_\(stamp)", "P_\(stamp)", "P_\(stamp)_ana", "V_\(stamp)", "E_\(stamp)", "T_\(stamp)_dev", "R_\(stamp)_dev"]
         for name in names {
             let stem = (name as NSString).deletingPathExtension
             guard stems.contains(stem) else { continue }

@@ -805,6 +805,14 @@ struct ShotScreen: View {
                             Button("Cancel", role: .cancel) {}
                         }
                 }
+                if !isVideo, let shot {
+                    let raw = [shot.nefT, shot.nefR].compactMap { $0 }.count
+                    RowBlock(title: "Raw", value: raw == 0 ? "No NEF" : (raw == 2 ? "T and R" : "One body"), hint: "Exposure and white balance in linear light, then the tone curve, detail, and noise. A saved grade is what the next CIRAW stitch uses.") {
+                        Button("Develop") { model.go(.raw(stamp)) }
+                            .buttonStyle(GoldButton())
+                            .disabled(raw == 0)
+                    }
+                }
                 if shot?.movT != nil && shot?.movR != nil {
                     Button(model.shooting ? (model.stitchLabel ?? "Stitching") : "Stitch again") {
                         Task { await model.restitchVideo(stamp) }

@@ -174,6 +174,7 @@ struct RootView: View {
         case .modes: ModesScreen()
         case .playback: PlaybackScreen()
         case .shot(let stamp): ShotScreen(stamp: stamp)
+        case .raw(let stamp): RawScreen(stamp: stamp)
         case .system: SystemScreen()
         case .cameras: CamerasScreen()
         case .rig: RigScreen()

@@ -43,35 +43,221 @@ enum StitchGate {
     }
 }
 
+struct RawAbility: Equatable {
+    var local = false
+    var lens = false
+    var highlights = true
+}
+
+private struct PreviewJob {
+    var url: URL
+    var grade: RawGrade
+    var clip: Bool
+    var ticket: Int
+    var deliver: (RawFrame?) -> Void
+}
+
+private final class OnceBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+    func run(_ body: () -> Void) {
+        lock.lock()
+        if fired { lock.unlock(); return }
+        fired = true
+        lock.unlock()
+        body()
+    }
+}
+
 /// Apple's raw develop. Orientation stays unrotated so it matches the JPEG the stitch already flops.
 enum RawDevelop {
-    static func image(at url: URL, lens: Bool, apple: Bool) -> CGImage? {
-        guard let filter = CIRAWFilter(imageURL: url) else { return nil }
-        if #available(iOS 27.0, *) {
-            DispatchQueue.global(qos: .userInitiated).sync {
-                let wait = DispatchSemaphore(value: 0)
-                _ = filter.downloadResources(timeout: 180) { error in
-                    if let error { print("FXPAN ciraw decoder \(error.localizedDescription)") }
-                    wait.signal()
-                }
-                wait.wait()
+    private static let context = CIContext(options: [.cacheIntermediates: false])
+    private static let gate = NSLock()
+    private static var fetched: Set<String> = []
+    private static let previewQueue = DispatchQueue(label: "fxpan.raw.preview")
+    private static var previewTicket = 0
+    private static var pumping = false
+    private static var pending: PreviewJob?
+    private static var abilityCache: [String: RawAbility] = [:]
+
+    /// The camera's own CIRAW recipe: linear exposure at zero, the recorded white balance, and the tone the decoder starts with.
+    static func baseline(at url: URL) -> RawGrade? {
+        guard let filter = open(url) else { return nil }
+        return read(filter)
+    }
+
+    static func image(at url: URL, lens: Bool, apple: Bool, grade: RawGrade? = nil) -> CGImage? {
+        render(at: url, lens: grade?.lens ?? lens, apple: apple && grade == nil, grade: grade, longest: nil, draft: false)
+    }
+
+    static func ability(for url: URL) -> RawAbility {
+        gate.lock()
+        let cached = abilityCache[url.path]
+        gate.unlock()
+        if let cached { return cached }
+        guard let filter = open(url) else { return RawAbility() }
+        return remember(filter, url)
+    }
+
+    /// One decode at a time. A drag replaces the queued grade, and the last finished frame is the one returned.
+    static func enqueuePreview(url: URL, grade: RawGrade, clip: Bool) async -> RawFrame? {
+        await withCheckedContinuation { continuation in
+            let once = OnceBox()
+            let deliver: (RawFrame?) -> Void = { frame in
+                once.run { continuation.resume(returning: frame) }
+            }
+            gate.lock()
+            previewTicket += 1
+            let replaced = pending
+            pending = PreviewJob(url: url, grade: grade, clip: clip, ticket: previewTicket, deliver: deliver)
+            let start = !pumping
+            pumping = true
+            gate.unlock()
+            replaced?.deliver(nil)
+            if start {
+                previewQueue.async { drain() }
             }
         }
+    }
+
+    private static func render(at url: URL, lens: Bool, apple: Bool, grade: RawGrade?, longest: CGFloat?, draft: Bool) -> CGImage? {
+        guard let filter = open(url) else { return nil }
         filter.orientation = .up
-        filter.isDraftModeEnabled = false
-        filter.scaleFactor = 1
-        filter.extendedDynamicRangeAmount = 0
-        if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = true }
+        filter.isDraftModeEnabled = draft
         if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = lens }
-        if apple { tone(filter) }
-        guard let output = filter.outputImage else { return nil }
-        var extent = output.extent.integral
-        if extent.isInfinite || extent.isNull || extent.isEmpty {
-            extent = CGRect(origin: .zero, size: filter.nativeSize)
+        if let grade {
+            apply(grade, to: filter)
+        } else {
+            filter.extendedDynamicRangeAmount = 0
+            if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = true }
+            if apple { tone(filter) }
         }
+        filter.scaleFactor = 1
+        guard var output = filter.outputImage else { return nil }
+        if let longest, output.extent.width > 1, output.extent.height > 1 {
+            let edge = max(output.extent.width, output.extent.height)
+            let scale = min(1, longest / edge)
+            if scale < 1 {
+                output = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            }
+        }
+        let extent = output.extent.integral
+        guard !extent.isInfinite, !extent.isNull, !extent.isEmpty else { return nil }
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        let ctx = CIContext(options: [.cacheIntermediates: false])
-        return ctx.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space)
+        return context.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space)
+    }
+
+    private static func drain() {
+        while true {
+            gate.lock()
+            guard let job = pending else {
+                pumping = false
+                gate.unlock()
+                return
+            }
+            pending = nil
+            gate.unlock()
+            guard let image = render(at: job.url, lens: job.grade.lens, apple: false, grade: job.grade, longest: 1400, draft: false) else {
+                job.deliver(nil)
+                continue
+            }
+            let shown = job.clip ? clipped(image) : image
+            let frame = RawFrame(image: shown, bins: bins(shown))
+            gate.lock()
+            let latest = pending == nil && previewTicket == job.ticket
+            gate.unlock()
+            job.deliver(latest ? frame : nil)
+        }
+    }
+
+    private static func remember(_ filter: CIRAWFilter, _ url: URL) -> RawAbility {
+        let ability = RawAbility(
+            local: filter.isLocalToneMapSupported,
+            lens: filter.isLensCorrectionSupported,
+            highlights: filter.isHighlightRecoverySupported
+        )
+        gate.lock()
+        abilityCache[url.path] = ability
+        gate.unlock()
+        return ability
+    }
+
+    private static func open(_ url: URL) -> CIRAWFilter? {
+        guard let filter = CIRAWFilter(imageURL: url) else { return nil }
+        gate.lock()
+        let already = fetched.contains(url.path)
+        gate.unlock()
+        if !already {
+            if #available(iOS 27.0, *) {
+                let wait = DispatchSemaphore(value: 0)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    _ = filter.downloadResources(timeout: 60) { error in
+                        if let error { print("FXPAN ciraw decoder \(error.localizedDescription)") }
+                        wait.signal()
+                    }
+                }
+                _ = wait.wait(timeout: .now() + 65)
+            }
+            gate.lock()
+            fetched.insert(url.path)
+            gate.unlock()
+        }
+        _ = remember(filter, url)
+        return filter
+    }
+
+    private static func read(_ filter: CIRAWFilter) -> RawGrade {
+        var grade = RawGrade()
+        grade.exposure = filter.exposure
+        grade.temperature = filter.neutralTemperature
+        grade.tint = filter.neutralTint
+        grade.asShotWB = true
+        grade.boost = filter.boostAmount
+        grade.shadow = filter.boostShadowAmount
+        grade.shadowBias = filter.shadowBias
+        if filter.isLocalToneMapSupported { grade.localTone = filter.localToneMapAmount }
+        if filter.isContrastSupported { grade.contrast = filter.contrastAmount }
+        if filter.isDetailSupported { grade.detail = filter.detailAmount }
+        if filter.isSharpnessSupported { grade.sharp = filter.sharpnessAmount }
+        if filter.isLuminanceNoiseReductionSupported { grade.luma = filter.luminanceNoiseReductionAmount }
+        if filter.isColorNoiseReductionSupported { grade.chroma = filter.colorNoiseReductionAmount }
+        if filter.isMoireReductionSupported { grade.moire = filter.moireReductionAmount }
+        grade.highlights = !filter.isHighlightRecoverySupported || filter.isHighlightRecoveryEnabled
+        grade.lens = filter.isLensCorrectionSupported && filter.isLensCorrectionEnabled
+        grade.gamut = filter.isGamutMappingEnabled
+        grade.edr = filter.extendedDynamicRangeAmount
+        return grade
+    }
+
+    /// Scene light first, then the curve that fits it on the screen. CIRAW already runs the stages in that order.
+    static func apply(_ grade: RawGrade, to filter: CIRAWFilter) {
+        filter.exposure = 0
+        if let x = grade.pickX, let y = grade.pickY {
+            let size = filter.nativeSize
+            filter.neutralLocation = CGPoint(x: CGFloat(x) * size.width, y: CGFloat(y) * size.height)
+        } else if !grade.asShotWB {
+            filter.neutralTemperature = grade.temperature
+            filter.neutralTint = grade.tint
+        }
+        filter.boostAmount = min(1, max(0, grade.boost))
+        filter.boostShadowAmount = grade.shadow
+        filter.shadowBias = grade.shadowBias
+        if filter.isLocalToneMapSupported { filter.localToneMapAmount = grade.localTone }
+        if filter.isContrastSupported { filter.contrastAmount = grade.contrast }
+        if filter.isDetailSupported { filter.detailAmount = grade.detail }
+        if filter.isSharpnessSupported { filter.sharpnessAmount = grade.sharp }
+        if filter.isLuminanceNoiseReductionSupported { filter.luminanceNoiseReductionAmount = grade.luma }
+        if filter.isColorNoiseReductionSupported { filter.colorNoiseReductionAmount = grade.chroma }
+        if filter.isMoireReductionSupported { filter.moireReductionAmount = grade.moire }
+        if filter.isHighlightRecoverySupported { filter.isHighlightRecoveryEnabled = grade.highlights }
+        filter.isGamutMappingEnabled = grade.gamut
+        filter.extendedDynamicRangeAmount = grade.edr
+        if filter.isLensCorrectionSupported { filter.isLensCorrectionEnabled = grade.lens }
+        filter.linearSpaceFilter = nil
+        if grade.exposure != 0, let adjust = CIFilter(name: "CIExposureAdjust") {
+            adjust.setValue(grade.exposure, forKey: kCIInputEVKey)
+            filter.linearSpaceFilter = adjust
+        }
     }
 
     /// The part of an iPhone photo CIRAW can actually do: local tone, open shadows, denoise, a little detail.
@@ -84,6 +270,54 @@ enum RawDevelop {
         if filter.isSharpnessSupported { filter.sharpnessAmount = 0.3 }
         if filter.isDetailSupported { filter.detailAmount = 0.8 }
         if filter.isContrastSupported { filter.contrastAmount = 0.28 }
+    }
+
+    private static func bins(_ image: CGImage) -> [Int] {
+        let w = image.width
+        let h = image.height
+        let space = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = ctx.data else { return Array(repeating: 0, count: 64) }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: h * ctx.bytesPerRow)
+        var bins = Array(repeating: 0, count: 64)
+        let row = ctx.bytesPerRow
+        for y in stride(from: 0, to: h, by: 4) {
+            for x in stride(from: 0, to: w, by: 4) {
+                let i = y * row + x * 4
+                let luma = 0.3 * Double(pixels[i]) + 0.59 * Double(pixels[i + 1]) + 0.11 * Double(pixels[i + 2])
+                bins[min(63, Int(luma) / 4)] += 1
+            }
+        }
+        return bins
+    }
+
+    /// Mark blown channels red and empty channels blue, the way a raw viewer shows clipping.
+    private static func clipped(_ image: CGImage) -> CGImage {
+        let w = image.width
+        let h = image.height
+        let space = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = ctx.data else { return image }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
+        let rowBytes = ctx.bytesPerRow
+        for y in 0..<h {
+            for x in Swift.stride(from: 0, to: w, by: 2) {
+                let i = y * rowBytes + x * 4
+                let r = pixels[i], g = pixels[i + 1], b = pixels[i + 2]
+                if r > 250 || g > 250 || b > 250 {
+                    pixels[i] = 255; pixels[i + 1] = 40; pixels[i + 2] = 40
+                } else if r < 6 && g < 6 && b < 6 {
+                    pixels[i] = 40; pixels[i + 1] = 90; pixels[i + 2] = 255
+                }
+            }
+        }
+        return ctx.makeImage() ?? image
     }
 }
 
@@ -171,11 +405,11 @@ enum Stitcher {
                 note?("Developing T")
                 let apple = photo.look.base == "apple"
                 let began = CFAbsoluteTimeGetCurrent()
-                guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens, apple: apple) else {
+                guard let t = RawDevelop.image(at: tNef, lens: photo.drive.cirawLens, apple: apple, grade: RawBook.grade(for: tNef)) else {
                     throw PTPError.message("Could not develop T")
                 }
                 note?("Developing R")
-                guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens, apple: apple) else {
+                guard let r = RawDevelop.image(at: rNef, lens: photo.drive.cirawLens, apple: apple, grade: RawBook.grade(for: rNef)) else {
                     throw PTPError.message("Could not develop R")
                 }
                 let size = { (url: URL) in ((try? files.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0) >> 20 }

@@ -7,6 +7,7 @@ enum Route: Hashable {
     case modes
     case playback
     case shot(String)
+    case raw(String)
     case system, cameras, rig, display, storage, about, apple
 }
 
