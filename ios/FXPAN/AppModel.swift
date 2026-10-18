@@ -221,6 +221,13 @@ final class AppModel {
         syncShoe()
     }
 
+    /// The frame is showing Shoe and the camera is down. Start it again.
+    func reviveShoe() {
+        guard shoeEnabled, !camera.live, !sleeping, !shooting, !recording, scenePhase == .active else { return }
+        guard !shoe.running else { return }
+        shoe.start(kind: bodyKind)
+    }
+
     func setShoe(_ on: Bool) {
         shoeOn = on
         persist()
@@ -581,7 +588,6 @@ final class AppModel {
         }
         if shooting { return }
         shooting = true
-        ingest()
         let wait = photo.drive.timer
         if wait > 0 {
             for s in stride(from: wait, through: 1, by: -1) {
@@ -590,7 +596,13 @@ final class AppModel {
             }
             countdown = nil
         }
+        let viewfinder = await shoe.snapshot()
+        ingest()
         let stamp = CaptureIndex.stampNow()
+        if let viewfinder {
+            let url = Disk.captures.appendingPathComponent("V_\(stamp).jpg")
+            try? Stitcher.jpeg(viewfinder, to: url)
+        }
         do {
             let grabbed = try await camera.capture(stamp: stamp, photo: photo) {
                 guard self.photo.light.autoMeter, !self.sleeping, !self.canon else { return self.photo }
@@ -1253,7 +1265,7 @@ final class AppModel {
         let ana = photo.frame.squeeze > 1.01 ? Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg") : nil
         let rig = rig
         let photo = photo
-        let mirrorScene = (Stitcher.isD7000File(t) || Stitcher.isD7000File(r)) ? false : bodyKind.mirrorScene
+        let mirrorScene = bodyKind.mirrorScene
         do {
             let note: StitchNote = { phase in
                 Task { @MainActor in self.noteStitch(phase) }

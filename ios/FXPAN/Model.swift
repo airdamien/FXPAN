@@ -199,9 +199,9 @@ enum BodyKind: Equatable {
     /// DXPAN is 42.48 × 15.6 mm. FXPAN is 64.80 × 23.9 mm.
     var aspect: Double { self == .d7000 ? 42.48 / 15.6 : 2.712 }
     var megapixels: Double { self == .d7000 ? 29 : 65 }
-    /// The aligned D800 pair is a mirror of the scene, so live view and the stitch are flopped.
-    /// A D7000 pair already reads forwards. That same flop turns it backwards.
-    var mirrorScene: Bool { self == .d800 }
+    /// The aligned pair is a mirror of the scene on both bodies. Live view and the stitch are flopped
+    /// so the words sit to the right of the sword tang, the way the shoe sees them.
+    var mirrorScene: Bool { self == .d800 || self == .d7000 }
 }
 
 struct Rig: Codable, Equatable {

@@ -714,8 +714,9 @@ struct Flow: Layout {
 struct PanoFrame: View {
     @Environment(AppModel.self) private var model
     var showGuide = true
-    var showLiveHint = false
     var flush = false
+    /// False on the home frame while another screen is covering it, so that screen is the only preview.
+    var shoePicture = true
     /// False while the picture is zoomed, so a tap still fits the frame instead of pinning focus.
     var aiming = true
 
@@ -725,10 +726,11 @@ struct PanoFrame: View {
         let _ = model.cameraRevision
         let squeeze = model.photo.frame.squeeze
         let shoeStandIn = model.shoeEnabled && !model.camera.live
+        let showShoe = shoeStandIn && shoePicture
         let bodies = [model.camera.slots[.t]?.model, model.camera.slots[.r]?.model].compactMap { $0 }.filter { !$0.isEmpty }
         let mirrorShoe = !bodies.isEmpty && !bodies.contains { BodyKind.from($0) == .d7000 }
         let aspect: Double = {
-            if shoeStandIn { return model.bodyKind.aspect }
+            if showShoe { return model.bodyKind.aspect }
             if let preview = model.preview, preview.size.height > 1 {
                 return Double(preview.size.width / preview.size.height)
             }
@@ -741,9 +743,9 @@ struct PanoFrame: View {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFit()
-                } else if shoeStandIn, model.shoe.running {
+                } else if showShoe, model.shoe.running {
                     ShoePreview(
-                        session: model.shoe.session,
+                        finder: model.shoe,
                         device: model.shoe.device,
                         sensorH: model.shoe.sensorH,
                         sensorV: model.shoe.sensorV,
@@ -756,15 +758,7 @@ struct PanoFrame: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .scaleEffect(x: mirrorShoe ? -1 : 1, y: 1)
                     ShoeMarks(overlap: model.rig.overlap)
-                    Text(model.shoe.lens.isEmpty ? "Shoe" : "Shoe · \(model.shoe.lens)")
-                        .font(Theme.font(11, weight: .semibold))
-                        .foregroundStyle(Theme.gold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(8)
-                } else if shoeStandIn, model.shoe.refused {
+                } else if showShoe, model.shoe.refused {
                     VStack(spacing: 8) {
                         Text("Camera access is off")
                             .font(Theme.font(16, weight: .medium))
@@ -772,24 +766,18 @@ struct PanoFrame: View {
                             .font(Theme.font(13))
                             .foregroundStyle(Theme.dim)
                     }
-                } else if shoeStandIn {
+                } else if showShoe {
                     Text("Shoe")
                         .font(Theme.font(16, weight: .medium))
                         .foregroundStyle(Theme.dim)
+                        .onAppear { model.reviveShoe() }
                 } else if let preview = model.preview {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFit()
                 } else {
-                    VStack(spacing: 8) {
-                        Text("No frame yet")
-                            .font(Theme.font(16, weight: .medium))
-                        if showLiveHint {
-                            Text("Tap to start live view")
-                                .font(Theme.font(13))
-                                .foregroundStyle(Theme.dim)
-                        }
-                    }
+                    Text("No frame yet")
+                        .font(Theme.font(16, weight: .medium))
                 }
                 if showGuide, let ratio = guideRatio {
                     GuideLines(ratio: ratio, frame: aspect, bottomInset: 0)
@@ -798,6 +786,23 @@ struct PanoFrame: View {
                     Loupe()
                 }
                 focusOverlay(aspect: aspect)
+            }
+            .overlay(alignment: .topLeading) {
+                if !model.camera.live {
+                    Button {
+                        model.setShoe(!model.shoeEnabled)
+                    } label: {
+                        Text(model.shoeEnabled ? (model.shoe.lens.isEmpty ? "Shoe" : "Shoe · \(model.shoe.lens)") : "Shoe off")
+                            .font(Theme.font(11, weight: .semibold))
+                            .foregroundStyle(model.shoeEnabled ? Theme.gold : Theme.dim)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.55), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.shoeEnabled ? "Turn the phone camera off" : "Turn the phone camera on")
+                    .padding(8)
+                }
             }
             .aspectRatio(aspect, contentMode: .fit)
             .frame(maxWidth: .infinity)

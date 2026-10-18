@@ -119,7 +119,7 @@ struct HomeView: View {
     private func frame(flush: Bool = false) -> some View {
         let scale = min(8, max(1, zoom * magnify))
         return ZStack(alignment: .top) {
-            PanoFrame(showLiveHint: !model.camera.live && zoom <= 1.02, flush: flush, aiming: zoom <= 1.02)
+            PanoFrame(flush: flush, shoePicture: pane == .picture || model.route.isEmpty, aiming: zoom <= 1.02)
                 .scaleEffect(scale, anchor: .center)
                 .offset(x: pan.width + drag.width, y: pan.height + drag.height)
                 .gesture(MagnifyGesture()
@@ -144,17 +144,12 @@ struct HomeView: View {
                         pan.height += value.translation.height
                         drag = .zero
                     })
-                .onTapGesture(count: 2) {
+                .simultaneousGesture(TapGesture(count: 2).onEnded {
                     zoom = 1
                     magnify = 1
                     pan = .zero
                     drag = .zero
-                }
-                .onTapGesture {
-                    guard zoom <= 1.02 else { return }
-                    if model.photo.focus.aid != "off", model.camera.live { return }
-                    Task { await model.toggleLive() }
-                }
+                })
             if model.simulate, model.photo.focus.aid != "off" {
                 HStack {
                     Spacer()

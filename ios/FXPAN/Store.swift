@@ -72,7 +72,7 @@ enum Disk {
             guard name.hasPrefix("P_"), name.hasSuffix(".json") else { return nil }
             return String(name.dropFirst(2).dropLast(5))
         }
-        let keep = Array(Set(stamps)).sorted().suffix(4)
+        let keep = Array(Set(stamps)).sorted().suffix(5)
         guard !keep.isEmpty else { return }
         let dest = support.appendingPathComponent("Inspect", isDirectory: true)
         try? files.removeItem(at: dest)
@@ -147,6 +147,8 @@ struct ShotFiles: Identifiable, Equatable {
     var movie: URL?
     var movT: URL?
     var movR: URL?
+    /// The hotshoe viewfinder at the shutter. Kept with the set while the aim is being checked.
+    var finder: URL?
     var id: String { stamp }
     var ready: Bool { t != nil && r != nil }
 
@@ -254,6 +256,7 @@ enum CaptureIndex {
                 if shot.movie != nil { row.movie = shot.movie }
                 if shot.movT != nil { row.movT = shot.movT }
                 if shot.movR != nil { row.movR = shot.movR }
+                if shot.finder != nil { row.finder = shot.finder }
                 by[shot.stamp] = row
             }
         }
@@ -276,8 +279,13 @@ enum CaptureIndex {
         guard stem.count > 2, stem.dropFirst(1).hasPrefix("_") else { return nil }
         let role = stem.prefix(1)
         let stamp = String(stem.dropFirst(2))
-        guard role == "T" || role == "R" else { return nil }
+        guard role == "T" || role == "R" || role == "V" else { return nil }
         var row = ShotFiles(stamp: stamp)
+        if role == "V" {
+            guard ext == "jpg" || ext == "jpeg" else { return nil }
+            row.finder = url
+            return row
+        }
         if ext == "nef" {
             if role == "T" { row.nefT = url } else { row.nefR = url }
         } else if ext == "jpg" || ext == "jpeg" {
@@ -293,7 +301,7 @@ enum CaptureIndex {
     static func delete(stamp: String) {
         let root = Disk.captures
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        let stems: Set<String> = ["T_\(stamp)", "R_\(stamp)", "P_\(stamp)", "P_\(stamp)_ana"]
+        let stems: Set<String> = ["T_\(stamp)", "R_\(stamp)", "P_\(stamp)", "P_\(stamp)_ana", "V_\(stamp)"]
         for name in names {
             let stem = (name as NSString).deletingPathExtension
             guard stems.contains(stem) else { continue }

@@ -28,7 +28,7 @@ struct StitchReport: Codable {
     var lag: Int?
     /// The saved panorama is already turned so text reads forwards. Missing on older files, which are turned when shown.
     var turned: Bool?
-    /// True when this file was flopped so a mirrored pair reads forwards. False when the pair already read forwards, as on a D7000. Missing on older files.
+    /// True when this file was flopped so the mirrored pair reads forwards. False when it was saved unflopped and still reads backwards. Missing on older files.
     var sceneMirror: Bool?
 }
 
@@ -90,15 +90,8 @@ enum RawDevelop {
 enum Stitcher {
     static let work = 360
 
-    static func isD7000File(_ url: URL) -> Bool {
-        if let model = FrameFacts.cameraModel(url), BodyKind.from(model) == .d7000 { return true }
-        if let (w, h) = FrameFacts.pixels(url), (2600...3500).contains(h), w <= 5300 { return true }
-        return false
-    }
-
     static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
-        let mirrorScene = (isD7000File(tURL) || isD7000File(rURL)) ? false : mirrorScene
         if photo.drive.engine == "hugin" {
             if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop) {
                 return try finish(
@@ -207,8 +200,7 @@ enum Stitcher {
         rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
         try StitchGate.check(stop)
-        // R is flopped to meet T. On a D800 that pair is a mirror of the scene, so it is flopped.
-        // A D7000 pair already reads forwards, and the same flop turns it backwards.
+        // R is flopped to meet T. That pair is a mirror of the scene on both bodies, so it is flopped.
         var cg = mirrorScene ? flop(image) : image
         if !LookBook.identity(photo.look) {
             note?("Grading the look")
@@ -375,18 +367,17 @@ enum Stitcher {
     struct Hand {
         /// Flop a saved file on the way to the screen.
         var flop: Bool
-        /// After that flop, T is the left half. A D7000 pair keeps T on the right.
+        /// After that flop, T is the left half.
         var tOnLeft: Bool
     }
 
     /// How to show a saved panorama. Older D800 files omit `turned` and were saved mirrored.
-    /// A D7000 stitch from before `sceneMirror` was recorded was flopped like a D800, so it reads backwards.
-    static func hand(turned: Bool?, sceneMirror: Bool?, savedHeight: Int?) -> Hand {
-        if sceneMirror == false { return Hand(flop: false, tOnLeft: false) }
+    /// A file with `sceneMirror` false was left unflopped, so it still reads backwards.
+    /// A D7000 stitch from before `sceneMirror` was recorded was already flopped, and that is the forwards image.
+    static func hand(turned: Bool?, sceneMirror: Bool?, savedHeight _: Int?) -> Hand {
+        if sceneMirror == true { return Hand(flop: false, tOnLeft: true) }
+        if sceneMirror == false { return Hand(flop: true, tOnLeft: true) }
         if turned != true { return Hand(flop: true, tOnLeft: true) }
-        if let savedHeight, (2600...3600).contains(savedHeight) {
-            return Hand(flop: true, tOnLeft: false)
-        }
         return Hand(flop: false, tOnLeft: true)
     }
 
@@ -395,16 +386,9 @@ enum Stitcher {
         return shown.flop ? flop(image) : image
     }
 
-    /// The D7000 still is 4928×3264. Its stitch is about 3264 tall. Either one skips the scene flop.
-    static func mirrorScene(shot: ShotFiles) -> Bool {
-        for url in [shot.t, shot.r].compactMap({ $0 }) {
-            if isD7000File(url) { return false }
-        }
-        if let report = FrameFacts.report(shot.stamp) {
-            if (2600...3600).contains(report.height) { return false }
-            if let scene = report.sceneMirror { return scene }
-        }
-        return true
+    /// The raw pair reads backwards on both bodies. Flop it for live view and for a stitch that has not been written yet.
+    static func mirrorScene(shot _: ShotFiles) -> Bool {
+        true
     }
 
     // MARK: - Match

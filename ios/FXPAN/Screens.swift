@@ -1413,7 +1413,7 @@ struct DisplayScreen: View {
                         model.setIdle(Int(value) ?? 0)
                     }
                 }
-                RowBlock(title: "Shoe", value: model.shoeEnabled ? "On" : "Off", hint: "While the bodies are out of live view, this phone's camera stands in for the 180mm and draws the T and R frames.") {
+                RowBlock(title: "Shoe", value: model.shoeEnabled ? "On" : "Off", hint: "While the bodies are out of live view, this phone's camera stands in for the 180mm. The Shoe label on the frame turns it off.") {
                     ChipRow(options: [("1", "On"), ("0", "Off")], selected: model.shoeEnabled ? "1" : "0") { value in
                         model.setShoe(value == "1")
                     }
