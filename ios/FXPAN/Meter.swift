@@ -26,11 +26,10 @@ struct MeterAim: Equatable {
 enum ExposureMeter {
     /// One count on 0xD1B1.
     static let count = 1.0 / 12.0
-    /// The body's own zero is a bit dark. Aim the bar here instead.
-    static let bias = 2.0 / 3.0
-    static var targetCounts: Int { Int((bias / count).rounded()) }
-    /// Leave the dials alone inside two counts of the aim.
+    /// Leave the dials alone inside two counts of the body's zero.
     private static let hold = 2.0 / 12.0
+    /// The prism is already calibrated. Zero is the exposure.
+    static let targetCounts = 0
 
     static func stops(counts: Int) -> Double { Double(counts) * count }
 
@@ -40,7 +39,7 @@ enum ExposureMeter {
         return MeterAim(maxISO: max(100, iso), slowest: max(1.0 / 8000, slow))
     }
 
-    static let programHint = "ISO runs from 100 up to the max while the shutter stays at the minimum speed. The shutter slows past that only after ISO is maxed, and speeds up only after ISO is back at 100."
+    static let programHint = "The shutter is solved first, down to the minimum speed, at ISO 100. ISO climbs the whole list only when the shutter would be slower, and a bright bar walks it back down before the shutter speeds up."
 
     static func plan(master: Role, read: MeterRead?, shutter: String, iso: String, kind: BodyKind, aim: MeterAim? = nil) -> MeterPlan {
         let who = master.rawValue
@@ -51,8 +50,8 @@ enum ExposureMeter {
             let why = read.detail.isEmpty ? "meter did not answer" : read.detail
             return MeterPlan(lines: ["\(who) \(why)"], shutter: nil, iso: nil, ready: false)
         }
-        let stops = stops(counts: counts)
-        var lines = ["Master \(who) · \(fmt(stops))"]
+        let measured = stops(counts: counts)
+        var lines = ["Master \(who) · \(fmt(measured))"]
         if abs(counts) >= 60 {
             lines.append("The bar is at its end, so the miss may be larger")
         }
@@ -63,8 +62,8 @@ enum ExposureMeter {
             lines.append("Set a shutter and an ISO, then the bar can move them")
             return MeterPlan(lines: lines, shutter: nil, iso: nil, ready: false)
         }
-        let error = stops - bias
-        // A reading inside the hold band still slides onto the program line, so a correct exposure at a high ISO comes back down.
+        let error = measured
+        // Inside the hold the exposure stays put, but the pair still sits on the program line: lowest ISO that keeps the shutter at the minimum.
         let need = aim == nil && abs(error) < hold ? nil : (abs(error) < hold ? 0 : -error)
         if need == nil {
             lines.append("\(Catalog.fmtShut(shutter)) · \(Catalog.fmtISO(iso, kind: kind)) holds")
@@ -78,9 +77,9 @@ enum ExposureMeter {
             return MeterPlan(lines: lines, shutter: shutter, iso: iso, ready: false)
         }
         if abs(error) < hold {
-            lines.append("On the aim, so the pair slides to a lower ISO")
+            lines.append("On zero, so the pair sits on the minimum shutter")
         } else {
-            let way = error < 0 ? "dark of the aim" : "bright of the aim"
+            let way = error < 0 ? "dark of zero" : "bright of zero"
             lines.append("\(String(format: "%.1f", abs(error))) \(way)")
         }
         lines.append("\(Catalog.fmtShut(shutter)) → \(Catalog.fmtShut(next.shutter))")
@@ -109,8 +108,8 @@ enum ExposureMeter {
         return targetCounts + (counts > 0 ? 12 : -12)
     }
 
-    /// Nikon aperture-priority auto ISO, with ISO spent before the shutter slows.
-    /// The shutter sits on the minimum speed while ISO runs from 100 to the max. It goes slower only after that max, and faster only after ISO is back at 100.
+    /// Aperture-priority auto ISO, the order Nikon, Fuji, and Sony publish.
+    /// Solve the shutter at ISO 100. Climb the list only when that shutter would be slower than the minimum, and walk back down it before the shutter goes faster. Past the maximum ISO, the shutter may be slower than the minimum.
     private static func program(seconds current: Double, iso isoNow: Double, need: Double, aim: MeterAim) -> (shutter: String, iso: String) {
         let fastest = 1.0 / 8000.0
         let slowest = 30.0
@@ -125,12 +124,24 @@ enum ExposureMeter {
         var nextSec = product / nextISO
         if nextSec < fastest {
             nextSec = fastest
-            nextISO = min(max(product / nextSec, base), ceiling)
+            nextISO = min(max(product / nextSec, base), maxISO)
         } else if nextSec > slowest {
             nextSec = slowest
-            nextISO = min(max(product / nextSec, base), ceiling)
+            nextISO = min(max(product / nextSec, base), maxISO)
         }
-        return (nearestShutter(nextSec), nearestISO(nextISO))
+        // Snap to a listed ISO, then give the shutter what remains. A third-stop miss stays a third stop instead of rounding up into Hi.
+        if let snapped = Double(nearestISO(nextISO, cap: maxISO)), snapped > 0 {
+            nextISO = snapped
+            nextSec = product / nextISO
+            if nextSec < fastest {
+                nextSec = fastest
+                nextISO = min(max(product / nextSec, base), maxISO)
+            } else if nextSec > slowest {
+                nextSec = slowest
+                nextISO = min(max(product / nextSec, base), maxISO)
+            }
+        }
+        return (nearestShutter(nextSec), nearestISO(nextISO, cap: maxISO))
     }
 
     static func fmt(_ stops: Double) -> String {
@@ -193,7 +204,7 @@ struct MeterScreen: View {
         )
         DimPage(title: "Meter", crumb: "Light", controls: {
             VStack(alignment: .leading, spacing: 10) {
-                RowBlock(title: "From the master", value: master.rawValue, hint: auto ? "Auto is writing these limits to both bodies." : "Aims two thirds of a stop brighter than the body's zero. Shutter and ISO share the bar, out to 30 seconds and ISO 25600.") {
+                RowBlock(title: "From the master", value: master.rawValue, hint: auto ? "Auto is writing these limits to both bodies." : "The bar settles on the body's zero. Half the miss moves the shutter, half moves ISO.") {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(plan.lines, id: \.self) { line in
                             Text(line)
