@@ -30,7 +30,8 @@ $fn = 48;
 
 // --- shoe foot, ISO 518 ------------------------------------------------------
 FOOT_W = 18.3;   // across the shoe; the slot is 18.6
-FOOT_L = 18.0;   // along the slide
+FOOT_L = 36.0;   // along the slide, long enough to enter from either end
+POST_L = 16.0;   // upright, only the middle; both ends of the rail stay clear
 FOOT_T = 2.05;   // under the rail lips. 1.9 rattled on the D800
 NECK_W = 12.0;   // between the lips, 12.5 apart
 NECK_H = 2.4;
@@ -55,7 +56,9 @@ NUT_T  = 2.6;
 function nut_r() = NUT_AF / cos(30) / 2;
 
 // --- iPhone 17 Pro Max, Apple silicone case ----------------------------------
-PM_W    = 82.13;   // measured, across the long edges
+// Inside the case, across the long edges. Bare body is 78.88
+// (x -0.45..78.43); the case adds 3.52.
+PM_W    = 82.4;
 PM_T    = 10.9;    // edge thickness in the case. Measure it.
 PM_TILT = 30;      // screen leans back this far from vertical
 PM_GAP  = 0.15;    // each side, at the long edges
@@ -73,7 +76,9 @@ PM_LOW_Z   = 14;   // lowest point of the cradle over the foot's base
 // 30, so its view lines up with the stitch. The phone lies the other way
 // round: USB-C on the right, camera plateau on the left.
 PM_MS_TILT = 12;
-PM_LEN     = 166;  // long edge, in the case
+// Long edge in the case. Bare length is 163.43; the case adds the
+// same 3.52 it adds across the width.
+PM_LEN     = 166.95;
 // Camera plateau on the 1:1 model (Furkan Bahçavan, Printables 1482045).
 // The outline, not the lens rings: x 5.35..72.50 and y 120.80..158.13 on
 // the bare phone (body x -0.45..78.43, y 0..163.43). That is 67.2 across
@@ -81,12 +86,13 @@ PM_LEN     = 166;  // long edge, in the case
 // about 9. In the case the island measures 72 across and 42.6 along.
 // The cradle holds the cased phone centred on the same point, so the
 // window sits at -57.8 along.
-PM_CAM   = [42.6, 72];    // opening, along the phone and across it
+PM_CAM   = [42.6, 72];    // cased island, along the phone and across it
 PM_CAM_X = -57.8;         // centre, phone centre at 0, plateau toward -X
 PM_CAM_Y = 0;
-// MagSafe puck, press fit. The ring's centre is the middle of the phone,
-// which clears the plateau.
-PM_MS_X   = 4;
+PM_CAM_FIT = 1.5;         // extra around the island so the case drops in
+// MagSafe puck, press fit. The near edge sits halfway from the old
+// centre-of-phone edge (x = -23.9) to the camera island (x = -36.5).
+PM_MS_X   = -2.3;
 PM_MS_D   = 55.7;       // snug on the 55.5 puck
 PM_MS_T   = 4.6;        // puck is 4.5, finishes just under the plate
 // USB-C, right end. The opening is wider than the plug so a cable seats.
@@ -94,7 +100,7 @@ PM_USB_W  = 16;
 PM_USB_H  = 8;
 // Bare body corner is 15 mm. The case grows it, same as the Duo.
 PM_EDGE   = 17;
-PM_MS_LIP = 4.0;        // phone is 10.9 thick; the screen stays above this
+PM_MS_LIP = 12.0;       // three times the 4 mm wall; phone edge is 10.9
 
 // --- iPhone Duo lower half: [along the hinge, hinge to front edge, thickness]
 // Bare is one half of the open phone: 117.8 along the hinge, 164.6 / 2 =
@@ -127,6 +133,7 @@ MS_CABLE_D = 3.2;  // groove depth below the pocket floor
 // Pro Max lead exits the right end above the USB-C port. The port owns
 // the centre; this is the centre of the groove, clear of the plug.
 PM_CABLE_Y = PM_USB_W / 2 + 8 + MS_CABLE / 2;
+PM_CABLE_R = 12;   // bend off the puck rim before the groove runs straight
 MS_FLOOR = DUO_RIB_H;
 // The countersink cone needs this much pad below the pocket floor to taper
 // from the head diameter to the screw bore. It stays inside the base, so
@@ -216,23 +223,50 @@ module socket_cut(face_z) {
         cylinder(h = 1, d = M3_CSK_D);
 }
 
-module shoe_foot() {
-    hull() {
-        translate([0, 0, 0.4])
-            linear_extrude(FOOT_T - 0.4)
-                square([FOOT_W, FOOT_L], center = true);
-        linear_extrude(0.4)
-            square([FOOT_W - 0.8, FOOT_L - 0.8], center = true);
-    }
+// The part that slides in the shoe. Nothing else occupies this height.
+module shoe_rail() {
+    linear_extrude(FOOT_T)
+        square([FOOT_W, FOOT_L], center = true);
     translate([0, 0, FOOT_T - 0.01])
         linear_extrude(NECK_H + 0.02)
             square([NECK_W, FOOT_L], center = true);
+}
+
+// Upright above the neck, only in the middle, so either end of the rail
+// can enter the shoe.
+module shoe_post() {
     hull() {
         translate([0, 0, plat_z0()])
-            linear_extrude(0.01) square([NECK_W, FOOT_L], center = true);
+            linear_extrude(0.01) square([NECK_W, POST_L], center = true);
         translate([0, 0, plat_z1() - 0.01])
-            linear_extrude(0.01) square([plat_w(), FOOT_L], center = true);
+            linear_extrude(0.01) square([plat_w(), POST_L], center = true);
     }
+}
+
+module shoe_foot() {
+    shoe_rail();
+    shoe_post();
+}
+
+// Behind the upright's back face. The pad's outer face is that plane;
+// cutting to it lets the shoe print lying on its back.
+module upright_back_clear() {
+    translate([-200, -200, -400])
+        cube([400, 400, 396]);
+}
+
+// On the projecting ends, remove everything the hotshoe lips would hit.
+// The rail itself stays.
+module shoe_end_clear() {
+    reach = FOOT_L / 2 - POST_L / 2 + 0.4;
+    for (s = [-1, 1])
+        translate([0, s * (POST_L / 2 + reach / 2), FOOT_T])
+            difference() {
+                translate([0, 0, plat_z1() / 2])
+                    cube([FOOT_W + 40, reach, plat_z1()], center = true);
+                translate([0, 0, plat_z1() / 2])
+                    cube([NECK_W - 0.4, reach + 2, plat_z1() + 2], center = true);
+            }
 }
 
 // Inward lip on top of a grip wall, flat under the phone face, 45° on top so
@@ -349,15 +383,17 @@ module pm_ms_lip_quadrant() {
         }
 }
 
-// Past the corner the retainer slopes back into the plate, short of the USB.
+// Past the corner the retainer slopes back into the plate. It stops
+// short of the USB so a plug can seat on the right end.
 module pm_ms_lip_side() {
     x0 = PM_LEN / 2;
     y0 = -(PM_W / 2 - PM_EDGE);
+    y1 = -(PM_USB_W / 2 + 6);
     h = pm_pad_top() + PM_MS_LIP;
     hull() {
         translate([x0 - 0.4, y0 - 0.3, 0])
             cube([CLIP_WALL + 0.4, 0.4, h]);
-        translate([x0 - 0.01, y0 + 12, 0])
+        translate([x0 - 0.01, y1, 0])
             cube([0.2, 0.4, pm_pad_top()]);
     }
 }
@@ -376,26 +412,63 @@ module pm_ms_lip() {
     }
 }
 
+// Groove from the puck rim. Wider at the rim, then a bend into the
+// straight run so the lead is not kinked as it leaves the puck.
+module pm_ms_cable_cut() {
+    dx = sqrt(pow(PM_MS_D / 2, 2) - pow(PM_CABLE_Y, 2));
+    a = atan2(PM_CABLE_Y, dx);
+    R = PM_CABLE_R;
+    S = [PM_MS_X + dx, PM_CABLE_Y];
+    C = S + R * [sin(a), -cos(a)];
+    E = C + R * [0, 1];
+    z = pm_pad_top() - PM_MS_T - MS_CABLE_D;
+    h = PM_MS_T + MS_CABLE_D + 1;
+    mouth = MS_CABLE + 4;
+    n = 12;
+    translate([0, 0, z])
+        linear_extrude(h)
+            union() {
+                // Constant width around the bend, so the inside of the
+                // turn stays a smooth radius. It narrows on the straight.
+                for (i = [0:n - 1]) {
+                    a0 = a * (1 - i / n);
+                    a1 = a * (1 - (i + 1) / n);
+                    hull() {
+                        translate(i == 0 ? S - 3 * [cos(a), sin(a)]
+                                         : C + R * [-sin(a0), cos(a0)])
+                            circle(d = mouth, $fn = 24);
+                        translate(C + R * [-sin(a1), cos(a1)])
+                            circle(d = mouth, $fn = 24);
+                    }
+                }
+                hull() {
+                    translate(E) circle(d = mouth, $fn = 24);
+                    translate([E[0] + 14, E[1] - MS_CABLE / 2])
+                        square([0.2, MS_CABLE]);
+                }
+                translate([E[0] + 14, E[1] - MS_CABLE / 2])
+                    square([PM_LEN / 2 + 2 - (E[0] + 14), MS_CABLE]);
+            }
+}
+
 module pm17_ms_cradle() {
     difference() {
         union() {
             linear_extrude(pm_pad_top()) pm_ms_outline(0);
             pm_ms_lip();
         }
-        // Camera plateau, open through the plate.
+        // Camera plateau, open through the plate, grown so the cased
+        // island sits down instead of hanging on the rim.
         translate([PM_CAM_X, PM_CAM_Y, -1])
             linear_extrude(pm_pad_top() + 2)
-                rrect(PM_CAM[0], PM_CAM[1], 11);
+                rrect(PM_CAM[0] + 2 * PM_CAM_FIT, PM_CAM[1] + 2 * PM_CAM_FIT,
+                      11 + PM_CAM_FIT);
         // MagSafe puck, pressed in from the phone side.
         translate([PM_MS_X, 0, pm_pad_top() - PM_MS_T])
             cylinder(h = PM_MS_T + 1, d = PM_MS_D, $fn = 96);
-        // Cable groove, open through the top. Floor sits below the pocket.
-        // It leaves the rim and runs out the right end above the USB port.
-        cable_r = sqrt(pow(PM_MS_D / 2, 2) - pow(PM_CABLE_Y + MS_CABLE / 2, 2));
-        translate([PM_MS_X + cable_r - 4, PM_CABLE_Y - MS_CABLE / 2,
-                   pm_pad_top() - PM_MS_T - MS_CABLE_D])
-            cube([PM_LEN / 2 + 2 - (PM_MS_X + cable_r - 4), MS_CABLE,
-                  PM_MS_T + MS_CABLE_D + 1]);
+        // Cable groove, open through the top. A wide mouth and a bend
+        // at the rim, then straight out the right end above the USB port.
+        pm_ms_cable_cut();
         // USB-C on the right end, centred. Anything outside the phone
         // edge in this band is open so a cable seats.
         translate([PM_LEN / 2, -PM_USB_W / 2, -0.1])
@@ -433,7 +506,9 @@ module pm17_ms_shoe() {
                         square([KEY_W + 14, KEY_L + 10], center = true);
             hull() {
                 intersection() {
-                    shoe_foot();
+                    translate([0, 0, plat_z1() - 0.4])
+                        cube([80, 80, 1], center = true);
+                    shoe_post();
                     pm_ms_back();
                 }
                 pm17_ms_place()
@@ -453,6 +528,8 @@ module pm17_ms_shoe() {
                     rotate([0, 0, 90])
                         cylinder(h = 40 - 3, r = nut_r(), $fn = 6);
             }
+        shoe_end_clear();
+        pm17_ms_place() upright_back_clear();
     }
 }
 
@@ -463,7 +540,7 @@ module pm17_shoe() {
             hull() {
                 translate([0, 0, plat_z1() - 0.01])
                     linear_extrude(0.01)
-                        square([plat_w(), FOOT_L], center = true);
+                        square([plat_w(), POST_L], center = true);
                 pm17_place()
                     translate([0, PM_KEY_Y, -4])
                         linear_extrude(4)
@@ -483,6 +560,8 @@ module pm17_shoe() {
                     rotate([0, 0, 90])
                         cylinder(h = 40 - 3, r = nut_r(), $fn = 6);
             }
+        shoe_end_clear();
+        pm17_place() upright_back_clear();
     }
 }
 
@@ -698,7 +777,9 @@ module duo_flat_shoe() {
                         square([KEY_W + 14, KEY_L + 10], center = true);
             hull() {
                 intersection() {
-                    shoe_foot();
+                    translate([0, 0, plat_z1() - 0.4])
+                        cube([80, 80, 1], center = true);
+                    shoe_post();
                     duo_flat_back();
                 }
                 duo_flat_place()
@@ -718,6 +799,8 @@ module duo_flat_shoe() {
                     rotate([0, 0, 90])
                         cylinder(h = 40 - 3, r = nut_r(), $fn = 6);
             }
+        shoe_end_clear();
+        duo_flat_place() upright_back_clear();
     }
 }
 
@@ -735,6 +818,7 @@ module duo_shoe() {
         translate([0, 0, -0.1])
             rotate([0, 0, 90])
                 cylinder(h = plat_z1() - 1.0 + 0.1, r = nut_r(), $fn = 6);
+        shoe_end_clear();
     }
 }
 
@@ -745,7 +829,7 @@ module assembly() {
     if ($preview)
         color("Black", 0.4) pm17_place()
             translate([0, 0, pm_pad_top() + PM_T / 2])
-                cube([166, PM_W, PM_T], center = true);
+                cube([PM_LEN, PM_W, PM_T], center = true);
     translate([0, -150, 0]) {
         color("DimGray") pm17_ms_shoe();
         color("SlateGray") pm17_ms_place() pm17_ms_cradle();
