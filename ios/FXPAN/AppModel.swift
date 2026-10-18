@@ -8,7 +8,7 @@ enum Route: Hashable {
     case playback
     case shot(String)
     case raw(String)
-    case system, cameras, rig, display, storage, about, apple
+    case system, cameras, rig, display, storage, about, apple, noise
 }
 
 struct Toast: Equatable {
@@ -60,6 +60,11 @@ final class AppModel {
     var focusPlace: FocusPlace = .both
     var playingFocus = false
     var simulate = false
+    /// High ISO reduction from the body profile. Off leaves the develop as graded.
+    var highISO = false
+    var noiseBusy = false
+    var noiseStatus = ""
+    private var noiseStop = false
     /// Both Nikons are recording. The shutter stops the clips and stitches them.
     var recording = false
     /// One Canon on USB. Picture and transfer only. The Nikon pair is left alone.
@@ -143,6 +148,7 @@ final class AppModel {
         simulate = state.simulate
         canon = state.canon
         shoeOn = state.shoeOn
+        highISO = NoiseBook.isOn
         if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -305,6 +311,105 @@ final class AppModel {
         body(&rig)
         persist()
         ingest()
+    }
+
+    func setHighISO(_ on: Bool) {
+        highISO = on
+        NoiseBook.setOn(on)
+    }
+
+    /// Fire each paired body through a manual ISO and shutter walk, then store variance = a × mean + b on its serial.
+    func profileNoise() {
+        if noiseBusy {
+            noiseStop = true
+            noiseStatus = "Stopping"
+            return
+        }
+        if shooting || recording {
+            noiseStatus = "Wait for the shutter"
+            return
+        }
+        if canon {
+            noiseStatus = "The profiler drives the Nikon pair"
+            return
+        }
+        let ready = Role.allCases.filter { role in
+            let slot = camera.slots[role] ?? BodyState()
+            return slot.paired && slot.online
+        }
+        if ready.isEmpty && !simulate {
+            noiseStatus = "Pair a body on USB first"
+            return
+        }
+        let roles = ready.isEmpty ? [Role.t, Role.r] : ready
+        let isos = ["200", "800", "1600", "3200", "6400"]
+        let shutters = ["1/1000", "1/60", "1/4"]
+        let total = roles.count * isos.count * shutters.count
+        noiseBusy = true
+        noiseStop = false
+        shooting = true
+        noiseStatus = "Starting"
+        Task {
+            defer {
+                self.noiseBusy = false
+                self.shooting = false
+                self.noiseStop = false
+                let photo = self.photo
+                Task { await self.camera.apply(photo, force: true) }
+            }
+            await self.camera.setLive(false)
+            var bag: [String: (model: String, samples: [NoiseSample])] = [:]
+            var lastError: String?
+            var step = 0
+            var halt = false
+            for role in roles {
+                for iso in isos {
+                    for shutter in shutters {
+                        if self.noiseStop { halt = true; break }
+                        await Task.yield()
+                        step += 1
+                        self.noiseStatus = "\(role.rawValue) \(step)/\(total)  ISO \(iso)  \(Catalog.fmtShut(shutter))"
+                        do {
+                            let shot = try await self.camera.profileFrame(role: role, iso: iso, shutter: shutter)
+                            guard !shot.serial.isEmpty, shot.iso > 0 else {
+                                lastError = "\(role.rawValue) came back without a serial"
+                                continue
+                            }
+                            let stats = NoiseField.measure(shot.image)
+                            var row = bag[shot.serial] ?? (model: shot.model, samples: [])
+                            row.model = shot.model
+                            row.samples.append(NoiseSample(
+                                iso: shot.iso, shutter: shutter,
+                                meanR: stats.mr, meanG: stats.mg, meanB: stats.mb,
+                                varR: stats.vr, varG: stats.vg, varB: stats.vb
+                            ))
+                            bag[shot.serial] = row
+                        } catch {
+                            lastError = error.localizedDescription
+                            self.noiseStatus = "\(role.rawValue) ISO \(iso) \(Catalog.fmtShut(shutter)): \(error.localizedDescription)"
+                        }
+                    }
+                    if halt { break }
+                }
+                if halt { break }
+            }
+            let made = bag.map { NoiseBook.make(serial: $0.key, model: $0.value.model, samples: $0.value.samples) }
+            if made.isEmpty {
+                self.noiseStatus = halt ? "Stopped" : (lastError ?? "No frame came back")
+                return
+            }
+            NoiseBook.save(made)
+            let useful = made.contains { $0.rises() }
+            if useful { self.setHighISO(true) }
+            let names = made.map { "\($0.model) \($0.serial)" }.joined(separator: ", ")
+            if halt {
+                self.noiseStatus = "Stopped. Saved \(names)."
+            } else if useful {
+                self.noiseStatus = "Saved \(names)"
+            } else {
+                self.noiseStatus = "Saved \(names). The frames stayed flat across ISO. Point the bodies at a dim, even wall and run it again."
+            }
+        }
     }
 
     func setSimulate(_ on: Bool) {

@@ -182,6 +182,7 @@ struct RootView: View {
         case .storage: StorageScreen()
         case .about: AboutScreen()
         case .apple: AppleScreen()
+        case .noise: NoiseScreen()
         }
     }
 }

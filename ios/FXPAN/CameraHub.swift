@@ -185,8 +185,8 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         publish()
     }
 
-    func apply(_ photo: Photo, readBack: Bool = true) async {
-        guard !simulate, !canonMode, photo.exposes, !usbHeld, !idling else { return }
+    func apply(_ photo: Photo, readBack: Bool = true, force: Bool = false) async {
+        guard !simulate, !canonMode, (photo.exposes || force), !usbHeld, !idling else { return }
         await withTaskGroup(of: Void.self) { group in
             for link in links.values where role(of: link.token) != nil {
                 group.addTask { await link.match(photo) }
@@ -199,7 +199,67 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         }
     }
 
+    /// One body, JPEG, manual. The file is measured and removed so the run does not land in the library.
+    func profileFrame(role: Role, iso: String, shutter: String) async throws -> NoiseGrab {
+        if simulate {
+            let isoN = Int(iso) ?? 200
+            let serial = role == .t ? "SIM-T" : "SIM-R"
+            return NoiseGrab(image: NoiseField.synthetic(iso: isoN, shutter: shutter), iso: isoN, serial: serial, model: "D800")
+        }
+        guard let link = links.values.first(where: { self.role(of: $0.token) == role }) else {
+            throw PTPError.message("\(role.rawValue) is not paired")
+        }
+        if link.canonBody { throw PTPError.message("The profiler drives a Nikon") }
+        var shot = Photo()
+        shot.light.program = "M"
+        shot.light.iso = iso
+        shot.light.shutter = shutter
+        shot.light.fstop = "Auto"
+        shot.light.bulb = false
+        shot.light.autoMeter = false
+        shot.drive.quality = "JPEG Fine"
+        shot.wb = "Auto"
+        noiseMark += 1
+        let stamp = "noise\(noiseMark)"
+        defer { Self.deleteNoise(stamp) }
+        holdSettings()
+        defer { releaseSettings() }
+        await link.waitIdle()
+        try await link.apply(shot, readBack: true)
+        try await link.armPTP()
+        await link.waitIdle()
+        guard await link.releaseShutter() else { throw PTPError.message("\(role.rawValue) shutter refused") }
+        let grabbed = try await link.takeRAM(stamp: stamp, role: role)
+        guard let url = grabbed.jpeg ?? grabbed.nef else { throw PTPError.message("\(role.rawValue) sent no frame") }
+        let image = try Self.noiseThumb(url)
+        let state = link.state(role: role, paired: true)
+        let got = Int(state.iso.filter { $0.isNumber }) ?? Int(iso) ?? 0
+        return NoiseGrab(image: image, iso: got > 0 ? got : (Int(iso) ?? 0), serial: state.serial, model: state.model)
+    }
+
+    private static func noiseThumb(_ url: URL) throws -> CGImage {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            throw PTPError.message("Could not read the profile frame")
+        }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 800,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else {
+            throw PTPError.message("Could not read the profile frame")
+        }
+        return image
+    }
+
+    private static func deleteNoise(_ stamp: String) {
+        for name in ["T_\(stamp).jpg", "T_\(stamp).nef", "R_\(stamp).jpg", "R_\(stamp).nef"] {
+            try? FileManager.default.removeItem(at: Disk.captures.appendingPathComponent(name))
+        }
+    }
+
     private var liveGate = false
+    private var noiseMark = 0
 
     func setLive(_ on: Bool) async {
         if on == live || liveGate { return }

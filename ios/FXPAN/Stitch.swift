@@ -144,7 +144,8 @@ enum RawDevelop {
         let extent = output.extent.integral
         guard !extent.isInfinite, !extent.isNull, !extent.isEmpty else { return nil }
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        return context.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space)
+        guard let image = context.createCGImage(output, from: extent, format: .RGBA8, colorSpace: space) else { return nil }
+        return NoiseBook.reduce(image, url: url)
     }
 
     private static func drain() {
@@ -425,7 +426,7 @@ enum Stitcher {
         guard let t = image(at: tURL), let r = image(at: rURL) else {
             throw PTPError.message("Could not read the pair")
         }
-        return (t, r, nil)
+        return (NoiseBook.reduce(t, url: tURL), NoiseBook.reduce(r, url: rURL), nil)
     }
 
     private static func finish(

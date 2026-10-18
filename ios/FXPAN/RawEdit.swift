@@ -108,7 +108,7 @@ struct RawScreen: View {
     }
 
     private var previewToken: String {
-        "\(role)|\(url?.path ?? "")|\(before)|\(clip)|\(shown.exposure)|\(shown.hashValue)"
+        "\(role)|\(url?.path ?? "")|\(before)|\(clip)|\(model.highISO)|\(shown.exposure)|\(shown.hashValue)"
     }
 
     @ViewBuilder
@@ -128,6 +128,7 @@ struct RawScreen: View {
                 exposure
                 balance
                 tone
+                highISO
                 detail
                 lens
                 actions
@@ -215,6 +216,20 @@ struct RawScreen: View {
                 slider(shown.contrast, 0...1) { $0.contrast = $1 }
             }
         }
+    }
+
+    private var highISO: some View {
+        Toggle(isOn: Binding(get: { model.highISO }, set: { model.setHighISO($0); schedule() })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("High ISO reduction").font(Theme.font(16, weight: .medium))
+                Text(NoiseBook.caption(url: url))
+                    .font(Theme.font(12))
+                    .foregroundStyle(Theme.dim)
+            }
+        }
+        .tint(Theme.gold)
+        .padding(12)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
     }
 
     private var detail: some View {

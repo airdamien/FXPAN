@@ -1151,6 +1151,7 @@ struct SystemScreen: View {
         DimPage(title: "System", controls: {
             VStack(spacing: 8) {
                 nav("Cameras", model.camera.line, .cameras)
+                nav("Noise", noiseHint, .noise)
                 nav("Rig", "\(Int((model.rig.overlap * 100).rounded()))%\(model.rig.flipR ? " · flop R" : "")", .rig)
                 nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min\(model.shoeEnabled ? " · Shoe" : "")", .display)
                 nav("Storage", Disk.freeBytes().map(Disk.fmtBytes) ?? "", .storage)
@@ -1186,6 +1187,14 @@ struct SystemScreen: View {
         })
     }
 
+    private var noiseHint: String {
+        let _ = model.noiseStatus
+        if model.highISO { return "High ISO on" }
+        let n = NoiseBook.bodies().count
+        if n == 0 { return "No profile" }
+        return "\(n) saved"
+    }
+
     private var appleLine: String {
         let gpu = model.metalWarp ? "Metal" : "CPU"
         if model.appleEnabled.isEmpty { return gpu }
@@ -1203,6 +1212,98 @@ struct SystemScreen: View {
         .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
         .contentShape(RoundedRectangle(cornerRadius: Theme.radius))
         .highPriorityGesture(TapGesture().onEnded { model.go(route) })
+    }
+}
+
+struct NoiseScreen: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let _ = model.usbRevision
+        let saved = NoiseBook.bodies()
+        DimPage(title: "Noise", crumb: "System", controls: {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(get: { model.highISO }, set: { model.setHighISO($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("High ISO reduction").font(Theme.font(16, weight: .medium))
+                        Text("Applies the fit on the raw develop and on a JPEG stitch.")
+                            .font(Theme.font(12)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .tint(Theme.gold)
+                .padding(12)
+                .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+                PressChip(title: model.noiseBusy ? "Stop" : "Profile the bodies", on: true) {
+                    model.profileNoise()
+                }
+                Text("Point both bodies at a dim, even wall. Set High ISO NR to Off on each body so the noise is still in the frame. The run switches to manual, walks ISO 200 through 6400 at three shutters, and keeps the fit under the body serial. Each body is fired on its own. The frames are deleted after they are measured.")
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.dim)
+                if !model.noiseStatus.isEmpty {
+                    Text(model.noiseStatus)
+                        .font(Theme.font(14, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                }
+                ForEach(Role.allCases) { role in
+                    slotRow(role, saved: saved)
+                }
+                let paired = Role.allCases.compactMap { model.camera.slots[$0]?.serial }
+                let extra = saved.filter { body in !paired.contains { NoiseBook.sameSerial($0, body.serial) } }
+                if !extra.isEmpty {
+                    Text("Saved").font(Theme.font(13)).foregroundStyle(Theme.dim)
+                    ForEach(extra) { body in
+                        profileCard(title: body.model, serial: body.serial, detail: body.line(), when: body.taken)
+                    }
+                }
+            }
+        }, panel: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.noiseBusy ? "Profiling" : (model.highISO ? "Reduction on" : "Reduction off"))
+                    .font(Theme.font(16, weight: .medium))
+                Text("A minute or two per body. The fit is variance = a × signal + read noise, per channel, per ISO.")
+                    .font(Theme.font(13)).foregroundStyle(Theme.dim)
+            }
+        })
+    }
+
+    private func slotRow(_ role: Role, saved: [NoiseBody]) -> some View {
+        let slot = model.camera.slots[role] ?? BodyState()
+        let title = "\(role.rawValue) · \(slot.model.isEmpty ? "No body" : slot.model)"
+        let match = saved.first { NoiseBook.sameSerial($0.serial, slot.serial) }
+        let detail: String
+        if !slot.paired || slot.serial.isEmpty {
+            detail = "Not paired"
+        } else if let match, slot.serial.hasPrefix("usb-") {
+            detail = "\(match.line()). Stored on this USB port."
+        } else if let match {
+            detail = match.line()
+        } else if slot.serial.hasPrefix("usb-") {
+            detail = "This body did not report a serial. The profile is stored on this USB port."
+        } else {
+            detail = "No profile yet"
+        }
+        return profileCard(title: title, serial: slot.serial, detail: detail, when: match?.taken)
+    }
+
+    private func profileCard(title: String, serial: String, detail: String, when: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).font(Theme.font(16, weight: .medium))
+                Spacer()
+                if let when {
+                    Text(when.formatted(date: .abbreviated, time: .shortened))
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+            if !serial.isEmpty {
+                Text(serial).font(Theme.font(12)).foregroundStyle(Theme.dim)
+            }
+            Text(detail).font(Theme.font(13)).foregroundStyle(Theme.dim)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
     }
 }
 
