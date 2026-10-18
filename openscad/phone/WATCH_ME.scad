@@ -162,7 +162,7 @@ DUO_CAM_Y = 43.7;
 // Bare body corner is 13 mm. The case grows it. The retainer follows
 // that curve around the bottom corners, then slopes down the side.
 DUO_EDGE  = 15;
-DUO_LIP_H = 4.0;          // phone is 6.5 thick; the screen stays above this
+DUO_LIP_H = DUO_FLAT_T + 1; // 1 mm past the 6.5 cased edge, outside the glass
 DUO_USB_X = 41.2;         // centre of the camera half, bottom edge
 DUO_USB_W = 16;           // wider than the plug, same as the Pro Max opening
 DUO_FN    = 160;          // corner segments
@@ -569,6 +569,15 @@ module pm17_shoe() {
 // x along the hinge, -y toward you, hinge at +y. The half's back on the cross.
 function duo_back_z() = DUO_FLOOR + DUO_RIB_H;
 
+// Cased tray, taken from the flat cradle's camera half. Flat +X (hinge to
+// the outer edge) runs toward tray -Y. Flat +Y (the top) runs toward tray +X.
+function duo_cased_ms(dep)  = [DUO_FLAT_MS[1], dep / 2 - DUO_FLAT_MS[0]];
+function duo_cased_cam(dep) = [DUO_CAM_Y, dep / 2 - DUO_CAM_X];
+// Under the puck: the spline, the countersink cone, then a little stock.
+// The seat is that floor plus the puck, so the head finishes under the phone.
+function duo_cased_pocket() = KEY_H + (M3_CSK_D - M3_D) / 2 + 0.5;
+function duo_cased_seat()   = duo_cased_pocket() + MS_T;
+
 module duo_tray(d, tag) {
     len = d[0]; dep = d[1]; t = d[2];
     xi = len / 2 + DUO_GAP;
@@ -578,80 +587,160 @@ module duo_tray(d, tag) {
     xo = xi + CLIP_WALL;
     difference() {
         union() {
-            translate([0, (yf - CLIP_WALL + yr + 2.5) / 2, 0])
-                linear_extrude(DUO_FLOOR)
-                    rrect(2 * xo, yr + 2.5 - (yf - CLIP_WALL), 4);
-            translate([0, 0, DUO_FLOOR - 0.01])
-                linear_extrude(DUO_RIB_H + 0.01) {
-                    square([len - 2, DUO_RIB_W], center = true);
-                    square([DUO_RIB_W, dep - 2], center = true);
-                    translate(duo_key_xy())
-                        rrect(KEY_W + 12, KEY_L + 12, 3);
+            if (tag == "duo_tray_cased") {
+                // One plate, thick enough that the puck recess, the lead
+                // groove, and the countersink all finish above the back.
+                linear_extrude(duo_cased_seat())
+                    rrect(len + 2 * CLIP_WALL, dep + 2 * CLIP_WALL,
+                          DUO_EDGE + CLIP_WALL, $fn = DUO_FN);
+                duo_cased_walls(len, dep, t);
+            } else {
+                translate([0, (yf - CLIP_WALL + yr + 2.5) / 2, 0])
+                    linear_extrude(DUO_FLOOR)
+                        rrect(2 * xo, yr + 2.5 - (yf - CLIP_WALL), 4);
+                translate([0, 0, DUO_FLOOR - 0.01])
+                    linear_extrude(DUO_RIB_H + 0.01) {
+                        square([len - 2, DUO_RIB_W], center = true);
+                        square([DUO_RIB_W, dep - 2], center = true);
+                        translate(duo_key_xy())
+                            rrect(KEY_W + 12, KEY_L + 12, 3);
+                    }
+                // Front corners: an L, side and front, that the front edge
+                // slides under. The side grips stay low, below the hinge, so
+                // the phone folds down past them.
+                for (s = [-1, 1]) {
+                    grip_y(yf - CLIP_WALL, yf + 14, s * xi, s, lip_z);
+                    grip_x(s > 0 ? xi - 14 : -xi - CLIP_WALL,
+                           s > 0 ? xi + CLIP_WALL : -xi + 14,
+                           yf, -1, lip_z);
+                    grip_y(yr - 30, yr - 14, s * xi, s, lip_z);
+                    translate([s * (len / 2 - 5) - 3, yr + DUO_GAP, 0])
+                        cube([6, 2.3, duo_back_z() + 2]);
                 }
-            // Pad under the MagSafe pocket. It fills the base only; the
-            // pocket is cut through the tray above it, so nothing stands
-            // over the puck but the lip.
-            if (tag == "duo_tray_cased")
-                translate([MS_XY[0], MS_XY[1], -0.01])
-                    cylinder(h = duo_back_z() + 0.02, d = MS_D + 8, $fn = 96);
-            // The base out to the back edge, so the cable groove has a floor
-            // the whole way and the bottom stays one plane.
-            if (tag == "duo_tray_cased")
-                translate([MS_XY[0] - (MS_CABLE + 8) / 2, MS_XY[1], -0.01])
-                    cube([MS_CABLE + 8, yr - MS_XY[1] + 2, DUO_FLOOR + 0.02]);
-            // Front corners: an L, side and front, that the front edge slides
-            // under. The side grips stay low, below the hinge, so the phone
-            // folds down past them. The rear stops are only bumpers.
-            for (s = [-1, 1]) {
-                grip_y(yf - CLIP_WALL, yf + 14, s * xi, s, lip_z);
-                grip_x(s > 0 ? xi - 14 : -xi - CLIP_WALL,
-                       s > 0 ? xi + CLIP_WALL : -xi + 14,
-                       yf, -1, lip_z);
-                grip_y(yr - 30, yr - 14, s * xi, s, lip_z);
-                translate([s * (len / 2 - 5) - 3, yr + DUO_GAP, 0])
-                    cube([6, 2.3, duo_back_z() + 2]);
             }
         }
-        translate(duo_key_xy()) {
-            translate([0, 0, -DUO_PAD - 0.2])
-                spline_key(KEY_CLEAR, 0.2);
-            translate([0, 0, -DUO_PAD - 1])
-                cylinder(h = DUO_PAD + MS_FLOOR + 2, d = M3_D);
-            // Screw drops in from above, through the puck recess. The cone
-            // opens at the recess floor and stops at the spline socket, so
-            // the head sits flush under the puck and the socket survives.
-            translate([0, 0, MS_FLOOR - 0.01])
-                cylinder(h = duo_back_z() - MS_T - MS_FLOOR + 0.02,
-                         d1 = M3_D, d2 = M3_CSK_D);
+        if (tag == "duo_tray_cased") {
+            translate(duo_cased_ms(dep))
+                socket_cut(duo_cased_pocket());
+            duo_cased_cam_cut(dep);
+            duo_magsafe_cut(dep);
+            // USB-C on the bottom end, same station as the flat cradle.
+            // Open through the wall so a camera plug seats.
+            translate([-90, dep / 2 - DUO_USB_X - DUO_USB_W / 2, -0.1])
+                cube([90 - (len / 2 - 1), DUO_USB_W,
+                      duo_cased_seat() + t + 6]);
+            translate([-18, 30, duo_cased_seat() - STAMP_DEPTH])
+                part_stamp_cut(tag, size = 2.2);
+        } else {
+            translate(duo_key_xy()) {
+                translate([0, 0, -DUO_PAD - 0.2])
+                    spline_key(KEY_CLEAR, 0.2);
+                translate([0, 0, -DUO_PAD - 1])
+                    cylinder(h = DUO_PAD + MS_FLOOR + 2, d = M3_D);
+                // Screw drops in from above, through the puck recess. The
+                // cone opens at the recess floor and stops at the spline.
+                translate([0, 0, MS_FLOOR - 0.01])
+                    cylinder(h = duo_back_z() - MS_T - MS_FLOOR + 0.02,
+                             d1 = M3_D, d2 = M3_CSK_D);
+            }
+            translate([-len / 4 - DUO_RIB_W / 4, -dep / 4 - DUO_RIB_W / 4,
+                       DUO_FLOOR - STAMP_DEPTH])
+                part_stamp_cut(tag, size = 2.2);
         }
-        translate([-len / 4 - DUO_RIB_W / 4, -dep / 4 - DUO_RIB_W / 4,
-                   DUO_FLOOR - STAMP_DEPTH])
-            part_stamp_cut(tag, size = 2.2);
-        // MagSafe puck, cased tray only. The bare tray has no case magnets
-        // to meet it.
-        if (tag == "duo_tray_cased")
-            duo_magsafe_cut(yr);
     }
 }
 
-// Round pocket for the puck, open out the back of the tray. A lip rings the
-// rim everywhere except that rear opening, so the puck slides in from behind
-// and the lip holds it down once it is in.
-module duo_magsafe_cut(yr) {
-    z1 = duo_back_z();
-    translate(MS_XY) {
-        // Straight recess, open at the top. The puck presses in.
-        translate([0, 0, z1 - MS_T])
-            cylinder(h = MS_T + 0.2, d = MS_D, $fn = 128);
-        // Cable groove. Rounded floor, runs straight back from the pocket
-        // rim and out through the tray's back edge.
-        translate([-MS_CABLE / 2, MS_D / 2 - 4, -0.2])
-            cube([MS_CABLE, yr + 8 - MS_XY[1] - MS_D / 2,
-                  MS_CABLE_D + z1 + 0.2]);
-        translate([0, MS_D / 2 - 4, -0.2])
+// Camera pill, same footprint as the flat cradle, long axis hinge-to-outer.
+module duo_cased_cam_cut(dep) {
+    c = duo_cased_cam(dep);
+    translate([c[0], c[1], -1])
+        linear_extrude(duo_cased_seat() + 2)
+            hull() {
+                translate([0, -DUO_CAM[0] / 2 + DUO_CAM[1] / 2])
+                    circle(d = DUO_CAM[1], $fn = 64);
+                translate([0, DUO_CAM[0] / 2 - DUO_CAM[1] / 2])
+                    circle(d = DUO_CAM[1], $fn = 64);
+            }
+}
+
+// Outside quadrant of a retainer corner. sx, sy point out of the phone.
+module duo_cased_corner(cx, cy, sx, sy, z_floor, z_top) {
+    $fn = DUO_FN;
+    module band(ri, ro) {
+        difference() {
+            translate([cx, cy]) circle(r = ro);
+            translate([cx, cy]) circle(r = ri);
+            translate([cx + (sx > 0 ? -300 : 0), cy - 300])
+                square([300, 600]);
+            translate([cx - 300, cy + (sy > 0 ? -300 : 0)])
+                square([600, 300]);
+        }
+    }
+    linear_extrude(z_top)
+        band(DUO_EDGE, DUO_EDGE + CLIP_WALL);
+    linear_extrude(z_floor)
+        band(DUO_EDGE - 0.4, DUO_EDGE);
+}
+
+// Cased tray retainer, same rules as the flat cradle. The wall stands 1 mm
+// past the case and stays outside the glass. The front edge slopes from
+// both corners down to the MagSafe lead. The bottom end slopes from the
+// front corner down to the USB opening. The hinge end stays clear so the
+// other half can fold down.
+module duo_cased_walls(len, dep, t) {
+    seat = duo_cased_seat();
+    z0 = seat;
+    h = seat + t + 1;
+    xL = -len / 2;
+    yF = -dep / 2;
+    cxL = xL + DUO_EDGE;
+    cxR = len / 2 - DUO_EDGE;
+    cy = yF + DUO_EDGE;
+    // Stop short of the port so the plug housing clears the slope.
+    usb0 = dep / 2 - DUO_USB_X - DUO_USB_W / 2 - 6;
+    cable0 = duo_cased_ms(dep)[0] - MS_CABLE / 2;
+    cable1 = duo_cased_ms(dep)[0] + MS_CABLE / 2;
+    duo_cased_corner(cxL, cy, -1, -1, z0, h);
+    duo_cased_corner(cxR, cy, 1, -1, z0, h);
+    translate([cxL - 0.4, yF - 0.4, 0])
+        cube([(cxR - cxL) + 0.8, 0.8, z0]);
+    hull() {
+        translate([cxL - 0.2, yF - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, h]);
+        translate([cable0 - 0.2, yF - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, seat]);
+    }
+    hull() {
+        translate([cable1 - 0.2, yF - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, seat]);
+        translate([cxR - 0.2, yF - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, h]);
+    }
+    translate([xL - 0.4, cy - 0.4, 0])
+        cube([0.8, usb0 - (cy - 0.4), z0]);
+    hull() {
+        translate([xL - CLIP_WALL, cy - 0.2, 0])
+            cube([CLIP_WALL, 0.4, h]);
+        translate([xL - CLIP_WALL, usb0 - 0.2, 0])
+            cube([CLIP_WALL, 0.4, seat]);
+    }
+}
+
+// Puck at the flat cradle's spot. The lead leaves the outer edge, centred
+// on the puck the same way the flat groove does.
+module duo_magsafe_cut(dep) {
+    ms = duo_cased_ms(dep);
+    pocket = duo_cased_pocket();
+    y_out = -dep / 2 - ms[1] - CLIP_WALL - 4;
+    translate(ms) {
+        translate([0, 0, pocket])
+            cylinder(h = MS_T + 1, d = MS_D, $fn = 128);
+        translate([-MS_CABLE / 2, y_out, pocket - MS_CABLE_D])
+            cube([MS_CABLE, (-MS_D / 2 + 4) - y_out,
+                  MS_CABLE_D + MS_T + 2]);
+        translate([0, y_out, pocket - MS_CABLE_D])
             rotate([-90, 0, 0])
-                cylinder(h = yr + 8 - MS_XY[1] - MS_D / 2,
-                         d = MS_CABLE, $fn = 32);
+                cylinder(h = (-MS_D / 2 + 4) - y_out, d = MS_CABLE, $fn = 32);
     }
 }
 
@@ -735,26 +824,49 @@ module duo_lip_quadrant() {
         }
 }
 
-// Past the corner the retainer slopes back into the plate edge.
+// Past the corner the retainer slopes along the end and is back at the
+// plate where the MagSafe lead leaves. The groove is centred on Y, so the
+// slope stops on its near edge and the exit stays open.
 module duo_lip_side() {
     x0 = DUO_FLAT_X / 2;
     y0 = -(DUO_FLAT_Y / 2 - DUO_EDGE);
+    y1 = -MS_CABLE / 2;
     h = DUO_FLAT_Z + DUO_LIP_H;
     hull() {
-        translate([x0 - 0.4, y0 - 0.3, 0])
-            cube([CLIP_WALL + 0.4, 0.4, h]);
-        translate([x0 - 0.01, y0 + 16, 0])
+        translate([x0, y0 - 0.3, 0])
+            cube([CLIP_WALL, 0.4, h]);
+        translate([x0 - 0.01, y1 - 0.4, 0])
             cube([0.2, 0.4, DUO_FLAT_Z]);
     }
+    translate([x0 - 0.4, y0 - 0.3, 0])
+        cube([0.4, 0.4, DUO_FLAT_Z]);
 }
 
-// Retainer along the bottom, around both corners, then down into the plate.
+// Retainer along the bottom, around both corners. From each corner it
+// slopes down and arrives at the plate where the USB slot opens.
 module duo_bottom_lip() {
     y0 = -DUO_FLAT_Y / 2;
     cx = DUO_FLAT_X / 2 - DUO_EDGE;
+    usb0 = DUO_USB_X - DUO_USB_W / 2;
+    usb1 = DUO_USB_X + DUO_USB_W / 2;
+    run = cx - usb1;
     h = DUO_FLAT_Z + DUO_LIP_H;
-    translate([-cx - 0.4, y0 - CLIP_WALL, 0])
-        cube([2 * cx + 0.8, CLIP_WALL + 0.4, h]);
+    translate([-cx - 0.4, y0 - 0.4, 0])
+        cube([2 * cx + 0.8, 0.8, DUO_FLAT_Z]);
+    translate([-cx, y0 - CLIP_WALL, 0])
+        cube([usb0 - run - (-cx), CLIP_WALL, h]);
+    hull() {
+        translate([usb0 - run - 0.2, y0 - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, h]);
+        translate([usb0 - 0.2, y0 - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, DUO_FLAT_Z]);
+    }
+    hull() {
+        translate([usb1 - 0.2, y0 - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, DUO_FLAT_Z]);
+        translate([cx - 0.2, y0 - CLIP_WALL, 0])
+            cube([0.4, CLIP_WALL, h]);
+    }
     duo_lip_quadrant();
     duo_lip_side();
     mirror([1, 0, 0]) {
@@ -836,7 +948,8 @@ module assembly() {
     }
     translate([0, 160, 0]) {
         color("DimGray") duo_shoe();
-        translate([-duo_key_xy()[0], -duo_key_xy()[1], plat_z1() + DUO_PAD])
+        translate([-duo_cased_ms(DUO_CASED[1])[0],
+                   -duo_cased_ms(DUO_CASED[1])[1], plat_z1()])
             color("SlateGray") duo_tray(DUO_CASED, "duo_tray_cased");
     }
     translate([220, 0, 0]) {
