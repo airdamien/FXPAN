@@ -19,7 +19,7 @@
 //   duo_flat_shoe  its foot.
 //
 // Duo bare sizes are Apple's published specs. The cased outline is the
-// case measured beside a ruler: 118 along the hinge, 84 hinge-to-outer.
+// case itself: 121.85 along the hinge, 84 hinge-to-outer.
 
 include <../lib/part_stamp.scad>
 
@@ -107,9 +107,9 @@ PM_MS_LIP = 12.0;       // three times the 4 mm wall; phone edge is 10.9
 // --- iPhone Duo lower half: [along the hinge, hinge to front edge, thickness]
 // Bare is one half of the open phone: 117.8 along the hinge, 164.6 / 2 =
 // 82.3 hinge to front edge, 5.2 thick. The case that arrived measures
-// 118 along the hinge and 84 hinge-to-outer, read off a ruler beside it.
+// 121.85 along the hinge and 84 hinge-to-outer.
 DUO_BARE  = [117.8, 82.3, 5.2];
-DUO_CASED = [118.0, 84.0, 6.5];
+DUO_CASED = [121.85, 84.0, 6.5];
 DUO_GAP   = 0.2;
 // Base thickness. One flat plane on the bottom, and deep enough that the
 // countersunk screw and the cable groove both finish inside it.
@@ -123,7 +123,7 @@ function duo_key_xy() = MS_XY;
 // It slides in from the side under a rail, so the tray holds it rather than
 // a lip it has to squeeze past. The slot sits in the front quadrant, clear
 // of the shoe screw at the hinge and of the camera corner.
-MS_D  = 55.7;      // pocket, a snug press fit on the 55.5 puck
+MS_D  = 55.3;      // 0.2 under the 55.5 puck. 55.7 fell out; this presses and still pulls out.
 MS_T  = 4.6;       // puck is 4.5; finishes just under the tray top
 MS_XY = [14, -8];
 // The puck presses in from the top. The cable leaves through a groove from
@@ -146,7 +146,7 @@ DUO_PAD  = 1.6;
 // tall enough that the puck recess, its cable groove, and the centre
 // countersink all finish above the back face.
 DUO_FLAT_X    = 168.0;
-DUO_FLAT_Y    = 118.0;
+DUO_FLAT_Y    = DUO_CASED[0];   // same hinge length as the cased half
 DUO_FLAT_T    = 6.5;
 DUO_FLAT_TILT = 12;
 DUO_FLAT_Z    = 9.0;
@@ -157,10 +157,16 @@ DUO_FLAT_KEY_Y = -20;   // below centre, so the foot stays short
 DUO_CAM   = [60.4, 30];
 DUO_CAM_X = 49.6;
 DUO_CAM_Y = 41.45;
+// Cased tray only: the wall between the island's upper long side and the
+// tray's outer edge. 5 mm off that strip, grown toward the outer edge.
+DUO_CAM_TRIM = 5;
 // Inside the case, cameras at the top: the puck's left edge is just left
 // of the camera island. Centering it on the island put that edge to the right.
+// The ring is the 55.5 puck. Its top is 35.69 below the case's upper edge.
 DUO_MS_PAST = 1.5;
-DUO_FLAT_MS = [DUO_CAM_X - DUO_CAM[0] / 2 - DUO_MS_PAST + MS_D / 2, 0];
+DUO_MS_FROM_TOP = 35.69;
+DUO_FLAT_MS = [DUO_CAM_X - DUO_CAM[0] / 2 - DUO_MS_PAST + 55.5 / 2,
+               DUO_FLAT_Y / 2 - DUO_MS_FROM_TOP - 55.5 / 2];
 // Bare body corner is 13 mm. The case grows it. The retainer follows
 // that curve around the bottom corners, then slopes down the side.
 DUO_EDGE  = 15;
@@ -669,14 +675,16 @@ module duo_tray(d, tag) {
 }
 
 // Camera pill, same footprint as the flat cradle, long axis hinge-to-outer.
+// The upper long side is the +X end. DUO_CAM_TRIM grows the cut that way,
+// taking wall off the strip between the island and the tray's outer edge.
 module duo_cased_cam_cut(dep) {
     c = duo_cased_cam(dep);
-    translate([c[0], c[1], -1])
+    translate([c[0] + DUO_CAM_TRIM / 2, c[1], -1])
         linear_extrude(duo_cased_seat() + 2)
             hull() {
                 translate([0, -DUO_CAM[0] / 2 + DUO_CAM[1] / 2])
                     circle(d = DUO_CAM[1], $fn = 64);
-                translate([0, DUO_CAM[0] / 2 - DUO_CAM[1] / 2])
+                translate([0, (DUO_CAM[0] + DUO_CAM_TRIM) / 2 - DUO_CAM[1] / 2])
                     circle(d = DUO_CAM[1], $fn = 64);
             }
 }
@@ -700,11 +708,10 @@ module duo_cased_corner(cx, cy, sx, sy, z_floor, z_top) {
         band(DUO_EDGE - 0.4, DUO_EDGE);
 }
 
-// Cased tray retainer, same rules as the flat cradle. The wall stands 1 mm
-// past the case and stays outside the glass. The front edge slopes from
-// both corners down to the MagSafe lead. The bottom end is closed: the
-// port is on the screen half, which this tray does not hold. The hinge
-// end stays clear so the other half can fold down.
+// Cased tray retainer. The front edge stands 1 mm past the case and slopes
+// from both corners down to the MagSafe lead. The short edges stay at the
+// plate: a wall there covers the USB port and the buttons. The hinge end
+// stays clear so the other half can fold down.
 module duo_cased_walls(len, dep, t) {
     seat = duo_cased_seat();
     z0 = seat;
@@ -714,7 +721,6 @@ module duo_cased_walls(len, dep, t) {
     cxL = xL + DUO_EDGE;
     cxR = len / 2 - DUO_EDGE;
     cy = yF + DUO_EDGE;
-    yH = dep / 2 - DUO_EDGE;
     cable0 = duo_cased_ms(dep)[0] - MS_CABLE / 2;
     cable1 = duo_cased_ms(dep)[0] + MS_CABLE / 2;
     duo_cased_corner(cxL, cy, -1, -1, z0, h);
@@ -733,10 +739,6 @@ module duo_cased_walls(len, dep, t) {
         translate([cxR - 0.2, yF - CLIP_WALL, 0])
             cube([0.4, CLIP_WALL, h]);
     }
-    translate([xL - 0.4, cy - 0.4, 0])
-        cube([0.8, yH - (cy - 0.4), z0]);
-    translate([xL - CLIP_WALL, cy - 0.2, 0])
-        cube([CLIP_WALL, yH - cy + 0.4, h]);
 }
 
 // Puck at the flat cradle's spot. The lead leaves the outer edge, centred

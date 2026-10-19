@@ -149,6 +149,8 @@ DX_BS_TOP     = 0.4;    // extra behind the two top fingers: those leaves are 2.
 DX_BS_FRONT   = 1.95;
 DX_BS_SLIT    = 0.8;
 DX_BS_PLAY    = 0.5;    // along the slot, past the 50 mm
+DX_BS_EDGE    = 4;      // glass margin around the window
+DX_BS_ROOF    = 13.5;   // window is full width up to here, then 45° shoulders
 
 function dx_bs_wall0() = -BS_THICK - DX_BS_SLACK;
 function dx_bs_wall1() = DX_BS_RELIEF;
@@ -174,7 +176,7 @@ module dx_plate() {
     web = 1.5;                              // shelf under the glass
     z0 = -DX_HALF_Z + DX_FLOOR - 0.15;      // cheeks down into the skin
     z1 = DX_SEAT - 0.3;
-    edge = 4;
+    edge = DX_BS_EDGE;
     open0 = shelf + edge;
     glass_top = shelf + BS_H;
     keep_y = dx_plate_keep_y();
@@ -228,11 +230,11 @@ module dx_plate() {
     dx_plate_brace(z0, z1, shelf);
 }
 
-// Opening for both beams. Full width to 13.5 above the axis, then 45°
+// Opening for both beams. Full width to DX_BS_ROOF above the axis, then 45°
 // shoulders to a 20 mm bridge just under the glass top. A flat roof across
 // all 42 mm sagged into the slot.
 module dx_bs_window(open0, yw, ridge) {
-    roof = 13.5;
+    roof = DX_BS_ROOF;
     yr = yw - (ridge - roof);
     rotate([90, 0, 90])
         linear_extrude(DX_BS_FRONT - DX_BS_BACK + 2, center = true)
@@ -240,9 +242,12 @@ module dx_bs_window(open0, yw, ridge) {
                      [yr, ridge], [-yr, ridge], [-yw, roof]]);
 }
 
+// Top of the window at local y, up its shoulders.
+function dx_bs_shoulder_z(y) = DX_BS_ROOF + BS_W / 2 - DX_BS_EDGE - abs(y);
+
 // Frees the finger behind pad p. The bottom two stand on the floor and end
-// in the window. The far one stands on the post and ends under a short
-// bridge. Both bend away from the glass, into the chamber.
+// in the window. The top two stand on the posts, and the wall above each
+// rises at 45° from both sides. All bend away from the glass, into the chamber.
 module dx_bs_finger_cut(p, shelf, web, open0) {
     s = DX_BS_SLIT;
     w = p[2];
@@ -266,16 +271,39 @@ module dx_bs_finger_cut(p, shelf, web, open0) {
         // start behind that face. x0 above is the 1.8 mm wall.
         xb = DX_BS_BACK - DX_BS_TOP;
         xt = xb - 0.2;
-        for (sy = [-1, 1])
-            translate([(xt + x1) / 2, p[0] + sy * (w + s) / 2, (root + tip + s) / 2])
-                cube([x1 - xt, s, tip + s - root], center = true);
-        translate([(xt + x1) / 2, p[0], tip + s / 2])
-            cube([x1 - xt, w + 2 * s, s], center = true);
+        half = w / 2 + s;
+        // Where the window's shoulder runs under a slit, the slit starts
+        // 1 mm above it, so the shoulder stays one ramp into the cheek.
+        for (sy = [-1, 1]) {
+            ya = p[0] + sy * w / 2;
+            yb = ya + sy * s;
+            translate([(xt + x1) / 2, 0, 0])
+                rotate([90, 0, 90])
+                    linear_extrude(x1 - xt, center = true)
+                        polygon([
+                            [ya, max(root, dx_bs_shoulder_z(ya) + 1)],
+                            [yb, max(root, dx_bs_shoulder_z(yb) + 1)],
+                            [yb, tip],
+                            [ya, tip]
+                        ]);
+        }
+        // Across the finger, 45° from each post.
+        translate([(xb + x1) / 2, 0, 0])
+            rotate([90, 0, 90])
+                linear_extrude(x1 - xb, center = true)
+                    polygon([
+                        [p[0] - half, tip - 0.2],
+                        [p[0] - half, tip],
+                        [p[0],        tip + half],
+                        [p[0] + half, tip],
+                        [p[0] + half, tip - 0.2]
+                    ]);
         // Clear any brace behind the finger so the leaf can flex,
         // with a 45° floor so the brace prints without an overhang.
+        // Open to the lid: brace left above the finger only hangs.
         hull() {
-            translate([xb - back_clear / 2, p[0], (root + tip + s) / 2])
-                cube([back_clear, w + 2 * s, tip + s - root], center = true);
+            translate([xb - back_clear / 2, p[0], (root + DX_SEAT + 1) / 2])
+                cube([back_clear, w + 2 * s, DX_SEAT + 1 - root], center = true);
             translate([xb - 0.05, p[0], root - back_clear + 0.05])
                 cube([0.1, w + 2 * s, 0.1], center = true);
         }
@@ -339,7 +367,7 @@ module dx_plate_brace(z0, z1, shelf) {
     w1 = dx_bs_wall1();
     back = w0 - DX_BS_BACK;
     front = DX_BS_FRONT - w1;
-    edge = 4;
+    edge = DX_BS_EDGE;
     // Solid end beside the window. The channel stop crosses the slot
     // on the logo side only, then local −X carries it into the wall.
     y0 = dx_bs_y0();
@@ -361,9 +389,15 @@ module dx_plate_brace(z0, z1, shelf) {
                         cube([w1 - DX_BS_BACK, 1.5, h], center = true);
                 }
                 hull() {
-                    rotate([0, 0, -45])
+                    rotate([0, 0, -45]) {
                         translate([lx, (y0 + ye) / 2, zc])
                             cube([back - 0.04, ye - y0, h], center = true);
+                        // Channel stop's logo face. The clear behind the finger
+                        // runs to the lid, so above its floor the brace meets
+                        // the holder only here.
+                        translate([DX_BS_BACK + 0.15, y0 - 0.75, zc])
+                            cube([0.3, 1.5, h], center = true);
+                    }
                     translate([-(DX_CAV + DX_LOGO) / 2,
                                (land0 + land1) / 2, zc])
                         cube([DX_LOGO - DX_CAV + 0.4, land1 - land0, h],
@@ -397,12 +431,20 @@ module dx_plate_brace(z0, z1, shelf) {
 
 function inner_y() = -(DX_LENS - DX_THREAD);
 
+// Horizontal, so a round hole leaves a flat ceiling. The peak is the
+// 45° tangency point; the pin still seats in the round lower half.
 module dx_plate_pins() {
+    r = 2.05 / 2;
     rotate([0, 0, -45])
         for (sy = [-1, 1])
             translate([0, sy * (BS_W / 2 - 8), BS_H / 2 + 1.0])
                 rotate([0, 90, 0])
-                    cylinder(h = 16, d = 2.05, center = true, $fn = 24);
+                    linear_extrude(16, center = true)
+                        hull() {
+                            circle(d = 2 * r, $fn = 24);
+                            translate([-r * sqrt(2), 0])
+                                square(0.02, center = true);
+                        }
 }
 
 // Root of the tube, in the tube's own XY. Full flange diameter, cut back
