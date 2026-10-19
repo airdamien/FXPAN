@@ -189,13 +189,12 @@ function reflect_tube_len()  =
 // back by bs_t_comp(). Shorten the tube by the same amount.
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
 // Printed F at the EL-Nikkor flange. T is the glass path; R is shorter
-// by the plate's circle of least confusion so the two focus together.
-// DX_T_PULL is the extra T shorten from the 2026-10-19 pair: T was
-// focused in front of the wall that R had sharp.
+// by the plate's circle of least confusion so the two focus together on
+// a flat plate. DX_R_PUSH moves R out to where the measured plate puts it.
 function reflect_focus_tube_len() =
-    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull();
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull() + DX_R_PUSH;
 function transmit_focus_tube_len() =
-    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp() - DX_T_PULL;
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp();
 function patch_t()           = PORT_PATCH_T;
 
 module mm_split() {
@@ -3208,11 +3207,13 @@ module diagnostics() {
              round(bs_t_comp() * 1000) / 1000, " mm",
              "  |  plate focus sits ", round(bs_focus_mid() * 1000) / 1000,
              " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")",
-             "  |  measured T pull ", DX_T_PULL, " mm"));
+             "  |  measured plate pushes R ", DX_R_PUSH, " mm"));
+    r_focus_d = reflect_focus_tube_len() - reflect_tube_len();
     echo(str("arm_r_focus: Nikkor-W printed F, tube ",
              round(reflect_focus_tube_len() * 1000) / 1000,
-             " mm, ", round(r_focus_pull() * 1000) / 1000,
-             " mm shorter than arm_r_fw, stamp dxp_rw_focus"));
+             " mm, ", round(abs(r_focus_d) * 1000) / 1000,
+             r_focus_d < 0 ? " mm shorter" : " mm longer",
+             " than arm_r_fw, stamp dxp_rw_focus"));
     head_r = norm(clamp_xy("", 1, 1)) - PORT_CSK_D / 2;
     echo(str("cookie ", round(port_patch_u() * 10) / 10, "×",
              round(port_patch_v("R") * 10) / 10, " arm, ",

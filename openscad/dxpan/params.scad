@@ -111,12 +111,15 @@ BS_FOCUS_SAG = 0.336;
 BS_FOCUS_TAN = 0.605;
 function bs_focus_mid() = (BS_FOCUS_SAG + BS_FOCUS_TAN) / 2;   // 0.470 mm
 function r_focus_pull() = bs_t_comp() + bs_focus_mid();        // 0.773 mm
-// Lens helicoid, 2026-10-19. T is decent at f/5.6 with the helicoid at
-// 24 mm. R peaks about 25 mm, and at T's setting it only cleans up
-// stopped a bit past f/32. One millimetre of lens travel is a millimetre
-// at the sensor on this conjugate, and f/32 is the stop that covers it.
-// T is the closer focus, so shorten the T arm by that millimetre. R stays.
-DX_T_PULL = 1.0;
+// Lens helicoid, 2026-10-19, on the print with T 1.60 mm short. T is sharp
+// at f/5.6 at 24 mm. R's best is about 25 mm and still soft at f/5.6 until
+// a bit past f/32. That is the plate curving the reflection, and only the
+// reflection: about 0.03 mm of bow across the 50 mm, convex toward the
+// lens, puts the R image 2.6 mm further out and splits it into focal lines
+// 1.7 mm apart. T looks through the glass and holds the design, so T stays
+// on it and R goes out by that print's 1.60 plus the 1 mm gap. A flatter
+// plate wants this back near zero.
+DX_R_PUSH = 2.60;
 
 // --- camera mouth ----------------------------------------------------------
 F_REV_MAJOR    = 52.0;    // M52×0.75, Fotodiox 52 mm F reverse ring
