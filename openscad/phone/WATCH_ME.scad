@@ -18,9 +18,8 @@
 //                  same 12° aim as the Pro Max scene mount.
 //   duo_flat_shoe  its foot.
 //
-// Duo bare sizes are Apple's published specs; the cased set adds the
-// regular two-part case estimate from the DUO_CASED comment below.
-// Measure the cased half when it lands and trim DUO_CASED to fit.
+// Duo bare sizes are Apple's published specs. The cased outline is the
+// case measured beside a ruler: 118 along the hinge, 84 hinge-to-outer.
 
 include <../lib/part_stamp.scad>
 
@@ -29,12 +28,15 @@ PART = "assembly"; // [assembly, pm17_cradle, pm17_shoe, pm17_ms_cradle, pm17_ms
 $fn = 48;
 
 // --- shoe foot, ISO 518 ------------------------------------------------------
-FOOT_W = 18.3;   // across the shoe; the slot is 18.6
+// The D800 slot is 18.6 across and the lips are 12.5 apart. 18.3 by 2.05
+// printed tight and would not start. The lock clamps what play is left.
+FOOT_W = 17.6;   // across the shoe
 FOOT_L = 36.0;   // along the slide, long enough to enter from either end
 POST_L = 16.0;   // upright, only the middle; both ends of the rail stay clear
-FOOT_T = 2.05;   // under the rail lips. 1.9 rattled on the D800
-NECK_W = 12.0;   // between the lips, 12.5 apart
+FOOT_T = 1.90;   // under the rail lips
+NECK_W = 11.4;   // between the lips
 NECK_H = 2.4;
+SHOE_LEAD = 6;   // each end necks down so the foot finds the slot
 PLAT_H = 4.0;
 // The platform grows out of the neck at 45°, so it prints without a ledge.
 function plat_z0() = FOOT_T + NECK_H;
@@ -104,12 +106,10 @@ PM_MS_LIP = 12.0;       // three times the 4 mm wall; phone edge is 10.9
 
 // --- iPhone Duo lower half: [along the hinge, hinge to front edge, thickness]
 // Bare is one half of the open phone: 117.8 along the hinge, 164.6 / 2 =
-// 82.3 hinge to front edge, 5.2 thick. Cased adds the regular two-part
-// case estimate: ~1.1 over each capped end and the front edge, ~1.3 of
-// back wall. Design envelope was 121 / 88 / 14.5 closed; the tray only
-// holds one half, so its numbers sit well inside that.
+// 82.3 hinge to front edge, 5.2 thick. The case that arrived measures
+// 118 along the hinge and 84 hinge-to-outer, read off a ruler beside it.
 DUO_BARE  = [117.8, 82.3, 5.2];
-DUO_CASED = [120.0, 83.5, 6.5];
+DUO_CASED = [118.0, 84.0, 6.5];
 DUO_GAP   = 0.2;
 // Base thickness. One flat plane on the bottom, and deep enough that the
 // countersunk screw and the cable groove both finish inside it.
@@ -141,29 +141,33 @@ MS_FLOOR = DUO_RIB_H;
 DUO_PAD  = 1.6;
 // Opened flat, landscape, in the case. The hinge runs along Y, so the two
 // halves sit left and right and the long edge is horizontal. Each cased
-// half is 83.5 hinge-to-outer, and the hinge is bare, so the open width is
+// half is 84 hinge-to-outer, and the hinge is bare, so the open width is
 // two halves. 12° is the same aim as the Pro Max scene mount. The plate is
 // tall enough that the puck recess, its cable groove, and the centre
 // countersink all finish above the back face.
-DUO_FLAT_X    = 167.0;
-DUO_FLAT_Y    = 120.0;
+DUO_FLAT_X    = 168.0;
+DUO_FLAT_Y    = 118.0;
 DUO_FLAT_T    = 6.5;
 DUO_FLAT_TILT = 12;
 DUO_FLAT_Z    = 9.0;
 DUO_FLAT_KEY_Y = -20;   // below centre, so the foot stays short
-DUO_FLAT_MS   = [49.6, 0];  // under the camera island, not the half centre
-// Main camera pill, on the back half. Read off a 1:1 model of that half
-// (body 82.3 hinge-to-outer by 118.3 along the hinge): the raised footprint
-// is 56.4 by 21.5, 4.5 in from the outer edge and 4.7 down from the top.
-// Hinge at cradle x=0, top at +Y. The case lip adds 2 mm.
-DUO_CAM   = [60.4, 25.5];
+// Main camera pill, on the back half. Hinge at cradle x=0, top at +Y.
+// The case opening is about 60 hinge-to-outer and 30 across. The top of
+// the cut stays 2.5 mm inside the plate; the extra width grows inward.
+DUO_CAM   = [60.4, 30];
 DUO_CAM_X = 49.6;
-DUO_CAM_Y = 43.7;
+DUO_CAM_Y = 41.45;
+// Inside the case, cameras at the top: the puck's left edge is just left
+// of the camera island. Centering it on the island put that edge to the right.
+DUO_MS_PAST = 1.5;
+DUO_FLAT_MS = [DUO_CAM_X - DUO_CAM[0] / 2 - DUO_MS_PAST + MS_D / 2, 0];
 // Bare body corner is 13 mm. The case grows it. The retainer follows
 // that curve around the bottom corners, then slopes down the side.
 DUO_EDGE  = 15;
 DUO_LIP_H = DUO_FLAT_T + 1; // 1 mm past the 6.5 cased edge, outside the glass
-DUO_USB_X = 41.2;         // centre of the camera half, bottom edge
+// Bottom edge, one inlet on each half. +X is the camera half. The screen
+// half is the same station on the other side of the hinge.
+DUO_USB_X = 41.2;
 DUO_USB_W = 16;           // wider than the plug, same as the Pro Max opening
 DUO_FN    = 160;          // corner segments
 
@@ -224,12 +228,31 @@ module socket_cut(face_z) {
 }
 
 // The part that slides in the shoe. Nothing else occupies this height.
+// Full section in the middle; each end tapers so it starts in the slot.
 module shoe_rail() {
     linear_extrude(FOOT_T)
-        square([FOOT_W, FOOT_L], center = true);
+        square([FOOT_W, FOOT_L - 2 * SHOE_LEAD], center = true);
     translate([0, 0, FOOT_T - 0.01])
         linear_extrude(NECK_H + 0.02)
-            square([NECK_W, FOOT_L], center = true);
+            square([NECK_W, FOOT_L - 2 * SHOE_LEAD], center = true);
+    for (s = [-1, 1]) {
+        hull() {
+            translate([0, s * (FOOT_L / 2 - SHOE_LEAD), 0])
+                linear_extrude(FOOT_T)
+                    square([FOOT_W, 0.02], center = true);
+            translate([0, s * (FOOT_L / 2), 0])
+                linear_extrude(FOOT_T - 0.25)
+                    square([FOOT_W - 1.0, 0.02], center = true);
+        }
+        hull() {
+            translate([0, s * (FOOT_L / 2 - SHOE_LEAD), FOOT_T - 0.01])
+                linear_extrude(NECK_H + 0.02)
+                    square([NECK_W, 0.02], center = true);
+            translate([0, s * (FOOT_L / 2), FOOT_T - 0.01])
+                linear_extrude(NECK_H + 0.02)
+                    square([NECK_W - 0.8, 0.02], center = true);
+        }
+    }
 }
 
 // Upright above the neck, only in the middle, so either end of the rail
@@ -624,11 +647,6 @@ module duo_tray(d, tag) {
                 socket_cut(duo_cased_pocket());
             duo_cased_cam_cut(dep);
             duo_magsafe_cut(dep);
-            // USB-C on the bottom end, same station as the flat cradle.
-            // Open through the wall so a camera plug seats.
-            translate([-90, dep / 2 - DUO_USB_X - DUO_USB_W / 2, -0.1])
-                cube([90 - (len / 2 - 1), DUO_USB_W,
-                      duo_cased_seat() + t + 6]);
             translate([-18, 30, duo_cased_seat() - STAMP_DEPTH])
                 part_stamp_cut(tag, size = 2.2);
         } else {
@@ -684,9 +702,9 @@ module duo_cased_corner(cx, cy, sx, sy, z_floor, z_top) {
 
 // Cased tray retainer, same rules as the flat cradle. The wall stands 1 mm
 // past the case and stays outside the glass. The front edge slopes from
-// both corners down to the MagSafe lead. The bottom end slopes from the
-// front corner down to the USB opening. The hinge end stays clear so the
-// other half can fold down.
+// both corners down to the MagSafe lead. The bottom end is closed: the
+// port is on the screen half, which this tray does not hold. The hinge
+// end stays clear so the other half can fold down.
 module duo_cased_walls(len, dep, t) {
     seat = duo_cased_seat();
     z0 = seat;
@@ -696,8 +714,7 @@ module duo_cased_walls(len, dep, t) {
     cxL = xL + DUO_EDGE;
     cxR = len / 2 - DUO_EDGE;
     cy = yF + DUO_EDGE;
-    // Stop short of the port so the plug housing clears the slope.
-    usb0 = dep / 2 - DUO_USB_X - DUO_USB_W / 2 - 6;
+    yH = dep / 2 - DUO_EDGE;
     cable0 = duo_cased_ms(dep)[0] - MS_CABLE / 2;
     cable1 = duo_cased_ms(dep)[0] + MS_CABLE / 2;
     duo_cased_corner(cxL, cy, -1, -1, z0, h);
@@ -717,13 +734,9 @@ module duo_cased_walls(len, dep, t) {
             cube([0.4, CLIP_WALL, h]);
     }
     translate([xL - 0.4, cy - 0.4, 0])
-        cube([0.8, usb0 - (cy - 0.4), z0]);
-    hull() {
-        translate([xL - CLIP_WALL, cy - 0.2, 0])
-            cube([CLIP_WALL, 0.4, h]);
-        translate([xL - CLIP_WALL, usb0 - 0.2, 0])
-            cube([CLIP_WALL, 0.4, seat]);
-    }
+        cube([0.8, yH - (cy - 0.4), z0]);
+    translate([xL - CLIP_WALL, cy - 0.2, 0])
+        cube([CLIP_WALL, yH - cy + 0.4, h]);
 }
 
 // Puck at the flat cradle's spot. The lead leaves the outer edge, centred
@@ -795,10 +808,11 @@ module duo_flat_cradle() {
             socket_cut(DUO_FLAT_Z);
         translate([-DUO_FLAT_X / 4, 20, DUO_FLAT_Z - STAMP_DEPTH])
             part_stamp_cut("duo_flat", size = 2.6);
-        // USB-C through the lip and the plate ledge in front of it.
-        translate([DUO_USB_X - DUO_USB_W / 2, -90, -0.1])
-            cube([DUO_USB_W, 90 - (DUO_FLAT_Y / 2 - 0.4),
-                  DUO_FLAT_Z + DUO_LIP_H + 2]);
+        // USB-C through the bottom lip, one opening on each half.
+        for (s = [-1, 1])
+            translate([s * DUO_USB_X - DUO_USB_W / 2, -90, -0.1])
+                cube([DUO_USB_W, 90 - (DUO_FLAT_Y / 2 - 0.4),
+                      DUO_FLAT_Z + DUO_LIP_H + 2]);
     }
 }
 
@@ -842,19 +856,14 @@ module duo_lip_side() {
         cube([0.4, 0.4, DUO_FLAT_Z]);
 }
 
-// Retainer along the bottom, around both corners. From each corner it
-// slopes down and arrives at the plate where the USB slot opens.
-module duo_bottom_lip() {
+// One bottom inlet. The wall slopes down to the slot and back up, the same
+// run on either side. cx_port is the slot centre.
+module duo_usb_ramp(cx_port) {
     y0 = -DUO_FLAT_Y / 2;
-    cx = DUO_FLAT_X / 2 - DUO_EDGE;
-    usb0 = DUO_USB_X - DUO_USB_W / 2;
-    usb1 = DUO_USB_X + DUO_USB_W / 2;
-    run = cx - usb1;
+    usb0 = cx_port - DUO_USB_W / 2;
+    usb1 = cx_port + DUO_USB_W / 2;
+    run = (DUO_FLAT_X / 2 - DUO_EDGE) - (abs(cx_port) + DUO_USB_W / 2);
     h = DUO_FLAT_Z + DUO_LIP_H;
-    translate([-cx - 0.4, y0 - 0.4, 0])
-        cube([2 * cx + 0.8, 0.8, DUO_FLAT_Z]);
-    translate([-cx, y0 - CLIP_WALL, 0])
-        cube([usb0 - run - (-cx), CLIP_WALL, h]);
     hull() {
         translate([usb0 - run - 0.2, y0 - CLIP_WALL, 0])
             cube([0.4, CLIP_WALL, h]);
@@ -864,9 +873,23 @@ module duo_bottom_lip() {
     hull() {
         translate([usb1 - 0.2, y0 - CLIP_WALL, 0])
             cube([0.4, CLIP_WALL, DUO_FLAT_Z]);
-        translate([cx - 0.2, y0 - CLIP_WALL, 0])
+        translate([usb1 + run - 0.2, y0 - CLIP_WALL, 0])
             cube([0.4, CLIP_WALL, h]);
     }
+}
+
+// Bottom lip. An inlet on each half, and a full-height wall between them.
+module duo_bottom_lip() {
+    y0 = -DUO_FLAT_Y / 2;
+    cx = DUO_FLAT_X / 2 - DUO_EDGE;
+    run = cx - (DUO_USB_X + DUO_USB_W / 2);
+    h = DUO_FLAT_Z + DUO_LIP_H;
+    translate([-cx - 0.4, y0 - 0.4, 0])
+        cube([2 * cx + 0.8, 0.8, DUO_FLAT_Z]);
+    translate([-(DUO_USB_X - DUO_USB_W / 2 - run), y0 - CLIP_WALL, 0])
+        cube([2 * (DUO_USB_X - DUO_USB_W / 2 - run), CLIP_WALL, h]);
+    for (s = [-1, 1])
+        duo_usb_ramp(s * DUO_USB_X);
     duo_lip_quadrant();
     duo_lip_side();
     mirror([1, 0, 0]) {
