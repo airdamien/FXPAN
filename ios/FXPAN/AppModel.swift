@@ -71,6 +71,8 @@ final class AppModel {
     var plateOn = false
     /// Per-stamp Spot choice. Missing means follow the drive setting.
     private var spotPicks: [String: String] = [:]
+    /// Stamps whose stitch runs the dusk curve. Missing means off. Not a drive setting.
+    private var duskPicks: [String: Bool] = [:]
     var plateBusy = false
     var plateStatus = ""
     var plateFlatCount = 0
@@ -164,6 +166,7 @@ final class AppModel {
         highISO = NoiseBook.isOn
         plateOn = PlateBook.isOn
         spotPicks = Self.loadSpotPicks()
+        duskPicks = Self.loadDuskPicks()
         if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -259,6 +262,7 @@ final class AppModel {
         highISO = NoiseBook.isOn
         plateOn = PlateBook.isOn
         spotPicks = Self.loadSpotPicks()
+        duskPicks = Self.loadDuskPicks()
         camera.simulate = simulate
         camera.canonMode = canon
         camera.adoptPair()
@@ -1345,6 +1349,30 @@ final class AppModel {
         return picks
     }
 
+    /// Off until this set is switched on. It does not follow Drive.
+    func duskOn(_ stamp: String) -> Bool {
+        duskPicks[stamp] == true
+    }
+
+    func chooseDusk(_ stamp: String, _ on: Bool) {
+        if on {
+            duskPicks[stamp] = true
+        } else {
+            duskPicks.removeValue(forKey: stamp)
+        }
+        if let data = try? JSONEncoder().encode(duskPicks) {
+            try? data.write(to: Disk.support.appendingPathComponent("dusk.json"), options: .atomic)
+        }
+        restitch(stamp)
+    }
+
+    private static func loadDuskPicks() -> [String: Bool] {
+        let url = Disk.support.appendingPathComponent("dusk.json")
+        guard let data = try? Data(contentsOf: url),
+              let picks = try? JSONDecoder().decode([String: Bool].self, from: data) else { return [:] }
+        return picks
+    }
+
     /// The stitch in flight was stopped so this set can run again with another engine.
     private func tookRestart(_ stamp: String) -> Bool {
         guard restartStamp == stamp else { return false }
@@ -1682,6 +1710,7 @@ final class AppModel {
         default: break
         }
         let mirrorScene = bodyKind.mirrorScene
+        let dusk = duskPicks[stamp] == true
         do {
             let note: StitchNote = { phase in
                 Task { @MainActor in self.noteStitch(phase) }
@@ -1689,7 +1718,7 @@ final class AppModel {
             let stop = stitchStop
             let metal = metalWarp
             let job = Task.detached(priority: .userInitiated) {
-                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, metal: metal, mirrorScene: mirrorScene, note: note, stop: { stop.cancelled })
+                try Stitcher.write(tURL: t, rURL: r, dest: dest, ana: ana, rig: rig, photo: photo, metal: metal, mirrorScene: mirrorScene, dusk: dusk, note: note, stop: { stop.cancelled })
             }
             stitchPiece = job
             defer { stitchPiece = nil }

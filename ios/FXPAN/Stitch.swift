@@ -325,7 +325,7 @@ enum RawDevelop {
 enum Stitcher {
     static let work = 360
 
-    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
+    static func write(tURL: URL, rURL: URL, dest: URL, ana: URL?, rig: Rig, photo: Photo, metal: Bool = true, mirrorScene: Bool = true, dusk: Bool = false, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> StitchReport {
         try StitchGate.check(stop)
         if photo.drive.engine == "hugin" {
             if let built = try huginFile(tURL: tURL, rURL: rURL, rig: rig, photo: photo, metal: metal, note: note, stop: stop) {
@@ -333,7 +333,7 @@ enum Stitcher {
                     built.made.image, dest: dest, ana: ana, photo: photo, frameWidth: built.made.frameWidth,
                     overlap: built.made.overlap, dy: built.made.dy, flip: rig.flipR, mode: "hugin", score: nil,
                     rot: built.made.rot, scale: built.made.scale, inliers: built.made.inliers, blend: built.made.blend,
-                    develop: built.develop, mirrorScene: mirrorScene, note: note, stop: stop
+                    develop: built.develop, mirrorScene: mirrorScene, dusk: dusk, note: note, stop: stop
                 )
             }
             note?("Features missed, feathering the seam")
@@ -374,7 +374,7 @@ enum Stitcher {
         return try finish(
             cg, dest: dest, ana: ana, photo: photo, frameWidth: frameWidth,
             overlap: overlap, dy: dy, flip: flip, mode: mode, score: score,
-            rot: nil, scale: nil, inliers: nil, blend: blendName, develop: loaded.develop, mirrorScene: mirrorScene, note: note, stop: stop
+            rot: nil, scale: nil, inliers: nil, blend: blendName, develop: loaded.develop, mirrorScene: mirrorScene, dusk: dusk, note: note, stop: stop
         )
     }
 
@@ -433,7 +433,7 @@ enum Stitcher {
     private static func finish(
         _ image: CGImage, dest: URL, ana: URL?, photo: Photo, frameWidth: Int,
         overlap: Double, dy: Int, flip: Bool, mode: String, score: Double?,
-        rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, mirrorScene: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil
+        rot: Double?, scale: Double?, inliers: Int?, blend: String?, develop: String? = nil, mirrorScene: Bool = true, dusk: Bool = false, note: StitchNote? = nil, stop: StitchStop? = nil
     ) throws -> StitchReport {
         try StitchGate.check(stop)
         // R is flopped to meet T. That pair is a mirror of the scene on both bodies, so it is flopped.
@@ -442,6 +442,15 @@ enum Stitcher {
             note?("Grading the look")
             cg = grade(cg, look: photo.look, fromRaw: develop == "ciraw")
             try StitchGate.check(stop)
+        }
+        if dusk {
+            note?("Lifting the dusk")
+            let started = CFAbsoluteTimeGetCurrent()
+            cg = Dusk.lift(cg)
+            try StitchGate.check(stop)
+            let took = CFAbsoluteTimeGetCurrent() - started
+            print(String(format: "FXPAN dusk %.1fs", took))
+            Trace.line(String(format: "FXPAN dusk %.1fs", took))
         }
         note?("Writing the panorama")
         try jpeg(cg, to: dest)

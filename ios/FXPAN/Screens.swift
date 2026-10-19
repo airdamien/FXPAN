@@ -866,7 +866,10 @@ struct ShotScreen: View {
                     ChipRow(options: [("drive", "Drive"), ("on", "Spot"), ("off", "Off")], selected: model.spotChoice(stamp)) { value in
                         model.chooseSpot(stamp, value)
                     }
-                    Text("Pick a stitch to run it on this set. Spot follows Drive unless this set says otherwise. Hold the picture to inspect pixels.")
+                    ChipRow(options: [("off", "Off"), ("on", "Dusk")], selected: model.duskOn(stamp) ? "on" : "off") { value in
+                        model.chooseDusk(stamp, value == "on")
+                    }
+                    Text("Pick a stitch to run it on this set. Spot follows Drive unless this set says otherwise. Dusk lifts this set only. Hold the picture to inspect pixels.")
                         .font(Theme.font(12))
                         .foregroundStyle(Theme.dim)
                 }
