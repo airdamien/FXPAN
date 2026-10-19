@@ -94,6 +94,12 @@ enum NoiseBook {
 
     static var isOn: Bool { snapshot().on }
 
+    static func forget() {
+        lock.lock()
+        cache = nil
+        lock.unlock()
+    }
+
     static func setOn(_ on: Bool) {
         lock.lock()
         defer { lock.unlock() }
@@ -161,8 +167,7 @@ enum NoiseBook {
     private static func amount(_ fit: NoiseFit, _ base: NoiseFit, y: Float) -> Float {
         let s = fit.sigma(at: y)
         let z = base.sigma(at: y)
-        if s < 1e-4 { return 0 }
-        if z < 1e-6 { return 0.5 }
+        if s < 0.001 || z < 0.001 { return 0 }
         return min(0.92, max(0, (s / z - 1.08) / 4.2))
     }
 
@@ -202,6 +207,7 @@ enum NoiseBook {
         let url = Disk.support.appendingPathComponent("noise.json")
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: url, options: .atomic)
+        CloudShelf.push("noise.json")
     }
 
     static func sameSerial(_ a: String, _ b: String) -> Bool {
@@ -227,6 +233,10 @@ enum NoiseBook {
             return !name.isEmpty && (fileModel.contains(name) || name.contains(fileModel))
         }
         return hits.count == 1 ? hits[0] : nil
+    }
+
+    static func identity(_ url: URL) -> (iso: Int, serial: String, model: String) {
+        facts(url)
     }
 
     private static func facts(_ url: URL) -> (iso: Int, serial: String, model: String) {

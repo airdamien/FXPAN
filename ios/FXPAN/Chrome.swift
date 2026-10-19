@@ -183,6 +183,7 @@ struct RootView: View {
         case .about: AboutScreen()
         case .apple: AppleScreen()
         case .noise: NoiseScreen()
+        case .plate: PlateScreen()
         }
     }
 }
@@ -512,6 +513,8 @@ struct DimPage<Controls: View, Panel: View>: View {
     var crumb: String?
     /// Keep the picture in place and scroll only the controls under it.
     var stickPanel: Bool = false
+    /// The list uses the whole width and keeps its own scroll.
+    var fills: Bool = false
     @ViewBuilder var controls: () -> Controls
     @ViewBuilder var panel: () -> Panel
 
@@ -538,7 +541,10 @@ struct DimPage<Controls: View, Panel: View>: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 6)
             Group {
-                if halfOpen {
+                if fills {
+                    controls()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                } else if halfOpen {
                     if stickPanel {
                         stuck()
                     } else {
@@ -574,7 +580,8 @@ struct DimPage<Controls: View, Panel: View>: View {
             }
             .padding(.horizontal, 12)
         }
-        .id(usb)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .id(fills ? 0 : usb)
     }
 
     /// The picture keeps the panorama's shape at the top. The controls take the rest of the screen and scroll.

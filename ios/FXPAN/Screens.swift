@@ -664,39 +664,61 @@ struct PlaybackScreen: View {
     @State private var confirmOlder = false
 
     var body: some View {
-        DimPage(title: "Playback", controls: {
-            if model.shots.isEmpty {
-                Text("No sets yet").foregroundStyle(Theme.dim).padding(.top, 24)
-            } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        PressChip(title: "Delete all", filled: false) { confirmAll = true }
-                            .confirmationDialog("Delete every set?", isPresented: $confirmAll, titleVisibility: .visible) {
-                                Button("Delete all", role: .destructive) { model.deleteShots(beforeToday: false) }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("Protected sets stay.")
-                            }
-                        PressChip(title: "Older than today", filled: false) { confirmOlder = true }
-                            .confirmationDialog("Delete sets from before today?", isPresented: $confirmOlder, titleVisibility: .visible) {
-                                Button("Delete older", role: .destructive) { model.deleteShots(beforeToday: true) }
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("Protected sets stay.")
-                            }
-                    }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
-                        ForEach(model.shots) { shot in
-                            card(shot)
-                                .onTapGesture { model.go(.shot(shot.stamp)) }
-                                .onLongPressGesture(minimumDuration: 0.35) {
-                                    model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+        DimPage(title: "Playback", fills: true, controls: {
+            GeometryReader { geo in
+                let columns = max(2, Int((geo.size.width + 10) / 156))
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if model.shots.isEmpty {
+                                Text("No sets yet").foregroundStyle(Theme.dim).padding(.top, 24)
+                            } else {
+                                HStack(spacing: 8) {
+                                    PressChip(title: "Delete all", filled: false) { confirmAll = true }
+                                        .confirmationDialog("Delete every set?", isPresented: $confirmAll, titleVisibility: .visible) {
+                                            Button("Delete all", role: .destructive) { model.deleteShots(beforeToday: false) }
+                                            Button("Cancel", role: .cancel) {}
+                                        } message: {
+                                            Text("Protected sets stay.")
+                                        }
+                                    PressChip(title: "Older than today", filled: false) { confirmOlder = true }
+                                        .confirmationDialog("Delete sets from before today?", isPresented: $confirmOlder, titleVisibility: .visible) {
+                                            Button("Delete older", role: .destructive) { model.deleteShots(beforeToday: true) }
+                                            Button("Cancel", role: .cancel) {}
+                                        } message: {
+                                            Text("Protected sets stay.")
+                                        }
                                 }
+                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 10) {
+                                    ForEach(model.shots) { shot in
+                                        card(shot)
+                                            .id(shot.stamp)
+                                            .onTapGesture {
+                                                model.playbackReturn = shot.stamp
+                                                model.go(.shot(shot.stamp))
+                                            }
+                                            .onLongPressGesture(minimumDuration: 0.35) {
+                                                model.peep(shot.ana ?? shot.pano ?? shot.t ?? shot.r, title: shot.name)
+                                            }
+                                    }
+                                }
+                            }
                         }
+                        .padding(.bottom, 24)
                     }
+                    .onAppear { restore(proxy) }
                 }
             }
         }, panel: { EmptyView() })
+    }
+
+    private func restore(_ proxy: ScrollViewProxy) {
+        guard let stamp = model.playbackReturn else { return }
+        Task { @MainActor in
+            proxy.scrollTo(stamp, anchor: .center)
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            proxy.scrollTo(stamp, anchor: .center)
+        }
     }
 
     private func card(_ shot: ShotFiles) -> some View {
@@ -1152,6 +1174,7 @@ struct SystemScreen: View {
             VStack(spacing: 8) {
                 nav("Cameras", model.camera.line, .cameras)
                 nav("Noise", noiseHint, .noise)
+                nav("Plate", plateHint, .plate)
                 nav("Rig", "\(Int((model.rig.overlap * 100).rounded()))%\(model.rig.flipR ? " · flop R" : "")", .rig)
                 nav("Display", model.idleMinutes == 0 ? "Awake" : "\(model.idleMinutes) min\(model.shoeEnabled ? " · Shoe" : "")", .display)
                 nav("Storage", Disk.freeBytes().map(Disk.fmtBytes) ?? "", .storage)
@@ -1183,6 +1206,8 @@ struct SystemScreen: View {
                      ? "USB connection set to photo import. The card is left alone. A CR3 is saved beside the JPEG."
                      : "T sees through the plate, R off its face.")
                     .font(Theme.font(13)).foregroundStyle(Theme.dim)
+                Text("Noise, plate, body pairing, and the rig copy to iCloud with this Apple ID. The next phone receives them when FXPAN is installed.")
+                    .font(Theme.font(13)).foregroundStyle(Theme.dim)
             }
         })
     }
@@ -1192,6 +1217,14 @@ struct SystemScreen: View {
         if model.highISO { return "High ISO on" }
         let n = NoiseBook.bodies().count
         if n == 0 { return "No profile" }
+        return "\(n) saved"
+    }
+
+    private var plateHint: String {
+        let _ = model.plateStatus
+        if model.plateOn { return "On" }
+        let n = PlateBook.bodies().filter(\.measured).count
+        if n == 0 { return "No sheet" }
         return "\(n) saved"
     }
 
@@ -1286,6 +1319,108 @@ struct NoiseScreen: View {
     }
 
     private func profileCard(title: String, serial: String, detail: String, when: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).font(Theme.font(16, weight: .medium))
+                Spacer()
+                if let when {
+                    Text(when.formatted(date: .abbreviated, time: .shortened))
+                        .font(Theme.font(12))
+                        .foregroundStyle(Theme.dim)
+                }
+            }
+            if !serial.isEmpty {
+                Text(serial).font(Theme.font(12)).foregroundStyle(Theme.dim)
+            }
+            Text(detail).font(Theme.font(13)).foregroundStyle(Theme.dim)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+    }
+}
+
+struct PlateScreen: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let _ = model.usbRevision
+        let saved = PlateBook.bodies()
+        DimPage(title: "Plate", crumb: "System", controls: {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: Binding(get: { model.plateOn }, set: { model.setPlate($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Plate correction").font(Theme.font(16, weight: .medium))
+                        Text("Matches R to T, pulls the color fringe in, and lifts the flat. Applied on the raw develop and on a JPEG stitch.")
+                            .font(Theme.font(12)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .tint(Theme.gold)
+                .padding(12)
+                .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+                PressChip(title: "Use the last good stitch", on: true) { model.measureSavedPlate() }
+                Text("Color and fringe come from the pair that lined up. The flat stays out of that frame, because the light on the sheet would be saved with it.")
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.dim)
+                PressChip(title: "Shoot the gray", on: true) { model.shootPlate(.color) }
+                PressChip(title: "Shoot the rules", on: true) { model.shootPlate(.fringe) }
+                PressChip(title: flatTitle, on: true) { model.shootPlate(.flat) }
+                PressChip(title: "Clear saved plate", on: true, filled: false) { model.clearSavedPlate() }
+                PressChip(title: "Clear the flats", on: model.plateFlatCount > 0, filled: false) { model.resetPlateFlats() }
+                if !model.plateStatus.isEmpty {
+                    Text(model.plateStatus)
+                        .font(Theme.font(14, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                }
+                ForEach(Role.allCases) { role in
+                    plateRow(role, saved: saved)
+                }
+                let paired = Role.allCases.compactMap { model.camera.slots[$0]?.serial }
+                let extra = saved.filter { body in !paired.contains { NoiseBook.sameSerial($0, body.serial) } }
+                if !extra.isEmpty {
+                    Text("Saved").font(Theme.font(13)).foregroundStyle(Theme.dim)
+                    ForEach(extra) { body in
+                        plateCard(title: body.model, serial: body.serial, detail: body.line(), when: body.taken)
+                    }
+                }
+            }
+        }, panel: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(model.plateBusy ? "Shooting" : (model.plateOn ? "Correction on" : "Correction off"))
+                    .font(Theme.font(16, weight: .medium))
+                Text(PlateBook.guide)
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.dim)
+                Text("Gray first. The gray half does not have to fill the frame. The app uses the flat part and ignores the rules. Then the rules, squared so the lines reach toward the corners. Then four flats. The gray cannot fill a 180mm frame at a distance that will focus, so aim the gray at a different part of the frame each time: left, right, high, low. The glass around the sheet is left out after the shot. A reflection on the paper still counts, so tilt that off. Both bodies fire together and the frames are deleted after they are measured.")
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.ink2)
+            }
+        })
+    }
+
+    private var flatTitle: String {
+        let n = model.plateFlatCount
+        if n <= 0 { return "Shoot flat 1 of 4" }
+        if n >= 4 { return "Shoot flat 1 of 4" }
+        return "Shoot flat \(n + 1) of 4"
+    }
+
+    private func plateRow(_ role: Role, saved: [PlateBody]) -> some View {
+        let slot = model.camera.slots[role] ?? BodyState()
+        let title = "\(role.rawValue) · \(slot.model.isEmpty ? "No body" : slot.model)"
+        let match = saved.first { NoiseBook.sameSerial($0.serial, slot.serial) }
+        let detail: String
+        if !slot.paired || slot.serial.isEmpty {
+            detail = "Not paired"
+        } else if let match {
+            detail = match.line()
+        } else {
+            detail = "No sheet yet"
+        }
+        return plateCard(title: title, serial: slot.serial, detail: detail, when: match?.taken)
+    }
+
+    private func plateCard(title: String, serial: String, detail: String, when: Date?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title).font(Theme.font(16, weight: .medium))

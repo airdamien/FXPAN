@@ -22,6 +22,64 @@ struct Persisted: Codable {
     var shoeOn: Bool? = nil
 }
 
+/// Noise, plate, body pairing, and rig settings. The store rides the Apple ID, so a new phone with this app receives them.
+enum CloudShelf {
+    static let names = ["noise.json", "plate.json", "cameras.json", "state.json"]
+    private static var watching = false
+
+    /// Pull a newer iCloud copy down, or push a newer local copy up. True when a local file was replaced.
+    @discardableResult
+    static func merge() -> Bool {
+        let store = NSUbiquitousKeyValueStore.default
+        var changed = false
+        for name in names {
+            let local = Disk.support.appendingPathComponent(name)
+            let attrs = try? FileManager.default.attributesOfItem(atPath: local.path)
+            let localDate = attrs?[.modificationDate] as? Date ?? .distantPast
+            let cloudStamp = store.double(forKey: stamp(name))
+            let cloudDate = cloudStamp > 0 ? Date(timeIntervalSince1970: cloudStamp) : .distantPast
+            if let cloud = store.data(forKey: name), cloudDate > localDate.addingTimeInterval(1) {
+                try? cloud.write(to: local, options: .atomic)
+                changed = true
+            } else if localDate > cloudDate.addingTimeInterval(1),
+                      let data = try? Data(contentsOf: local),
+                      data.count < 900_000 {
+                store.set(data, forKey: name)
+                store.set(localDate.timeIntervalSince1970, forKey: stamp(name))
+            }
+        }
+        store.synchronize()
+        return changed
+    }
+
+    static func push(_ name: String) {
+        guard names.contains(name) else { return }
+        let local = Disk.support.appendingPathComponent(name)
+        guard let data = try? Data(contentsOf: local), data.count < 900_000 else { return }
+        let store = NSUbiquitousKeyValueStore.default
+        store.set(data, forKey: name)
+        store.set(Date().timeIntervalSince1970, forKey: stamp(name))
+        store.synchronize()
+    }
+
+    static func watch(_ apply: @escaping () -> Void) {
+        guard !watching else { return }
+        watching = true
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { note in
+            let reason = note.userInfo?[NSUbiquitousKeyValueStoreChangeReasonKey] as? Int
+            if reason == NSUbiquitousKeyValueStoreQuotaViolationChange { return }
+            apply()
+        }
+        NSUbiquitousKeyValueStore.default.synchronize()
+    }
+
+    private static func stamp(_ name: String) -> String { name + ".at" }
+}
+
 enum Disk {
     static var support: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -105,6 +163,7 @@ enum Disk {
         let url = support.appendingPathComponent("state.json")
         guard let data = try? JSONEncoder().encode(state) else { return }
         try? data.write(to: url, options: .atomic)
+        CloudShelf.push("state.json")
     }
 
     static func loadPair() -> (t: String, r: String) {
@@ -121,6 +180,7 @@ enum Disk {
         let obj = ["T": t, "R": r]
         guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) else { return }
         try? data.write(to: url, options: .atomic)
+        CloudShelf.push("cameras.json")
     }
 
     static func freeBytes() -> Int64? {

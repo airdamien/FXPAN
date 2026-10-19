@@ -8,7 +8,7 @@ enum Route: Hashable {
     case playback
     case shot(String)
     case raw(String)
-    case system, cameras, rig, display, storage, about, apple, noise
+    case system, cameras, rig, display, storage, about, apple, noise, plate
 }
 
 struct Toast: Equatable {
@@ -65,6 +65,12 @@ final class AppModel {
     var noiseBusy = false
     var noiseStatus = ""
     private var noiseStop = false
+    /// Sheet corrections for the plate: color, fringe, and flat.
+    var plateOn = false
+    var plateBusy = false
+    var plateStatus = ""
+    var plateFlatCount = 0
+    private let plateScratch = PlateScratch()
     /// Both Nikons are recording. The shutter stops the clips and stitches them.
     var recording = false
     /// One Canon on USB. Picture and transfer only. The Nikon pair is left alone.
@@ -81,6 +87,8 @@ final class AppModel {
     var cameraRevision = 0
     /// Bumped when a body is added, removed, or reseated. Settings pages use this, not every live frame.
     var usbRevision = 0
+    /// The playback card to return to after a set is closed.
+    var playbackReturn: String?
     /// Latest prism readings. The top bar shows these while auto-meter is on.
     var meterReads: [Role: MeterRead] = [:]
     /// The bar auto-meter already turned into shutter and ISO.
@@ -124,6 +132,7 @@ final class AppModel {
     }
 
     func start() async {
+        CloudShelf.merge()
         var state = Disk.load()
         photo = state.photo
         let huginMark = Disk.support.appendingPathComponent("hugin-default")
@@ -149,6 +158,7 @@ final class AppModel {
         canon = state.canon
         shoeOn = state.shoeOn
         highISO = NoiseBook.isOn
+        plateOn = PlateBook.isOn
         if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -195,6 +205,9 @@ final class AppModel {
             note("10-pin sync on", bad: false)
         }
         ingest()
+        CloudShelf.watch { [weak self] in
+            Task { @MainActor in self?.adoptCloud() }
+        }
         armIdle()
         watchSync()
         armMeter()
@@ -204,6 +217,47 @@ final class AppModel {
             try? await Task.sleep(nanoseconds: 600_000_000)
             await fire()
         }
+    }
+
+    private var cloudWait: Task<Void, Never>?
+
+    /// iCloud delivered a newer calibration. Idle only, so a shot in progress does not get its settings replaced.
+    func adoptCloud() {
+        if shooting || recording || plateBusy || noiseBusy || stitchRunning {
+            guard cloudWait == nil else { return }
+            cloudWait = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                self.cloudWait = nil
+                self.adoptCloud()
+            }
+            return
+        }
+        guard CloudShelf.merge() else { return }
+        NoiseBook.forget()
+        PlateBook.forget()
+        let state = Disk.load()
+        photo = state.photo
+        modes = state.modes
+        activeModeID = state.activeModeID
+        rig = state.rig
+        notes = state.shots
+        protectedStamps = Set(state.protectedStamps)
+        if state.idleChosen {
+            idleMinutes = state.idleMinutes
+            idleChosen = true
+        }
+        appleOn = state.appleOn
+        if let warp = state.metalWarp { metalWarp = warp }
+        simulate = state.simulate
+        canon = state.canon
+        shoeOn = state.shoeOn
+        highISO = NoiseBook.isOn
+        plateOn = PlateBook.isOn
+        camera.simulate = simulate
+        camera.canonMode = canon
+        camera.adoptPair()
+        ingest()
+        applyIdle()
     }
 
     /// A stitch keeps running for the short time iOS allows after a switch away. This is not a background-processing mode. The hold exists only while the app is actually in the background and a stitch is in flight.
@@ -316,6 +370,223 @@ final class AppModel {
     func setHighISO(_ on: Bool) {
         highISO = on
         NoiseBook.setOn(on)
+    }
+
+    func setPlate(_ on: Bool) {
+        plateOn = on
+        PlateBook.setOn(on)
+    }
+
+    /// One paired frame of the printed sheet. Color and fringe are a single shot. The flat is four, with a slide between them.
+    func shootPlate(_ job: PlateJob) {
+        if plateBusy {
+            return
+        }
+        if noiseBusy || shooting || recording {
+            plateStatus = "Wait for the shutter"
+            return
+        }
+        if canon {
+            plateStatus = "The sheet run drives the Nikon pair"
+            return
+        }
+        let ready = Role.allCases.filter { role in
+            let slot = camera.slots[role] ?? BodyState()
+            return slot.paired && slot.online
+        }
+        if ready.count < 2 && !simulate {
+            plateStatus = "Pair both bodies on USB first"
+            return
+        }
+        plateBusy = true
+        shooting = true
+        let label: String
+        switch job {
+        case .color: label = "Shooting the gray"
+        case .fringe: label = "Shooting the rules"
+        case .flat: label = "Shooting flat \(plateFlatCount + 1) of 4"
+        }
+        plateStatus = label
+        let restore = photo
+        let wasLive = camera.live
+        Task {
+            defer {
+                self.plateBusy = false
+                self.shooting = false
+                let photo = self.photo
+                Task {
+                    await self.camera.apply(photo, force: true)
+                    if wasLive { await self.camera.setLive(true) }
+                }
+            }
+            do {
+                let pair = try await self.camera.platePair(photo: restore)
+                self.keepPlate(job, pair)
+            } catch {
+                self.plateStatus = error.localizedDescription
+            }
+        }
+    }
+
+    /// Color and fringe from the newest stitch that actually lined up. One frame cannot be the flat: the room light would be stored as the plate.
+    func measureSavedPlate() {
+        if plateBusy || noiseBusy || shooting || recording {
+            plateStatus = "Wait for the shutter"
+            return
+        }
+        reloadShots()
+        guard let shot = goodPlateShot() else {
+            plateStatus = "No lined-up stitch to measure. The pair that missed is left out."
+            return
+        }
+        plateBusy = true
+        plateStatus = "Measuring \(shot.name)"
+        Task {
+            defer { self.plateBusy = false }
+            guard let tURL = plateFile(shot.t, shot.nefT), let rURL = plateFile(shot.r, shot.nefR),
+                  let tImage = Stitcher.thumbnail(at: tURL, maxPixel: 1600),
+                  let rImage = Stitcher.thumbnail(at: rURL, maxPixel: 1600) else {
+                self.plateStatus = "Could not read \(shot.name)"
+                return
+            }
+            let tWho = NoiseBook.identity(tURL)
+            let rWho = NoiseBook.identity(rURL)
+            let pair: [Role: NoiseGrab] = [
+                .t: NoiseGrab(image: tImage, iso: tWho.iso, serial: tWho.serial, model: tWho.model),
+                .r: NoiseGrab(image: rImage, iso: rWho.iso, serial: rWho.serial, model: rWho.model),
+            ]
+            self.keepPlate(.color, pair)
+            let color = self.plateStatus
+            if color.hasPrefix("The gray") || color.hasPrefix("One body") {
+                return
+            }
+            self.keepPlate(.fringe, pair)
+            let fringe = self.plateStatus
+            if fringe.hasPrefix("The rules") || fringe.hasPrefix("One body") {
+                self.plateStatus = "From \(shot.name). \(color)"
+                return
+            }
+            self.plateStatus = "From \(shot.name). \(color) \(fringe) The flat stays out of this frame. The light on the sheet would be saved as if it were the plate."
+        }
+    }
+
+    private func plateFile(_ jpeg: URL?, _ nef: URL?) -> URL? {
+        if let jpeg, !NoiseBook.identity(jpeg).serial.isEmpty { return jpeg }
+        if let nef, !NoiseBook.identity(nef).serial.isEmpty { return nef }
+        return jpeg ?? nef
+    }
+
+    private func goodPlateShot() -> ShotFiles? {
+        for shot in shots where (shot.t ?? shot.nefT) != nil && (shot.r ?? shot.nefR) != nil {
+            guard let report = stitchReport(shot) else { continue }
+            if report.blend == "multiband", (report.inliers ?? 0) >= 20 { return shot }
+        }
+        return nil
+    }
+
+    private func stitchReport(_ shot: ShotFiles) -> StitchReport? {
+        let url = Disk.captures.appendingPathComponent("P_\(shot.stamp).json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(StitchReport.self, from: data)
+    }
+
+    func resetPlateFlats() {
+        plateScratch.shots.removeAll()
+        plateFlatCount = 0
+        plateStatus = "Flats cleared. Aim the gray at one part of the frame, then shoot flat 1 of 4."
+    }
+
+    /// The sheet shots and anything they stored. A restitch after this is the frame without them.
+    func clearSavedPlate() {
+        plateScratch.shots.removeAll()
+        plateFlatCount = 0
+        PlateBook.clearMeasurements()
+        setPlate(false)
+        plateStatus = "Saved plate cleared. Correction is off. Restitch for the frame without it."
+    }
+
+    private func doorNote(_ image: CGImage) -> String {
+        PlateField.trimmedDoor(image) ? " The door around the sheet was left out." : ""
+    }
+
+    private func keepPlate(_ job: PlateJob, _ pair: [Role: NoiseGrab]) {
+        guard let t = pair[.t], let r = pair[.r], !t.serial.isEmpty, !r.serial.isEmpty else {
+            plateStatus = "One body came back without a serial"
+            return
+        }
+        switch job {
+        case .color:
+            guard let tm = PlateField.gray(t.image), let rm = PlateField.gray(r.image), tm.neutral, rm.neutral else {
+                plateStatus = "The gray on the sheet was not even enough. A reflection on the paper still counts. Shift until that gray is flat, then shoot again."
+                return
+            }
+            PlateBook.update(t.serial, model: t.model) {
+                $0.reference = t.serial
+                $0.gainR = 1
+                $0.gainG = 1
+                $0.gainB = 1
+            }
+            let gr = tm.r / max(rm.r, 0.002)
+            let gg = tm.g / max(rm.g, 0.002)
+            let gb = tm.b / max(rm.b, 0.002)
+            PlateBook.update(r.serial, model: r.model) {
+                $0.reference = t.serial
+                $0.gainR = min(1.6, max(0.6, gr))
+                $0.gainG = min(1.6, max(0.6, gg))
+                $0.gainB = min(1.6, max(0.6, gb))
+            }
+            setPlate(true)
+            plateStatus = String(format: "Gray saved. R against T: red %+.1f%%, green %+.1f%%, blue %+.1f%%. Turn the sheet to the rules.", (gr - 1) * 100, (gg - 1) * 100, (gb - 1) * 100) + doorNote(t.image)
+        case .fringe:
+            var saved = 0
+            var note = ""
+            for grab in [t, r] {
+                guard let fit = PlateField.fringe(grab.image) else { continue }
+                PlateBook.update(grab.serial, model: grab.model) {
+                    $0.caR = fit.caR
+                    $0.caB = fit.caB
+                }
+                saved += 1
+                note += String(format: " %@ red %+.2f%% blue %+.2f%%.", grab.model, fit.caR * 100, fit.caB * 100)
+            }
+            if saved == 0 {
+                plateStatus = "The rules on the sheet were not clear enough. Square the grid to the rig. A reflection on the paper still counts."
+                return
+            }
+            setPlate(true)
+            plateStatus = "Rules saved.\(note) Put the gray back for the four flats." + doorNote(t.image)
+        case .flat:
+            plateScratch.shots[.t, default: []].append(t.image)
+            plateScratch.shots[.r, default: []].append(r.image)
+            plateFlatCount = min(plateScratch.shots[.t]?.count ?? 0, plateScratch.shots[.r]?.count ?? 0)
+            if plateFlatCount < 4 {
+                plateStatus = "Flat \(plateFlatCount) of 4. Move the sheet so the gray covers a part of the frame it has not covered yet." + doorNote(t.image)
+                return
+            }
+            var lines: [String] = []
+            for role in [Role.t, Role.r] {
+                guard let grab = pair[role] else { continue }
+                let frames = plateScratch.shots[role] ?? []
+                guard let made = PlateField.flat(frames) else { continue }
+                PlateBook.update(grab.serial, model: grab.model) {
+                    $0.flatW = made.w
+                    $0.flatH = made.h
+                    $0.flat = made.values
+                }
+                let body = PlateBook.bodies().first { NoiseBook.sameSerial($0.serial, grab.serial) }
+                if let fall = body?.cornerFall() {
+                    lines.append(String(format: "%@ corner %+.0f%%", grab.model, fall * 100))
+                }
+            }
+            plateScratch.shots.removeAll()
+            plateFlatCount = 0
+            if lines.isEmpty {
+                plateStatus = "The sheet's grid was still in the flat, so nothing was saved. Move the gray to a new part of the frame for each of the four shots, then start again."
+                return
+            }
+            setPlate(true)
+            plateStatus = "Flat saved. " + lines.joined(separator: ", ") + ". Plate correction is on." + doorNote(t.image)
+        }
     }
 
     /// Fire each paired body through a manual ISO and shutter walk, then store variance = a × mean + b on its serial.

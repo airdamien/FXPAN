@@ -108,7 +108,7 @@ struct RawScreen: View {
     }
 
     private var previewToken: String {
-        "\(role)|\(url?.path ?? "")|\(before)|\(clip)|\(model.highISO)|\(shown.exposure)|\(shown.hashValue)"
+        "\(role)|\(url?.path ?? "")|\(before)|\(clip)|\(model.highISO)|\(model.plateOn)|\(shown.exposure)|\(shown.hashValue)"
     }
 
     @ViewBuilder
@@ -129,6 +129,7 @@ struct RawScreen: View {
                 balance
                 tone
                 highISO
+                plate
                 detail
                 lens
                 actions
@@ -223,6 +224,20 @@ struct RawScreen: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("High ISO reduction").font(Theme.font(16, weight: .medium))
                 Text(NoiseBook.caption(url: url))
+                    .font(Theme.font(12))
+                    .foregroundStyle(Theme.dim)
+            }
+        }
+        .tint(Theme.gold)
+        .padding(12)
+        .background(Theme.s1, in: RoundedRectangle(cornerRadius: Theme.radius))
+    }
+
+    private var plate: some View {
+        Toggle(isOn: Binding(get: { model.plateOn }, set: { model.setPlate($0); schedule() })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Plate correction").font(Theme.font(16, weight: .medium))
+                Text("Color match, fringe, and flat from the printed sheet.")
                     .font(Theme.font(12))
                     .foregroundStyle(Theme.dim)
             }

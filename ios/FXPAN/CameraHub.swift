@@ -90,6 +90,15 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         publish()
     }
 
+    /// Pairing saved in iCloud. Leave the roles alone until a body is actually on USB, so an empty bus does not wipe the saved serials.
+    func adoptPair() {
+        let pair = Disk.loadPair()
+        pairT = Self.kept(pair.t)
+        pairR = Self.kept(pair.r)
+        if !links.isEmpty { claimRoles() }
+        publish()
+    }
+
     /// Stop live view and drop the sessions so the bodies are not held awake.
     func idleDown() async {
         guard started, !simulate, !idling else { return }
@@ -231,19 +240,53 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
         guard await link.releaseShutter() else { throw PTPError.message("\(role.rawValue) shutter refused") }
         let grabbed = try await link.takeRAM(stamp: stamp, role: role)
         guard let url = grabbed.jpeg ?? grabbed.nef else { throw PTPError.message("\(role.rawValue) sent no frame") }
-        let image = try Self.noiseThumb(url)
+        let image = try Self.noiseThumb(url, maxPixel: 800)
         let state = link.state(role: role, paired: true)
         let got = Int(state.iso.filter { $0.isNumber }) ?? Int(iso) ?? 0
         return NoiseGrab(image: image, iso: got > 0 ? got : (Int(iso) ?? 0), serial: state.serial, model: state.model)
     }
 
-    private static func noiseThumb(_ url: URL) throws -> CGImage {
+    /// Both bodies, one exposure, JPEG. The frames are measured and removed so the sheet does not land in the library.
+    func platePair(photo: Photo) async throws -> [Role: NoiseGrab] {
+        var shot = photo
+        shot.drive.quality = "JPEG Fine"
+        shot.drive.autoStitch = false
+        shot.light.autoMeter = false
+        noiseMark += 1
+        let stamp = "plate\(noiseMark)"
+        defer { Self.deleteNoise(stamp) }
+        await apply(shot, readBack: false, force: true)
+        let grabbed = try await capture(stamp: stamp, photo: shot)
+        var out: [Role: NoiseGrab] = [:]
+        for (role, file) in grabbed {
+            guard let url = file.jpeg ?? file.nef else { continue }
+            let image = try Self.noiseThumb(url, maxPixel: 1600)
+            let serial: String
+            let model: String
+            if simulate {
+                serial = role == .t ? "SIM-T" : "SIM-R"
+                model = "D800"
+            } else if let link = links.values.first(where: { self.role(of: $0.token) == role }) {
+                let state = link.state(role: role, paired: true)
+                serial = state.serial
+                model = state.model
+            } else {
+                serial = ""
+                model = ""
+            }
+            out[role] = NoiseGrab(image: image, iso: 0, serial: serial, model: model)
+        }
+        if out.isEmpty { throw PTPError.message("The pair sent no frame") }
+        return out
+    }
+
+    private static func noiseThumb(_ url: URL, maxPixel: Int) throws -> CGImage {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw PTPError.message("Could not read the profile frame")
         }
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: 800,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
             kCGImageSourceCreateThumbnailWithTransform: true,
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else {
