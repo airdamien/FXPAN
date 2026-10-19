@@ -58,6 +58,8 @@ final class AppModel {
     var focusBox: CGRect?
     var focusSharp: CGRect?
     var focusPlace: FocusPlace = .both
+    /// Set when one body's overlap is plainly softer than the other. Nil when they match.
+    var focusGap: FocusPlace?
     var playingFocus = false
     var simulate = false
     /// High ISO reduction from the body profile. Off leaves the develop as graded.
@@ -67,6 +69,8 @@ final class AppModel {
     private var noiseStop = false
     /// Sheet corrections for the plate: color, fringe, and flat.
     var plateOn = false
+    /// Per-stamp Spot choice. Missing means follow the drive setting.
+    private var spotPicks: [String: String] = [:]
     var plateBusy = false
     var plateStatus = ""
     var plateFlatCount = 0
@@ -159,6 +163,7 @@ final class AppModel {
         shoeOn = state.shoeOn
         highISO = NoiseBook.isOn
         plateOn = PlateBook.isOn
+        spotPicks = Self.loadSpotPicks()
         if canon { simulate = false }
         if adoptHugin {
             try? Data("1".utf8).write(to: huginMark)
@@ -253,6 +258,7 @@ final class AppModel {
         shoeOn = state.shoeOn
         highISO = NoiseBook.isOn
         plateOn = PlateBook.isOn
+        spotPicks = Self.loadSpotPicks()
         camera.simulate = simulate
         camera.canonMode = canon
         camera.adoptPair()
@@ -1315,6 +1321,30 @@ final class AppModel {
         enqueue(stamp)
     }
 
+    /// Drive follows the Drive screen. On and Off apply to this set only.
+    func spotChoice(_ stamp: String) -> String {
+        spotPicks[stamp] ?? "drive"
+    }
+
+    func chooseSpot(_ stamp: String, _ choice: String) {
+        if choice == "drive" {
+            spotPicks.removeValue(forKey: stamp)
+        } else {
+            spotPicks[stamp] = choice
+        }
+        if let data = try? JSONEncoder().encode(spotPicks) {
+            try? data.write(to: Disk.support.appendingPathComponent("spot.json"), options: .atomic)
+        }
+        restitch(stamp)
+    }
+
+    private static func loadSpotPicks() -> [String: String] {
+        let url = Disk.support.appendingPathComponent("spot.json")
+        guard let data = try? Data(contentsOf: url),
+              let picks = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return picks
+    }
+
     /// The stitch in flight was stopped so this set can run again with another engine.
     private func tookRestart(_ stamp: String) -> Bool {
         guard restartStamp == stamp else { return false }
@@ -1373,6 +1403,7 @@ final class AppModel {
                 if let image = made.image {
                     self.preview = image
                 }
+                self.focusGap = made.soft
                 if meter {
                     self.applyFocus(FocusRead(score: made.score, box: made.box, sharp: made.box, place: made.place, holdBest: made.holdBest))
                 } else {
@@ -1411,15 +1442,18 @@ final class AppModel {
         var sharp: CGRect?
         var place: FocusPlace = .both
         var holdBest: Double = 0
+        var soft: FocusPlace?
     }
 
     nonisolated private static func makePreview(t: CGImage?, r: CGImage?, rig: Rig, photo: Photo, fallback: URL?, meter: Bool, aim: CGPoint?, hold: CGRect?, holdBest: Double, mirrorScene: Bool) -> PreviewMade {
         if let t, let r, let cg = Stitcher.preview(t: t, r: r, rig: rig, squeeze: photo.frame.squeeze, maxWidth: 1400, mirrorScene: mirrorScene) {
-            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: rig.overlap(width: t.width, height: t.height), only: nil, hold: hold, holdBest: holdBest, tOnLeft: mirrorScene) : FocusRead()
+            let overlap = rig.overlap(width: t.width, height: t.height)
+            let soft = FocusMeter.softer(t: t, r: r, flipR: rig.flipR, overlap: overlap)
+            let read = meter ? FocusMeter.read(cg, aim: aim, overlap: overlap, only: nil, hold: hold, holdBest: holdBest, tOnLeft: mirrorScene) : FocusRead()
             var out = cg
             if !LookBook.identity(photo.look) { out = Stitcher.grade(out, look: photo.look) }
             if photo.focus.aid == "peaking" { out = Peak.draw(out, color: photo.focus.color, level: photo.focus.level) }
-            return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest)
+            return PreviewMade(image: UIImage(cgImage: out), score: read.score, box: read.box, sharp: read.sharp, place: read.place, holdBest: read.holdBest, soft: soft)
         }
         if let t {
             let shown = Stitcher.present(t, flopBody: false, mirrorScene: mirrorScene)
@@ -1641,7 +1675,12 @@ final class AppModel {
         let dest = Disk.captures.appendingPathComponent("P_\(stamp).jpg")
         let ana = photo.frame.squeeze > 1.01 ? Disk.captures.appendingPathComponent("P_\(stamp)_ana.jpg") : nil
         let rig = rig
-        let photo = photo
+        var photo = photo
+        switch spotPicks[stamp] {
+        case "on": photo.drive.spot = true
+        case "off": photo.drive.spot = false
+        default: break
+        }
         let mirrorScene = bodyKind.mirrorScene
         do {
             let note: StitchNote = { phase in

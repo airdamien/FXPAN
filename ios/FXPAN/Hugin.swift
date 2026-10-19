@@ -65,7 +65,7 @@ enum Hugin {
         }
     }
 
-    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, balance: Bool = false, metal: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
+    static func prepare(t: CGImage, r: CGImage, overlap: Double, frameWidth: Int, balance: Bool = false, spot: Bool = false, metal: Bool = true, note: StitchNote? = nil, stop: StitchStop? = nil) throws -> Prepared? {
         try StitchGate.check(stop)
         note?("Reading the frames")
         let tr = rgba(from: t)
@@ -82,7 +82,21 @@ enum Hugin {
             note?("Balancing the overlap")
             balancePair(&pr, &pt, cropped.w, cropped.h)
         }
-        return Prepared(r: pr, t: pt, w: cropped.w, h: cropped.h, fit: fit, frameWidth: frameWidth)
+        var restored = false
+        if spot {
+            try StitchGate.check(stop)
+            note?("Matching the softer leg")
+            switch Spot.match(r: &pr, t: &pt, w: cropped.w, h: cropped.h, note: note) {
+            case .restored(let fit):
+                restored = true
+                note?(String(format: "%@ at %.0f%% of the sharp leg", fit.leg, fit.reached * 100))
+            case .same:
+                note?("The legs already match")
+            case .missed, .skipped:
+                note?("The soft leg could not be measured")
+            }
+        }
+        return Prepared(r: pr, t: pt, w: cropped.w, h: cropped.h, fit: fit, frameWidth: frameWidth, restored: restored)
     }
 
     /// The source frames and the uncropped warp are already gone. Blend, drop the pair, then pack.
@@ -176,26 +190,29 @@ enum Hugin {
         var h: Int
         var fit: Fit
         var frameWidth: Int
+        /// Spot brought the soft leg up, so the seam sits mid-overlap and blends tone instead of hiding blur.
+        var restored = false
     }
 
     /// Blend, then drop both warped frames before the caller packs a third copy.
     private static func blend(_ cropped: inout Prepared, note: StitchNote?, stop: StitchStop?) throws -> (px: [UInt8], w: Int, h: Int, blend: String) {
         let useBands = memoryAllowsBands(w: cropped.w, h: cropped.h)
+        let focus = !cropped.restored
         if useBands {
             let baseBands = bandCount(overlapPx: Int((cropped.fit.overlap * Double(cropped.frameWidth)).rounded()))
             note?("Blending \(baseBands) bands")
-            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: baseBands, stop: stop) {
+            if let blended = try multiband(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, bands: baseBands, stop: stop, focus: focus) {
                 return (blended, cropped.w, cropped.h, "multiband")
             }
             try StitchGate.check(stop)
             note?("Feathering the seam")
-            guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) else {
+            guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, focus: focus) else {
                 throw PTPError.message("Could not feather the seam")
             }
             return (soft, cropped.w, cropped.h, "feather")
         }
         note?("Not enough memory for bands, feathering")
-        guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h) else {
+        guard let soft = feather(r: cropped.r, t: cropped.t, w: cropped.w, h: cropped.h, focus: focus) else {
             throw PTPError.message("Could not feather the seam")
         }
         return (soft, cropped.w, cropped.h, "feather")
@@ -1150,9 +1167,38 @@ enum Hugin {
     /// Match red, green, and blue where the frames land on top of each other, one band of rows at a time.
     /// A single scale fit on the whole overlap follows the trees and then pulls the blue out of the sky.
     /// Each band darkens whichever body is brighter there, and a clipped sky keeps a neutral match instead of the trees' color.
+    /// Stills use one gain per channel for the whole frame, measured on overlap midtones. In each channel the brighter leg is darkened to the other.
+    /// Row bands scaled every row by whatever crossed the overlap there, so a gray card left a band across the whole frame.
     private static func balancePair(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int) {
-        guard let scales = toneScales(r, t, w, h) else { return }
-        applyTone(&r, &t, w, h, scaleR: scales.r, scaleT: scales.t)
+        var sumR = [Double](repeating: 0, count: 3)
+        var sumT = sumR
+        var n: Double = 0
+        for y in stride(from: 0, to: h, by: 2) {
+            for x in stride(from: 0, to: w, by: 2) {
+                let i = (y * w + x) * 4
+                guard r[i + 3] > 32, t[i + 3] > 32 else { continue }
+                var usable = true
+                for c in 0..<3 where r[i + c] >= 245 || t[i + c] >= 245 || r[i + c] < 16 || t[i + c] < 16 { usable = false }
+                guard usable else { continue }
+                for c in 0..<3 {
+                    sumR[c] += Double(r[i + c])
+                    sumT[c] += Double(t[i + c])
+                }
+                n += 1
+            }
+        }
+        guard n > 2000 else { return }
+        var scaleR = [Double](repeating: 1, count: 3)
+        var scaleT = scaleR
+        for c in 0..<3 {
+            let ratio = sumR[c] / max(sumT[c], 1)
+            if ratio < 1 { scaleT[c] = max(0.5, ratio) } else { scaleR[c] = max(0.5, 1 / ratio) }
+        }
+        Trace.line(String(format: "FXPAN balance R ×%.3f %.3f %.3f T ×%.3f %.3f %.3f", scaleR[0], scaleR[1], scaleR[2], scaleT[0], scaleT[1], scaleT[2]))
+        for i in stride(from: 0, to: w * h * 4, by: 4) {
+            if r[i + 3] > 32 { darken(&r, i, scaleR) }
+            if t[i + 3] > 32 { darken(&t, i, scaleT) }
+        }
     }
 
     private static func applyTone(_ r: inout [UInt8], _ t: inout [UInt8], _ w: Int, _ h: Int, scaleR: [Float], scaleT: [Float]) {
@@ -1247,9 +1293,9 @@ enum Hugin {
         return ok
     }
 
-    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?, inset: Int = 0) throws -> [UInt8]? {
+    private static func multiband(r: [UInt8], t: [UInt8], w: Int, h: Int, bands: Int, stop: StitchStop?, inset: Int = 0, focus: Bool = true) throws -> [UInt8]? {
         try StitchGate.check(stop)
-        let (weight, _) = optimalSeam(r, t, w, h, inset: inset)
+        let (weight, _) = optimalSeam(r, t, w, h, inset: inset, focus: focus)
         if let gpu = BlendGPU.multiband(r: r, t: t, weight: weight, w: w, h: h, bands: bands) { return gpu }
         print("FXPAN blend metal missed, using the CPU")
         var out = [UInt8](repeating: 0, count: w * h * 4)
@@ -1368,9 +1414,9 @@ enum Hugin {
         return acc
     }
 
-    private static func feather(r: [UInt8], t: [UInt8], w: Int, h: Int) -> [UInt8]? {
-        let (rawWeight, _) = optimalSeam(r, t, w, h)
-        let radius = min(64, max(16, w / 100))
+    private static func feather(r: [UInt8], t: [UInt8], w: Int, h: Int, focus: Bool = true) -> [UInt8]? {
+        let (rawWeight, biased) = optimalSeam(r, t, w, h, focus: focus)
+        let radius = biased ? 10 : min(64, max(16, w / 100))
         let weight = box(rawWeight, w, h, radius: radius)
         var out = [UInt8](repeating: 0, count: w * h * 4)
         for i in 0..<w * h {
@@ -1391,7 +1437,7 @@ enum Hugin {
         return out
     }
 
-    private static func optimalSeam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int = 0) -> (weight: [Float], focusBias: Bool) {
+    private static func optimalSeam(_ r: [UInt8], _ t: [UInt8], _ w: Int, _ h: Int, inset: Int = 0, focus: Bool = true) -> (weight: [Float], focusBias: Bool) {
         let n = w * h
         var rLeft = [Int](repeating: w, count: h)
         var rRight = [Int](repeating: -1, count: h)
@@ -1439,9 +1485,27 @@ enum Hugin {
             }
         }
 
+        var sharpR: Float = 0
+        var sharpT: Float = 0
+        for y in stride(from: 0, to: h, by: 4) {
+            let lo = max(rLeft[y], tLeft[y])
+            let hi = min(rRight[y], tRight[y])
+            guard hi - lo > 8 else { continue }
+            let row = y * w
+            for x in stride(from: lo, to: hi, by: 4) {
+                let i = (row + x) * 4
+                let j = (row + min(w - 1, x + 2)) * 4
+                sharpR += abs(Float(r[i]) - Float(r[j])) + abs(Float(r[i + 1]) - Float(r[j + 1]))
+                sharpT += abs(Float(t[i]) - Float(t[j])) + abs(Float(t[i + 1]) - Float(t[j + 1]))
+            }
+        }
+        let preferR = focus && sharpR > sharpT * 1.35
+        let preferT = focus && sharpT > sharpR * 1.35
+
         var weight = [Float](repeating: 0, count: n)
         for y in 0..<h {
-            let cut = (olL[y] + olR[y]) / 2
+            let mid = (olL[y] + olR[y]) / 2
+            let cut = preferR ? olR[y] : (preferT ? olL[y] : mid)
             let rl = rLeft[y], rr = rRight[y]
             guard rl <= rr else { continue }
             let tl = tLeft[y], tr = tRight[y]
@@ -1458,7 +1522,7 @@ enum Hugin {
                 }
             }
         }
-        return (weight, false)
+        return (weight, preferR || preferT)
     }
 
     /// Empty warp pixels are black. A band pyramid treats that cliff as detail and the bright side overshoots white.

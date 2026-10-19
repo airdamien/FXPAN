@@ -88,6 +88,32 @@ enum FocusMeter {
         )
     }
 
+    /// The overlap is the only band where both lenses see the same subject. A wide gap there is one body missing focus.
+    static func softer(t: CGImage, r: CGImage, flipR: Bool, overlap: Double) -> FocusPlace? {
+        let fraction = min(0.28, max(0.12, overlap))
+        let shown = flipR ? Stitcher.flop(r) : r
+        guard let tBand = band(t, left: true, fraction: fraction),
+              let rBand = band(shown, left: false, fraction: fraction),
+              let tMap = detail(tBand), let rMap = detail(rBand) else { return nil }
+        let ts = tMap.cells.reduce(0, +) / Double(tMap.cells.count)
+        let rs = rMap.cells.reduce(0, +) / Double(rMap.cells.count)
+        guard max(ts, rs) > 1.2 else { return nil }
+        if ts * 1.5 < rs { return .t }
+        if rs * 1.5 < ts { return .r }
+        return nil
+    }
+
+    private static func band(_ image: CGImage, left: Bool, fraction: Double) -> CGImage? {
+        let w = image.width
+        let h = image.height
+        guard w > 16, h > 16 else { return nil }
+        let bw = max(8, min(w - 1, Int((Double(w) * fraction).rounded())))
+        let y0 = h / 5
+        let bh = max(8, h * 3 / 5)
+        let x = left ? 0 : w - bw
+        return image.cropping(to: CGRect(x: x, y: y0, width: bw, height: bh))
+    }
+
     private struct Detail {
         var cells: [Double]
         var cols: Int

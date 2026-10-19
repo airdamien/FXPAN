@@ -434,6 +434,7 @@ struct DriveScreen: View {
                     )
                     pair(reviewBlock(fill: rowFill), EmptyView())
                     pair(stitchBlock(fill: rowFill), engineBlock(fill: rowFill))
+                    pair(spotBlock(fill: rowFill), EmptyView())
                     if drive.ciraw {
                         pair(lensBlock(fill: rowFill, compact: true), overlapNote(fill: rowFill))
                     }
@@ -451,6 +452,7 @@ struct DriveScreen: View {
                     reviewBlock()
                     stitchBlock()
                     engineBlock()
+                    spotBlock()
                 }
             }
         }, panel: {
@@ -458,7 +460,7 @@ struct DriveScreen: View {
                 EmptyView()
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Hugin fits a small rotation and scale in the overlap, then blends in bands sized to the overlap. A miss feathers the rig overlap.")
+                    Text("Hugin fits a small rotation and scale in the overlap, then blends in bands sized to the overlap. A miss feathers the rig overlap. Spot brings the softer leg up to the sharper one, using the overlap as the measure. The soft frame stays the picture.")
                         .font(Theme.font(14))
                         .foregroundStyle(Theme.ink2)
                     Text("Match only shifts. Blend and cut use the rig percentage.")
@@ -573,6 +575,15 @@ struct DriveScreen: View {
         return RowBlock(title: "Stitch", value: drive.autoStitch ? "After the shot" : "Hold", fillHeight: fill) {
             ChipRow(options: [("1", "Auto"), ("0", "Hold")], selected: drive.autoStitch ? "1" : "0") { value in
                 model.edit { $0.drive.autoStitch = value == "1" }
+            }
+        }
+    }
+
+    private func spotBlock(fill: CGFloat? = nil) -> some View {
+        let drive = model.photo.drive
+        return RowBlock(title: "Spot", value: drive.spot ? "On" : "Off", fillHeight: fill) {
+            ChipRow(options: [("0", "Off"), ("1", "On")], selected: drive.spot ? "1" : "0") { value in
+                model.edit { $0.drive.spot = value == "1" }
             }
         }
     }
@@ -852,7 +863,10 @@ struct ShotScreen: View {
                         model.edit { $0.drive.ciraw = value == "ciraw" }
                         model.restitch(stamp)
                     }
-                    Text("Pick a stitch to run it on this set. Hold the picture to inspect pixels.")
+                    ChipRow(options: [("drive", "Drive"), ("on", "Spot"), ("off", "Off")], selected: model.spotChoice(stamp)) { value in
+                        model.chooseSpot(stamp, value)
+                    }
+                    Text("Pick a stitch to run it on this set. Spot follows Drive unless this set says otherwise. Hold the picture to inspect pixels.")
                         .font(Theme.font(12))
                         .foregroundStyle(Theme.dim)
                 }

@@ -337,6 +337,7 @@ enum Stitcher {
                 )
             }
             note?("Features missed, feathering the seam")
+            if photo.drive.spot { note?("Spot needs the overlap lined up") }
             print("FXPAN hugin SIFT missed — feather")
             Trace.line("FXPAN hugin SIFT missed — feather")
         }
@@ -392,7 +393,7 @@ enum Stitcher {
         let oriented = rig.flipR ? flop(loaded.r) : loaded.r
         let prepared = try Hugin.prepare(
             t: loaded.t, r: oriented, overlap: overlap, frameWidth: loaded.t.width,
-            balance: rig.balance, metal: metal, note: note, stop: stop
+            balance: rig.balance, spot: photo.drive.spot, metal: metal, note: note, stop: stop
         )
         return (prepared, loaded.develop)
     }

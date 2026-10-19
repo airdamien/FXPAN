@@ -824,6 +824,17 @@ struct PanoFrame: View {
                     .padding(8)
                 }
             }
+            .overlay(alignment: .topTrailing) {
+                if model.camera.live, let gap = model.focusGap, gap != .both {
+                    Text(gap == .t ? "T soft" : "R soft")
+                        .font(Theme.font(12, weight: .semibold))
+                        .foregroundStyle(gap == .t ? Theme.transmit : Theme.reflect)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(8)
+                }
+            }
             .aspectRatio(aspect, contentMode: .fit)
             .frame(maxWidth: .infinity)
             .background(Color.black)

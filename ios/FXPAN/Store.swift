@@ -126,11 +126,12 @@ enum Disk {
         let files = FileManager.default
         let src = captures
         guard let names = try? files.contentsOfDirectory(atPath: src.path) else { return }
-        let stamps = names.compactMap { name -> String? in
-            guard name.hasPrefix("P_"), name.hasSuffix(".json") else { return nil }
-            return String(name.dropFirst(2).dropLast(5))
+        let ranked = names.filter { $0.hasPrefix("P_") && $0.hasSuffix(".jpg") }.sorted { a, b in
+            let da = (try? files.attributesOfItem(atPath: src.appendingPathComponent(a).path)[.modificationDate] as? Date) ?? .distantPast
+            let db = (try? files.attributesOfItem(atPath: src.appendingPathComponent(b).path)[.modificationDate] as? Date) ?? .distantPast
+            return da > db
         }
-        let keep = Array(Set(stamps)).sorted().suffix(5)
+        let keep = ranked.prefix(6).map { String($0.dropFirst(2).dropLast(4)) }
         guard !keep.isEmpty else { return }
         let dest = support.appendingPathComponent("Inspect", isDirectory: true)
         try? files.removeItem(at: dest)

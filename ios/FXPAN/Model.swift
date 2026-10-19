@@ -132,11 +132,13 @@ struct DriveSet: Equatable {
     var cirawLens: Bool = false
     /// Record both bodies, then stitch the clips. Off is a still.
     var movie: Bool = false
+    /// Restore the soft leg from the sharp overlap. Off leaves both frames as shot.
+    var spot: Bool = false
 }
 
 extension DriveSet: Codable {
     private enum CodingKeys: String, CodingKey {
-        case release, save, quality, timer, review, autoStitch, engine, ciraw, cirawLens, movie
+        case release, save, quality, timer, review, autoStitch, engine, ciraw, cirawLens, movie, spot
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +153,7 @@ extension DriveSet: Codable {
         ciraw = try c.decodeIfPresent(Bool.self, forKey: .ciraw) ?? false
         cirawLens = try c.decodeIfPresent(Bool.self, forKey: .cirawLens) ?? false
         movie = try c.decodeIfPresent(Bool.self, forKey: .movie) ?? false
+        spot = try c.decodeIfPresent(Bool.self, forKey: .spot) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -165,6 +168,7 @@ extension DriveSet: Codable {
         try c.encode(ciraw, forKey: .ciraw)
         try c.encode(cirawLens, forKey: .cirawLens)
         try c.encode(movie, forKey: .movie)
+        try c.encode(spot, forKey: .spot)
     }
 }
 
