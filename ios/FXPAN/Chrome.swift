@@ -19,6 +19,7 @@ struct RootView: View {
                 } else {
                     column
                         .padding(geo.safeAreaInsets)
+                        .padding(.top, menuDrop(geo))
                 }
                 overlays
             }
@@ -44,6 +45,14 @@ struct RootView: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in model.poke() }
         )
+    }
+
+    /// Portrait keeps the status bar hidden and sits the menu just below its corner. Landscape stays put.
+    private func menuDrop(_ geo: GeometryProxy) -> CGFloat {
+        guard geo.size.height > geo.size.width else { return 0 }
+        let covered = geo.safeAreaInsets.top
+        if covered < 24 { return 40 }
+        return 21
     }
 
     private var column: some View {
@@ -394,10 +403,6 @@ struct TopBar: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(pad.wifi ? Theme.ink : Theme.faint)
                 .accessibilityLabel(pad.wifi ? "Wi-Fi connected" : "Wi-Fi off")
-            PadBattery(level: pad.level, charging: pad.charging)
-                .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
-                    pad.refreshBattery()
-                }
             if model.simulate && !compact {
                 Button { model.go(.system) } label: {
                     Text("SIM")
@@ -413,7 +418,13 @@ struct TopBar: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 18))
                     .foregroundStyle(Theme.ink2)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            PadBattery(level: pad.level, charging: pad.charging)
+                .onReceive(Timer.publish(every: 15, on: .main, in: .common).autoconnect()) { _ in
+                    pad.refreshBattery()
+                }
         }
         .padding(.horizontal, compact ? 10 : 14)
     }
