@@ -85,9 +85,11 @@ DX_R_DROP = 0.81;
 function dx_axis_z(mark) = mark == "R" ? -DX_R_DROP : 0;
 DX_LIP   = 2;
 // The flange crown is r 31. The lid is everything above that, except the
-// lens ledge, which stays so the M65 thread still has a roof.
+// lens ledge, which stays so the M65 thread still has a roof. The ledge
+// has to cover the whole threaded wall: stopping at DX_THREAD left the
+// last 1.25 mm under the seat plane, and that plane sheared every crest.
 DX_SEAT    = F_STL_OD / 2 + 0.8;
-DX_LEDGE_Y = -DX_LENS + DX_THREAD;
+DX_LEDGE_Y = -(DX_LENS - DX_THREAD_WALL);
 DX_TAP_D   = 2.5;    // M3 cuts its own thread
 DX_TAP_H   = 6;
 DX_CLR_D   = 3.2;

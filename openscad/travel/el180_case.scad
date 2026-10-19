@@ -59,6 +59,9 @@ CAP_PITCH = 2;
 CAP_LEN   = 8;
 CAP_TOL   = 0.4;
 CAP_END   = 4.4;   // 2 mm of shell under the mark pocket
+// Diametral, lid only. The can's crest is CAP_MAJOR + 0.25*CAP_TOL.
+// ScrewHole added another 1.01× and the cap spun on without biting.
+CAP_CLEAR = 0.20;
 // Library tooth angle. 50° lands near 48° from horizontal after the
 // tolerance is applied, so the underside of each tooth supports itself.
 CAP_TOOTH = 50;
@@ -237,13 +240,17 @@ module cover() {
     color("DimGray")
     difference() {
         union() {
-            ScrewHole(CAP_MAJOR, CAP_LEN - 0.05,
-                      pitch = CAP_PITCH, tolerance = CAP_TOL,
-                      tooth_angle = CAP_TOOTH)
-                cylinder(h = CAP_LEN, d = CAP_OD, $fn = 160);
+            cylinder(h = CAP_LEN, d = CAP_OD, $fn = 160);
             translate([0, 0, CAP_LEN - 0.15])
                 cylinder(h = CAP_END + 0.15, d = CAP_OD, $fn = 160);
         }
+        // Female cut to the printed can. Same pitch, angle, and full
+        // tooth as its male, shifted out by CAP_CLEAR.
+        translate([0, 0, -0.2])
+            ScrewThread(CAP_MAJOR + 0.25 * CAP_TOL + CAP_CLEAR,
+                        CAP_LEN + 0.45,
+                        pitch = CAP_PITCH, tolerance = 0,
+                        tooth_angle = CAP_TOOTH);
         // Side wall only. The end disk stays a plain cylinder so the
         // closed face is flat, not a patterned crown.
         wall_pattern(1.4, CAP_LEN - 0.8, CAP_OD);
