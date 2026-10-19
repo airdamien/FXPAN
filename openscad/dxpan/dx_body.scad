@@ -145,6 +145,7 @@ DX_BS_SLACK   = 0.25;   // back of the glass to the slot wall
 DX_BS_RELIEF  = 0.4;    // slot wall behind the pads
 DX_BS_PRELOAD = 0.35;   // free spring crest, inside the glass
 DX_BS_BACK    = -3.05;  // holder faces, local x. Leaf is 1.8 mm so the fingers survive support removal.
+DX_BS_TOP     = 0.4;    // extra behind the two top fingers: those leaves are 2.2 mm
 DX_BS_FRONT   = 1.95;
 DX_BS_SLIT    = 0.8;
 DX_BS_PLAY    = 0.5;    // along the slot, past the 50 mm
@@ -160,8 +161,9 @@ function dx_bs_y1() = dx_bs_y0() + BS_W + DX_BS_PLAY;
 function dx_bs_pads() = [
     [-14, -23, 4.0],
     [ 14, -23, 4.0],
-    [dx_bs_y0() + 2.4,        22.5, 3.4],
-    [dx_bs_y0() + BS_W - 2.2, 22.5, 3.4]
+    // 3.8 wide. 4.0 lets the slit break into the window.
+    [dx_bs_y0() + 2.4,        22.5, 3.8],
+    [dx_bs_y0() + BS_W - 2.2, 22.5, 3.8]
 ];
 
 module dx_plate() {
@@ -186,10 +188,14 @@ module dx_plate() {
         rotate([0, 0, -45])
             union() {
                 difference() {
-                    translate([(DX_BS_BACK + DX_BS_FRONT) / 2, (y0 + yend) / 2,
-                               (z0 + z1) / 2])
-                        cube([DX_BS_FRONT - DX_BS_BACK, yend - y0, z1 - z0],
-                             center = true);
+                    union() {
+                        translate([(DX_BS_BACK + DX_BS_FRONT) / 2, (y0 + yend) / 2,
+                                   (z0 + z1) / 2])
+                            cube([DX_BS_FRONT - DX_BS_BACK, yend - y0, z1 - z0],
+                                 center = true);
+                        for (p = dx_bs_pads())
+                            if (p[1] > 0) dx_bs_top_leaf(p);
+                    }
                     // Open to the lid so the plate slides in.
                     translate([(w0 + w1) / 2, (y0 + y1) / 2, (shelf + z1 + 2) / 2])
                         cube([w1 - w0, y1 - y0, z1 + 2 - shelf], center = true);
@@ -256,20 +262,34 @@ module dx_bs_finger_cut(p, shelf, web, open0) {
         root = p[1] - 7;
         tip = p[1] + 3;
         back_clear = 6.0;
+        // The top leaf is thicker, so the slits and the brace clear
+        // start behind that face. x0 above is the 1.8 mm wall.
+        xb = DX_BS_BACK - DX_BS_TOP;
+        xt = xb - 0.2;
         for (sy = [-1, 1])
-            translate([(x0 + x1) / 2, p[0] + sy * (w + s) / 2, (root + tip + s) / 2])
-                cube([x1 - x0, s, tip + s - root], center = true);
-        translate([(x0 + x1) / 2, p[0], tip + s / 2])
-            cube([x1 - x0, w + 2 * s, s], center = true);
-        // Clear any brace behind the finger so the 1.8 mm leaf can flex,
+            translate([(xt + x1) / 2, p[0] + sy * (w + s) / 2, (root + tip + s) / 2])
+                cube([x1 - xt, s, tip + s - root], center = true);
+        translate([(xt + x1) / 2, p[0], tip + s / 2])
+            cube([x1 - xt, w + 2 * s, s], center = true);
+        // Clear any brace behind the finger so the leaf can flex,
         // with a 45° floor so the brace prints without an overhang.
         hull() {
-            translate([DX_BS_BACK - back_clear / 2, p[0], (root + tip + s) / 2])
+            translate([xb - back_clear / 2, p[0], (root + tip + s) / 2])
                 cube([back_clear, w + 2 * s, tip + s - root], center = true);
-            translate([DX_BS_BACK - 0.05, p[0], root - back_clear + 0.05])
+            translate([xb - 0.05, p[0], root - back_clear + 0.05])
                 cube([0.1, w + 2 * s, 0.1], center = true);
         }
     }
+}
+
+// The two top fingers stand on the posts and break when the support
+// comes off. This adds to the 1.8 mm leaf, between the slits, and stops
+// at the tip cut so the finger still flexes.
+module dx_bs_top_leaf(p) {
+    root = p[1] - 7;
+    tip = p[1] + 3;
+    translate([DX_BS_BACK - DX_BS_TOP / 2 + 0.01, p[0], (root + tip) / 2])
+        cube([DX_BS_TOP + 0.02, p[2], tip - root], center = true);
 }
 
 // Reference pad on the slot's lens-side wall. Its face is the coated face.
