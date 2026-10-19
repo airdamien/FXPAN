@@ -384,20 +384,39 @@ enum Spot {
         return true
     }
 
+    /// One FFT plan per thread. A plan is not safe to share, and the tiles were queued on a single plan.
+    private final class FFTKeep: NSObject {
+        let setup: FFTSetup
+        init(_ log2n: vDSP_Length) {
+            setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))!
+            super.init()
+        }
+        deinit { vDSP_destroy_fftsetup(setup) }
+    }
+
+    private static func fftSetup(_ log2n: vDSP_Length) -> FFTSetup {
+        let key = "fxpan.fft.\(log2n)"
+        if let keep = Thread.current.threadDictionary[key] as? FFTKeep { return keep.setup }
+        let keep = FFTKeep(log2n)
+        Thread.current.threadDictionary[key] = keep
+        return keep.setup
+    }
+
     /// Total-variation deconvolution by half-quadratic splitting (Krishnan and Fergus 2009), in overlapping FFT tiles.
-    private static func deconvolve(_ plane: [Float], _ w: Int, _ h: Int, sigma: Float) -> [Float]? {
+    /// The GPU keeps each tile for every pass. The CPU path is the result when the GPU is missing or the frame is an odd size.
+    static func deconvolve(_ plane: [Float], _ w: Int, _ h: Int, sigma: Float, gpu: Bool = false) -> [Float]? {
+        if gpu, let metal = SpotGPU.deconvolve(plane, w, h, sigma: sigma) { return metal }
         let log2n = vDSP_Length(9)
         let n = 1 << 9
         let margin = 96
         let core = n - 2 * margin
-        guard let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else { return nil }
-        defer { vDSP_destroy_fftsetup(setup) }
         let count = n * n
         let lambda: Float = 0.3
         let betaStart: Float = 0.03
         let passes = 8
 
         func fft(_ re: inout [Float], _ im: inout [Float], _ dir: Int) {
+            let setup = fftSetup(log2n)
             re.withUnsafeMutableBufferPointer { r in
                 im.withUnsafeMutableBufferPointer { i in
                     var split = DSPSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
