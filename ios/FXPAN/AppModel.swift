@@ -133,7 +133,7 @@ final class AppModel {
 
     func start() async {
         CloudShelf.merge()
-        var state = Disk.load()
+        let state = Disk.load()
         photo = state.photo
         let huginMark = Disk.support.appendingPathComponent("hugin-default")
         let adoptHugin = !FileManager.default.fileExists(atPath: huginMark.path)

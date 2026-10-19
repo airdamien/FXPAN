@@ -93,7 +93,7 @@ enum ExposureMeter {
         let slowest = 30.0
         var sec = min(max(current * pow(2, need / 2), fastest), slowest)
         var left = need - log2(sec / current)
-        var iso = min(max(isoNow * pow(2, left), 100), 25600)
+        let iso = min(max(isoNow * pow(2, left), 100), 25600)
         left -= log2(iso / isoNow)
         if abs(left) >= 0.08 {
             sec = min(max(sec * pow(2, left), fastest), slowest)

@@ -1132,7 +1132,7 @@ struct ShotPart: View {
         return "\(generation)|\(part)|\(look.base)|\(look.grain)|\(look.filter)|\(look.apple)|\(revised(shot.pano))|\(revised(shot.t))|\(revised(shot.r))|\(revised(shot.ana))|\(revised(LookStore.plain(stamp: shot.stamp, ana: false)))|\(revised(LookStore.plain(stamp: shot.stamp, ana: true)))"
     }
 
-    private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
+    nonisolated private static func load(_ shot: ShotFiles, part: String, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
         let cg: CGImage?
         let mirror = Stitcher.mirrorScene(shot: shot)
         let report = FrameFacts.report(shot.stamp)
@@ -1641,14 +1641,19 @@ struct RigScreen: View {
 
 struct DisplayScreen: View {
     @Environment(AppModel.self) private var model
-    @State private var bright = UIScreen.main.brightness
+    @State private var bright: CGFloat = 1
+
+    private func screen() -> UIScreen? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.screen
+    }
 
     var body: some View {
         DimPage(title: "Display", crumb: "System", controls: {
             VStack(spacing: 10) {
                 RowBlock(title: "Brightness", value: "\(Int(bright * 100))%") {
                     Slider(value: $bright, in: 0.05...1) { _ in
-                        UIScreen.main.brightness = bright
+                        screen()?.brightness = bright
                     }
                     .tint(Theme.gold)
                 }
@@ -1667,6 +1672,9 @@ struct DisplayScreen: View {
             Text("Sleep releases the cameras. Brightness is this \(UIDevice.current.userInterfaceIdiom == .phone ? "iPhone" : "iPad")'s backlight.")
                 .font(Theme.font(14)).foregroundStyle(Theme.dim)
         })
+        .onAppear {
+            if let screen = screen() { bright = screen.brightness }
+        }
     }
 }
 

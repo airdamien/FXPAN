@@ -338,70 +338,72 @@ enum PanoVideo {
         let began = CFAbsoluteTimeGetCurrent()
         var more = true
         while more {
-            try autoreleasepool {
+            let frame: CGImage? = try autoreleasepool { () -> CGImage? in
                 guard let tImage = left.next(), let rImage = right.next() else {
                     more = false
-                    return
+                    return nil
                 }
                 if frames % 15 == 0 {
                     note(total > 0 ? "Stitching \(frames + 1) of \(total)" : "Stitching \(frames + 1)")
                 }
                 let oriented = rig.flipR ? Stitcher.flop(rImage) : rImage
-                guard var frame = Hugin.frame(t: tImage, r: oriented, hold: hold) else {
+                guard var made = Hugin.frame(t: tImage, r: oriented, hold: hold) else {
                     missed += 1
-                    return
+                    return nil
                 }
-                if mirrorScene { frame = Stitcher.flop(frame) }
-                let w = frame.width - frame.width % 2
-                let h = frame.height - frame.height % 2
+                if mirrorScene { made = Stitcher.flop(made) }
+                let w = made.width - made.width % 2
+                let h = made.height - made.height % 2
                 if w < 16 || h < 16 {
                     missed += 1
-                    return
+                    return nil
                 }
-                if w != frame.width || h != frame.height, let cropped = frame.cropping(to: CGRect(x: 0, y: 0, width: w, height: h)) {
-                    frame = cropped
+                if w != made.width || h != made.height, let cropped = made.cropping(to: CGRect(x: 0, y: 0, width: w, height: h)) {
+                    made = cropped
                 }
                 if writer == nil {
                     size = (w, h)
-                    let made = try Self.writer(movie: movie, width: w, height: h)
-                    writer = made.0
-                    input = made.1
-                    adaptor = made.2
+                    let opened = try Self.writer(movie: movie, width: w, height: h)
+                    writer = opened.0
+                    input = opened.1
+                    adaptor = opened.2
                     if let jpg = CGImageDestinationCreateWithURL(poster as CFURL, "public.jpeg" as CFString, 1, nil) {
-                        CGImageDestinationAddImage(jpg, frame, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+                        CGImageDestinationAddImage(jpg, made, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
                         CGImageDestinationFinalize(jpg)
                     }
                 }
-                guard frame.width == size.w, frame.height == size.h else {
+                guard made.width == size.w, made.height == size.h else {
                     missed += 1
-                    return
+                    return nil
                 }
-                guard let input, let adaptor, let pool = adaptor.pixelBufferPool else {
-                    more = false
-                    return
-                }
-                while !input.isReadyForMoreMediaData {
-                    Thread.sleep(forTimeInterval: 0.01)
-                }
-                var buffer: CVPixelBuffer?
-                CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
-                guard let buffer else {
-                    more = false
-                    return
-                }
-                draw(frame, into: buffer)
-                let time = CMTime(value: CMTimeValue(frames), timescale: CMTimeScale(fps))
-                guard adaptor.append(buffer, withPresentationTime: time) else {
-                    throw PTPError.message(Self.why(writer?.error, fallback: "Could not write a frame"))
-                }
-                frames += 1
+                return made
             }
+            guard more, let frame else { continue }
+            guard let input, let adaptor, let pool = adaptor.pixelBufferPool else {
+                more = false
+                continue
+            }
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            var buffer: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
+            guard let buffer else {
+                more = false
+                continue
+            }
+            draw(frame, into: buffer)
+            let time = CMTime(value: CMTimeValue(frames), timescale: CMTimeScale(fps))
+            guard adaptor.append(buffer, withPresentationTime: time) else {
+                throw PTPError.message(Self.why(writer?.error, fallback: "Could not write a frame"))
+            }
+            frames += 1
         }
         guard let writer, let input, frames > 0 else { throw PTPError.message("No frames to stitch") }
         input.markAsFinished()
-        let gate = DispatchSemaphore(value: 0)
-        writer.finishWriting { gate.signal() }
-        gate.wait()
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            writer.finishWriting { done.resume() }
+        }
         guard writer.status == .completed else {
             throw PTPError.message(Self.why(writer.error, fallback: "Could not write the movie"))
         }
@@ -548,11 +550,12 @@ enum PanoVideo {
                     audioDone = true
                 }
             }
-            if !wrote { Thread.sleep(forTimeInterval: 0.005) }
+            if !wrote { try? await Task.sleep(nanoseconds: 5_000_000) }
         }
-        let gate = DispatchSemaphore(value: 0)
-        writer.finishWriting { gate.signal() }
-        gate.wait()
+        let gate = writer
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            gate.finishWriting { done.resume() }
+        }
         guard writer.status == .completed else {
             Trace.line("FXPAN video audio \(Self.why(writer.error, fallback: "mux"))")
             try? FileManager.default.removeItem(at: out)

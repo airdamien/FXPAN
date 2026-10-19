@@ -1178,7 +1178,7 @@ struct PairPicture: View {
     }
 
     /// The finished panorama when it exists. Until then, T and R side by side the same way live view is composed.
-    private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
+    nonisolated private static func make(_ shot: ShotFiles, rig: Rig, squeeze: Double, look: LookSet) -> UIImage? {
         let cg: CGImage?
         let mirror = Stitcher.mirrorScene(shot: shot)
         if let url = shot.ana ?? shot.pano, let image = Stitcher.thumbnail(at: url, maxPixel: 1800) {

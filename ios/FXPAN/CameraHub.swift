@@ -749,7 +749,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     private func authorize() async {
         // The Simulator's ImageCaptureCore advertises this and then throws
         // if you send it. A real iPad answers the prompt.
-        let ask = Selector(("requestControlAuthorizationWithCompletion:"))
+        let ask = #selector(ICDeviceBrowser.requestControlAuthorization(completion:))
         guard browser.responds(to: ask) else {
             controlAuthorized = true
             return
@@ -1245,8 +1245,8 @@ final class NikonLink {
     func apply(_ photo: Photo, readBack: Bool = true) async throws {
         let light = photo.light
         if let iso = Catalog.isoValue(light.iso) {
-            try? await set(.isoAuto, 0)
-            try? await set(.isoAutoHi, 0)
+            _ = try? await set(.isoAuto, 0)
+            _ = try? await set(.isoAutoHi, 0)
             try await set(.iso, UInt64(iso))
             exposure.iso = light.iso
         }
@@ -1462,17 +1462,17 @@ final class NikonLink {
     /// Aperture only moves with live view down, so this runs before movie live view starts.
     private func setStillExposure(_ photo: Photo) async {
         let light = photo.light
-        try? await set(.program, Self.programCode("M"))
-        try? await set(.isoAuto, 0)
-        try? await set(.isoAutoHi, 0)
+        _ = try? await set(.program, Self.programCode("M"))
+        _ = try? await set(.isoAuto, 0)
+        _ = try? await set(.isoAutoHi, 0)
         if let iso = Catalog.isoValue(light.iso) {
-            try? await set(.iso, UInt64(iso))
+            _ = try? await set(.iso, UInt64(iso))
         }
         if let shutter = Catalog.shutterTenThousandths(light.bulb ? "bulb" : light.shutter) {
-            try? await set(.exposureTime, UInt64(shutter))
+            _ = try? await set(.exposureTime, UInt64(shutter))
         }
         if let aperture = Catalog.fNumberHundredths(light.fstop) {
-            try? await set(.fNumber, UInt64(aperture))
+            _ = try? await set(.fNumber, UInt64(aperture))
         }
     }
 

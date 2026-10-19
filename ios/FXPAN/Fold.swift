@@ -154,7 +154,8 @@ enum FoldOrientation {
             for window in scene.windows {
                 window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
-            let turned = scene.interfaceOrientation == .landscapeLeft || scene.interfaceOrientation == .landscapeRight
+            let face = scene.effectiveGeometry.interfaceOrientation
+            let turned = face == .landscapeLeft || face == .landscapeRight
             guard halfOpen, turned else { continue }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
         }

@@ -338,7 +338,7 @@ final class ShoeFinder {
         let host = ShoePreview.ShoeHost()
         host.sessionQueue = sessionQueue
         heldPreview = host
-        let layer = host.preview
+        nonisolated(unsafe) let layer = host.preview
         let capture = session
         sessionQueue.async {
             if layer.session !== capture { layer.session = capture }
@@ -599,7 +599,7 @@ struct ShoePreview: UIViewRepresentable {
             attachedID = device.uniqueID
             let made = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: preview)
             coordinator = made
-            let layer = preview
+            nonisolated(unsafe) let layer = preview
             let queue = sessionQueue
             watch = made.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak self] made, _ in
                 let angle = made.videoRotationAngleForHorizonLevelPreview
