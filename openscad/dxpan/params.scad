@@ -111,13 +111,12 @@ BS_FOCUS_SAG = 0.336;
 BS_FOCUS_TAN = 0.605;
 function bs_focus_mid() = (BS_FOCUS_SAG + BS_FOCUS_TAN) / 2;   // 0.470 mm
 function r_focus_pull() = bs_t_comp() + bs_focus_mid();        // 0.773 mm
-// Same shutter, 2026-10-19, stopped just shy of f/11. R's wall is the
-// sharp plane (edge 10–90% about 2.6 preview px). T's wall is about
-// 5.4 px, and a nearer object in that frame is sharper than the wall,
-// so T is focused close. That extra spread is a 0.16 mm blur circle,
-// which at f/11 is 1.7 mm at the sensor and a hair less a stop open
-// of that. Shorten the T focus arm by this much. R stays put.
-DX_T_PULL = 1.60;
+// Lens helicoid, 2026-10-19. T is decent at f/5.6 with the helicoid at
+// 24 mm. R peaks about 25 mm, and at T's setting it only cleans up
+// stopped a bit past f/32. One millimetre of lens travel is a millimetre
+// at the sensor on this conjugate, and f/32 is the stop that covers it.
+// T is the closer focus, so shorten the T arm by that millimetre. R stays.
+DX_T_PULL = 1.0;
 
 // --- camera mouth ----------------------------------------------------------
 F_REV_MAJOR    = 52.0;    // M52×0.75, Fotodiox 52 mm F reverse ring
