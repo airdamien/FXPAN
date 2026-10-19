@@ -65,10 +65,11 @@ DX_THREAD_BORE = 62;          // core, under the M65 crests
 // Direct ScrewThread cutter for the M65×1 female — NOT ScrewHole, whose
 // 1.01 × D multiplier bloats a 65 mm hole by +1.33 mm (66.33 root / 64.48
 // crest), leaving ~0.18 mm of radial bite that strips and pulls out.
-// 65.50 root / 64.15 crest gives ~0.37 mm radial bite per side and 0.50 mm
-// diametral clearance on a metal M65×1 male.
-DX_M65_CLEAR   = 0.50;
-DX_M65_TOOTH   = 0.78;
+// 66.00 groove / 64.27 crest. The 65.50 / 64.15 fit bound once the ledge
+// kept every crest. Full V (tooth = pitch) holds the crest and leaves
+// 0.50 mm radial on the metal major.
+DX_M65_CLEAR   = 1.00;
+DX_M65_TOOTH   = 1.00;
 DX_HELI_CLEAR_D = 83;         // keep-out around the helicoid body
 DX_THREAD_BACK = 20;
 DX_LENS        = DX_THREAD_BACK + DX_THREAD;
@@ -143,7 +144,7 @@ module dx_cavity() {
 DX_BS_SLACK   = 0.25;   // back of the glass to the slot wall
 DX_BS_RELIEF  = 0.4;    // slot wall behind the pads
 DX_BS_PRELOAD = 0.35;   // free spring crest, inside the glass
-DX_BS_BACK    = -2.45;  // holder faces, local x
+DX_BS_BACK    = -3.05;  // holder faces, local x. Leaf is 1.8 mm so the fingers survive support removal.
 DX_BS_FRONT   = 1.95;
 DX_BS_SLIT    = 0.8;
 DX_BS_PLAY    = 0.5;    // along the slot, past the 50 mm
@@ -157,10 +158,10 @@ function dx_bs_y1() = dx_bs_y0() + BS_W + DX_BS_PLAY;
 // [y, z, finger width]. Two under the window, one on each top post, all
 // outside the beams so the top and bottom of the glass register on x = 0.
 function dx_bs_pads() = [
-    [-14, -23, 3.0],
-    [ 14, -23, 3.0],
-    [dx_bs_y0() + 2.4,        22.5, 2.3],
-    [dx_bs_y0() + BS_W - 2.2, 22.5, 2.3]
+    [-14, -23, 4.0],
+    [ 14, -23, 4.0],
+    [dx_bs_y0() + 2.4,        22.5, 3.4],
+    [dx_bs_y0() + BS_W - 2.2, 22.5, 3.4]
 ];
 
 module dx_plate() {
@@ -260,7 +261,7 @@ module dx_bs_finger_cut(p, shelf, web, open0) {
                 cube([x1 - x0, s, tip + s - root], center = true);
         translate([(x0 + x1) / 2, p[0], tip + s / 2])
             cube([x1 - x0, w + 2 * s, s], center = true);
-        // Clear any brace behind the finger so the 1.2 mm leaf can flex,
+        // Clear any brace behind the finger so the 1.8 mm leaf can flex,
         // with a 45° floor so the brace prints without an overhang.
         hull() {
             translate([DX_BS_BACK - back_clear / 2, p[0], (root + tip + s) / 2])
@@ -658,8 +659,10 @@ module dx_lens_thread() {
                             tolerance = 0,
                             tooth_height = DX_M65_TOOTH,
                             tooth_angle = 30);
-            // Lead-in at the lens face so the metal male starts square.
-            cylinder(h = 0.75, d1 = d_maj + 0.4, d2 = d_min, $fn = 128);
+            // A pitch and a half of bell. The short cone closed to the
+            // crest, inside the 65 mm major, and the male wedged before
+            // it could catch. This stays outside 65 for the first pitch.
+            cylinder(h = 2.0, d1 = d_maj + 1.6, d2 = d_min, $fn = 128);
         }
 }
 

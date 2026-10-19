@@ -190,10 +190,12 @@ function reflect_tube_len()  =
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
 // Printed F at the EL-Nikkor flange. T is the glass path; R is shorter
 // by the plate's circle of least confusion so the two focus together.
+// DX_T_PULL is the extra T shorten from the 2026-10-19 pair: T was
+// focused in front of the wall that R had sharp.
 function reflect_focus_tube_len() =
     ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull();
 function transmit_focus_tube_len() =
-    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp();
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp() - DX_T_PULL;
 function patch_t()           = PORT_PATCH_T;
 
 module mm_split() {
@@ -3205,7 +3207,8 @@ module diagnostics() {
              " mm of n=", BS_N, " glass at 45°: tube shortened by ",
              round(bs_t_comp() * 1000) / 1000, " mm",
              "  |  plate focus sits ", round(bs_focus_mid() * 1000) / 1000,
-             " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")"));
+             " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")",
+             "  |  measured T pull ", DX_T_PULL, " mm"));
     echo(str("arm_r_focus: Nikkor-W printed F, tube ",
              round(reflect_focus_tube_len() * 1000) / 1000,
              " mm, ", round(r_focus_pull() * 1000) / 1000,
