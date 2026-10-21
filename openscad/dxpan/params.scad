@@ -111,15 +111,6 @@ BS_FOCUS_SAG = 0.336;
 BS_FOCUS_TAN = 0.605;
 function bs_focus_mid() = (BS_FOCUS_SAG + BS_FOCUS_TAN) / 2;   // 0.470 mm
 function r_focus_pull() = bs_t_comp() + bs_focus_mid();        // 0.773 mm
-// Lens helicoid, 2026-10-19, on the print with T 1.60 mm short. T is sharp
-// at f/5.6 at 24 mm. R's best is about 25 mm and still soft at f/5.6 until
-// a bit past f/32. That is the plate curving the reflection, and only the
-// reflection: about 0.03 mm of bow across the 50 mm, convex toward the
-// lens, puts the R image 2.6 mm further out and splits it into focal lines
-// 1.7 mm apart. T looks through the glass and holds the design, so T stays
-// on it and R goes out by that print's 1.60 plus the 1 mm gap. A flatter
-// plate wants this back near zero.
-DX_R_PUSH = 2.60;
 
 // --- camera mouth ----------------------------------------------------------
 F_REV_MAJOR    = 52.0;    // M52×0.75, Fotodiox 52 mm F reverse ring
@@ -223,12 +214,15 @@ W_ARM_EXTRA = 8.0;
 // Spent on the register. The cookies sit this much deeper.
 CAM_RECESS = 2.5;
 // M65 helicoid, measured on the Nikkor-W unit. Body seats on the skin.
-// Barrel travel is 7.5 mm. This is the mirror-image station; the two
-// cameras peak together r_focus_pull() (0.773) further out, at 6.77,
-// which leaves 0.73 mm before the stop. Flangeless ring only.
+// Barrel travel is 7.5 mm. Flangeless ring only.
 DX_HELI_BODY   = 16.58;
 DX_HELI_TRAVEL = 7.5;
 DX_HELI_EXT    = 6.0;
+// Tube length added to each arm. The print with T 7.42 and R 6.02 focused
+// at f/5.6 with the lens helicoid at 22 mm for T and 24 mm for R. R needs
+// 2 mm more, so its tube gets 2 mm and both focus at the same setting.
+DX_T_PUSH = 7.42;
+DX_R_PUSH = 6.02 + 2.0;
 
 // --- EL-Nikkor 180/5.6N on an M62×1 helicoid -------------------------------
 // The stem carries a short M62 female boss and nothing else. hybrid_shift's

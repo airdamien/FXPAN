@@ -46,7 +46,7 @@ function dx_pixco_extra() =
 function dx_pixco_shim(mark) =
     dx_reg(mark) + dx_pixco_extra()
     - dx_pixco_seat(mark) - PIXCO_MIN - F_FMOUNT_STACK;
-function dx_pixco_inf() = DX_HELI_EXT + r_focus_pull() - dx_pixco_extra();
+function dx_pixco_inf() = DX_HELI_EXT - dx_pixco_extra();
 function dx_arm_end(mark) = dx_pixco_on() ? dx_pixco_seat(mark) : dx_back(mark);
 
 DX_CAV   = 27;     // cavity half. Plate cheeks stay inside it.
@@ -216,7 +216,12 @@ module dx_plate() {
                 }
                 for (p = dx_bs_pads()) {
                     dx_bs_pad(p);
-                    dx_bs_bump(p, p[1] < 0 ? open0 - 0.06 : p[1] + 3);
+                    // Far top clip, opposite the logo wall. A 2 mm lead
+                    // leaves the glass edge a square corner to climb.
+                    far = p[1] > 0 && p[0] > 0;
+                    dx_bs_bump(p, far ? p[1] + 6.2
+                                      : (p[1] < 0 ? open0 - 0.06 : p[1] + 3),
+                               far ? 6 : 2);
                 }
                 // Only the T/R corner. Starts past the far wall.
                 translate([0, yend + (reach - yend) / 2, (z0 + z1) / 2])
@@ -333,12 +338,13 @@ module dx_bs_pad(p) {
 }
 
 // Spring crest on the finger. Lead-in on top for the glass coming down,
-// 45° under it so it prints.
-module dx_bs_bump(p, z_top) {
+// 45° under it so it prints. lead_h is how far above the crest that
+// ramp starts, measured at the wall.
+module dx_bs_bump(p, z_top, lead_h = 2) {
     crest = -BS_THICK + DX_BS_PRELOAD;
     w0 = dx_bs_wall0();
     rise = crest - w0;
-    lead = min(2.0, z_top - p[1]);
+    lead = min(lead_h, z_top - p[1]);
     w = p[2] - 0.7;
     hull() {
         translate([crest - 0.005, p[0], p[1]])
@@ -894,11 +900,8 @@ module part_dx_body() {
             if (!dx_pixco_on()) {
                 dx_mount("R");
                 dx_mount("T");
-            } else {
+            } else
                 dx_pixco_hub("R");
-                dx_pixco_tab("R");
-                dx_pixco_tab("T");
-            }
             dx_r_join(0);
             dx_r_join(1);
         }
@@ -919,8 +922,6 @@ module part_dx_body() {
         if (dx_pixco_on()) {
             dx_pixco_thread("R");
             dx_pixco_thread("T");
-            dx_pixco_notch("R");
-            dx_pixco_notch("T");
         }
     }
     if ($preview && dx_pixco_on()) {
@@ -966,10 +967,7 @@ module part_dx_lid() {
     }
 }
 
-// Arm frame: local +Z runs out toward the camera. World up is not the
-// same azimuth on the two arms, so the witness sits on a different side.
-function dx_pixco_tab_az(mark) = mark == "R" ? 180 : -90;
-
+// Arm frame: local +Z runs out toward the camera.
 module dx_pixco_place(mark, dist) {
     a = mark == "T" ? [sensor_shift(), 0, 0]
                     : [0, -sensor_shift(), dx_axis_z(mark)];
@@ -1011,23 +1009,6 @@ module dx_pixco_thread(mark) {
                         tooth_height = CAM_HELI_TOOTH);
 }
 
-module dx_pixco_tab(mark) {
-    r0 = PIXCO_OD / 2 + 1.0;
-    r1 = r0 + 6.0;
-    dx_pixco_place(mark, dx_pixco_seat(mark))
-        rotate([0, 0, dx_pixco_tab_az(mark)])
-            translate([(r0 + r1) / 2, 0, -1.3])
-                cube([r1 - r0, 3.6, 2.6], center = true);
-}
-
-module dx_pixco_notch(mark) {
-    r1 = PIXCO_OD / 2 + 7.2;
-    dx_pixco_place(mark, dx_pixco_seat(mark))
-        rotate([0, 0, dx_pixco_tab_az(mark)])
-            translate([r1 - 1.2, 0, -1.3])
-                cube([2.6, 1.0, 2.8], center = true);
-}
-
 module dx_pixco_ghost(mark) {
     dx_pixco_place(mark, dx_pixco_seat(mark))
         cylinder(h = PIXCO_MIN, d = PIXCO_OD, $fn = 96);
@@ -1041,8 +1022,6 @@ module part_pixco_tube(mark) {
     assert(dx_pixco_inf() > 0.4,
            str("pixco stack is ", dx_pixco_extra(),
                " mm past infinity at the lens stop"));
-    r0 = PIXCO_OD / 2 + 1.0;
-    r1 = r0 + 6.0;
     difference() {
         union() {
             translate([0, 0, -PIXCO_MALE_CUT])
@@ -1052,26 +1031,19 @@ module part_pixco_tube(mark) {
                             tooth_height = CAM_HELI_TOOTH,
                             tip_height = 0.9,
                             tip_min_fract = 0.3);
+            // The thread's last half millimetre is the tip chamfer, so the
+            // shoulder has to reach back over it.
+            translate([0, 0, -0.8])
+                cylinder(h = 0.8, d = PIXCO_FRONT_D + 3, $fn = 96);
             cylinder(h = shim, d1 = PIXCO_FRONT_D + 3, d2 = F_STL_OD, $fn = 96);
             translate([0, 0, shim + F_COLLAR_Z0])
                 cylinder(h = F_COLLAR_H, d = F_COLLAR_OD, $fn = 96);
             translate([0, 0, shim])
                 rotate([0, 0, mount_clock(mark)])
                     f_mount_stl_raw();
-            rotate([0, 0, dx_pixco_tab_az(mark)])
-                translate([(r0 + r1) / 2, 0, 1.3])
-                    cube([r1 - r0, 3.6, 2.6], center = true);
         }
         translate([0, 0, -PIXCO_MALE_CUT - 0.2])
             cylinder(h = shim + F_STL_ZMAX + 1.5, d = TUBE_ID, $fn = 64);
-        rotate([0, 0, dx_pixco_tab_az(mark)]) {
-            translate([r1 - 1.2, 0, 1.3])
-                cube([2.6, 1.0, 2.8], center = true);
-            translate([(r0 + r1) / 2, 0, 2.7])
-                linear_extrude(0.8)
-                    text(mark, size = 3.2, font = "Futura:style=Bold",
-                         halign = "center", valign = "center");
-        }
     }
 }
 
@@ -1457,7 +1429,7 @@ module part_pixco_tube_print(mark) {
              "  register ", dx_reg(mark) + dx_pixco_extra(),
              "  lens infinity at ", dx_pixco_inf(),
              " of ", DX_HELI_TRAVEL,
-             "  (fixed arms were ", DX_HELI_EXT + r_focus_pull(), ")"));
+             "  (fixed arms peak at ", DX_HELI_EXT, ")"));
     translate([0, 0, dx_pixco_shim(mark) + F_STL_ZMAX])
         rotate([180, 0, 0])
             part_pixco_tube(mark);

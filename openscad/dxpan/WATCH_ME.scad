@@ -7,8 +7,8 @@
 // tray, no separate arms.
 //
 // Lens seat at y = −DX_LENS. R register at +X = dx_reg("R"), T at +Y =
-// dx_reg("T"). Infinity is DX_HELI_EXT + r_focus_pull() of helicoid travel
-// (6.77 mm of the measured 7.5). Open this file and read the echo() lines.
+// dx_reg("T"). Both peak at DX_HELI_EXT of the helicoid's 7.5 mm travel.
+// Open this file and read the echo() lines.
 // =============================================================================
 
 /* [Part] */
@@ -190,11 +190,11 @@ function reflect_tube_len()  =
 function transmit_tube_len() = reflect_tube_len() - bs_t_comp();
 // Printed F at the EL-Nikkor flange. T is the glass path; R is shorter
 // by the plate's circle of least confusion so the two focus together on
-// a flat plate. DX_R_PUSH moves R out to where the measured plate puts it.
+// a flat plate. DX_T_PUSH and DX_R_PUSH are the measured corrections.
 function reflect_focus_tube_len() =
     ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - r_focus_pull() + DX_R_PUSH;
 function transmit_focus_tube_len() =
-    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp();
+    ARM_TUBE + F_REV_STACK - F_FMOUNT_STACK - bs_t_comp() + DX_T_PUSH;
 function patch_t()           = PORT_PATCH_T;
 
 module mm_split() {
@@ -3099,8 +3099,7 @@ module diagnostics() {
     echo(str("seat y=", -DX_LENS, "  R register ",
              round(dx_reg("R") * 100) / 100, "  T register ",
              round(dx_reg("T") * 100) / 100,
-             "  |  helicoid +", DX_HELI_EXT, " mm station, both cameras ",
-             "peak at +", round((DX_HELI_EXT + r_focus_pull()) * 100) / 100,
+             "  |  helicoid +", DX_HELI_EXT, " mm, both cameras peak there",
              " of ", DX_HELI_TRAVEL, " mm travel"));
     echo(str("DXPAN 65  |  ", BS_H, "×", BS_W, "×", BS_THICK,
              " 50/50 at 45°, S1 toward the lens, ", BS_W,
@@ -3207,7 +3206,8 @@ module diagnostics() {
              round(bs_t_comp() * 1000) / 1000, " mm",
              "  |  plate focus sits ", round(bs_focus_mid() * 1000) / 1000,
              " mm further out (sag ", BS_FOCUS_SAG, " tan ", BS_FOCUS_TAN, ")",
-             "  |  measured plate pushes R ", DX_R_PUSH, " mm"));
+             "  |  tubes pushed T ", DX_T_PUSH,
+             " mm and R ", DX_R_PUSH, " mm"));
     r_focus_d = reflect_focus_tube_len() - reflect_tube_len();
     echo(str("arm_r_focus: Nikkor-W printed F, tube ",
              round(reflect_focus_tube_len() * 1000) / 1000,
