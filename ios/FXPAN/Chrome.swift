@@ -1,3 +1,4 @@
+import AVKit
 import Network
 import SwiftUI
 
@@ -41,6 +42,17 @@ struct RootView: View {
         .font(Theme.font(15))
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+        .background {
+            ShutterHardware {
+                let asleep = model.sleeping
+                model.poke()
+                guard !asleep, model.releaseReady else { return }
+                Task { await model.fire() }
+            } onLight: {
+                model.poke()
+            }
+            .allowsHitTesting(false)
+        }
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in model.poke() }
@@ -194,6 +206,40 @@ struct RootView: View {
         case .noise: NoiseScreen()
         case .plate: PlateScreen()
         }
+    }
+}
+
+/// Camera Control, on a view that does not take taps, so Live and the other buttons still receive them.
+private struct ShutterHardware: UIViewRepresentable {
+    var onPress: () -> Void
+    var onLight: () -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        let coordinator = context.coordinator
+        let interaction = AVCaptureEventInteraction(primary: { [weak coordinator] event in
+            guard event.phase == .ended else { return }
+            Task { @MainActor in coordinator?.onPress() }
+        }, secondary: { [weak coordinator] event in
+            guard event.phase == .began else { return }
+            Task { @MainActor in coordinator?.onLight() }
+        })
+        view.addInteraction(interaction)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onPress = onPress
+        context.coordinator.onLight = onLight
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var onPress: () -> Void = {}
+        var onLight: () -> Void = {}
     }
 }
 
@@ -530,7 +576,6 @@ struct DimPage<Controls: View, Panel: View>: View {
     @ViewBuilder var panel: () -> Panel
 
     var body: some View {
-        let usb = model.usbRevision
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button { model.back() } label: {
@@ -592,7 +637,6 @@ struct DimPage<Controls: View, Panel: View>: View {
             .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .id(fills ? 0 : usb)
     }
 
     /// The picture keeps the panorama's shape at the top. The controls take the rest of the screen and scroll.

@@ -242,7 +242,7 @@ struct HomeView: View {
             .frame(width: 76, height: 76)
         }
         .accessibilityLabel(model.recording ? "Stop" : (model.photo.drive.movie ? "Record" : "Release"))
-        .disabled((!online && !model.simulate && !model.recording) || (model.shooting && !model.recording))
+        .disabled(!model.releaseReady)
     }
 
     private var liveButton: some View {

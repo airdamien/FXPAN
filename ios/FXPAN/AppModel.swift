@@ -123,12 +123,21 @@ final class AppModel {
     private var scenePhase: ScenePhase = .active
     private var previewToken = 0
 
-    /// D7000 when a paired body says so. The simulator and a D800 stay on the FX stitch.
-    var bodyKind: BodyKind {
+    /// The on-screen release and the Camera Control button. A still already in flight stays closed. Recording stays open so the same press can stop it.
+    var releaseReady: Bool {
         let _ = cameraRevision
+        if shooting && !recording { return false }
+        if recording || simulate { return true }
+        return camera.slots.values.contains { $0.online }
+    }
+
+    /// D7000 when a paired body says so. The simulator and a D800 stay on the FX stitch. Updated when the body names change, not on every live frame.
+    private(set) var bodyKind: BodyKind = .d800
+
+    private func noteBodyKind() {
         let names = [camera.slots[.t]?.model, camera.slots[.r]?.model].compactMap { $0 }
-        if names.contains(where: { BodyKind.from($0) == .d7000 }) { return .d7000 }
-        return .d800
+        let next: BodyKind = names.contains(where: { BodyKind.from($0) == .d7000 }) ? .d7000 : .d800
+        if next != bodyKind { bodyKind = next }
     }
 
     var activeMode: NamedMode? { modes.first { $0.id == activeModeID } }
@@ -175,11 +184,15 @@ final class AppModel {
         camera.simulate = simulate
         camera.canonMode = canon
         camera.onChange = { [weak self] in
-            self?.cameraRevision += 1
-            self?.ingest()
+            guard let self else { return }
+            self.noteBodyKind()
+            self.cameraRevision += 1
+            self.ingest()
         }
         camera.onSeat = { [weak self] in
-            self?.usbRevision += 1
+            guard let self else { return }
+            self.noteBodyKind()
+            self.usbRevision += 1
         }
         camera.onReady = { [weak self] in
             guard let self, !self.shooting else { return }

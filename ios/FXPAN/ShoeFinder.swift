@@ -688,3 +688,4 @@ struct ShoeMarks: View {
             .stroke(color.opacity(0.9), lineWidth: 1)
     }
 }
+

@@ -917,12 +917,14 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
     }
 
     private func publish() {
+        let priorSlots = slots
+        let priorDetected = detected
         if simulate {
             slots[.t] = BodyState(online: true, paired: true, serial: "SIM-T", model: "D800", battery: 86, iso: "400", shutter: "1/250", fstop: "8", program: "M", wb: "Auto")
             slots[.r] = BodyState(online: true, paired: true, serial: "SIM-R", model: "D800", battery: 74, iso: "400", shutter: "1/250", fstop: "8", program: "M", wb: "Auto")
             line = "Simulator"
             onChange?()
-            onSeat?()
+            if slots != priorSlots || detected != priorDetected { onSeat?() }
             return
         }
         var next: [Role: BodyState] = [
@@ -942,7 +944,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
                 line = controlAuthorized ? "No Canon on USB" : line
             }
             onChange?()
-            onSeat?()
+            if slots != priorSlots || detected != priorDetected { onSeat?() }
             return
         }
         let online = Role.allCases.filter { slots[$0]?.online == true }
@@ -960,7 +962,7 @@ final class CameraHub: NSObject, ICDeviceBrowserDelegate, ICCameraDeviceDelegate
             line = "T and R on USB"
         }
         onChange?()
-        onSeat?()
+        if slots != priorSlots || detected != priorDetected { onSeat?() }
     }
 
     /// Both prism meters. The count is nil when the body does not offer the property.
